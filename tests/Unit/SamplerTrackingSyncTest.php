@@ -680,6 +680,133 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertNull($connection->table('sampler_tracking_troubles')->find($ids[2])->reopened_at);
     }
 
+
+    public function testQuotationRevisionPreservesSessionEvidenceAndUpdatedCategories(): void
+    {
+        foreach (['old-header', 'new-header', 'manual'] as $index => $mode) {
+            $old = 'ISL/QT/26-IX/01854' . $index . 'R1';
+            $new = 'ISL/QT/26-IX/01854' . $index . 'R2';
+            $schedule = $this->schedule(['no_quotation' => $old, 'id_sampling' => 100 + $index, 'kategori' => '["Air - 001","Udara - 002"]']);
+            $session = $this->prepare('2026-09-17')->firstWhere('no_quotation', $old);
+            $member = $this->attendance($session);
+            $eventIds = $member->events()->pluck('id')->all();
+            // Simulate quotation job: the original schedule row is retained.
+            Jadwal::where('id', $schedule->id)->update(['no_quotation' => $new, 'kategori' => '["Udara - 002","Kebisingan - 003"]', 'durasi' => 2]);
+            if ($mode === 'manual') {
+                $this->service->sync('2026-09-17');
+            } else {
+                $header = new PersiapanSampelHeader();
+                $header->no_quotation = $mode === 'old-header' ? $old : $new;
+                $header->tanggal_sampling = '2026-09-17';
+                $this->service->syncByPersiapanHeader($header);
+            }
+            $current = $session->fresh();
+            $this->assertSame($new, $current->no_quotation);
+            $this->assertTrue((bool) $current->is_active);
+            $this->assertEquals(['Udara - 002', 'Kebisingan - 003'], json_decode($current->kategori, true));
+            $this->assertSame($eventIds, $member->fresh()->events()->pluck('id')->all());
+            $this->assertEquals(2, $member->fresh()->effective_duration);
+            $this->service->syncQuotation($new);
+            $this->assertSame(1, SamplerTrackingSession::where('no_quotation', $new)->count());
+            // A later schedule edit must still preserve the migrated identity.
+            $before = $this->service->snapshotSchedules($new);
+            Jadwal::where('id', $schedule->id)->update(['jam_mulai' => '09:00:00', 'kategori' => '["Udara - 002"]']);
+            $this->service->syncScheduleEdit($before, $new);
+            $this->assertSame('09:00:00', $session->fresh()->jam_mulai);
+            $this->assertEquals(['Udara - 002'], json_decode($session->fresh()->kategori, true));
+        }
+    }
+
+    public function testRevisionWithoutPreparationCannotCreateActivity(): void
+    {
+        $row = $this->schedule(['no_quotation' => 'ISL/QT/26-IX/123R1']);
+        Jadwal::where('id', $row->id)->update(['no_quotation' => 'ISL/QT/26-IX/123R2']);
+        $this->service->syncQuotation('ISL/QT/26-IX/123R2');
+        $this->assertSame(0, SamplerTrackingSession::count());
+    }
+
+    public function testRevisionDoesNotMoveEvidenceToDifferentVisit(): void
+    {
+        $old = 'ISL/QT/26-IX/456R1';
+        $new = 'ISL/QT/26-IX/456R2';
+        $row = $this->schedule(['no_quotation' => $old]);
+        $session = $this->prepare('2026-09-17')->first();
+        $member = $this->attendance($session);
+        Jadwal::where('id', $row->id)->update(['is_active' => false]);
+        $this->schedule(['no_quotation' => $new, 'id_sampling' => 999]);
+        $this->service->syncQuotation($old);
+        $this->assertSame($old, $session->fresh()->no_quotation);
+        $this->assertFalse((bool) $session->fresh()->is_active);
+        $this->assertSame(2, $member->events()->count());
+        $this->assertSame(0, SamplerTrackingSession::where('no_quotation', $new)->count());
+    }
+
+
+    public function testMultipleTeamsInOneQuotationKeepTheirOwnHistoryAcrossRevisions(): void
+    {
+        $old = 'ISL/QT/26-IX/777R1';
+        $new = 'ISL/QT/26-IX/777R2';
+        foreach ([['08:00:00', 10, 'Asep'], ['13:00:00', 20, 'Andik']] as [$time, $id, $name]) {
+            $this->schedule(['no_quotation' => $old, 'jam_mulai' => $time, 'userid' => $id, 'sampler' => $name]);
+        }
+        $this->schedule(['no_quotation' => $old, 'tanggal' => '2026-09-18', 'userid' => 30, 'sampler' => 'Eko']);
+        $this->prepare('2026-09-17');
+        $this->prepare('2026-09-18');
+        $sessions = SamplerTrackingSession::orderBy('id')->get();
+        $this->assertCount(3, $sessions);
+        $evidence = [];
+        foreach ($sessions as $session) {
+            $member = $this->attendance($session);
+            $evidence[$session->id] = [$member->id, $member->sampler_id, $member->events()->pluck('id')->all()];
+        }
+        Jadwal::where('no_quotation', $old)->update(['no_quotation' => $new]);
+        Jadwal::where('no_quotation', $new)->where('userid', 20)->update(['kategori' => '["Udara - 002","Kebisingan - 003"]', 'durasi' => 2]);
+        $this->service->syncQuotation($old);
+        $this->service->syncQuotation($new);
+        $this->assertSame(3, SamplerTrackingSession::count());
+        foreach ($sessions as $session) {
+            $current = $session->fresh();
+            $member = $current->activeMembers()->firstOrFail();
+            $this->assertTrue((bool) $current->is_active);
+            $this->assertSame($new, $current->no_quotation);
+            $this->assertEquals($evidence[$session->id], [$member->id, $member->sampler_id, $member->events()->pluck('id')->all()]);
+            $this->assertEquals($member->sampler_id == 20 ? ['Udara - 002', 'Kebisingan - 003'] : ['Air - 001'], json_decode($current->kategori, true));
+        }
+        Jadwal::where('no_quotation', $new)->update(['no_quotation' => 'ISL/QT/26-IX/777R3']);
+        $this->service->syncQuotation('ISL/QT/26-IX/777R3');
+        $this->assertSame(3, SamplerTrackingSession::where('no_quotation', 'ISL/QT/26-IX/777R3')->where('is_active', true)->count());
+        $this->assertSame(6, $this->db->getConnection('mysql')->table('sampler_tracking_events')->count());
+    }
+
+    public function testRevisionCollisionRollsBackAllTeamsWithoutMovingEvidence(): void
+    {
+        $old = 'ISL/QT/26-IX/888R1';
+        $new = 'ISL/QT/26-IX/888R2';
+        $this->schedule(['no_quotation' => $old]);
+        $second = $this->schedule(['no_quotation' => $old, 'jam_mulai' => '13:00:00']);
+        $sessions = $this->prepare('2026-09-17');
+        foreach ($sessions as $session) $this->attendance($session);
+        Jadwal::where('no_quotation', $old)->update(['no_quotation' => $new]);
+        $method = new \ReflectionMethod($this->service, 'makeTeamKey');
+        $method->setAccessible(true);
+        SamplerTrackingSession::create([
+            'team_key' => $method->invoke($this->service, $second->fresh()),
+            'no_quotation' => $new, 'tanggal_sampling' => '2026-09-17', 'is_active' => true,
+        ]);
+        try {
+            $this->service->syncQuotation($old);
+            $this->fail('Conflicting destination session must reject revision reconciliation.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('jadwal', $exception->errors());
+        }
+        foreach ($sessions as $session) {
+            $this->assertSame($old, $session->fresh()->no_quotation);
+            $this->assertSame($session->team_key, $session->fresh()->team_key);
+            $this->assertTrue((bool) $session->fresh()->is_active);
+            $this->assertSame(2, $session->events()->count());
+        }
+    }
+
     private function schedule(array $values = [])
     {
         $id = $this->db->getConnection('mysql')->table('jadwal')->insertGetId(array_merge([

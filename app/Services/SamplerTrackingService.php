@@ -33,6 +33,9 @@ class SamplerTrackingService
         $date = Carbon::parse($date ?: $this->today())->toDateString();
 
         return DB::transaction(function () use ($date) {
+            foreach (SamplerTrackingSession::whereDate('tanggal_sampling', $date)->pluck('no_quotation')->filter()->unique() as $quotation) {
+                $this->reconcileQuotationRevision($quotation);
+            }
             $jadwals = Jadwal::where('is_active', true)
                 ->whereDate('tanggal', $date)
                 ->lockForUpdate()->get();
@@ -175,6 +178,7 @@ class SamplerTrackingService
     public function syncQuotation($quotation, array $creationKeys = [])
     {
         return DB::transaction(function () use ($quotation, $creationKeys) {
+            $revised = $this->reconcileQuotationRevision($quotation);
             $rows = $this->snapshotSchedules($quotation);
             $dates = $rows->pluck('tanggal')->merge(
                 SamplerTrackingSession::where('no_quotation', $quotation)->pluck('tanggal_sampling')
@@ -186,8 +190,46 @@ class SamplerTrackingService
                 ));
             }
 
+            foreach ($revised as $target) {
+                if ($target !== $quotation) $sessions = $sessions->merge($this->syncQuotation($target));
+            }
             return $sessions;
         });
+    }
+
+    /** Revision recovery requires the same sampling plan and exact original visit key. */
+    protected function reconcileQuotationRevision($quotation)
+    {
+        $plans = Jadwal::where('no_quotation', $quotation)->where('is_active', true)->pluck('id_sampling')->filter()->unique()->all();
+        $sessions = SamplerTrackingSession::where(function ($query) use ($quotation, $plans) {
+            $query->where('no_quotation', $quotation);
+            if ($plans) $query->orWhereIn('id_sampling', $plans);
+        })->lockForUpdate()->get();
+        $revised = [];
+        foreach ($sessions as $session) {
+            if (!$session->id_sampling || !$session->no_quotation) continue;
+            $root = preg_replace('/R\d+$/', '', $session->no_quotation);
+            preg_match('/R(\d+)$/', $session->no_quotation, $oldRevision);
+            $candidates = Jadwal::where('id_sampling', $session->id_sampling)->where('is_active', true)
+                ->where('no_quotation', '!=', $session->no_quotation)->lockForUpdate()->get()
+                ->filter(function ($row) use ($session, $root, $oldRevision) {
+                    if (preg_replace('/R\d+$/', '', $row->no_quotation) !== $root) return false;
+                    preg_match('/R(\d+)$/', $row->no_quotation, $revision);
+                    if ((int) ($revision[1] ?? 0) <= (int) ($oldRevision[1] ?? 0)) return false;
+                    $old = clone $row;
+                    $old->no_quotation = $session->no_quotation;
+                    return $this->makeTeamKey($old) === $session->team_key;
+                })->groupBy(function ($row) { return $this->makeTeamKey($row); });
+            if ($candidates->isEmpty()) continue;
+            if ($candidates->count() !== 1) {
+                throw ValidationException::withMessages(['jadwal' => ['Revisi QT memiliki beberapa kandidat activity. Riwayat tidak dipindahkan.']]);
+            }
+            $target = $candidates->first()->first();
+            $this->rekeySessions([$session->team_key => $this->makeTeamKey($target)]);
+            SamplerTrackingSession::where('id', $session->id)->update(['no_quotation' => $target->no_quotation]);
+            $revised[] = $target->no_quotation;
+        }
+        return array_values(array_unique($revised));
     }
 
     /** Call inside the schedule edit transaction, using its pre-edit snapshot. */
