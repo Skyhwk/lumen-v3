@@ -56,7 +56,7 @@ class MonthlySalaryController extends Controller
         }
 
         $user = $this->getCurrentUser();
-        return $user && in_array($user->grade, ['MANAGER', 'DIREKSI']);
+        return $user && in_array($user->grade, ['MANAGER', 'DIREKSI', 'SENIOR MANAGER']);
     }
 
     /**
