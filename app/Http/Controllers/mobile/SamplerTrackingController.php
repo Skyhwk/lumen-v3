@@ -46,7 +46,8 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
         $data = $this->service->listByDate(
             $date,
             $samplerId,
-            $samplerName
+            $samplerName,
+            $recovery ? [$recovery->tracking_session_id] : null
         );
 
         // Aktivitas yang bisa dijalankan dari Apps FDL hanya milik sampler

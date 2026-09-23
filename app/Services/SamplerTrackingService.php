@@ -435,7 +435,7 @@ class SamplerTrackingService
 
         return collect($sessions);
     }
-    public function listByDate($date = null, $samplerId = null, $samplerName = null)
+    public function listByDate($date = null, $samplerId = null, $samplerName = null, $sessionIds = null)
     {
         $date = !empty($date)
             ? Carbon::parse($date)->toDateString()
@@ -474,6 +474,7 @@ class SamplerTrackingService
             ->where('is_active', true)
             ->whereHas('activeMembers', $memberFilter)
             ->whereIn('tanggal_sampling', array_unique($dates))
+            ->when($sessionIds !== null, function ($query) use ($sessionIds) { $query->whereIn('id', $sessionIds); })
             ->orderBy('tanggal_sampling')
             ->orderBy('jam_mulai')
             ->orderBy('nama_perusahaan')
@@ -532,9 +533,9 @@ class SamplerTrackingService
         ];
     }
 
-    public function listTrackingRows($date = null, $samplerId = null, $samplerName = null, $trackingStatus = null)
+    public function listTrackingRows($date = null, $samplerId = null, $samplerName = null, $trackingStatus = null, $sessionIds = null)
     {
-        $rows = $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName));
+        $rows = $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName, $sessionIds));
         $trackingStatusCounts = $this->trackingStatusCounts($rows);
         $rows = $this->filterByTrackingStatus($rows, $trackingStatus);
 
@@ -1009,7 +1010,7 @@ class SamplerTrackingService
             ]);
         }
         // Run clearance outside the event transaction: a later validation failure must not undo it.
-        (new SamplerTrackingTroubleService())->assertAllowed($source->sampler_id, $source->session->tanggal_sampling);
+        (new SamplerTrackingTroubleService())->assertAllowed($source->sampler_id, $source->session->tanggal_sampling, $source->sampler_tracking_session_id);
         return DB::transaction(function () use ($payload) {
             $member = SamplerTrackingMember::with('session')
                 ->where('id', $payload['member_id'])
@@ -1035,7 +1036,7 @@ class SamplerTrackingService
             $this->ensureEventSequence($member, $eventType);
             $movementGroup = $member->current_movement_group ?: $this->makeMovementGroupCode($member->session);
 
-            $activities = $this->listByDate($member->session->tanggal_sampling, $member->sampler_id);
+            $activities = $this->eventActivities($member);
             $activity = $activities->first(function ($item) use ($member) {
                 return in_array((int) $member->sampler_tracking_session_id, array_map('intval', $item->activity_session_ids ?? [$item->id]), true);
             });
@@ -1049,9 +1050,9 @@ class SamplerTrackingService
             $members = $members->filter(function ($target) use ($activity, $ownActivityMember, $eventType, $member) {
                 $logical = $activity ? $this->sessionMemberForSampler($activity, $target) : $target;
                 if (in_array($eventType, ['checkout', 'return'], true) && SamplerTrackingActivity::duration($logical) !== SamplerTrackingActivity::duration($ownActivityMember)) return false;
-                if ((string) $target->sampler_id !== (string) $member->sampler_id) {
+                if ((string) $target->id !== (string) $member->id) {
                     try {
-                        (new SamplerTrackingTroubleService())->assertAllowed($target->sampler_id, $member->session->tanggal_sampling);
+                        (new SamplerTrackingTroubleService())->assertAllowed($target->sampler_id, $member->session->tanggal_sampling, $target->sampler_tracking_session_id);
                     } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
                         if ($e->getStatusCode() !== 423) throw $e;
                         return false;
@@ -1110,17 +1111,20 @@ class SamplerTrackingService
      * scheduled order. This is enforced server-side so every Apps FDL screen
      * follows the same rule.
      */
+    protected function eventActivities(SamplerTrackingMember $member)
+    {
+        $recovery = (new SamplerTrackingTroubleService())->isReopened($member->sampler_id, $member->sampler_tracking_session_id);
+        return $this->listByDate($member->session->tanggal_sampling, $member->sampler_id, null,
+            $recovery ? [$member->sampler_tracking_session_id] : null);
+    }
+
     protected function ensureEventSequence(SamplerTrackingMember $member, string $eventType): void
     {
         if (!$member->session || !in_array($eventType, ['checkin', 'checkout', 'return'], true)) {
             return;
         }
 
-        $sessions = $this->listByDate(
-            $member->session->tanggal_sampling,
-            $member->sampler_id,
-            $member->sampler_name
-        )->values();
+        $sessions = $this->eventActivities($member)->values();
         $currentIndex = $sessions->search(function ($session) use ($member) {
             return in_array((int) $member->sampler_tracking_session_id, array_map('intval', $session->activity_session_ids ?? [$session->id]), true);
         });

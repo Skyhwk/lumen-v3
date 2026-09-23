@@ -70,7 +70,7 @@ class SamplerTrackingController extends Controller
     {
         $member = \App\Models\SamplerTrackingMember::with('session')->where('id', $request->member_id)->where('is_active', true)->firstOrFail();
         if (!$member->session || !$member->session->is_active) abort(422, 'Activity sampling sudah tidak aktif.');
-        (new \App\Services\SamplerTrackingTroubleService())->assertAllowed($member->sampler_id, $member->session->tanggal_sampling);
+        (new \App\Services\SamplerTrackingTroubleService())->assertAllowed($member->sampler_id, $member->session->tanggal_sampling, $member->sampler_tracking_session_id);
         $this->validate($request, [
             'member_id' => 'required',
             'event_type' => 'required|in:departure,checkin,checkout,return',
@@ -228,6 +228,7 @@ class SamplerTrackingController extends Controller
         $date = $this->normalizeTroubleFilterDate($date);
         $today = Carbon::now('Asia/Jakarta')->toDateString();
         $query = DB::table(SamplerTrackingTroubleService::TABLE)
+            ->whereNotNull('tracking_session_id')
             ->where('activity_date', '<', $today);
 
         if ($reopenedOnly) {
@@ -274,7 +275,9 @@ class SamplerTrackingController extends Controller
         $trackingRows = $this->service->listTrackingRows(
             $activityDate,
             $samplerId,
-            $samplerName
+            $samplerName,
+            null,
+            $trouble->tracking_session_id ? [$trouble->tracking_session_id] : []
         )['data'];
 
         $trackingRows = $trackingRows->filter(function ($row) use ($activityDate) {
@@ -300,6 +303,8 @@ class SamplerTrackingController extends Controller
             $troubleObj['sampler_name'] = $row['sampler'] ?? $samplerName;
             $row['trouble'] = $troubleObj;
             $row['trouble_id'] = $trouble->id;
+            $row['tracking_session_id'] = $trouble->tracking_session_id;
+            $row['row_id'] = 'trouble-' . $trouble->id;
 
             return $row;
         });
@@ -338,6 +343,7 @@ class SamplerTrackingController extends Controller
         $date = $this->normalizeTroubleFilterDate($date);
         $today = Carbon::now('Asia/Jakarta')->toDateString();
         $query = DB::table(SamplerTrackingTroubleService::TABLE)
+            ->whereNotNull('tracking_session_id')
             ->where('activity_date', '<', $today)
             ->whereNotNull('reopened_at');
 
