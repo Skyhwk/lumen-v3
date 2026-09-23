@@ -42,8 +42,8 @@ class PermohonanIzinController extends Controller
     {
         return PermissionRequest::on('intilab_apps')
             ->from('intilab_apps.permission_requests as pr')
-            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
-            ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
             ->where('pr.is_active', 1)
             ->whereIn('pr.created_by', $this->getOwnerNames())
             ->whereYear('pr.created_at', $periode ?: date('Y'))

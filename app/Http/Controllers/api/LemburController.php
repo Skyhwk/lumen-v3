@@ -30,8 +30,8 @@ class LemburController extends Controller
     {
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
-            ->leftJoin('master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
-            ->leftJoin('master_karyawan as u', 'fd.employee_id', '=', 'u.id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.employee_id', '=', 'u.id')
             ->select(
                 'overtime_requests.id',
                 'overtime_requests.no_document',
@@ -89,8 +89,8 @@ class LemburController extends Controller
 
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
-            ->leftJoin('master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
-            ->leftJoin('master_karyawan as u', 'fd.employee_id', '=', 'u.id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.employee_id', '=', 'u.id')
             ->select(
                 'overtime_requests.id',
                 'overtime_requests.no_document',
@@ -149,8 +149,8 @@ class LemburController extends Controller
     {
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
-            ->leftJoin('master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
-            ->leftJoin('master_karyawan as u', 'fd.employee_id', '=', 'u.id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.employee_id', '=', 'u.id')
             ->select(
                 'overtime_requests.id',
                 'overtime_requests.no_document',
@@ -210,8 +210,8 @@ class LemburController extends Controller
     {
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
-            ->leftJoin('master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
-            ->leftJoin('master_karyawan as u', 'fd.employee_id', '=', 'u.id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.employee_id', '=', 'u.id')
             ->select(
                 'overtime_requests.id',
                 'overtime_requests.no_document',
@@ -270,8 +270,8 @@ class LemburController extends Controller
         $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
-            ->leftJoin('master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
-            ->leftJoin('master_karyawan as u', 'fd.employee_id', '=', 'u.id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.employee_id', '=', 'u.id')
             ->select(
                 'overtime_requests.id',
                 'overtime_requests.no_document',
@@ -335,8 +335,8 @@ class LemburController extends Controller
         $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
-            ->leftJoin('master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
-            ->leftJoin('master_karyawan as u', 'fd.employee_id', '=', 'u.id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.employee_id', '=', 'u.id')
             ->select(
                 'overtime_requests.id',
                 'overtime_requests.no_document',
