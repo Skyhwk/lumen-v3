@@ -18,9 +18,7 @@
 @php
     $gajiTerakhir = !empty($data->gaji_terakhir) ? 'Rp ' . number_format($data->gaji_terakhir, 0, ',', '.') : '-';
     $ekspektasiGaji = !empty($data->ekspetasi_gaji) ? 'Rp ' . number_format($data->ekspetasi_gaji, 0, ',', '.') : '-';
-    $penawaranGajiHrd = !empty($data->sallary_offer_hrd)
-        ? 'Rp ' . number_format($data->sallary_offer_hrd, 0, ',', '.')
-        : (!empty($data->sallary_offer->sallary_offer_hrd) ? 'Rp ' . number_format($data->sallary_offer->sallary_offer_hrd, 0, ',', '.') : '-');
+    $penawaranGajiHrd = \App\Services\OfferingSalaryEmail::formatRupiah(\App\Services\OfferingSalaryEmail::getSalaryOfferHrd($data));
 @endphp
 
    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:0;background:linear-gradient(180deg,#eff6ff 0%,#f8fafc 100%);border:1px solid #bfdbfe;border-radius:14px;overflow:hidden;margin:0 0 16px 0;">
