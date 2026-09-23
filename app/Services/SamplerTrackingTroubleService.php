@@ -14,7 +14,7 @@ class SamplerTrackingTroubleService
 
     const REOPEN_REASONS = [
         'operational_delay' => 'Activity belum selesai (kendala operasional)',
-        'technical_issue' => 'Kendala teknis aplikasi / perangkat',
+        // 'technical_issue' => 'Kendala teknis aplikasi / perangkat',
         'force_majeure' => 'Force majeure (cuaca, lalu lintas, dll.)',
         'sampler_procedure' => 'Kesalahan prosedur / kelalaian sampler',
         'other' => 'Lainnya',
@@ -64,11 +64,13 @@ class SamplerTrackingTroubleService
     protected function progress($samplerId, $date, $sessionId)
     {
         $sessions = SamplerTrackingSession::with('activeMembers.events')->where('is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('nama_perusahaan')
+                    ->orWhereRaw('LOWER(TRIM(nama_perusahaan)) != ?', ['cuti']);
+            })
             ->whereDate('tanggal_sampling', $date)->whereHas('activeMembers', function ($query) use ($samplerId) {
                 $query->where('sampler_id', $samplerId);
-            })->get()->reject(function ($session) {
-                return mb_strtoupper(trim((string) $session->nama_perusahaan)) === 'CUTI';
-            });
+            })->get();
         $session = $sessions->firstWhere('id', $sessionId);
         if (!$session) return ['complete' => true, 'due_date' => null];
         $members = $session->activeMembers->filter(function ($member) use ($samplerId) {
@@ -106,6 +108,10 @@ class SamplerTrackingTroubleService
         $assignments = DB::table('sampler_tracking_members as m')
             ->join('sampler_tracking_sessions as s', 's.id', '=', 'm.sampler_tracking_session_id')
             ->where('s.is_active', true)->where('m.is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('s.nama_perusahaan')
+                    ->orWhereRaw('LOWER(TRIM(s.nama_perusahaan)) != ?', ['cuti']);
+            })
             ->whereDate('s.tanggal_sampling', '>=', $startDate)->whereDate('s.tanggal_sampling', '<=', $day)
             ->when($samplerIds, function ($query) use ($samplerIds) { $query->whereIn('m.sampler_id', $samplerIds); })
             ->whereNotNull('m.sampler_id')
@@ -114,6 +120,11 @@ class SamplerTrackingTroubleService
         $count = 0;
         foreach ($assignments as $assignment) {
             if (!$assignment->sampler_id) continue;
+            $exists = DB::table(self::TABLE)
+                ->where('sampler_id', $assignment->sampler_id)
+                ->where('tracking_session_id', $assignment->tracking_session_id)
+                ->exists();
+            if ($exists) continue;
             $progress = $this->progress($assignment->sampler_id, $assignment->activity_date, $assignment->tracking_session_id);
             if ($progress['complete'] || !$progress['due_date'] || $progress['due_date'] > $day) continue;
             $count += DB::table(self::TABLE)->insertOrIgnore([
@@ -208,19 +219,37 @@ class SamplerTrackingTroubleService
         $reopenReason = (string) ($payload['reopen_reason'] ?? '');
         $followUp = (string) ($payload['sampler_follow_up_action'] ?? '');
 
-        return DB::transaction(function () use ($troubleId, $actorId, $note, $reopenReason, $followUp) {
+        return DB::transaction(function () use ($troubleId, $actorId, $note, $reopenReason, $followUp, $payload) {
             $trouble = DB::table(self::TABLE)->where('id', $troubleId)->lockForUpdate()->first();
             if (!$trouble) throw new HttpException(404, 'Data trouble tidak ditemukan.');
-            // The Tracking Sampler menu already determines who can use this
-            // action. Do not additionally hide or lock a trouble based on the
-            // sampler's direct-supervisor snapshot, because that data can be
-            // stale after a team/supervisor change.
             if (!$actorId) throw new HttpException(403, 'Akses tidak diizinkan.');
             if (!$trouble->tracking_session_id) throw new HttpException(422, 'Kendala lama belum terhubung ke penugasan.');
             if ($trouble->is_clear) throw new HttpException(422, 'Aktivitas ini sudah selesai.');
             if ($trouble->reopened_at) {
                 throw new HttpException(422, 'Activity ini sudah pernah di-unblock.');
             }
+
+            $sessionIds = $this->normalizeSessionIds($payload['session_id'] ?? null, $payload['session_ids'] ?? []);
+            if (empty($sessionIds) && !empty($trouble->tracking_session_id)) {
+                $sessionIds = [(int) $trouble->tracking_session_id];
+            }
+
+            $targetQuery = DB::table(self::TABLE)
+                ->where('is_clear', 0)
+                ->whereNull('reopened_at');
+
+            if (!empty($sessionIds)) {
+                $targetQuery->whereIn('tracking_session_id', $sessionIds);
+            } else {
+                $targetQuery->where('id', $troubleId);
+            }
+
+            $targetIds = $targetQuery->lockForUpdate()->pluck('id')->all();
+
+            if (!in_array((int) $troubleId, array_map('intval', $targetIds), true)) {
+                $targetIds[] = $troubleId;
+            }
+
             $update = [
                 'reopened_by' => $actorId,
                 'reopened_at' => Carbon::now('Asia/Jakarta'),
@@ -235,9 +264,20 @@ class SamplerTrackingTroubleService
                 $update['sampler_follow_up_action'] = $followUp;
             }
 
-            DB::table(self::TABLE)->where('id', $troubleId)->update($update);
+            DB::table(self::TABLE)->whereIn('id', $targetIds)->update($update);
 
             return DB::table(self::TABLE)->where('id', $troubleId)->first();
         });
     }
+
+    protected function normalizeSessionIds($sessionId, $sessionIds)
+    {
+        $ids = is_array($sessionIds) ? $sessionIds : [];
+        if ($sessionId) {
+            $ids[] = $sessionId;
+        }
+
+        return array_values(array_unique(array_filter(array_map('intval', $ids))));
+    }
+
 }
