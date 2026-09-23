@@ -102,7 +102,7 @@ class AtsRejectedCandidatesController extends Controller
                 'counts' => [
                     'reject_hrd' => $this->rejectedCandidatesQuery('reject_hrd')->count(),
                     'reject_user' => $this->rejectedCandidatesQuery('reject_user')->count(),
-                    'assessment' => $this->rejectedCandidatesQuery('assessment')->count(),
+                    'assessment' => 0,
                 ],
             ],
             'message' => 'Rejected candidate tab counts retrieved successfully',
@@ -112,10 +112,16 @@ class AtsRejectedCandidatesController extends Controller
     private function rejectedCandidatesQuery(?string $mode = null)
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
-            ->where('is_rejected_kandidat', 1)
             ->whereNotNull('personnel_request_id')
             ->where('personnel_request_id', '!=', '');
 
+        if ($mode === 'assessment') {
+            $query->whereRaw('1 = 0');
+
+            return $query->orderBy('id', 'desc');
+        }
+
+        $query->where('is_rejected_kandidat', 1);
         $this->applyRejectTab($query, $mode);
 
         return $query->orderBy('is_rejected_kandidat_at', 'desc')
@@ -139,28 +145,32 @@ class AtsRejectedCandidatesController extends Controller
             $query->where(function ($q) {
                 $q->whereHas('hrdInterview', function ($sub) {
                     $sub->whereIn('status_result', ['failed', 'gagal']);
-                })->orWhere('meta_history', 'like', '%hrd_final_decision_rejected%');
-            });
-            return;
-        }
-
-        $query->whereDoesntHave('hrdInterview', function ($sub) {
-            $sub->whereIn('status_result', ['failed', 'gagal']);
-        });
-
-        foreach ([
-            'hrd_final_decision_rejected',
-            'internal_sallary_offer_rejected',
-            'candidate_offering_rejected',
-            'candidate_rejected',
-            'finance_rejected',
-            'management_decision_rejected',
-        ] as $marker) {
-            $query->where(function ($q) use ($marker) {
-                $q->whereNull('meta_history')
-                    ->orWhere('meta_history', 'not like', '%' . $marker . '%');
+                })->orWhere('meta_history', 'like', '%hrd_final_decision_rejected%')
+                    ->orWhereRaw(
+                        "CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(meta_history, 'one', 'rejected', NULL, '$[*].status')), '[', -1), ']', 1) AS SIGNED) > 0
+                        AND JSON_UNQUOTE(JSON_EXTRACT(
+                            meta_history,
+                            CONCAT(
+                                '$[',
+                                CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(meta_history, 'one', 'rejected', NULL, '$[*].status')), '[', -1), ']', 1) AS SIGNED) - 1,
+                                '].status'
+                            )
+                        )) = 'screening'"
+                    );
             });
         }
+    }
+
+    private function whereAssessmentOverdue($query): void
+    {
+        $deadline = Carbon::now('Asia/Jakarta')->subDays(6)->format('Y-m-d H:i:s');
+
+        $query->where('status', 'assessment')
+            ->where('is_active', 1)
+            ->whereRaw(
+                "JSON_UNQUOTE(JSON_EXTRACT(meta_history, REPLACE(JSON_UNQUOTE(JSON_SEARCH(meta_history, 'one', 'assessment', NULL, '$[*].status')), '.status', '.at'))) <= ?",
+                [$deadline]
+            );
     }
 
     private function whereUserRejected($query): void
