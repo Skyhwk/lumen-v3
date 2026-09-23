@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Carbon\Carbon;
 use App\Models\MasterKaryawan;
 use App\Models\SamplerTrackingMember;
+use Illuminate\Validation\ValidationException;
 
 class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackingController
 {
@@ -46,7 +47,8 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
         $data = $this->service->listByDate(
             $date,
             $samplerId,
-            $samplerName
+            $samplerName,
+            $recovery ? [$recovery->tracking_session_id] : null
         );
 
         // Aktivitas yang bisa dijalankan dari Apps FDL hanya milik sampler
@@ -103,7 +105,19 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
         // Old-day recovery is recorded at the real submission time, not a client-supplied backdate.
         $request->merge(['event_at' => Carbon::now('Asia/Jakarta')->toDateTimeString()]);
 
-        return parent::storeEvent($request);
+        try {
+            return parent::storeEvent($request);
+        } catch (ValidationException $exception) {
+            $errors = $exception->errors();
+            $message = collect($errors)->flatten()->first()
+                ?: 'Data activity tidak valid.';
+
+            return response()->json([
+                'success' => false,
+                'message' => $message,
+                'errors' => $errors,
+            ], 422);
+        }
     }
 
     public function previewSamplers(Request $request)

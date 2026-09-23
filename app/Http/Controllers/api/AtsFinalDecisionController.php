@@ -857,6 +857,12 @@ class AtsFinalDecisionController extends Controller
 
             if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $hStatus, $m)) {
                 if ($m[1] === 'rejected') {
+                    // Penolakan Direktur sudah tidak aktif setelah HRD mengajukan ulang
+                    // dan prosesnya diteruskan ke kandidat/Finance.
+                    if (RecruitmentStatusService::hasHistoryStatusAfterDirectorResubmit($applicant, 'candidate_offering_sent')) {
+                        return false;
+                    }
+
                     return !RecruitmentStatusService::isAwaitingDirectorSalaryResubmit($applicant);
                 }
 
@@ -1176,6 +1182,34 @@ class AtsFinalDecisionController extends Controller
         }
 
         if ($action === 'approve' || $action === 'submit' || $action === 'send_email') {
+            $isDirectorSalaryResubmission = RecruitmentStatusService::isAwaitingDirectorSalaryRejectResubmit($applicant);
+            $resubmitReason = trim((string) $request->input('reason', ''));
+
+            if ($isDirectorSalaryResubmission && $resubmitReason === '') {
+                return response()->json([
+                    'status' => 422,
+                    'message' => 'Alasan pengajuan ulang Salary Approval wajib diisi.',
+                ], 422);
+            }
+            if (mb_strlen($resubmitReason) > 1000) {
+                return response()->json([
+                    'status' => 422,
+                    'message' => 'Alasan pengajuan ulang maksimal 1000 karakter.',
+                ], 422);
+            }
+
+            if ($isDirectorSalaryResubmission) {
+                $history = RecruitmentStatusService::parseMetaHistory($applicant);
+                $history[] = [
+                    'status' => 'internal_sallary_offer_resubmitted',
+                    'at' => $now->toDateTimeString(),
+                    'reason' => $resubmitReason,
+                    'by' => $user ?? 'HRD',
+                ];
+                $applicant->update(['meta_history' => json_encode(array_values($history))]);
+                $applicant->meta_history = json_encode(array_values($history));
+            }
+
             $savedOffer = CandidateDataOffers::where('new_recruitment_id', $id)->first();
             $history = RecruitmentStatusService::parseMetaHistory($applicant);
             $hasSalaryInputSaved = false;
@@ -1363,6 +1397,20 @@ class AtsFinalDecisionController extends Controller
         }
 
         $btn = GenerateMessageAtsEmail::buildSalaryDecisionButtons($applicant, $token);
+        $emailApplicant = clone $applicant;
+        $history = RecruitmentStatusService::parseMetaHistory($applicant);
+        $directorResubmitIndex = RecruitmentStatusService::getLatestDirectorSalaryResubmitIndex($history);
+        if ($directorResubmitIndex !== null) {
+            for ($i = count($history) - 1; $i > $directorResubmitIndex; $i--) {
+                if (($history[$i]['status'] ?? '') === 'internal_sallary_offer_resubmitted'
+                    && trim((string) ($history[$i]['reason'] ?? '')) !== '') {
+                    $emailApplicant->resubmit_reason = trim((string) $history[$i]['reason']);
+                    $emailApplicant->resubmit_by = $history[$i]['by'] ?? null;
+                    $emailApplicant->resubmit_at = $history[$i]['at'] ?? null;
+                    break;
+                }
+            }
+        }
 
         $targetEmail = trim((string) env('EMAIL_DIREKTUR_BAPAK', ''));
         $user = $this->karyawan;
@@ -1371,7 +1419,7 @@ class AtsFinalDecisionController extends Controller
         $documents = [];
 
         try {
-            $bodyEmail = GenerateMessageAtsEmail::bodyEmailSallaryOffer($applicant, $btn);
+            $bodyEmail = GenerateMessageAtsEmail::bodyEmailSallaryOffer($emailApplicant, $btn);
             $attachmentBundle = $assessmentService->prepareDirectorEmailAttachments((int) $applicant->id);
             $documents = $attachmentBundle['documents'] ?? [];
             $attachments = $attachmentBundle['attachments'] ?? [];
@@ -1418,6 +1466,20 @@ class AtsFinalDecisionController extends Controller
     public function resendRejectedDecisionEmail(Request $request, $id = null)
     {
         $id = $id ?? $request->header('id') ?? $request->input('id');
+        $resubmitReason = trim((string) $request->input('reason', ''));
+
+        if ($resubmitReason === '') {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Alasan pengajuan ulang Final Decision wajib diisi.',
+            ], 422);
+        }
+        if (mb_strlen($resubmitReason) > 1000) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Alasan pengajuan ulang maksimal 1000 karakter.',
+            ], 422);
+        }
 
         $applicant = NewRecruitment::find($id);
 
@@ -1469,11 +1531,24 @@ class AtsFinalDecisionController extends Controller
             $tokenKey = $pr->id . $applicant->nama_lengkap . 'approval' . str_replace('.', '', microtime(true));
             $token = $tokenService->encryptv1(md5($tokenKey) . '|' . $tokenService->encrypt(date('Y-m-d')));
 
+            $history = RecruitmentStatusService::parseMetaHistory($applicant);
+            $history[] = [
+                'status' => 'management_decision_resubmitted',
+                'at' => Carbon::now()->toDateTimeString(),
+                'reason' => $resubmitReason,
+                'by' => $this->karyawan ?? 'HRD',
+            ];
+
             $applicant->update([
                 'token_approval'           => $token,
                 'status'                   => 'management_decision',
                 'rejected_decision'        => false,
+                'meta_history'             => json_encode(array_values($history)),
             ]);
+            $applicant->meta_history = json_encode(array_values($history));
+            $applicant->resubmit_reason = $resubmitReason;
+            $applicant->resubmit_by = $this->karyawan ?? 'HRD';
+            $applicant->resubmit_at = $history[count($history) - 1]['at'];
 
             $assessmentData = $assessmentService->tryGenerateTempAttachments((int) $applicant->id);
             $documents = $assessmentData['documents'] ?? [];

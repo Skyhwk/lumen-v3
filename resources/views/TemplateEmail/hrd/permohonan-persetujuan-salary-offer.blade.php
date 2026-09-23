@@ -36,6 +36,87 @@
     @endforeach
 </table>
 
+@if(!empty($data->resubmit_reason))
+    @php
+        $resubmitAt = '-';
+        if (!empty($data->resubmit_at)) {
+            $resubmitDate = \Carbon\Carbon::parse($data->resubmit_at);
+            $resubmitAt = $resubmitDate->locale('id')->translatedFormat('d F Y') . $resubmitDate->format(' h:i A');
+        }
+    @endphp
+    <div style="background-color:#fffbeb;border:1px solid #fde68a;padding:14px;border-radius:8px;margin-bottom:20px;">
+        <h3 style="margin:0 0 8px 0;font-size:13px;color:#92400e;text-transform:uppercase;letter-spacing:0.05em;">
+            <strong>Alasan Pengajuan Ulang</strong>
+        </h3>
+        <div style="margin:0 0 10px 0;font-size:13px;color:#475569;line-height:1.6;">
+            {!! ($data->resubmit_reason) !!}
+        </div>
+        <table role="presentation" cellspacing="0" cellpadding="0" style="font-size:12px;color:#78716c;line-height:1.6;border-collapse:collapse;">
+            <tr>
+                <td style="padding:0 8px 0 0;">Diajukan ulang oleh</td>
+                <td style="padding:0 8px 0 0;">:</td>
+                <td style="padding:0;"><strong>{{ $data->resubmit_by ?? 'HRD' }}</strong></td>
+            </tr>
+            <tr>
+                <td style="padding:0 8px 0 0;">Tanggal diajukan</td>
+                <td style="padding:0 8px 0 0;">:</td>
+                <td style="padding:0;">{{ $resubmitAt }}</td>
+            </tr>
+        </table>
+    </div>
+@endif
+
+@php
+    $bypassData = is_array($data->bypass ?? null)
+        ? $data->bypass
+        : (json_decode($data->bypass ?? '{}', true) ?: []);
+    $bypassLabels = [
+        'hrd_interview' => [
+            'label' => 'HRD Interview',
+            'background' => '#f1f5f9',
+            'border' => '#cbd5e1',
+            'heading' => '#334155',
+        ],
+        'user_interview' => [
+            'label' => 'User Interview',
+            'background' => '#f0fdf4',
+            'border' => '#bbf7d0',
+            'heading' => '#166534',
+        ],
+    ];
+@endphp
+@foreach($bypassLabels as $bypassStage => $bypassStyle)
+    @if(!empty($bypassData[$bypassStage]['description']))
+        @php
+            $bypassAt = '-';
+            if (!empty($bypassData[$bypassStage]['at'])) {
+                $bypassDate = \Carbon\Carbon::parse($bypassData[$bypassStage]['at']);
+                $bypassAt = $bypassDate->locale('id')->translatedFormat('d F Y') . $bypassDate->format(' h:i A');
+            }
+        @endphp
+        <div style="background-color:{{ $bypassStyle['background'] }};border:1px solid {{ $bypassStyle['border'] }};padding:14px;border-radius:8px;margin-bottom:20px;">
+            <h3 style="margin:0 0 8px 0;font-size:13px;color:{{ $bypassStyle['heading'] }};text-transform:uppercase;letter-spacing:0.05em;">
+                <strong>Bypass {{ $bypassStyle['label'] }}</strong>
+            </h3>
+            <div style="margin:0 0 10px 0;font-size:13px;color:#475569;line-height:1.6;">
+                {!! $bypassData[$bypassStage]['description'] !!}
+            </div>
+            <table role="presentation" cellspacing="0" cellpadding="0" style="font-size:12px;color:#78716c;line-height:1.6;border-collapse:collapse;">
+                <tr>
+                    <td style="padding:0 8px 0 0;">Bypass oleh</td>
+                    <td style="padding:0 8px 0 0;">:</td>
+                    <td style="padding:0;"><strong>{{ $bypassData[$bypassStage]['by'] ?? 'HRD' }}</strong></td>
+                </tr>
+                <tr>
+                    <td style="padding:0 8px 0 0;">Tanggal bypass</td>
+                    <td style="padding:0 8px 0 0;">:</td>
+                    <td style="padding:0;">{{ $bypassAt }}</td>
+                </tr>
+            </table>
+        </div>
+    @endif
+@endforeach
+
 <p style="margin:0 0 20px 0;font-size:14px;line-height:1.8;color:#475569;text-align:justify;">
     Kandidat ini telah memenuhi sejumlah persyaratan awal dan memiliki potensi sesuai dengan kebutuhan perusahaan.
     Persetujuan Bapak/Ibu Direktur akan sangat membantu dalam menentukan langkah selanjutnya.

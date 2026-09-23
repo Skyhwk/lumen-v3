@@ -700,7 +700,7 @@ class MasterKaryawanController extends Controller
                 $user->save();
             }
 
-            DB::connection('intilab_apps')
+            DB::connection('mysql')
                 ->table('users')
                 ->where('user_id', $karyawan->id)
                 ->update([

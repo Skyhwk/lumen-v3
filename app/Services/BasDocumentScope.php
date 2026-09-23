@@ -68,7 +68,53 @@ class BasDocumentScope
         return $decision->status === 'Belum Selesai'
             && is_string($decision->alasan) && trim($decision->alasan) !== ''
             && $decision->alasan !== 'Dibatalkan otomatis dari Submit BAS'
-            && ($decision->alasan !== 'Lainnya' || trim((string) $decision->keterangan) !== '');
+            && ($decision->alasan !== 'Lainnya' || self::lainnyaKeteranganError($decision->keterangan) === '');
+    }
+
+    public static function freeTextError($value, $label = 'Teks')
+    {
+        $text = trim((string) $value);
+        if ($text === '' || $text === '-') {
+            return $label . ' wajib diisi.';
+        }
+        if (strpos($text, '-') !== false) {
+            return $label . ' tidak boleh memakai tanda minus (-).';
+        }
+        if (mb_strlen($text) < 10) {
+            return $label . ' minimal 10 karakter.';
+        }
+
+        preg_match_all('/[A-Za-zÀ-ÿ]/u', $text, $matches);
+        $letters = $matches[0] ?? [];
+        if (count($letters) < 6) {
+            return 'Tuliskan ' . mb_strtolower($label) . ' yang jelas, bukan angka atau simbol saja.';
+        }
+
+        $compact = strtolower(implode('', $letters));
+        $unique = count(array_unique(str_split($compact)));
+        $noSpace = preg_replace('/\s+/', '', $text);
+        if (preg_match('/(.)\1{3,}/', $noSpace)) {
+            return $label . ' terlihat ngasal. Tuliskan dengan kalimat yang benar.';
+        }
+        if ($unique < 4) {
+            return $label . ' terlihat ngasal. Tuliskan dengan kalimat yang benar.';
+        }
+        if (strlen($compact) >= 10 && ($unique / strlen($compact)) > 0.85) {
+            return $label . ' terlihat ngasal. Tuliskan dengan kalimat yang benar.';
+        }
+        if (!preg_match('/[aiueo]/', $compact)) {
+            return $label . ' terlihat ngasal. Tuliskan dengan kalimat yang benar.';
+        }
+        if (preg_match('/^(.{2,5})\1{2,}$/', $compact)) {
+            return $label . ' terlihat ngasal. Tuliskan dengan kalimat yang benar.';
+        }
+
+        return '';
+    }
+
+    public static function lainnyaKeteranganError($value)
+    {
+        return self::freeTextError($value, 'Alasan');
     }
 
     public static function filename($name)
