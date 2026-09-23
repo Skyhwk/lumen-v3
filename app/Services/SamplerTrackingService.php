@@ -61,6 +61,29 @@ class SamplerTrackingService
         $existingSessions = SamplerTrackingSession::with('activeMembers')->whereDate('tanggal_sampling', $date)->get();
         $activeSessions = $existingSessions->where('is_active', true)->values();
         $existingByTeamKey = $activeSessions->keyBy('team_key');
+        $replacementMapping = $this->replacementMapping($activeSessions, $jadwals);
+        $reconciledTargetKeys = collect($replacementMapping)->values()->unique();
+        $reconciliations = collect($replacementMapping)->map(function ($newKey, $oldKey) use ($existingByTeamKey, $groups) {
+            $session = $existingByTeamKey->get($oldKey);
+            $rows = $groups->get($newKey, collect());
+            $first = $rows->first();
+            $replacement = SamplerTrackingSession::where('team_key', $newKey)
+                ->where('id', '!=', $session->id)
+                ->first();
+
+            return [
+                'session_id' => $session->id,
+                'replacement_session_id' => $replacement ? $replacement->id : null,
+                'team_key' => $newKey,
+                'no_quotation' => $first->no_quotation,
+                'tanggal_sampling' => $first->tanggal,
+                'jam' => trim(($first->jam_mulai ?: '-') . ' - ' . ($first->jam_selesai ?: '-')),
+                'nama_perusahaan' => $first->nama_perusahaan,
+                'sampler' => $rows->pluck('sampler')->filter()->unique()->values()->implode(', '),
+                'perubahan' => 'Session #' . $session->id . ' dipertahankan; event dan trouble tetap di session ini.'
+                    . ($replacement ? ' Session #' . $replacement->id . ' akan diarsipkan.' : ''),
+            ];
+        })->values();
         $missing = collect();
         $existing = collect();
         $changed = collect();
@@ -87,14 +110,15 @@ class SamplerTrackingService
                     $item['perubahan'] = implode('; ', $reasons);
                     $changed->push($item);
                 }
-            } else {
+            } elseif (!$reconciledTargetKeys->contains($teamKey)) {
                 $missing->push($item);
             }
         }
 
         $willDeactivate = $activeSessions
-                ->filter(function ($session) use ($teamKeys) {
-                    return !$teamKeys->contains($session->team_key);
+                ->filter(function ($session) use ($teamKeys, $replacementMapping) {
+                    return !$teamKeys->contains($session->team_key)
+                        && !array_key_exists($session->team_key, $replacementMapping);
                 })
                 ->map(function ($session) {
                     return [
@@ -117,10 +141,12 @@ class SamplerTrackingService
             'sudah_ada' => $existing->count(),
             'sudah_sesuai' => $existing->count() - $changed->count(),
             'perlu_diperbarui' => $changed->count(),
+            'akan_direkonsiliasi' => $reconciliations->count(),
             'belum_kebentuk' => $missing->count(),
             'akan_dinonaktifkan' => $willDeactivate->count(),
             'preview' => [
                 'perlu_diperbarui' => $changed->values(),
+                'akan_direkonsiliasi' => $reconciliations->take(20)->values(),
                 'belum_kebentuk' => $missing->take(20)->values(),
                 'akan_dinonaktifkan' => $willDeactivate->take(20)->values(),
             ],
@@ -321,13 +347,26 @@ class SamplerTrackingService
             if (!$session) {
                 continue;
             }
-            // Never merge a different visit merely because its new attributes
-            // happen to match. Let the surrounding edit transaction roll back.
-            if (SamplerTrackingSession::where('team_key', $newKey)->exists()) {
-                throw ValidationException::withMessages([
-                    'jadwal' => ['Perubahan jadwal bertabrakan dengan activity lain. Riwayat activity tidak diubah.'],
-                ]);
+
+            $replacement = SamplerTrackingSession::where('team_key', $newKey)
+                ->where('id', '!=', $session->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($replacement) {
+                // A generic sync may already have created the replacement
+                // session. Keep the original session as the canonical record
+                // because events and trouble rows reference its ID, then fold
+                // the empty/replacement members into it before changing keys.
+                $this->mergeDuplicateSession($session, $replacement);
+
+                // is_active does not release the unique team_key. Archive the
+                // duplicate key before assigning the replacement identity to
+                // the canonical session.
+                $replacement->team_key = sha1('archived|' . $replacement->id . '|' . $newKey);
+                $replacement->save();
             }
+
             $session->team_key = $newKey;
             $session->save();
         }
@@ -368,6 +407,8 @@ class SamplerTrackingService
         $activeTeamKeys = [];
 
         DB::transaction(function () use ($jadwals, $now, &$sessions, &$activeTeamKeys, $date, $deactivateMissingSessions, $quotation, $creationKeys) {
+            $this->reconcileReplacedSessions($jadwals, $date, $quotation);
+
             $jadwals->groupBy(function ($row) {
                 return $this->makeTeamKey($row);
             })->each(function ($rows, $teamKey) use ($now, &$sessions, &$activeTeamKeys, $creationKeys) {
@@ -480,6 +521,82 @@ class SamplerTrackingService
         }, 5);
 
         return collect($sessions);
+    }
+
+    /**
+     * Reconcile a previously-created replacement during a manual/date sync.
+     * Only a one-to-one match of the same visit may carry history forward;
+     * ambiguous same-day visits remain separate instead of sharing events.
+     */
+    protected function reconcileReplacedSessions($jadwals, $date, $quotation = null)
+    {
+        if ($jadwals->isEmpty()) {
+            return;
+        }
+
+        $sessions = SamplerTrackingSession::whereDate('tanggal_sampling', $date)
+            ->where('is_active', true)
+            ->when($quotation !== null, function ($query) use ($quotation) {
+                $query->where('no_quotation', $quotation);
+            })
+            ->lockForUpdate()
+            ->get();
+
+        $mapping = $this->replacementMapping($sessions, $jadwals);
+        if ($mapping) {
+            $this->rekeySessions($mapping);
+        }
+    }
+
+    protected function replacementMapping($sessions, $jadwals)
+    {
+        $currentKeys = $jadwals->map(function ($row) {
+            return $this->makeTeamKey($row);
+        })->unique();
+
+        $replacementKeysByVisit = $jadwals->groupBy(function ($row) {
+            return $this->visitIdentity($row);
+        })->map(function ($rows) {
+            return $rows->map(function ($row) {
+                return $this->makeTeamKey($row);
+            })->unique()->values();
+        });
+
+        $legacyByVisit = collect($sessions)->filter(function ($session) use ($currentKeys) {
+            return !$currentKeys->contains($session->team_key);
+        })->groupBy(function ($session) {
+            return $this->visitIdentity($session);
+        });
+
+        $mapping = [];
+        foreach ($legacyByVisit as $visit => $legacySessions) {
+            $replacementKeys = $replacementKeysByVisit->get($visit, collect());
+            // Do not guess when one visit was split, combined, or duplicated.
+            if ($legacySessions->count() !== 1 || $replacementKeys->count() !== 1) {
+                continue;
+            }
+
+            $mapping[$legacySessions->first()->team_key] = $replacementKeys->first();
+        }
+
+        return $mapping;
+    }
+
+    protected function visitIdentity($row)
+    {
+        $date = isset($row->tanggal_sampling) && $row->tanggal_sampling
+            ? $row->tanggal_sampling
+            : (isset($row->tanggal) && $row->tanggal ? $row->tanggal : 'date-null');
+
+        return implode('|', [
+            $row->id_sampling ?: 'sampling-null',
+            $row->parsial ?: 'parsial-null',
+            $row->no_quotation ?: 'qt-null',
+            $date,
+            $row->jam_mulai ?: 'start-null',
+            $row->jam_selesai ?: 'end-null',
+            mb_strtolower(trim((string) ($row->nama_perusahaan ?: 'company-null'))),
+        ]);
     }
     public function listByDate($date = null, $samplerId = null, $samplerName = null, $sessionIds = null)
     {
