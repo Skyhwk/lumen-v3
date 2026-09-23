@@ -367,6 +367,9 @@ class SamplerTrackingTroubleService
             if (Schema::hasColumn(self::TABLE, 'sampler_follow_up_action')) {
                 $update['sampler_follow_up_action'] = $followUp;
             }
+            if (!empty($payload['lampiran']) && Schema::hasColumn(self::TABLE, 'lampiran')) {
+                $update['lampiran'] = json_encode(array_values($payload['lampiran']));
+            }
 
             DB::table(self::TABLE)->whereIn('id', $targetIds)->update($update);
 
@@ -382,6 +385,93 @@ class SamplerTrackingTroubleService
         }
 
         return array_values(array_unique(array_filter(array_map('intval', $ids))));
+    }
+
+    public function storeLampiran($files, $troubleId)
+    {
+        $files = $this->normalizeUploads($files);
+        if (!$files) {
+            return [];
+        }
+        if (count($files) > 10) {
+            throw new HttpException(422, 'Lampiran maksimal 10 file.');
+        }
+        if (!Schema::hasColumn(self::TABLE, 'lampiran')) {
+            throw new HttpException(500, 'Kolom lampiran belum tersedia.');
+        }
+
+        $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx'];
+        $directory = public_path('samplingtrackingtrouble');
+        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+            throw new HttpException(500, 'Folder lampiran tidak dapat dibuat.');
+        }
+
+        $stored = [];
+        try {
+            foreach ($files as $file) {
+                if (!$file || !$file->isValid()) {
+                    throw new HttpException(422, 'Salah satu lampiran gagal diunggah.');
+                }
+                $extension = strtolower((string) $file->getClientOriginalExtension());
+                if (!in_array($extension, $allowed, true)) {
+                    throw new HttpException(422, 'Lampiran hanya boleh gambar, PDF, DOC, atau DOCX.');
+                }
+                $size = (int) $file->getSize();
+                if ($size > 8 * 1024 * 1024) {
+                    throw new HttpException(422, 'Ukuran tiap lampiran maksimal 8 MB.');
+                }
+
+                $fileName = 'trouble_' . (int) $troubleId . '_' . date('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
+                $file->move($directory, $fileName);
+                $stored[] = [
+                    'original_name' => $file->getClientOriginalName(),
+                    'path' => 'samplingtrackingtrouble/' . $fileName,
+                    'extension' => $extension,
+                    'size' => $size,
+                ];
+            }
+        } catch (\Throwable $e) {
+            $this->deleteLampiranFiles($stored);
+            throw $e;
+        }
+
+        return $stored;
+    }
+
+    public function deleteLampiranFiles(array $stored)
+    {
+        foreach ($stored as $item) {
+            $relative = ltrim((string) ($item['path'] ?? ''), '/');
+            if ($relative === '' || strpos($relative, 'samplingtrackingtrouble/') !== 0) {
+                continue;
+            }
+            $full = public_path($relative);
+            if (is_file($full)) {
+                @unlink($full);
+            }
+        }
+    }
+
+    protected function normalizeUploads($files)
+    {
+        if (!$files) {
+            return [];
+        }
+        if ($files instanceof \Illuminate\Http\UploadedFile) {
+            return [$files];
+        }
+        if (!is_array($files)) {
+            return [];
+        }
+
+        $flat = [];
+        array_walk_recursive($files, function ($file) use (&$flat) {
+            if ($file instanceof \Illuminate\Http\UploadedFile) {
+                $flat[] = $file;
+            }
+        });
+
+        return $flat;
     }
 
 }
