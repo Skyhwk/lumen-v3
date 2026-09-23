@@ -70,9 +70,20 @@ class SamplerTrackingTroubleService
             })
             ->whereDate('tanggal_sampling', $date)->whereHas('activeMembers', function ($query) use ($samplerId) {
                 $query->where('sampler_id', $samplerId);
-            })->get();
+        })->get();
         $session = $sessions->firstWhere('id', $sessionId);
-        if (!$session) return ['complete' => true, 'due_date' => null];
+        // A schedule correction can temporarily leave a legacy trouble
+        // pointing at a session whose member has been superseded. Missing
+        // from the active query is not proof that its checkout/return was
+        // completed; treating it as complete silently clears the trouble.
+        if (!$session) {
+            return [
+                'complete' => false,
+                'stops_complete' => false,
+                'due_date' => $this->dueDate($date, 0),
+                'missing_active_assignment' => true,
+            ];
+        }
         $members = $session->activeMembers->filter(function ($member) use ($samplerId) {
             return (string) $member->sampler_id === (string) $samplerId;
         });
