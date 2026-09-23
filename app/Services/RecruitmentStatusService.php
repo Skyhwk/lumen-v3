@@ -131,8 +131,29 @@ class RecruitmentStatusService
         return $reason !== '' ? $reason : null;
     }
 
+    public static function isKeptCandidate($recruitment): bool
+    {
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        if ($status !== 'management_decision') {
+            return false;
+        }
+
+        $isKeep = is_object($recruitment)
+            ? (int) ($recruitment->is_keep ?? 0)
+            : (int) ($recruitment['is_keep'] ?? 0);
+
+        return $isKeep === 1;
+    }
+
     public static function isAwaitingIbuDirekturApproval($recruitment): bool
     {
+        if (self::isKeptCandidate($recruitment)) {
+            return false;
+        }
+
         if (self::isAwaitingCandidateOfferingResubmit($recruitment)) {
             return false;
         }
@@ -1350,6 +1371,9 @@ class RecruitmentStatusService
             : ($recruitment['status'] ?? ''))));
 
         switch ($stageTab) {
+            case 'keep':
+                return self::isKeptCandidate($recruitment);
+
             case 'waiting_approval':
                 return self::isAwaitingIbuDirekturApproval($recruitment);
 
@@ -1359,7 +1383,8 @@ class RecruitmentStatusService
             case 'management_decision':
                 return $status === 'management_decision'
                     && !self::isAwaitingIbuDirekturApproval($recruitment)
-                    && !self::isAwaitingDirectorSalaryApproval($recruitment);
+                    && !self::isAwaitingDirectorSalaryApproval($recruitment)
+                    && !self::isKeptCandidate($recruitment);
 
             case 'salary_offer':
                 return in_array($status, ['internal_sallary_offer', 'salary_offer'], true)
