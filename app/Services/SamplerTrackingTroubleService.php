@@ -87,10 +87,11 @@ class SamplerTrackingTroubleService
             ->where('tracking_session_id', $sessionId)
             ->whereNotNull('reopened_by')->whereNotNull('reopened_at')->exists();
         $journeyMembers = $wasReopened ? $members : $dailyMembers;
-        $complete = $members->every(function ($member) {
+        $stopsComplete = $members->every(function ($member) {
             return SamplerTrackingActivity::hasEvent($member, 'checkin')
                 && SamplerTrackingActivity::hasEvent($member, 'checkout');
-        }) && $journeyMembers->contains(function ($member) { return SamplerTrackingActivity::hasEvent($member, 'departure'); })
+        });
+        $complete = $stopsComplete && $journeyMembers->contains(function ($member) { return SamplerTrackingActivity::hasEvent($member, 'departure'); })
            && $journeyMembers->contains(function ($member) { return SamplerTrackingActivity::hasEvent($member, 'return'); });
         $sessionDue = $this->dueDate($date, $members->max(function ($member) {
             return SamplerTrackingActivity::duration($member);
@@ -107,7 +108,7 @@ class SamplerTrackingTroubleService
             }));
         });
 
-        return ['complete' => $complete, 'due_date' => $dailyDue ?: $sessionDue];
+        return ['complete' => $complete, 'stops_complete' => $stopsComplete, 'due_date' => $dailyDue ?: $sessionDue];
     }
 
     protected function dueDate($date, $duration)
@@ -201,20 +202,19 @@ class SamplerTrackingTroubleService
             $journeyDue = $journeyDueByKey[$key] ?? null;
             $journeyCount = $journeyCountByKey[$key] ?? 1;
             // Sesaat + 1x24 jam (atau PT lain di hari yang sama) adalah 1 perjalanan.
-            // Jangan buat trouble selama PT terpanjang belum jatuh tempo, dan jangan
-            // buat tiket terpisah untuk PT pendek yang deadline-nya lebih awal.
+            // Tunggu deadline PT terpanjang sebelum memeriksa semua kunjungan.
             if ($journeyCount > 1) {
                 if (!$journeyDue || $journeyDue > $day) {
-                    continue;
-                }
-                $ownDue = $this->dueDate($assignment->activity_date, $this->assignmentDuration($assignment));
-                if ($ownDue < $journeyDue) {
                     continue;
                 }
             }
 
             $progress = $this->progress($assignment->sampler_id, $assignment->activity_date, $assignment->tracking_session_id);
             if ($progress['complete'] || !$this->isPastDue($progress, $day)) continue;
+            // A completed short stop shares the final journey return; missing
+            // check-in/checkout must still receive its own recovery ticket.
+            $ownDue = $this->dueDate($assignment->activity_date, $this->assignmentDuration($assignment));
+            if ($journeyCount > 1 && $ownDue < $journeyDue && $progress['stops_complete']) continue;
             $count += DB::table(self::TABLE)->insertOrIgnore([
                 'sampler_id' => $assignment->sampler_id,
                 'tracking_session_id' => $assignment->tracking_session_id,

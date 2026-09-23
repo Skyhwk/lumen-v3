@@ -364,11 +364,11 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame(0, $service->collect('2026-09-21', [10]));
         $this->assertCount(0, $service->unresolved(10));
         $service->assertAllowed(10, '2026-09-23');
-        $this->assertSame(1, $service->collect('2026-09-22', [10]));
-        $this->assertCount(1, $service->unresolved(10));
+        $this->assertSame(2, $service->collect('2026-09-22', [10]));
+        $this->assertCount(2, $service->unresolved(10));
     }
 
-    public function testLongerAssignmentCannotDelayAnotherTeamsTroubleDeadline(): void
+    public function testAllUnfinishedAssignmentsAreCollectedAfterLongestDeadline(): void
     {
         \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-25 10:00:00', 'Asia/Jakarta'));
         $this->troubleAssignment('short-team', '2026-09-21', 1);
@@ -377,8 +377,8 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame(0, $service->collect('2026-09-22', [10]));
         $this->assertCount(0, $service->unresolved(10));
         $service->assertAllowed(10, '2026-09-25');
-        $this->assertSame(1, $service->collect('2026-09-24', [10]));
-        $this->assertCount(1, $service->unresolved(10));
+        $this->assertSame(2, $service->collect('2026-09-24', [10]));
+        $this->assertCount(2, $service->unresolved(10));
     }
 
     public function testUnblockingAndFinishingOneAssignmentDoesNotUnlockOrClearTheOther(): void
@@ -471,6 +471,26 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame(0, $second->events()->count());
         $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
         $this->service->storeEvent(['member_id' => $second->activeMembers()->firstOrFail()->id, 'event_type' => 'departure']);
+    }
+
+
+    public function testCompletedSesaatSharesReturnButMissingCheckoutGetsItsOwnTrouble(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-22 10:00:00', 'Asia/Jakarta'));
+        [$short, $member] = $this->troubleAssignment('sesaat', '2026-09-21', 0);
+        [$long] = $this->troubleAssignment('overnight', '2026-09-21', 2);
+        $this->attendance($short);
+        $service = new \App\Services\SamplerTrackingTroubleService();
+        $this->assertSame(0, $service->collect('2026-09-21', [10]));
+        $service->assertAllowed(10, '2026-09-21', $long->id);
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-23 10:00:00', 'Asia/Jakarta'));
+        $this->assertSame(1, $service->collect('2026-09-22', [10]));
+        $this->assertEquals($long->id, $service->unresolved(10)->first()->tracking_session_id);
+        $this->assertSame(0, $service->collect('2026-09-22', [10]));
+        $member->events()->where('event_type', 'checkout')->delete();
+        $this->assertSame(1, $service->collect('2026-09-22', [10]));
+        $this->assertCount(2, $service->unresolved(10));
+        $this->assertSame(0, $service->collect('2026-09-22', [10]));
     }
 
     private function schedule(array $values = [])
