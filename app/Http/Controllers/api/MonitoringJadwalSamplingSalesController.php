@@ -65,6 +65,10 @@ class MonitoringJadwalSamplingSalesController extends Controller
             $detail = $order->orderDetail->first();
             return $detail ? $detail->tanggal_sampling : '-';
         })
+        ->addColumn('jam_mulai_display', function($order) {
+            $detail = $order->jadwal->first();
+            return $detail ? ($detail->jam_mulai ?? '-') : '-';
+        })
         ->addColumn('durasi', function($order) {
             // Ambil baris pertama dari relasi orderDetail
             $detail = $order->jadwal->first();
@@ -133,6 +137,11 @@ class MonitoringJadwalSamplingSalesController extends Controller
         ->filterColumn('tgl_sampling_display', function($q, $keyword) {
             $q->whereHas('orderDetail', function($sub) use ($keyword) {
                 $sub->whereDate('tanggal_sampling', 'like', "%{$keyword}%");
+            });
+        })
+        ->filterColumn('jam_mulai_display', function($q, $keyword) {
+            $q->whereHas('jadwal', function($sub) use ($keyword) {
+                $sub->where('jam_mulai', 'like', "%{$keyword}%");
             });
         })
         ->filterColumn('penanggung_jawab', function($q, $keyword) {
