@@ -1573,7 +1573,7 @@ class AtsFinalDecisionController extends Controller
                 $candidateDocumentAttachments
             );
 
-            $subject = 'Permohonan Persetujuan Kandidat - ' . $applicant->nama_lengkap;
+            $subject = 'Pengajuan Ulang Permohonan Persetujuan Kandidat - ' . $applicant->nama_lengkap;
             $attachments = array_merge(
                 $assessmentService->buildSendEmailAttachments($documents),
                 $candidateDocumentSendAttachments
@@ -1592,7 +1592,7 @@ class AtsFinalDecisionController extends Controller
 
             return response()->json([
                 'status'  => 200,
-                'message' => 'Email permohonan persetujuan kandidat berhasil dikirim ulang.',
+                'message' => 'Email Pengajuan Ulang permohonan persetujuan kandidat berhasil dikirim ulang.',
                 'assessment_attachment_count' => count($assessmentAttachments),
                 'candidate_document_attachment_count' => count($candidateDocumentAttachments),
             ], 200);
@@ -1708,7 +1708,7 @@ class AtsFinalDecisionController extends Controller
                 $candidateDocumentAttachments
             );
 
-            $subject = 'Permohonan Persetujuan Kandidat - ' . $applicant->nama_lengkap;
+            $subject = 'Pengajuan Ulang Permohonan Persetujuan Kandidat - ' . $applicant->nama_lengkap;
             $attachments = array_merge(
                 $assessmentService->buildSendEmailAttachments($documents),
                 $candidateDocumentSendAttachments
@@ -1727,7 +1727,7 @@ class AtsFinalDecisionController extends Controller
 
             return response()->json([
                 'status'  => 200,
-                'message' => 'Email permohonan persetujuan kandidat berhasil dikirim ulang.',
+                'message' => 'Email Pengajuan Ulang permohonan persetujuan kandidat berhasil dikirim ulang.',
                 'assessment_attachment_count' => count($assessmentAttachments),
                 'candidate_document_attachment_count' => count($candidateDocumentAttachments),
             ], 200);
