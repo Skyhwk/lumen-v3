@@ -55,6 +55,8 @@ class Kernel extends ConsoleKernel
         Commands\SendKeptManagementDecisionReminders::class,
         Commands\SendCandidateActionReminders::class,
         Commands\SendPendingAssessmentInvitations::class,
+        Commands\RejectOverdueAssessment::class,
+        Commands\RollbackOverdueAssessment::class,
         Commands\CustomerServiceAutoCloseCommand::class,
         Commands\CustomerServiceAutoArchiveCommand::class,
         // Commands\LhpBackfillCommand::class,
@@ -69,6 +71,11 @@ class Kernel extends ConsoleKernel
         //     ->dailyAt('00:00')->timezone('Asia/Jakarta')->withoutOverlapping(60);
         // $schedule->command('recruitment:send-pending-assessment-invitations')
         //     ->everyFiveMinutes()
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping();
+        // Belum diaktifkan. Nyalakan hanya setelah command assessmentrejection dicek manual.
+        // $schedule->command('assessmentrejection')
+        //     ->dailyAt('17:00')
         //     ->timezone('Asia/Jakarta')
         //     ->withoutOverlapping();
         // Manual dulu per kategori. Nanti aktifkan jika sudah siap otomatis jam 11 malam:
