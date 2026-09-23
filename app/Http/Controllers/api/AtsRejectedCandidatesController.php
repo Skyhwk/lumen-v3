@@ -102,7 +102,7 @@ class AtsRejectedCandidatesController extends Controller
                 'counts' => [
                     'reject_hrd' => $this->rejectedCandidatesQuery('reject_hrd')->count(),
                     'reject_user' => $this->rejectedCandidatesQuery('reject_user')->count(),
-                    'assessment' => 0,
+                    'assessment' => $this->rejectedCandidatesQuery('assessment')->count(),
                 ],
             ],
             'message' => 'Rejected candidate tab counts retrieved successfully',
@@ -116,9 +116,32 @@ class AtsRejectedCandidatesController extends Controller
             ->where('personnel_request_id', '!=', '');
 
         if ($mode === 'assessment') {
-            $query->whereRaw('1 = 0');
-
-            return $query->orderBy('id', 'desc');
+            return $query->where('is_rejected_kandidat', 1)
+                ->where(function ($q) {
+                    $q->whereRaw("JSON_SEARCH(meta_history, 'one', 'rejected_system', NULL, '$[*].status') IS NOT NULL")
+                        ->orWhereRaw(
+                            "CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(meta_history, 'one', 'rejected', NULL, '$[*].status')), '[', -1), ']', 1) AS SIGNED) > 0
+                            AND JSON_UNQUOTE(JSON_EXTRACT(
+                                meta_history,
+                                CONCAT(
+                                    '$[',
+                                    CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(meta_history, 'one', 'rejected', NULL, '$[*].status')), '[', -1), ']', 1) AS SIGNED) - 1,
+                                    '].status'
+                                )
+                            )) = 'assessment'"
+                        );
+                })
+                ->where(function ($q) {
+                    $q->where(function ($sub) {
+                        $sub->whereNotNull('is_rejected_kandidat_by')
+                            ->where('is_rejected_kandidat_by', '!=', '');
+                    })->orWhere(function ($sub) {
+                        $sub->whereNotNull('rejected_by')
+                            ->where('rejected_by', '!=', '');
+                    });
+                })
+                ->orderBy('is_rejected_kandidat_at', 'desc')
+                ->orderBy('id', 'desc');
         }
 
         $query->where('is_rejected_kandidat', 1);

@@ -740,11 +740,8 @@ class GenerateMessageAtsEmail
             return 'Saudari';
         }
 
-        if (in_array($gender, ['male', 'laki-laki', 'laki laki', 'm', 'pria'], true)) {
-            return 'Saudara';
-        }
-
-        return 'Saudara/i';
+        // Male / unknown → Saudara (jangan pakai "Saudara/i")
+        return 'Saudara';
     }
 
     private static function candidateGreetingHtml($data, $name)
@@ -845,7 +842,10 @@ class GenerateMessageAtsEmail
 
         $greeting = self::candidateGreetingHtml($data, $data->nama_lengkap ?? 'Kandidat');
         $recruitmentEmail = 'recruitment.hrd@intilab.com';
-        $waNumber = (string) env('NUMBER', '');
+        $waNumber = collect(explode(',', (string) env('NUMBER', '')))
+            ->map(fn ($number) => trim($number))
+            ->filter()
+            ->first() ?? '';
         $waNumberDisplay = htmlspecialchars($waNumber !== '' ? $waNumber : '-');
         $waNumberDigits = preg_replace('/[^0-9]/', '', $waNumber);
         $waLink = $waNumberDigits !== '' ? 'https://wa.me/' . $waNumberDigits : '#';
