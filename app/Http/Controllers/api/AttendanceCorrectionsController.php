@@ -21,6 +21,17 @@ class AttendanceCorrectionsController extends Controller
         return datatables()->of($data)->make(true);
     }
 
+    public function tabCounts(Request $request)
+    {
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'approved_atasan' => AttendanceCorrections::where('status', 'Approved Atasan')->count(),
+                'pending' => AttendanceCorrections::where('status', 'Pending')->count(),
+            ],
+        ]);
+    }
+
     public function approve(Request $request)
     {
         DB::beginTransaction();

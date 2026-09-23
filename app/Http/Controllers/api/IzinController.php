@@ -16,24 +16,24 @@ class IzinController extends Controller
     {
         $permissions = PermissionRequest::query()->toBase()
             ->from('intilab_apps.permission_requests as pr')
-            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
+            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.id')
             ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
             ->select(
                 DB::raw("CONCAT('PR-', pr.id) as id"),
                 'pr.no_document',
                 'd.nama_divisi',
-                DB::raw('CASE 
-            WHEN pr.status = "Approved Atasan" THEN "APPROVED ATASAN" 
-            WHEN pr.status = "Approved HRD" THEN "APPROVED HRD" 
-            WHEN pr.status = "Rejected Atasan" THEN "REJECTED ATASAN" 
-            WHEN pr.status = "Rejected HRD" THEN "REJECTED HRD" 
-            ELSE "WAITING" 
+                DB::raw('CASE
+            WHEN pr.status = "Approved Atasan" THEN "APPROVED ATASAN"
+            WHEN pr.status = "Approved HRD" THEN "APPROVED HRD"
+            WHEN pr.status = "Rejected Atasan" THEN "REJECTED ATASAN"
+            WHEN pr.status = "Rejected HRD" THEN "REJECTED HRD"
+            ELSE "WAITING"
         END as status'),
-                DB::raw('CASE 
-            WHEN pr.type = "Event Leave" THEN "kegiatan" 
-            WHEN pr.type = "Sick Leave" THEN "sakit" 
-            WHEN pr.type = "Late Arrival" THEN "datang_terlambat" 
-            ELSE pr.type 
+                DB::raw('CASE
+            WHEN pr.type = "Event Leave" THEN "kegiatan"
+            WHEN pr.type = "Sick Leave" THEN "sakit"
+            WHEN pr.type = "Late Arrival" THEN "datang_terlambat"
+            ELSE pr.type
         END as type_document'),
                 'pr.start_date as tanggal_mulai',
                 'pr.end_date as tanggal_selesai',
@@ -66,24 +66,24 @@ class IzinController extends Controller
 
         $leaves = LeaveRequest::query()->toBase()
             ->from('intilab_apps.leave_requests as lr')
-            ->leftJoin('master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
+            ->leftJoin('master_karyawan as u', 'lr.employee_id', '=', 'u.id')
             ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
             ->select(
                 DB::raw("CONCAT('LR-', lr.id) as id"),
                 'lr.no_document',
                 'd.nama_divisi',
-                DB::raw('CASE 
-            WHEN lr.status = "Approved Atasan" THEN "APPROVED ATASAN" 
-            WHEN lr.status = "Approved HRD" THEN "APPROVED HRD" 
-            WHEN lr.status = "Rejected Atasan" THEN "REJECTED ATASAN" 
-            WHEN lr.status = "Rejected HRD" THEN "REJECTED HRD" 
-            ELSE "WAITING" 
+                DB::raw('CASE
+            WHEN lr.status = "Approved Atasan" THEN "APPROVED ATASAN"
+            WHEN lr.status = "Approved HRD" THEN "APPROVED HRD"
+            WHEN lr.status = "Rejected Atasan" THEN "REJECTED ATASAN"
+            WHEN lr.status = "Rejected HRD" THEN "REJECTED HRD"
+            ELSE "WAITING"
         END as status'),
-                DB::raw('CASE 
-            WHEN lr.type = "Annual Leave" THEN "cuti" 
-            WHEN lr.type = "Special Leave" THEN "cuti_khusus" 
-            WHEN lr.type = "Unpaid Leave" THEN "unpaid_leave" 
-            ELSE lr.type 
+                DB::raw('CASE
+            WHEN lr.type = "Annual Leave" THEN "cuti"
+            WHEN lr.type = "Special Leave" THEN "cuti_khusus"
+            WHEN lr.type = "Unpaid Leave" THEN "unpaid_leave"
+            ELSE lr.type
         END as type_document'),
                 'lr.start_date as tanggal_mulai',
                 'lr.end_date as tanggal_selesai',
@@ -123,24 +123,24 @@ class IzinController extends Controller
     {
          $permissions = PermissionRequest::query()->toBase()
             ->from('intilab_apps.permission_requests as pr')
-            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
+            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.id')
             ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
             ->select(
                 DB::raw("CONCAT('PR-', pr.id) as id"),
                 'pr.no_document',
                 'd.nama_divisi',
-                DB::raw('CASE 
-            WHEN pr.status = "Approved Atasan" THEN "APPROVED" 
-            WHEN pr.status = "Approved HRD" THEN "APPROVED HRD" 
-            WHEN pr.status = "Rejected Atasan" THEN "REJECTED" 
-            WHEN pr.status = "Rejected HRD" THEN "REJECTED HRD" 
-            ELSE "WAITING" 
+                DB::raw('CASE
+            WHEN pr.status = "Approved Atasan" THEN "APPROVED"
+            WHEN pr.status = "Approved HRD" THEN "APPROVED HRD"
+            WHEN pr.status = "Rejected Atasan" THEN "REJECTED"
+            WHEN pr.status = "Rejected HRD" THEN "REJECTED HRD"
+            ELSE "WAITING"
         END as status'),
-                DB::raw('CASE 
-            WHEN pr.type = "Event Leave" THEN "kegiatan" 
-            WHEN pr.type = "Sick Leave" THEN "sakit" 
-            WHEN pr.type = "Late Arrival" THEN "datang_terlambat" 
-            ELSE pr.type 
+                DB::raw('CASE
+            WHEN pr.type = "Event Leave" THEN "kegiatan"
+            WHEN pr.type = "Sick Leave" THEN "sakit"
+            WHEN pr.type = "Late Arrival" THEN "datang_terlambat"
+            ELSE pr.type
         END as type_document'),
                 'pr.start_date as tanggal_mulai',
                 'pr.end_date as tanggal_selesai',
@@ -169,24 +169,24 @@ class IzinController extends Controller
 
         $leaves = LeaveRequest::query()->toBase()
             ->from('intilab_apps.leave_requests as lr')
-            ->leftJoin('master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
+            ->leftJoin('master_karyawan as u', 'lr.employee_id', '=', 'u.id')
             ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
             ->select(
                 DB::raw("CONCAT('LR-', lr.id) as id"),
                 'lr.no_document',
                 'd.nama_divisi',
-                DB::raw('CASE 
-            WHEN lr.status = "Approved Atasan" THEN "APPROVED" 
-            WHEN lr.status = "Approved HRD" THEN "APPROVED HRD" 
-            WHEN lr.status = "Rejected Atasan" THEN "REJECTED" 
-            WHEN lr.status = "Rejected HRD" THEN "REJECTED HRD" 
-            ELSE "WAITING" 
+                DB::raw('CASE
+            WHEN lr.status = "Approved Atasan" THEN "APPROVED"
+            WHEN lr.status = "Approved HRD" THEN "APPROVED HRD"
+            WHEN lr.status = "Rejected Atasan" THEN "REJECTED"
+            WHEN lr.status = "Rejected HRD" THEN "REJECTED HRD"
+            ELSE "WAITING"
         END as status'),
-                DB::raw('CASE 
-            WHEN lr.type = "Annual Leave" THEN "cuti" 
-            WHEN lr.type = "Special Leave" THEN "cuti_khusus" 
-            WHEN lr.type = "Unpaid Leave" THEN "unpaid_leave" 
-            ELSE lr.type 
+                DB::raw('CASE
+            WHEN lr.type = "Annual Leave" THEN "cuti"
+            WHEN lr.type = "Special Leave" THEN "cuti_khusus"
+            WHEN lr.type = "Unpaid Leave" THEN "unpaid_leave"
+            ELSE lr.type
         END as type_document'),
                 'lr.start_date as tanggal_mulai',
                 'lr.end_date as tanggal_selesai',
@@ -224,7 +224,7 @@ class IzinController extends Controller
 
         $onProgressPermissions = PermissionRequest::query()->toBase()
             ->from('intilab_apps.permission_requests as pr')
-            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
+            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.id')
             ->whereNull('pr.rejected_atasan_by')
             ->whereNull('pr.rejected_hrd_by')
             ->where('pr.status', 'Approved Atasan')
@@ -239,7 +239,7 @@ class IzinController extends Controller
 
         $onProgressLeaves = LeaveRequest::query()->toBase()
             ->from('intilab_apps.leave_requests as lr')
-            ->leftJoin('master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
+            ->leftJoin('master_karyawan as u', 'lr.employee_id', '=', 'u.id')
             ->whereNull('lr.rejected_atasan_by')
             ->whereNull('lr.rejected_hrd_by')
             ->where('lr.status', 'Approved Atasan')
@@ -286,7 +286,7 @@ class IzinController extends Controller
         DB::beginTransaction();
         try {
             $idStr = $request->id;
-            
+
             if (strpos($idStr, 'PR-') === 0) {
                 $id = substr($idStr, 3);
                 $model = PermissionRequest::find($id);
@@ -335,7 +335,7 @@ class IzinController extends Controller
         DB::beginTransaction();
         try {
             $idStr = $request->id;
-            
+
             if (strpos($idStr, 'PR-') === 0) {
                 $id = substr($idStr, 3);
                 $model = PermissionRequest::find($id);
