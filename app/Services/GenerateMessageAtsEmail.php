@@ -634,7 +634,7 @@ class GenerateMessageAtsEmail
             'negotiate' => 'Berhasil Dinegosiasikan',
         ];
 
-        return ($flow === 'salary_decision' ? 'Salary Decision' : 'Approval')
+        return ($flow === 'salary_decision' ? 'Salary Decision' : 'Final Decision')
             . ' ' . ($decisionLabels[$decision] ?? 'Berhasil Diproses');
     }
 
@@ -683,16 +683,16 @@ class GenerateMessageAtsEmail
       <div style='margin-top:10px; font-size:14px;'>" . $escape($subtitle) . "</div>
     </td></tr>
     <tr><td style='padding:28px 32px 34px;'>
-      <div style='font-size:18px; font-weight:700; margin-bottom:16px;'>Candidate Details</div>
+      <div style='font-size:18px; font-weight:700; margin-bottom:16px;'>Data Kandidat</div>
       <table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='background:#f8fafc; border:1px solid #dbe4f0; border-radius:12px;'>
         <tr>
           <td style='padding:20px; vertical-align:top;'>
             <table role='presentation' cellpadding='0' cellspacing='0' style='font-size:14px; line-height:1.75;'>
-              <tr><td style='width:155px; color:#64748b;'>Name</td><td style='font-weight:700;'>: " . $escape($recruitment->nama_lengkap) . "</td></tr>
-              <tr><td style='color:#64748b;'>Placement Location</td><td style='font-weight:700;'>: " . $escape($placement) . "</td></tr>
-              <tr><td style='color:#64748b;'>Applied Position</td><td style='font-weight:700;'>: " . $escape($position) . "</td></tr>
-              <tr><td style='color:#64748b;'>Zodiac</td><td style='font-weight:700;'>: " . $escape($shioElemen['shio'] ?? $recruitment->shio ?? '-') . "</td></tr>
-              <tr><td style='color:#64748b;'>Element</td><td style='font-weight:700;'>: " . $escape($shioElemen['elemen'] ?? $recruitment->elemen ?? '-') . "</td></tr>
+              <tr><td style='width:155px; color:#64748b;'>Nama</td><td style='font-weight:700;'>: " . $escape($recruitment->nama_lengkap) . "</td></tr>
+              <tr><td style='color:#64748b;'>Lokasi Penempatan</td><td style='font-weight:700;'>: " . $escape($placement) . "</td></tr>
+              <tr><td style='color:#64748b;'>Posisi Dilamar</td><td style='font-weight:700;'>: " . $escape($position) . "</td></tr>
+              <tr><td style='color:#64748b;'>Zodiak</td><td style='font-weight:700;'>: " . $escape($shioElemen['shio'] ?? $recruitment->shio ?? '-') . "</td></tr>
+              <tr><td style='color:#64748b;'>Elemen</td><td style='font-weight:700;'>: " . $escape($shioElemen['elemen'] ?? $recruitment->elemen ?? '-') . "</td></tr>
             </table>
           </td>
           <td style='padding:20px 20px 20px 0; width:92px; vertical-align:top;'>" . $photo . "</td>
