@@ -98,6 +98,34 @@ class PermohonanIzinController extends Controller
         return $map[$type] ?? $type;
     }
 
+    public function tabCounts(Request $request)
+    {
+        $periode = (int) ($request->periode ?: date('Y'));
+        $onProgress = $this->baseQuery($periode)
+            ->whereNull('pr.approved_hrd_by')
+            ->whereNull('pr.rejected_hrd_by')
+            ->whereNull('pr.rejected_atasan_by');
+        $processed = $this->baseQuery($periode)
+            ->where(function ($query) {
+                $query->whereNotNull('pr.approved_hrd_by')
+                    ->orWhereNotNull('pr.rejected_hrd_by')
+                    ->orWhereNotNull('pr.rejected_atasan_by');
+            });
+
+        if ($this->grade === 'STAFF') {
+            $onProgress->where('pr.created_by', $this->karyawan);
+            $processed->where('pr.created_by', $this->karyawan);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'on_progress' => $onProgress->count(),
+                'processed' => $processed->count(),
+            ],
+        ]);
+    }
+
     public function indexUnprocessed(Request $request)
     {
         try {

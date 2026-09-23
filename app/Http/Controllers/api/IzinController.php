@@ -218,6 +218,69 @@ class IzinController extends Controller
         return Datatables::of($data)->make(true);
     }
 
+    public function tabCounts(Request $request)
+    {
+        $periode = $request->periode ?? date('Y');
+
+        $onProgressPermissions = PermissionRequest::query()->toBase()
+            ->from('intilab_apps.permission_requests as pr')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
+            ->whereNull('pr.rejected_atasan_by')
+            ->whereNull('pr.rejected_hrd_by')
+            ->where('pr.status', 'Approved Atasan')
+            ->where(function ($query) {
+                $query->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
+                    ->orWhereNull('u.atasan_langsung');
+            })
+            ->whereNotNull('pr.approved_atasan_by')
+            ->whereNotNull('pr.approved_atasan_at')
+            ->whereYear('pr.created_at', $periode)
+            ->count();
+
+        $onProgressLeaves = LeaveRequest::query()->toBase()
+            ->from('intilab_apps.leave_requests as lr')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
+            ->whereNull('lr.rejected_atasan_by')
+            ->whereNull('lr.rejected_hrd_by')
+            ->where('lr.status', 'Approved Atasan')
+            ->where(function ($query) {
+                $query->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
+                    ->orWhereNull('u.atasan_langsung');
+            })
+            ->whereNotNull('lr.approved_atasan_by')
+            ->whereNotNull('lr.approved_atasan_at')
+            ->whereYear('lr.created_at', $periode)
+            ->count();
+
+        $processedPermissions = PermissionRequest::query()->toBase()
+            ->from('intilab_apps.permission_requests as pr')
+            ->whereNotNull('pr.approved_hrd_by')
+            ->whereNotNull('pr.approved_hrd_at')
+            ->whereNull('pr.rejected_atasan_by')
+            ->whereNull('pr.rejected_hrd_by')
+            ->whereYear('pr.created_at', $periode)
+            ->whereNotNull('pr.approved_atasan_by')
+            ->count();
+
+        $processedLeaves = LeaveRequest::query()->toBase()
+            ->from('intilab_apps.leave_requests as lr')
+            ->whereNotNull('lr.approved_hrd_by')
+            ->whereNotNull('lr.approved_hrd_at')
+            ->whereNull('lr.rejected_atasan_by')
+            ->whereNull('lr.rejected_hrd_by')
+            ->whereYear('lr.created_at', $periode)
+            ->whereNotNull('lr.approved_atasan_by')
+            ->count();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'on_progress' => $onProgressPermissions + $onProgressLeaves,
+                'processed' => $processedPermissions + $processedLeaves,
+            ],
+        ]);
+    }
+
     public function approveIzin(Request $request)
     {
         DB::beginTransaction();
