@@ -452,6 +452,259 @@ class PersonnelRequestController extends Controller
         return $query;
     }
 
+    private function candidateActionCategoryConstants(): array
+    {
+        return [
+            'shortlisted' => [
+                'assessment',
+                'screening',
+                'approved',
+                'interview_hrd',
+                'profile_completion',
+                'interview_user',
+            ],
+            'excluded_shortlisted' => [
+                'management_decision',
+                'internal_sallary_offer',
+                'salary_offer',
+                'sallary_offer',
+                'hired',
+                'rejected',
+                'finance_review',
+                'training',
+            ],
+            'terminal' => ['rejected', 'void', 'hired', 'selesai', 'pr_rejected'],
+        ];
+    }
+
+    private function isCandidateTerminalStatus($row, string $status): bool
+    {
+        $constants = $this->candidateActionCategoryConstants();
+
+        return in_array($status, $constants['terminal'], true)
+            || (int) ($row->is_rejected_kandidat ?? 0) === 1;
+    }
+
+    private function isReadyToScheduleUserInterview(string $status, bool $profileDone, $userInterview): bool
+    {
+        return !($userInterview && $userInterview->id)
+            && ($status === 'interview_user' || ($status === 'profile_completion' && $profileDone));
+    }
+
+    private function belongsToShortlistedCandidate($row, string $status): bool
+    {
+        $constants = $this->candidateActionCategoryConstants();
+
+        return in_array($status, $constants['shortlisted'], true)
+            && !in_array($status, $constants['excluded_shortlisted'], true)
+            && !$this->isCandidateTerminalStatus($row, $status);
+    }
+
+    private function isUserInterviewDecisionPending($row, $userInterview): bool
+    {
+        if (!$userInterview || !$userInterview->id) {
+            return false;
+        }
+
+        $approved = $row->is_approve_interview_user ?? 0;
+
+        return !($approved === 1 || $approved === true || $approved === '1');
+    }
+
+    private function resolveCandidateActionCategory($row): ?string
+    {
+        $status = strtolower(trim((string) ($row->status ?? '')));
+        $userInterview = $row->userInterview ?? null;
+        $profileDone = $row->candidateProfile !== null;
+
+        $intDateStr = '';
+        if ($userInterview && !empty($userInterview->tgl_interview)) {
+            try {
+                $intDateStr = Carbon::parse($userInterview->tgl_interview)->format('Y-m-d');
+            } catch (\Throwable $e) {
+                $intDateStr = '';
+            }
+        }
+
+        $todayStr = Carbon::today()->format('Y-m-d');
+
+        if ($this->isUserInterviewDecisionPending($row, $userInterview)) {
+            if ($intDateStr === $todayStr) {
+                return 'today_scheduled';
+            }
+
+            if ($intDateStr > $todayStr) {
+                return 'scheduled';
+            }
+
+            return 'overdue';
+        }
+
+        if ($this->isReadyToScheduleUserInterview($status, $profileDone, $userInterview)) {
+            return 'unscheduled';
+        }
+
+        if ($this->belongsToShortlistedCandidate($row, $status)) {
+            return 'shortlisted';
+        }
+
+        return null;
+    }
+
+    private function ownedCandidateBaseQuery()
+    {
+        $ownedRequestIds = $this->ownedPersonnelRequestQuery()->pluck('id');
+
+        return NewRecruitment::query()
+            ->with([
+                'personnelRequest.detailCabang',
+                'personnelRequest.detailDivisi',
+                'personnelRequest.detailPosisi',
+                'userInterview',
+                'candidateProfile',
+            ])
+            ->whereIn('personnel_request_id', $ownedRequestIds->isEmpty() ? [-1] : $ownedRequestIds);
+    }
+
+    private function resolveCandidateActionIds(?string $category): array
+    {
+        if (!$category) {
+            return [];
+        }
+
+        return $this->ownedCandidateBaseQuery()
+            ->orderByDesc('id')
+            ->get()
+            ->filter(function ($row) use ($category) {
+                return $this->resolveCandidateActionCategory($row) === $category;
+            })
+            ->pluck('id')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Tab counts untuk Personnel Request user view
+     */
+    public function tabCounts()
+    {
+        try {
+            $onProgress = $this->applyCompletionFilter(
+                $this->ownedPersonnelRequestQuery(),
+                'on_progress'
+            )->count();
+
+            $completed = $this->applyCompletionFilter(
+                $this->ownedPersonnelRequestQuery(),
+                'completed'
+            )->count();
+
+            $candidateCounts = [
+                'shortlisted' => 0,
+                'unscheduled' => 0,
+                'scheduled' => 0,
+                'today_scheduled' => 0,
+                'overdue' => 0,
+            ];
+
+            $this->ownedCandidateBaseQuery()
+                ->orderByDesc('id')
+                ->get()
+                ->each(function ($row) use (&$candidateCounts) {
+                    $category = $this->resolveCandidateActionCategory($row);
+                    if ($category && isset($candidateCounts[$category])) {
+                        $candidateCounts[$category]++;
+                    }
+                });
+
+            return response()->json([
+                'data' => array_merge([
+                    'on_progress' => $onProgress,
+                    'completed' => $completed,
+                ], $candidateCounts),
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * DataTables kandidat yang perlu tindakan user (pengganti Kanban)
+     */
+    public function candidateActionIndex(Request $request)
+    {
+        try {
+            $category = $request->input('action_category');
+            $allowed = ['shortlisted', 'unscheduled', 'scheduled', 'today_scheduled', 'overdue'];
+            if (!in_array($category, $allowed, true)) {
+                return response()->json(['message' => 'Kategori tindakan kandidat tidak valid.'], 422);
+            }
+
+            $ids = $this->resolveCandidateActionIds($category);
+
+            $data = NewRecruitment::query()
+                ->with([
+                    'personnelRequest.detailCabang',
+                    'personnelRequest.detailDivisi',
+                    'personnelRequest.detailPosisi',
+                    'userInterview',
+                    'candidateProfile',
+                    'sallaryOffer',
+                ])
+                ->whereIn('id', $ids ?: [-1])
+                ->orderByDesc('id');
+
+            return Datatables::of($data)
+                ->addColumn('no_request', function ($row) {
+                    return optional($row->personnelRequest)->no_request ?? '-';
+                })
+                ->addColumn('posisi_divisi', function ($row) {
+                    $pr = $row->personnelRequest;
+                    $posisi = optional($pr->detailPosisi)->nama_jabatan ?? $pr->posisi ?? '-';
+                    $divisi = optional($pr->detailDivisi)->nama_divisi ?? $pr->divisi ?? '-';
+
+                    return "{$posisi}|||{$divisi}";
+                })
+                ->addColumn('has_completed_profile', function ($row) {
+                    return $row->candidateProfile !== null;
+                })
+                ->addColumn('interview_schedule', function ($row) {
+                    return optional($row->userInterview)->tgl_interview;
+                })
+                ->addColumn('action_category', function ($row) {
+                    return $this->resolveCandidateActionCategory($row);
+                })
+                ->filterColumn('no_request', function ($q, $keyword) {
+                    $q->whereHas('personnelRequest', function ($pr) use ($keyword) {
+                        $pr->where('no_request', 'like', "%{$keyword}%");
+                    });
+                })
+                ->filterColumn('nama_lengkap', fn($q, $k) => $q->where('nama_lengkap', 'like', "%{$k}%"))
+                ->filterColumn('posisi_divisi', function ($q, $keyword) {
+                    $q->where(function ($sub) use ($keyword) {
+                        $sub->where('posisi_dilamar', 'like', "%{$keyword}%")
+                            ->orWhereHas('personnelRequest', function ($pr) use ($keyword) {
+                                $pr->where('posisi', 'like', "%{$keyword}%")
+                                    ->orWhere('divisi', 'like', "%{$keyword}%")
+                                    ->orWhereHas('detailPosisi', fn($p) => $p->where('nama_jabatan', 'like', "%{$keyword}%"))
+                                    ->orWhereHas('detailDivisi', fn($d) => $d->where('nama_divisi', 'like', "%{$keyword}%"));
+                            });
+                    });
+                })
+                ->filterColumn('status', fn($q, $k) => $q->where('status', 'like', "%{$k}%"))
+                ->filterColumn('nilai_kecocokan', fn($q, $k) => $q->where('nilai_kecocokan', 'like', "%{$k}%"))
+                ->make(true);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile(),
+            ], 500);
+        }
+    }
+
     /**
      * Index - DataTables server-side
      */
@@ -816,9 +1069,77 @@ class PersonnelRequestController extends Controller
             return response()->json(['message' => 'Data personel request tidak ditemukan'], 404);
         }
 
+        $data->load(['detailCabang', 'detailDivisi', 'detailPosisi']);
+        $data->loadCount([
+            'newRecruitments as total_pelamar' => function ($query) {
+                $this->constrainCountedApplicants($query);
+            },
+            'newRecruitments as total_hired' => function ($query) {
+                $query->where('status', 'hired');
+            },
+            'newRecruitments as total_keterima' => function ($query) {
+                $query->whereIn('status', ['completed', 'hired', 'training', 'HIRED', 'Training']);
+            },
+        ]);
+
         app(UserAssessmentCategoryService::class)->appendLegacyConfigFields($data);
 
         return response()->json($data, 200);
+    }
+
+    /**
+     * Detail kandidat milik personnel request user (untuk modal detail kandidat)
+     */
+    public function candidateDetail(Request $request)
+    {
+        $id = $request->input('id');
+        if (!$id) {
+            return response()->json(['message' => 'ID kandidat tidak ditemukan'], 400);
+        }
+
+        $ownedRequestIds = $this->ownedPersonnelRequestQuery()->pluck('id');
+        if ($ownedRequestIds->isEmpty()) {
+            return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+        }
+
+        $candidate = NewRecruitment::with([
+            'personalRequest.masterJabatan',
+            'personalRequest.masterDivisi',
+            'personalRequest.detailDivisi',
+            'personalRequest.detailPosisi',
+            'appliedPositionJabatan',
+            'masterJabatan',
+            'hrdInterview',
+            'userInterview',
+            'candidateProfile',
+        ])
+            ->whereIn('personnel_request_id', $ownedRequestIds)
+            ->find($id);
+
+        if (!$candidate) {
+            return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+        }
+
+        $pictureService = app(RecruitmentPictureService::class);
+        $personnelRequest = $candidate->personalRequest;
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'candidate' => $this->formatCandidatePreviewItem($candidate, $pictureService),
+                'request' => $personnelRequest ? [
+                    'id' => $personnelRequest->id,
+                    'no_request' => $personnelRequest->no_request,
+                    'posisi' => optional($personnelRequest->detailPosisi)->nama_jabatan
+                        ?: optional($personnelRequest->masterJabatan)->nama_jabatan
+                        ?: $personnelRequest->posisi,
+                    'divisi' => optional($personnelRequest->detailDivisi)->nama_divisi
+                        ?: optional($personnelRequest->masterDivisi)->nama_divisi
+                        ?: ($personnelRequest->divisi_alias ?: $personnelRequest->divisi),
+                    'minimum_matching' => $personnelRequest->minimum_matching,
+                ] : null,
+            ],
+        ], 200);
     }
 
     /**
@@ -1082,6 +1403,86 @@ class PersonnelRequestController extends Controller
                 "message" => $th->getMessage(),
                 "line"    => $th->getLine(),
                 "file"    => $th->getFile()
+            ], 500);
+        }
+    }
+
+    /**
+     * Kembalikan kandidat dari tab Terlewat ke tahap HR Interview untuk ditinjau ulang HRD.
+     */
+    public function returnCandidateToHrd(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $recruitment = $this->findOwnedRecruitment($request->new_recruitment_id);
+            if (!$recruitment) {
+                return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+            }
+
+            $recruitment->load(['userInterview', 'candidateProfile', 'hrdInterview']);
+
+            if ($this->resolveCandidateActionCategory($recruitment) !== 'overdue') {
+                return response()->json([
+                    'message' => 'Kandidat hanya dapat dikembalikan ke HRD dari tab Terlewat.',
+                ], 422);
+            }
+
+            $reason = trim((string) ($request->input('reason') ?? ''));
+            if ($reason === '') {
+                return response()->json(['message' => 'Alasan pengembalian wajib diisi.'], 422);
+            }
+
+            $user = $this->getEffectiveKaryawanName();
+            $now = Carbon::now();
+
+            RecruitmentInterview::where('new_recruitment_id', $recruitment->id)
+                ->where('stage', 'user')
+                ->where('is_active', 1)
+                ->update([
+                    'is_active' => 0,
+                    'updated_by' => $user,
+                ]);
+
+            (new RecruitmentStatusService())->update(
+                $recruitment->id,
+                'interview_hrd',
+                $now,
+                'returned_to_hrd_from_user_interview',
+                [
+                    'reason' => $reason,
+                    'by' => $user,
+                ]
+            );
+
+            $recruitment->update([
+                'status' => 'interview_hrd',
+                'is_approved_interview_hrd' => 0,
+                'approved_interview_hrd_by' => null,
+                'approved_interview_hrd_at' => null,
+                'is_approve_interview_user' => 0,
+                'is_input_review_hrd' => 1,
+            ]);
+
+            $latestHrdInterview = RecruitmentInterview::where('new_recruitment_id', $recruitment->id)
+                ->where('stage', 'hrd')
+                ->orderByDesc('id')
+                ->first();
+
+            if ($latestHrdInterview) {
+                $latestHrdInterview->update(['is_active' => 1]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Kandidat berhasil dikembalikan ke HR Interview. HRD akan meninjau ulang keputusan.',
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile(),
             ], 500);
         }
     }

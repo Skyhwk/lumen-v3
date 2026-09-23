@@ -15,7 +15,13 @@
 </p>
 
 
-   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:0;background:linear-gradient(180deg,#eff6ff 0%,#f8fafc 100%);border:1px solid #bfdbfe;border-radius:14px;overflow:hidden;margin:0 0 24px 0;">
+@php
+    $gajiTerakhir = !empty($data->gaji_terakhir) ? 'Rp ' . number_format($data->gaji_terakhir, 0, ',', '.') : '-';
+    $ekspektasiGaji = !empty($data->ekspetasi_gaji) ? 'Rp ' . number_format($data->ekspetasi_gaji, 0, ',', '.') : '-';
+    $penawaranGajiHrd = \App\Services\OfferingSalaryEmail::formatRupiah(\App\Services\OfferingSalaryEmail::getSalaryOfferHrd($data));
+@endphp
+
+   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:0;background:linear-gradient(180deg,#eff6ff 0%,#f8fafc 100%);border:1px solid #bfdbfe;border-radius:14px;overflow:hidden;margin:0 0 16px 0;">
     @foreach([
             'Nama Kandidat' => $data->nama_lengkap ?? '-',
             'Shio' => $data->shio ?? '-',
@@ -24,9 +30,6 @@
             'Usia' => \App\Services\HrdEmailViewData::getUsia($data),
             'Alamat' => $data->alamat_domisili ?? '-',
             'Kontak' => $contact ?? '-',
-            'Gaji Terakhir' => !empty($data->gaji_terakhir) ? 'Rp ' . number_format($data->gaji_terakhir, 0, ',', '.') : '-',
-            'Ekspektasi Gaji' => !empty($data->ekspetasi_gaji) ? 'Rp ' . number_format($data->ekspetasi_gaji, 0, ',', '.') : '-',
-            // 'Penawaran Gaji HRD' => !empty($data->sallary_offer_hrd) ? 'Rp ' . number_format($data->sallary_offer_hrd, 0, ',', '.') : (!empty($data->sallary_offer->sallary_offer_hrd) ? 'Rp ' . number_format($data->sallary_offer->sallary_offer_hrd, 0, ',', '.') : '-'),
         ] as $label => $value)
             <tr>
                         <td
@@ -34,6 +37,23 @@
             <td style="padding:12px 18px;font-size:14px;color:#0f172a;font-weight:400;{{ $loop->first ? '' : 'border-top:1px solid #dbeafe;' }}vertical-align:top;">{{ $value }}</td>
             </tr>
     @endforeach
+</table>
+
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:0;background:#f8fafc;border:1px solid #bfdbfe;border-radius:14px;overflow:hidden;margin:0 0 24px 0;">
+    <tr>
+        <td style="width:33.33%;padding:14px 16px;vertical-align:top;border-right:1px solid #dbeafe;">
+            <div style="font-size:12px;color:#64748b;margin:0 0 6px 0;">Gaji Terakhir</div>
+            <div style="font-size:14px;color:#0f172a;font-weight:600;">{{ $gajiTerakhir }}</div>
+        </td>
+        <td style="width:33.33%;padding:14px 16px;vertical-align:top;border-right:1px solid #dbeafe;">
+            <div style="font-size:12px;color:#64748b;margin:0 0 6px 0;">Ekspektasi Gaji</div>
+            <div style="font-size:14px;color:#0f172a;font-weight:600;">{{ $ekspektasiGaji }}</div>
+        </td>
+        <td style="width:33.33%;padding:14px 16px;vertical-align:top;">
+            <div style="font-size:12px;color:#64748b;margin:0 0 6px 0;">Persetujuan Gaji</div>
+            <div style="font-size:14px;color:#1e40af;font-weight:700;">{{ $penawaranGajiHrd }}</div>
+        </td>
+    </tr>
 </table>
 
 @if(!empty($data->resubmit_reason))
