@@ -247,6 +247,9 @@ class AtsInterviewHrdController extends Controller
 
                 return $pipelineStatus['label'] ?? null;
             })
+            ->addColumn('is_returned_from_user_interview', function ($row) {
+                return (int) RecruitmentStatusService::isReturnedFromUserInterview($row);
+            })
             ->addColumn('reject_reason', function ($row) {
                 if (RecruitmentStatusService::isRejectedKandidat($row) && !RecruitmentStatusService::isReturnedFromDirectorManagementRejection($row)) {
                     $reason = trim((string) ($row->alasan_reject ?? ''));

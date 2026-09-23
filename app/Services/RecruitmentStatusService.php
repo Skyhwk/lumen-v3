@@ -1180,10 +1180,41 @@ class RecruitmentStatusService
         return false;
     }
 
+    public static function hasReturnedFromUserInterviewInHistory($recruitment): bool
+    {
+        foreach (self::parseMetaHistory($recruitment) as $entry) {
+            if (strtolower((string) ($entry['status'] ?? '')) === 'returned_to_hrd_from_user_interview') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function isReturnedFromUserInterview($recruitment): bool
+    {
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        if ($status !== 'interview_hrd') {
+            return false;
+        }
+
+        return self::hasReturnedFromUserInterviewInHistory($recruitment);
+    }
+
     public static function shouldSkipProfileCompletionOnHrdPass($recruitment): bool
     {
-        return self::hasCompletedProfile($recruitment)
-            && self::hasDirectorManagementRejectionInHistory($recruitment);
+        if (!self::hasCompletedProfile($recruitment)) {
+            return false;
+        }
+
+        if (self::hasReturnedFromUserInterviewInHistory($recruitment)) {
+            return true;
+        }
+
+        return self::hasDirectorManagementRejectionInHistory($recruitment);
     }
 
     public function update($recruitmentId, $status, $at = null, $historyStatus = null, array $extraData = [])
