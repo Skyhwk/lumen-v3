@@ -83,6 +83,8 @@ class SamplerTrackingSyncTest extends TestCase
         (new \AddUnblockDetailToSamplerTrackingTroubles())->up();
         require_once __DIR__ . '/../../database/migrations/2026_09_22_100000_add_session_to_sampler_tracking_troubles.php';
         (new \AddSessionToSamplerTrackingTroubles())->up();
+        require_once __DIR__ . '/../../database/migrations/2026_09_23_100000_add_lampiran_to_sampler_tracking_troubles.php';
+        (new \AddLampiranToSamplerTrackingTroubles())->up();
         $connection->table('sampling_plan')->insert(['id' => 1, 'no_quotation' => 'Q1']);
         \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-17 10:00:00', 'Asia/Jakarta'));
         $this->service = new SamplerTrackingService();

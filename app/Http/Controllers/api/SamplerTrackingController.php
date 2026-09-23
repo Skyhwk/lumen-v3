@@ -191,7 +191,7 @@ class SamplerTrackingController extends Controller
         $allowedGradesConfig = env('SAMPLER_TRACKING_UNBLOCK_GRADES', 'MANAGER,SENIOR MANAGER');
         $allowedGrades = array_filter(array_map('trim', explode(',', strtoupper((string) $allowedGradesConfig))));
 
-        $userGrade = strtoupper(trim((string) $this->grade));
+        $userGrade = $this->effectiveGrade();
         if (!$userGrade || !in_array($userGrade, $allowedGrades, true)) {
             $allowedStr = implode(', ', $allowedGrades);
             return response()->json([
@@ -213,13 +213,24 @@ class SamplerTrackingController extends Controller
             'note' => 'required|string|max:2000',
         ]);
 
-        $data = (new SamplerTrackingTroubleService())->reopen($request->trouble_id, $this->user_id, [
-            'note' => $request->note,
-            'reopen_reason' => $request->reopen_reason,
-            'sampler_follow_up_action' => $request->sampler_follow_up_action,
-            'session_id' => $request->session_id,
-            'session_ids' => $request->session_ids,
-        ]);
+        $service = new SamplerTrackingTroubleService();
+        $lampiran = [];
+        try {
+            $lampiran = $service->storeLampiran($request->file('lampiran'), $request->trouble_id);
+            $data = $service->reopen($request->trouble_id, $this->user_id, [
+                'note' => $request->note,
+                'reopen_reason' => $request->reopen_reason,
+                'sampler_follow_up_action' => $request->sampler_follow_up_action,
+                'session_id' => $request->session_id,
+                'session_ids' => $request->session_ids,
+                'lampiran' => $lampiran,
+            ]);
+        } catch (\Throwable $e) {
+            if ($lampiran) {
+                $service->deleteLampiranFiles($lampiran);
+            }
+            throw $e;
+        }
 
         $actor = \App\Models\MasterKaryawan::find($this->user_id);
         if ($actor && is_object($data)) {
@@ -249,6 +260,22 @@ class SamplerTrackingController extends Controller
                 'trouble_selesai' => $selesai->count(),
             ],
         ]);
+    }
+
+    private function effectiveGrade(): string
+    {
+        $grade = $this->grade;
+        $isDevMode = env('APP_ENV') !== 'production' && env('DEV_BYPASS_USER_ID') !== null;
+        $devUserId = env('DEV_BYPASS_USER_ID');
+
+        if ($isDevMode && $devUserId) {
+            $devKaryawan = \App\Models\MasterKaryawan::where('id', $devUserId)->first();
+            if ($devKaryawan && $devKaryawan->grade) {
+                $grade = $devKaryawan->grade;
+            }
+        }
+
+        return strtoupper(trim((string) $grade));
     }
 
     protected function normalizeTroubleFilterDate($date)
@@ -289,6 +316,12 @@ class SamplerTrackingController extends Controller
             : null;
         $troubleObj['reopen_reason_label'] = SamplerTrackingTroubleService::reopenReasonLabel($trouble->reopen_reason ?? null);
         $troubleObj['sampler_follow_up_action_label'] = SamplerTrackingTroubleService::samplerFollowUpLabel($trouble->sampler_follow_up_action ?? null);
+        $lampiran = $trouble->lampiran ?? null;
+        if (is_string($lampiran)) {
+            $decoded = json_decode($lampiran, true);
+            $lampiran = is_array($decoded) ? $decoded : [];
+        }
+        $troubleObj['lampiran'] = is_array($lampiran) ? $lampiran : [];
 
         return $troubleObj;
     }
