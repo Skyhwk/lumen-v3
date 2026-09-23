@@ -945,6 +945,102 @@ class PersiapanSampleController extends Controller
         return 'ISL/PS/' . date('y') . '-' . $this->getRomanMonth(date('m')) . '/' . sprintf('%04d', $latestPSH ? $latestPSH->id + 1 : 1);
     }
 
+    private function findMatchingPersiapanHeaderIds(Request $request): array
+    {
+        $periode = trim((string) $request->periode);
+        $query = PersiapanSampelHeader::where('is_active', 1)
+            ->where('tanggal_sampling', $request->tanggal_sampling)
+            ->where(function ($quotation) use ($request) {
+                $quotation->where('no_quotation', $request->no_quotation);
+                if (!empty($request->no_order)) {
+                    $quotation->orWhere(function ($sameOrder) use ($request) {
+                        $sameOrder->where('no_order', $request->no_order)
+                            ->where(function ($emptyQuotation) {
+                                $emptyQuotation->whereNull('no_quotation')->orWhere('no_quotation', '');
+                            });
+                    });
+                }
+            })
+            ->orderBy('id')
+            ->lockForUpdate();
+        if ($periode === '') {
+            $query->where(function ($inner) {
+                $inner->whereNull('periode')->orWhere('periode', '')->orWhereRaw("TRIM(periode) = ''");
+            });
+        } else {
+            $query->whereRaw('TRIM(periode) = ?', [$periode]);
+        }
+
+        $wantedSampler = $this->normalizeSamplerList($request->sampler_jadwal);
+
+        return $query->get()
+            ->filter(function ($header) use ($wantedSampler) {
+                return $this->normalizeSamplerList($header->sampler_jadwal) === $wantedSampler;
+            })
+            ->pluck('id')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function normalizeSamplerList($sampler): array
+    {
+        $names = array_map(function ($name) {
+            return strtolower(trim(preg_replace('/\s+/', ' ', (string) $name)));
+        }, explode(',', (string) $sampler));
+        $names = array_values(array_filter($names, function ($name) {
+            return $name !== '';
+        }));
+        sort($names);
+
+        return $names;
+    }
+
+    private function collapseDuplicatePersiapanHeaders(Request $request, PersiapanSampelHeader $current): PersiapanSampelHeader
+    {
+        $ids = $this->findMatchingPersiapanHeaderIds($request);
+        if (count($ids) <= 1) {
+            return $current;
+        }
+
+        $rows = PersiapanSampelHeader::whereIn('id', $ids)->orderBy('id')->get();
+        $keeper = $rows->first(function ($header) {
+            return !is_null($header->detail_bas_documents);
+        }) ?: $rows->firstWhere('id', $current->id) ?: $rows->last();
+
+        if ((int) $keeper->id !== (int) $current->id) {
+            $keeper->no_order = $current->no_order;
+            $keeper->no_quotation = $current->no_quotation;
+            $keeper->tanggal_sampling = $current->tanggal_sampling;
+            $keeper->nama_perusahaan = $current->nama_perusahaan;
+            $keeper->no_sampel = $current->no_sampel;
+            $keeper->periode = $current->periode;
+            $keeper->sampler_jadwal = $current->sampler_jadwal;
+            foreach (['plastik_benthos', 'media_petri_dish', 'media_tabung', 'masker', 'sarung_tangan_karet', 'sarung_tangan_bintik', 'tambahan', 'analis_berangkat', 'sampler_berangkat', 'analis_pulang', 'sampler_pulang'] as $field) {
+                $keeper->$field = $current->$field;
+            }
+            $keeper->is_active = 1;
+            $keeper->updated_by = $this->karyawan;
+            $keeper->updated_at = Carbon::now();
+            $keeper->save();
+        }
+
+        $removeIds = $rows->pluck('id')->filter(function ($id) use ($keeper) {
+            return (int) $id !== (int) $keeper->id;
+        })->values()->all();
+        if ($removeIds) {
+            PersiapanSampelHeader::whereIn('id', $removeIds)->update([
+                'is_active' => 0,
+                'updated_by' => $this->karyawan,
+            ]);
+            PersiapanSampelDetail::whereIn('id_persiapan_sampel_header', $removeIds)->update([
+                'is_active' => 0,
+            ]);
+        }
+
+        return $keeper->fresh();
+    }
+
     private function saveHeader(Request $request)
     {
         
@@ -952,15 +1048,7 @@ class PersiapanSampleController extends Controller
             $psh = null;
             $noSampel = isset($request->all_category) && !empty($request->all_category) ? $request->all_category : (isset($request->detail) && !empty($request->detail) ? array_keys($request->detail) : []);
             $modeUpdate = false;
-            $existingPsd = PersiapanSampelHeader::where([
-                ['is_active', 1],
-                ['no_quotation', $request->no_quotation],
-                ['tanggal_sampling', $request->tanggal_sampling],
-                ['periode', $request->periode],
-                ['sampler_jadwal', $request->sampler_jadwal],
-            ])->pluck('id')
-            ->unique()
-            ->toArray();
+            $existingPsd = $this->findMatchingPersiapanHeaderIds($request);
             $jumlahHeader = count($existingPsd);
             
            
@@ -1052,14 +1140,17 @@ class PersiapanSampleController extends Controller
             $psh->periode = $request->periode ?? $psh->periode;
             $psh->is_active = 1;
            
-            if($modeUpdate){
-                $psh->sampler_jadwal = $request->sampler_jadwal ?? $psh->sampler_jadwal;
+            if ($modeUpdate) {
+                $incomingSampler = $request->sampler_jadwal ?? $psh->sampler_jadwal;
+                if ($this->normalizeSamplerList($incomingSampler) !== $this->normalizeSamplerList($psh->sampler_jadwal)) {
+                    $psh->sampler_jadwal = $incomingSampler;
+                }
                 $psh->updated_by = $this->karyawan;
                 $psh->updated_at = Carbon::now();
             }
 
             $psh->save();
-            return $psh;
+            return $this->collapseDuplicatePersiapanHeaders($request, $psh);
         } catch (\Throwable $th) {
             new Exception($th);
         }
