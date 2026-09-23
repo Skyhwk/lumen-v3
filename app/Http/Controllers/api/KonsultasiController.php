@@ -204,8 +204,8 @@ class KonsultasiController extends Controller
     {
         $query = ConsultationRequest::on('intilab_apps')
             ->from('intilab_apps.consultation_requests as cr')
-            ->leftJoin('master_karyawan as u', 'cr.employee_id', '=', 'u.id')
-            ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'cr.employee_id', '=', 'u.id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
             ->where('cr.is_active', 1)
             ->select(
                 'cr.id',
