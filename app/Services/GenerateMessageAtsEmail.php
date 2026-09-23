@@ -625,6 +625,84 @@ class GenerateMessageAtsEmail
         return $photoUrl ?: '';
     }
 
+    public static function decisionActionTitle(string $flow, string $decision): string
+    {
+        $decisionLabels = [
+            'approve' => 'Berhasil Disetujui',
+            'reject' => 'Berhasil Ditolak',
+            'keep' => 'Berhasil Ditahan',
+            'negotiate' => 'Berhasil Dinegosiasikan',
+        ];
+
+        return ($flow === 'salary_decision' ? 'Salary Decision' : 'Final Decision')
+            . ' ' . ($decisionLabels[$decision] ?? 'Berhasil Diproses');
+    }
+
+    /**
+     * Ringkasan hasil action untuk pengambil keputusan. Tidak memuat tombol action lagi.
+     */
+    public static function bodyEmailDecisionActionConfirmation($recruitment, string $flow, string $decision): string
+    {
+        $title = self::decisionActionTitle($flow, $decision);
+        $subtitle = $flow === 'salary_decision'
+            ? 'Pemberitahuan hasil keputusan persetujuan penawaran gaji.'
+            : 'Pemberitahuan hasil keputusan persetujuan kandidat.';
+
+        $request = \Illuminate\Support\Facades\DB::table('personnel_requests')
+            ->where('id', $recruitment->personnel_request_id ?? null)
+            ->first();
+        $placement = \Illuminate\Support\Facades\DB::table('master_cabang')
+            ->where('id', $request->lokasi_penempatan_cabang ?? null)
+            ->value('nama_cabang')
+            ?? (($request->lokasi_penempatan_cabang ?? null) == 1 ? 'HEAD OFFICE' : '-');
+        $position = \Illuminate\Support\Facades\DB::table('master_jabatan')
+            ->where('id', $request->posisi ?? null)
+            ->value('nama_jabatan')
+            ?? ($request->divisi_alias ?? null)
+            ?? $recruitment->posisi_dilamar
+            ?? '-';
+        $shioElemen = \App\Helpers\ShioElemenHelper::resolve(
+            $recruitment->tanggal_lahir ?? null,
+            $recruitment->shio ?? null,
+            $recruitment->elemen ?? null
+        );
+        $photoUrl = self::recruitmentPhotoForEmail($recruitment);
+
+        $escape = fn ($value) => htmlspecialchars((string) ($value ?? '-'), ENT_QUOTES, 'UTF-8');
+        $photo = $photoUrl !== ''
+            ? "<img src='" . $escape($photoUrl) . "' alt='Foto kandidat' width='92' height='92' style='display:block; width:92px; height:92px; object-fit:cover; border-radius:12px; border:1px solid #dbeafe;'>"
+            : '';
+
+        return "<!DOCTYPE html>
+<html><head><meta charset='utf-8'></head>
+<body style='margin:0; padding:24px; background:#f4f7ff; font-family:Arial,Helvetica,sans-serif; color:#0f172a;'>
+  <table role='presentation' width='640' align='center' cellpadding='0' cellspacing='0' style='max-width:640px; background:#fff; border-radius:16px; overflow:hidden;'>
+    <tr><td style='padding:30px 32px; background:linear-gradient(120deg,#2247b9,#5699f8); color:#fff;'>
+      <div style='font-size:12px; font-weight:700; letter-spacing:1.2px;'>PT INTI SURYA LABORATORIUM</div>
+      <div style='margin-top:14px; font-size:25px; line-height:1.2; font-weight:700;'>" . $escape($title) . "</div>
+      <div style='margin-top:10px; font-size:14px;'>" . $escape($subtitle) . "</div>
+    </td></tr>
+    <tr><td style='padding:28px 32px 34px;'>
+      <div style='font-size:18px; font-weight:700; margin-bottom:16px;'>Candidate Details</div>
+      <table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='background:#f8fafc; border:1px solid #dbe4f0; border-radius:12px;'>
+        <tr>
+          <td style='padding:20px; vertical-align:top;'>
+            <table role='presentation' cellpadding='0' cellspacing='0' style='font-size:14px; line-height:1.75;'>
+              <tr><td style='width:155px; color:#64748b;'>Name</td><td style='font-weight:700;'>: " . $escape($recruitment->nama_lengkap) . "</td></tr>
+              <tr><td style='color:#64748b;'>Placement Location</td><td style='font-weight:700;'>: " . $escape($placement) . "</td></tr>
+              <tr><td style='color:#64748b;'>Applied Position</td><td style='font-weight:700;'>: " . $escape($position) . "</td></tr>
+              <tr><td style='color:#64748b;'>Zodiac</td><td style='font-weight:700;'>: " . $escape($shioElemen['shio'] ?? $recruitment->shio ?? '-') . "</td></tr>
+              <tr><td style='color:#64748b;'>Element</td><td style='font-weight:700;'>: " . $escape($shioElemen['elemen'] ?? $recruitment->elemen ?? '-') . "</td></tr>
+            </table>
+          </td>
+          <td style='padding:20px 20px 20px 0; width:92px; vertical-align:top;'>" . $photo . "</td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>";
+    }
+
     private static function resolveAiMatchingReason($recruitment): ?string
     {
         if (!empty($recruitment->ai_matching_reason)) {
