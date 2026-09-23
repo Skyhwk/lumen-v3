@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 
 class SendWhatsapp
@@ -52,25 +53,13 @@ class SendWhatsapp
         return $number;
     }
 
-    private function senderNumbers(): array
-    {
-        $numbers = collect(explode(',', (string) env('NUMBER', '')))
-            ->map(fn ($number) => trim($number))
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-
-        shuffle($numbers);
-
-        return $numbers;
-    }
-
     public function send()
     {
         $number = $this->formatNumber();
+        $senderService = new WaSenderNumberService();
 
-        foreach ($this->senderNumbers() as $senderNumber) {
+        foreach ($senderService->availableSenders() as $sender) {
+            $senderNumber = $sender->number;
             try {
                 $seasonID = $this->getSeason($senderNumber);
                 $response = Http::withHeaders(
@@ -85,10 +74,22 @@ class SendWhatsapp
                 );
 
                 $res = json_decode($response->getBody());
-                if (isset($res->status)) {
+                if ($this->wasSent($res)) {
+                    $senderService->markSuccess($sender->id);
                     return true;
                 }
+
+                $senderService->markFailure($sender->id, [
+                    'reason' => 'Provider rejected message',
+                    'at' => Carbon::now('Asia/Jakarta')->toDateTimeString(),
+                    'response' => $this->responseSummary($res),
+                ]);
             } catch (\Throwable $e) {
+                $senderService->markFailure($sender->id, [
+                    'reason' => $e->getMessage(),
+                    'at' => Carbon::now('Asia/Jakarta')->toDateTimeString(),
+                    'type' => get_class($e),
+                ]);
                 \Log::warning('WhatsApp sender failed, trying next sender.', [
                     'sender' => $senderNumber,
                     'message' => $e->getMessage(),
@@ -97,5 +98,39 @@ class SendWhatsapp
         }
 
         return false;
+    }
+
+    private function wasSent($response): bool
+    {
+        if (!is_object($response)) {
+            return false;
+        }
+
+        $status = $response->status ?? null;
+        if (in_array($status, [true, 1, '1', 'true'], true)) {
+            return true;
+        }
+
+        // Provider returns PENDING once it has accepted and queued the message.
+        return is_string($status) && in_array(strtoupper($status), [
+            'PENDING', 'QUEUED', 'SENT', 'SUCCESS', 'DELIVERED',
+        ], true);
+    }
+
+    private function responseSummary($response): array
+    {
+        if (!is_object($response)) {
+            return ['body' => 'Invalid JSON response'];
+        }
+
+        $summary = ['status' => $response->status ?? null];
+        foreach (['message', 'error'] as $field) {
+            $value = $response->{$field} ?? null;
+            if (is_scalar($value) && $value !== '') {
+                $summary[$field] = substr((string) $value, 0, 500);
+            }
+        }
+
+        return array_filter($summary, fn ($value) => $value !== null && $value !== '');
     }
 }
