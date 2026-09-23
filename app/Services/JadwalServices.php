@@ -18,6 +18,7 @@ use Carbon\Carbon;
 use Exception;
 use App\Services\SendEmail;
 use App\Jobs\SendNotifPerubahanJadwalJob;
+use App\Jobs\SyncSamplerTrackingScheduleJob;
 
 
 class JadwalServices
@@ -56,27 +57,18 @@ class JadwalServices
     }
 
     /**
-     * Run only after the schedule transaction commits. This reconciles one QT
-     * instead of performing the old full-date Tracking Sampler sync.
+     * Queue the scoped reconciliation only after the schedule transaction has
+     * committed. The job never performs the old full-date sync.
      */
     private function syncSamplerTrackingChange($before, $quotation, $isCreation = false): void
     {
-        try {
-            $tracking = app(SamplerTrackingService::class);
-            if ($isCreation) {
-                $tracking->syncScheduleCreation($before, $quotation);
-            } else {
-                $tracking->syncScheduleEdit($before, $quotation);
-            }
-        } catch (\Throwable $exception) {
-            Log::warning('Gagal rekonsiliasi tracking sampler setelah perubahan jadwal.', [
-                'no_quotation' => $quotation,
-                'jenis_perubahan' => $isCreation ? 'creation' : 'edit',
-                'message' => $exception->getMessage(),
-                'line' => $exception->getLine(),
-                'file' => $exception->getFile(),
-            ]);
-        }
+        dispatch(new SyncSamplerTrackingScheduleJob(
+            $quotation,
+            collect($before)->map(function ($row) {
+                return $row->getAttributes();
+            })->values()->all(),
+            $isCreation
+        ));
     }
 
     public static function __callStatic($method, $arguments)
