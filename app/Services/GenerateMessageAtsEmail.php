@@ -634,7 +634,7 @@ class GenerateMessageAtsEmail
             'negotiate' => 'Berhasil Dinegosiasikan',
         ];
 
-        return ($flow === 'salary_decision' ? 'Salary Decision' : 'Final Decision')
+        return ($flow === 'salary_decision' ? 'Salary Decision' : 'Approval')
             . ' ' . ($decisionLabels[$decision] ?? 'Berhasil Diproses');
     }
 
