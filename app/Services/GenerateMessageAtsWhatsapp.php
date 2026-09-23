@@ -40,6 +40,15 @@ class GenerateMessageAtsWhatsapp
         return "Yth. Bapak/Ibu *" . $nama . "*";
     }
 
+    private function databaseTemplate(string $code, array $variables): ?string
+    {
+        if (!isset($variables['saudara'])) {
+            $variables['saudara'] = GenerateMessageAtsEmail::resolveSalutation($this->data);
+        }
+
+        return WaMessageTemplateService::render($code, $variables);
+    }
+
     /**
      * Concise, Neutral & Professional WhatsApp Message for Approved Candidate (HRD Interview)
      * 
@@ -53,6 +62,17 @@ class GenerateMessageAtsWhatsapp
         $tanggal = $this->data->tglInter ?? '-';
         $jam = $this->data->jam_interview ?? $this->data->jam_interview_hrd ?? '-';
         $jenisMode = $this->data->jenis_interview_hrd ?? 'Online';
+        $detailLokasi = $jenisMode === 'Online'
+            ? '*Link Meeting:* ' . ($this->data->link_gmeet_hrd ?? '-')
+            : '*Lokasi Ruangan:* ' . trim($this->data->alamat_cabang ?? 'Ruang HRD PT Inti Surya Laboratorium');
+        $databaseMessage = $this->databaseTemplate('interview_hrd_invite', [
+            'sapaan' => $this->sapaan(), 'nama' => $namaLengkap, 'posisi' => $posisi,
+            'bagian' => $posisi, 'hari' => $hari, 'tanggal' => $tanggal, 'jam' => $jam,
+            'metode' => $jenisMode, 'detail_lokasi' => $detailLokasi, 'kode' => '',
+        ]);
+        if ($databaseMessage !== null) {
+            return $databaseMessage;
+        }
 
         $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
         $msg .= "Sehubungan dengan proses seleksi posisi *" . $posisi . "* di PT Inti Surya Laboratorium, kami mengundang Anda untuk mengikuti tahapan *Interview HRD* pada:\n\n";
@@ -86,6 +106,12 @@ class GenerateMessageAtsWhatsapp
     {
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
         $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
+        $databaseMessage = $this->databaseTemplate('candidate_rejection', [
+            'sapaan' => $this->sapaan(), 'nama' => $namaLengkap, 'posisi' => $posisi,
+        ]);
+        if ($databaseMessage !== null) {
+            return $databaseMessage;
+        }
 
         $msg = $this->candidateSalutationLine($namaLengkap) . ",\n\n";
         $msg .= "Terima kasih atas waktu dan partisipasi Anda dalam proses rekrutmen untuk posisi *" . $posisi . "*.\n\n";
@@ -108,6 +134,12 @@ class GenerateMessageAtsWhatsapp
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
         $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
         $linkProfile = $this->data->link_complete_profile ?? ('https://portal.intilab.com/public/recruitment/complete-profile/' . rawurlencode($this->data->token ?? ''));
+        $databaseMessage = $this->databaseTemplate('complete_profile', [
+            'sapaan' => $this->sapaan(), 'nama' => $namaLengkap, 'posisi' => $posisi, 'link' => $linkProfile,
+        ]);
+        if ($databaseMessage !== null) {
+            return $databaseMessage;
+        }
 
         $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
         $msg .= "Sehubungan dengan proses rekrutmen posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*, mohon berkenan untuk *melengkapi Data Diri & Berkas Pendukung* Anda melalui tautan resmi berikut:\n\n";
@@ -132,6 +164,13 @@ class GenerateMessageAtsWhatsapp
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
         $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
         $assessmentUrl = $this->data->assessment_url ?? ('https://portal.intilab.com/public/recruitment/assessment/' . rawurlencode($this->data->token ?? ''));
+        $databaseMessage = $this->databaseTemplate('assessment_invitation', [
+            'sapaan' => $this->sapaan(), 'nama' => $namaLengkap, 'posisi' => $posisi,
+            'link' => $assessmentUrl, 'masa_berlaku' => '2 x 24 jam',
+        ]);
+        if ($databaseMessage !== null) {
+            return $databaseMessage;
+        }
 
         $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
         $msg .= "Terima kasih telah mengirimkan lamaran untuk posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*.\n\n";
@@ -155,6 +194,20 @@ class GenerateMessageAtsWhatsapp
         $linkGmeet   = $this->data->link_gmeet ?? '';
         $ruangan     = $this->data->ruangan_interview ?? 'Office Room';
         $catatan     = $this->data->catatan ?? '';
+        $detailLokasi = $jenis === 'online'
+            ? (!empty($linkGmeet) ? '*Link Google Meet:*\n' . $linkGmeet : '')
+            : '*Ruangan / Lokasi:* ' . $ruangan;
+        $databaseMessage = $this->databaseTemplate('interview_user_invite', [
+            'sapaan' => $this->sapaan(), 'nama' => $namaLengkap, 'posisi' => $posisi,
+            'waktu' => $tgl, 'tipe' => $jenis === 'online' ? 'Online (Google Meet)' : 'Offline (Tatap Muka)',
+            'detail_lokasi' => $detailLokasi,
+            'instruksi' => $jenis === 'online'
+                ? 'Mohon bergabung 10 menit sebelum jadwal dimulai dan pastikan koneksi internet stabil.'
+                : 'Mohon hadir 15 menit sebelum jadwal di lokasi yang telah ditentukan.',
+        ]);
+        if ($databaseMessage !== null) {
+            return $databaseMessage;
+        }
 
         $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
         $msg .= "Berikut kami sampaikan informasi jadwal *User Interview* Anda untuk posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*:\n\n";
@@ -233,6 +286,13 @@ class GenerateMessageAtsWhatsapp
                 ?? 0
         );
         $email = trim((string) ($this->data->email ?? ''));
+        $databaseMessage = $this->databaseTemplate('salary_offering_letter', [
+            'sapaan' => $this->sapaan(), 'nama' => $namaLengkap, 'posisi' => $posisi,
+            'gaji' => $gaji, 'email' => $email,
+        ]);
+        if ($databaseMessage !== null) {
+            return $databaseMessage;
+        }
 
         $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
         $msg .= "Terima kasih atas partisipasi Anda dalam proses rekrutmen posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*.\n\n";
@@ -264,6 +324,13 @@ class GenerateMessageAtsWhatsapp
         $gaji = HrdEmailViewData::formatRupiah($this->data->gaji_pokok ?? 0);
         $tglMulai = $this->data->tanggal_mulai_kerja ?? '-';
         $email = trim((string) ($this->data->email ?? ''));
+        $databaseMessage = $this->databaseTemplate('hiring_letter', [
+            'sapaan' => $this->sapaan(), 'nama' => $namaLengkap, 'posisi' => $posisi,
+            'gaji' => $gaji, 'tanggal_mulai' => $tglMulai, 'email' => $email,
+        ]);
+        if ($databaseMessage !== null) {
+            return $databaseMessage;
+        }
 
         $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
         $msg .= "Selamat! Berdasarkan hasil seleksi rekrutmen, Anda *diterima* untuk bergabung di *PT Inti Surya Laboratorium* pada posisi *" . $posisi . "*.\n\n";
