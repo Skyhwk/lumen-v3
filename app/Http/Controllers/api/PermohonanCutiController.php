@@ -28,8 +28,8 @@ class PermohonanCutiController extends Controller
         $bawahanNames = $bawahan->pluck('nama_lengkap')->toArray();
 
         $query = LeaveRequest::on('intilab_apps')
-            ->leftJoin('master_karyawan as karyawan', 'leave_requests.employee_id', '=', 'karyawan.id')
-            ->leftJoin('master_divisi as d', 'karyawan.id_department', '=', 'd.id')
+            ->leftJoin('intilab_produksi.master_karyawan as karyawan', 'leave_requests.employee_id', '=', 'karyawan.id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'karyawan.id_department', '=', 'd.id')
             ->leftJoin('intilab_apps.special_leave_types as slt', 'leave_requests.special_leave_id', '=', 'slt.id')
             ->select(
                 'leave_requests.id',
@@ -114,8 +114,8 @@ class PermohonanCutiController extends Controller
         $bawahanNames = $bawahan->pluck('nama_lengkap')->toArray();
 
         $query = LeaveRequest::on('intilab_apps')
-            ->leftJoin('master_karyawan as karyawan', 'leave_requests.employee_id', '=', 'karyawan.id')
-            ->leftJoin('master_divisi as d', 'karyawan.id_department', '=', 'd.id')
+            ->leftJoin('intilab_produksi.master_karyawan as karyawan', 'leave_requests.employee_id', '=', 'karyawan.id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'karyawan.id_department', '=', 'd.id')
             ->leftJoin('intilab_apps.special_leave_types as slt', 'leave_requests.special_leave_id', '=', 'slt.id')
             ->select(
                 'leave_requests.id',
@@ -312,7 +312,7 @@ class PermohonanCutiController extends Controller
                 Notification::whereIn('id', $userId)
                     ->title('Permohonan Cuti')
                     ->message($message . ' oleh ' . $this->karyawan)
-                    ->url('/request/formulir/permohonan-cuti')
+                    ->url('/request/permohonan/permohonan-cuti')
                     ->send();
             }
 
@@ -366,7 +366,7 @@ class PermohonanCutiController extends Controller
                 Notification::whereIn('id', $userId)
                     ->title('Permohonan Cuti')
                     ->message($message . ' oleh ' . $this->karyawan . '. Alasan: ' . ($request->keterangan ?? '-'))
-                    ->url('/request/formulir/permohonan-cuti')
+                    ->url('/request/permohonan/permohonan-cuti')
                     ->send();
             }
 
@@ -479,7 +479,7 @@ class PermohonanCutiController extends Controller
                 Notification::whereIn('id', $sendNotifTo)
                     ->title('Permohonan Cuti Baru!')
                     ->message('Permohonan cuti baru diajukan oleh ' . $this->karyawan)
-                    ->url('/request/formulir/permohonan-cuti')
+                    ->url('/request/permohonan/permohonan-cuti')
                     ->send();
             }
 
