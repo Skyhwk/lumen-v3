@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 
 class CollectSamplerTrackingTroubles extends Command
 {
-    protected $signature = 'sampler-tracking:collect-troubles {--date= : Batas akhir deadline (YYYY-MM-DD), default kemarin (WIB)} {--sampler-id=* : Batasi ke sampler ID tertentu} {--sync-today : Sinkron activity hari ini sebelum collect trouble}';
+    protected $signature = 'activitysamplertrouble {--date= : Batas akhir deadline (YYYY-MM-DD), default kemarin (WIB)} {--sampler-id=* : Batasi ke sampler ID tertentu} {--sync-today : Sinkron activity hari ini sebelum collect trouble}';
     protected $description = 'Catat activity belum selesai dengan deadline sampai tanggal target. Batas awal SAMPLER_TRACKING_TROUBLE_START_DATE, paling awal 2026-09-21.';
 
     public function handle(SamplerTrackingTroubleService $service, SamplerTrackingService $trackingService)
