@@ -1201,8 +1201,8 @@ class RecruitmentStatusService
 
         if (($last['status'] ?? null) !== $historyStatus) {
             $history[] = array_merge([
-                'status' => $historyStatus,
                 'at'     => Carbon::parse($at)->toDateTimeString(),
+                'status' => $historyStatus,
             ], $extraData);
         }
 
