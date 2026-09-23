@@ -6,6 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\MasterKaryawan;
 use App\Models\SalaryAdjustmentCounseling;
 use App\Models\SalaryAdjustmentRequest;
+use App\Services\EmployeeAdjustmentMutasiService;
+use App\Services\EmployeeAdjustmentRekapService;
+use App\Services\EmployeeAdjustmentTypeRegistry;
+use App\Services\EmployeeAdjustmentWorkflowResolver;
 use App\Services\KaryawanProfileService;
 use App\Services\SalaryAdjustmentAssessmentReportService;
 use App\Services\SalaryAdjustmentEvaluationService;
@@ -53,6 +57,9 @@ class KonselingKaryawanController extends Controller
             'request.kpi.items',
             'request.assessment.sessions',
             'request.statusLogs',
+            'request.newJabatan',
+            'request.rekap',
+            'request.receiverManager',
         ])->find((int) $request->id);
 
         if (!$counseling) {
@@ -64,30 +71,67 @@ class KonselingKaryawanController extends Controller
             return response()->json(['success' => false, 'message' => 'Permohonan tidak ditemukan'], 404);
         }
 
-        $employee = MasterKaryawan::with('jabatan')->find($counseling->employee_id);
-        $manager = MasterKaryawan::find($requestRecord->requested_by_id);
-        $namaJabatan = KaryawanProfileService::resolveJabatan($employee);
-
         return response()->json([
             'success' => true,
-            'data' => [
-                'id' => $requestRecord->id,
-                'no_document' => $requestRecord->no_document,
-                'nama_lengkap' => $employee->nama_lengkap ?? '-',
-                'manager_nama' => $manager->nama_lengkap ?? $requestRecord->created_by,
-                'jabatan' => $namaJabatan !== '-' ? $namaJabatan : ($requestRecord->jabatan ?: '-'),
-                'status' => $requestRecord->status,
-                'status_label' => SalaryAdjustmentWorkflowService::statusLabel($requestRecord->status),
-                'kpi' => optional($requestRecord->kpi)->load('items'),
-                'assessment' => $requestRecord->assessment,
-                'assessment_report' => (new SalaryAdjustmentAssessmentReportService())
-                    ->buildAssessmentReport($requestRecord->assessment),
-                'attendance' => (new SalaryAdjustmentEvaluationService())
-                    ->getAttendanceSummary((int) $counseling->employee_id),
-                'counseling' => $counseling,
-                'logs' => SalaryAdjustmentWorkflowService::formatLogs($requestRecord->statusLogs),
-            ],
+            'data' => array_merge(
+                $this->buildRequestDetailPayload($requestRecord, (int) $counseling->employee_id),
+                [
+                    'counseling_id' => $counseling->id,
+                    'counseling' => $counseling,
+                ]
+            ),
         ]);
+    }
+
+    private function buildRequestDetailPayload(SalaryAdjustmentRequest $record, int $employeeId): array
+    {
+        $employee = MasterKaryawan::with('jabatan')->find($employeeId);
+        $manager = MasterKaryawan::find($record->requested_by_id);
+        $namaJabatan = KaryawanProfileService::resolveJabatan($employee);
+
+        return array_merge([
+            'id' => $record->id,
+            'no_document' => $record->no_document,
+            'request_type' => $record->request_type ?: EmployeeAdjustmentTypeRegistry::TYPE_PENYESUAIAN_GAJI,
+            'request_type_label' => EmployeeAdjustmentTypeRegistry::label($record->request_type),
+            'workflow_profile' => $record->workflow_profile,
+            'nama_lengkap' => $employee->nama_lengkap ?? '-',
+            'manager_nama' => $manager->nama_lengkap ?? $record->created_by,
+            'jabatan' => $namaJabatan !== '-' ? $namaJabatan : ($record->jabatan ?: '-'),
+            'current_gaji_pokok' => (float) $record->current_gaji_pokok,
+            'current_tunjangan_kerja' => (float) $record->current_tunjangan_kerja,
+            'adjustment_gaji_pokok' => (float) ($record->adjustment_gaji_pokok ?? 0),
+            'adjustment_tunjangan' => (float) ($record->adjustment_tunjangan ?? 0),
+            'requested_gaji_pokok' => (float) $record->requested_gaji_pokok,
+            'requested_tunjangan_kerja' => (float) $record->requested_tunjangan_kerja,
+            'bulan_efektif' => $record->bulan_efektif,
+            'tanggal_efektif' => $record->tanggal_efektif,
+            'tanggal_mulai' => $record->tanggal_mulai,
+            'tanggal_selesai' => $record->tanggal_selesai,
+            'tanggal_berakhir_kerja' => $record->tanggal_berakhir_kerja,
+            'new_jabatan_id' => $record->new_jabatan_id,
+            'new_jabatan_nama' => optional($record->newJabatan)->nama_jabatan,
+            'has_salary_adjustment' => (bool) $record->has_salary_adjustment,
+            'receiver_manager_id' => $record->receiver_manager_id,
+            'receiver_manager_nama' => optional($record->receiverManager)->nama_lengkap,
+            'scheduled_apply_at' => $record->scheduled_apply_at,
+            'catatan_tambahan' => $record->catatan_tambahan,
+            'reject_reason' => $record->reject_reason,
+            'status' => $record->status,
+            'status_label' => SalaryAdjustmentWorkflowService::statusLabel($record->status),
+            'workflow_meta' => (new EmployeeAdjustmentWorkflowResolver())->buildWorkflowMeta($record),
+            'kpi' => $record->kpi,
+            'assessment' => $record->assessment,
+            'assessment_report' => (new SalaryAdjustmentAssessmentReportService())
+                ->buildAssessmentReport($record->assessment),
+            'attendance' => (new SalaryAdjustmentEvaluationService())
+                ->getAttendanceSummary($employeeId),
+            'logs' => SalaryAdjustmentWorkflowService::formatLogs($record->statusLogs),
+        ],
+            SalaryAdjustmentEvaluationService::formatAdjustmentSnapshot($record),
+            (new EmployeeAdjustmentMutasiService())->formatReceiverFields($record),
+            (new EmployeeAdjustmentRekapService())->formatForDetail($record)
+        );
     }
 
     public function complete(Request $request)

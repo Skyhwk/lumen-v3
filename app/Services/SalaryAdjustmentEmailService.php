@@ -13,8 +13,8 @@ class SalaryAdjustmentEmailService
     public const ROLE_IBU = 'ibu';
     public const ROLE_BAPAK = 'bapak';
 
-    public const LABEL_APPROVAL = 'Persetujuan Approval';
-    public const LABEL_APPROVAL_FINAL = 'Persetujuan Approval Final';
+    public const LABEL_APPROVAL = 'Waiting Approval';
+    public const LABEL_APPROVAL_FINAL = 'Waiting Approval Final';
 
     public function sendForRole(SalaryAdjustmentRequest $request, string $role, string $sender): bool
     {
@@ -54,7 +54,7 @@ class SalaryAdjustmentEmailService
             $buttons = $this->buildDecisionButtons($token);
             $approverLabel = $this->approverLabel($role);
             $employeeName = $bundle['request']['nama_lengkap'] ?? 'Karyawan';
-            $subject = 'Permohonan Penyesuaian Gaji - ' . $approverLabel . ' - ' . $employeeName;
+            $subject = 'Permohonan Penyesuaian Karyawan - ' . $approverLabel . ' - ' . $employeeName;
             $body = $this->renderApprovalBody($bundle, $role, $buttons);
 
             SendEmail::where('to', $emailTo)

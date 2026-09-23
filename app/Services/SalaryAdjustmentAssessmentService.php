@@ -34,6 +34,10 @@ class SalaryAdjustmentAssessmentService
             throw new \RuntimeException('Permohonan tidak dapat digenerate link assessment pada status ini.');
         }
 
+        if (!(new EmployeeAdjustmentWorkflowResolver())->requiresAssessment($request->request_type)) {
+            throw new \RuntimeException('Jenis permohonan ini tidak memerlukan assessment.');
+        }
+
         $categoryConfigs = $this->orderCategoryConfigs($this->normalizeCategoryQuestion($payload));
         if (empty($categoryConfigs)) {
             throw new \RuntimeException('Minimal pilih 1 modul assessment.');
@@ -51,7 +55,11 @@ class SalaryAdjustmentAssessmentService
             $generatedBy
         ) {
             $token = bin2hex(random_bytes(32));
-            $linkUrl = FrontendPublicUrl::build('private/assessment/' . rawurlencode($token));
+            $frontendOrigin = trim((string) ($payload['frontend_origin'] ?? ''));
+            $linkUrl = FrontendPublicUrl::buildAssessmentLink(
+                $token,
+                $frontendOrigin !== '' ? $frontendOrigin : null
+            );
 
             $sessionPayloads = [];
             $totalDuration = 0;
@@ -169,6 +177,85 @@ class SalaryAdjustmentAssessmentService
                 'module_count' => count($sessionPayloads),
             ];
         });
+    }
+
+    /**
+     * @return array{next_status: string, requires_counseling: bool}
+     */
+    public function skipAssessment(
+        SalaryAdjustmentRequest $record,
+        string $target,
+        string $actorName,
+        ?int $actorId
+    ): array {
+        if (!in_array($record->status, EmployeeAdjustmentWorkflowResolver::assessmentSkippableStatuses(), true)) {
+            throw new \RuntimeException('Permohonan tidak dapat dilewati assessment pada status ini');
+        }
+
+        $resolver = new EmployeeAdjustmentWorkflowResolver();
+        $nextStatus = $resolver->resolveSkipAssessmentTarget($record, $target);
+        $requiresCounseling = $resolver->requiresCounseling($record->request_type);
+
+        return DB::connection('mysql')->transaction(function () use (
+            $record,
+            $target,
+            $nextStatus,
+            $requiresCounseling,
+            $actorName,
+            $actorId
+        ) {
+            $this->deactivateActiveAssessmentForSkip($record);
+
+            $from = $record->status;
+            $record->status = $nextStatus;
+            $record->updated_by = $actorName;
+            $record->save();
+
+            $notes = $target === 'final'
+                ? 'HRD melewati assessment & konseling'
+                : ($nextStatus === SalaryAdjustmentWorkflowService::STATUS_FINAL_EVALUATION
+                    ? 'HRD melewati assessment — lanjut ke Evaluasi Final'
+                    : 'HRD melewati assessment — lanjut ke penjadwalan konseling');
+
+            SalaryAdjustmentLogService::log(
+                $record->id,
+                $from,
+                $nextStatus,
+                'skip_assessment',
+                $actorId,
+                $actorName,
+                $notes,
+                [
+                    'target' => $target,
+                    'requires_counseling' => $requiresCounseling,
+                ]
+            );
+
+            return [
+                'next_status' => $nextStatus,
+                'requires_counseling' => $requiresCounseling,
+            ];
+        });
+    }
+
+    public function deactivateActiveAssessmentForSkip(SalaryAdjustmentRequest $record): void
+    {
+        $assessment = SalaryAdjustmentAssessment::where('request_id', $record->id)->first();
+        if (!$assessment) {
+            return;
+        }
+
+        if ($assessment->attempt_status === 'completed') {
+            throw new \RuntimeException('Assessment sudah selesai dikerjakan');
+        }
+
+        if (!$assessment->is_link_active) {
+            return;
+        }
+
+        $assessment->is_link_active = false;
+        $assessment->link_deactivated_at = Carbon::now();
+        $assessment->save();
     }
 
     public function findByToken(string $token): ?SalaryAdjustmentAssessment

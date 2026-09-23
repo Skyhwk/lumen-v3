@@ -75,8 +75,8 @@ if ($applied->isNotEmpty()) {
 }
 
 $notificationUrls = [
-    '/request/permohonan/penyesuaian-gaji',
-    '/hrd/payroll/permohonan-penyesuaian-gaji',
+    '/request/permohonan/penyesuaian-karyawan',
+    '/hrd/permohonan/permohonan-penyesuaian-karyawan',
     '/finance/pengajuan-penyesuaian-gaji',
     '/hrd/hris/konseling-karyawan',
 ];

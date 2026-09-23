@@ -32,13 +32,20 @@ class SalaryAdjustmentEvaluationService
 
         $employee = MasterKaryawan::with(['jabatan', 'divisi'])->find($record->employee_id);
         $manager = MasterKaryawan::find($record->requested_by_id);
+        $workflowResolver = new EmployeeAdjustmentWorkflowResolver();
+        $workflowMeta = $workflowResolver->buildWorkflowMeta($record);
 
         $adjustmentSnapshot = self::formatAdjustmentSnapshot($record);
 
         return [
+            'workflow' => $workflowMeta,
             'request' => array_merge([
                 'id' => $record->id,
                 'no_document' => $record->no_document,
+                'request_type' => $workflowMeta['request_type'],
+                'request_type_label' => $workflowMeta['request_type_label'],
+                'workflow_profile' => $workflowMeta['workflow_profile'],
+                'has_salary_adjustment' => $workflowMeta['has_salary_adjustment'],
                 'nama_lengkap' => $employee->nama_lengkap ?? '-',
                 'nik_karyawan' => $employee->nik_karyawan ?? '-',
                 'department' => optional($employee->divisi)->nama_divisi ?? ($employee->department ?? '-'),
@@ -58,6 +65,8 @@ class SalaryAdjustmentEvaluationService
                 'status_label' => SalaryAdjustmentWorkflowService::statusLabel($record->status),
                 'finance_approved_at' => $record->finance_approved_at,
                 'finance_approved_by' => $record->finance_approved_by,
+                'final_eval_approved_at' => $record->final_eval_approved_at,
+                'final_eval_approved_by' => $record->final_eval_approved_by,
                 'ibu_approved_at' => $record->ibu_approved_at,
                 'ibu_approved_by' => $record->ibu_approved_by,
             ], $adjustmentSnapshot),
@@ -77,27 +86,31 @@ class SalaryAdjustmentEvaluationService
         $submittedReqGaji = (float) ($record->submitted_requested_gaji_pokok ?? $record->requested_gaji_pokok ?? 0);
         $submittedReqTunj = (float) ($record->submitted_requested_tunjangan_kerja ?? $record->requested_tunjangan_kerja ?? 0);
 
-        $hrdGaji = (float) ($record->hrd_final_adjustment_gaji_pokok ?? $record->adjustment_gaji_pokok ?? 0);
-        $hrdTunj = (float) ($record->hrd_final_adjustment_tunjangan ?? $record->adjustment_tunjangan ?? 0);
-        $hrdReqGaji = (float) ($record->hrd_final_requested_gaji_pokok ?? $record->requested_gaji_pokok ?? 0);
-        $hrdReqTunj = (float) ($record->hrd_final_requested_tunjangan_kerja ?? $record->requested_tunjangan_kerja ?? 0);
+        $hasHrdDecision = self::hasHrdFinalDecision($record);
+
+        $hrdGaji = $hasHrdDecision ? (float) ($record->hrd_final_adjustment_gaji_pokok ?? 0) : null;
+        $hrdTunj = $hasHrdDecision ? (float) ($record->hrd_final_adjustment_tunjangan ?? 0) : null;
+        $hrdReqGaji = $hasHrdDecision ? (float) ($record->hrd_final_requested_gaji_pokok ?? 0) : null;
+        $hrdReqTunj = $hasHrdDecision ? (float) ($record->hrd_final_requested_tunjangan_kerja ?? 0) : null;
 
         $activeGaji = (float) ($record->adjustment_gaji_pokok ?? 0);
         $activeTunj = (float) ($record->adjustment_tunjangan ?? 0);
         $activeReqGaji = (float) $record->requested_gaji_pokok;
         $activeReqTunj = (float) $record->requested_tunjangan_kerja;
 
-        $changedByHrd = round($submittedGaji, 2) !== round($hrdGaji, 2)
-            || round($submittedTunj, 2) !== round($hrdTunj, 2)
-            || round($submittedReqGaji, 2) !== round($hrdReqGaji, 2)
-            || round($submittedReqTunj, 2) !== round($hrdReqTunj, 2);
+        $changedByHrd = $hasHrdDecision && (
+            round($submittedGaji, 2) !== round((float) ($record->hrd_final_adjustment_gaji_pokok ?? 0), 2)
+            || round($submittedTunj, 2) !== round((float) ($record->hrd_final_adjustment_tunjangan ?? 0), 2)
+            || round($submittedReqGaji, 2) !== round((float) ($record->hrd_final_requested_gaji_pokok ?? 0), 2)
+            || round($submittedReqTunj, 2) !== round((float) ($record->hrd_final_requested_tunjangan_kerja ?? 0), 2)
+        );
 
-        $changedByFinance = $record->hrd_final_adjustment_gaji_pokok !== null
+        $changedByFinance = $hasHrdDecision
             && (
-                round($hrdGaji, 2) !== round($activeGaji, 2)
-                || round($hrdTunj, 2) !== round($activeTunj, 2)
-                || round($hrdReqGaji, 2) !== round($activeReqGaji, 2)
-                || round($hrdReqTunj, 2) !== round($activeReqTunj, 2)
+                round((float) ($record->hrd_final_adjustment_gaji_pokok ?? 0), 2) !== round($activeGaji, 2)
+                || round((float) ($record->hrd_final_adjustment_tunjangan ?? 0), 2) !== round($activeTunj, 2)
+                || round((float) ($record->hrd_final_requested_gaji_pokok ?? 0), 2) !== round($activeReqGaji, 2)
+                || round((float) ($record->hrd_final_requested_tunjangan_kerja ?? 0), 2) !== round($activeReqTunj, 2)
             );
 
         return [
@@ -105,6 +118,7 @@ class SalaryAdjustmentEvaluationService
             'submitted_adjustment_tunjangan' => $submittedTunj,
             'submitted_requested_gaji_pokok' => $submittedReqGaji,
             'submitted_requested_tunjangan_kerja' => $submittedReqTunj,
+            'has_hrd_final_decision' => $hasHrdDecision,
             'hrd_final_adjustment_gaji_pokok' => $hrdGaji,
             'hrd_final_adjustment_tunjangan' => $hrdTunj,
             'hrd_final_requested_gaji_pokok' => $hrdReqGaji,
@@ -118,14 +132,26 @@ class SalaryAdjustmentEvaluationService
         ];
     }
 
+    public static function hasHrdFinalDecision(SalaryAdjustmentRequest $record): bool
+    {
+        if (!empty($record->final_eval_approved_at)) {
+            return true;
+        }
+
+        return $record->hrd_final_adjustment_gaji_pokok !== null
+            || $record->hrd_final_adjustment_tunjangan !== null
+            || $record->hrd_final_requested_gaji_pokok !== null
+            || $record->hrd_final_requested_tunjangan_kerja !== null;
+    }
+
     public static function ensureHrdFinalSnapshot(SalaryAdjustmentRequest $record): void
     {
-        if ($record->hrd_final_adjustment_gaji_pokok !== null) {
+        if (self::hasHrdFinalDecision($record)) {
             return;
         }
 
-        $record->hrd_final_adjustment_gaji_pokok = $record->adjustment_gaji_pokok;
-        $record->hrd_final_adjustment_tunjangan = $record->adjustment_tunjangan;
+        $record->hrd_final_adjustment_gaji_pokok = $record->adjustment_gaji_pokok ?? 0;
+        $record->hrd_final_adjustment_tunjangan = $record->adjustment_tunjangan ?? 0;
         $record->hrd_final_requested_gaji_pokok = $record->requested_gaji_pokok;
         $record->hrd_final_requested_tunjangan_kerja = $record->requested_tunjangan_kerja;
     }

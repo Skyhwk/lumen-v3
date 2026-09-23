@@ -10,9 +10,9 @@ use Illuminate\Support\Str;
 
 class SalaryAdjustmentNotificationService
 {
-    public const URL_MANAGER = '/request/permohonan/penyesuaian-gaji';
+    public const URL_MANAGER = '/request/permohonan/penyesuaian-karyawan';
 
-    public const URL_HRD = '/hrd/payroll/permohonan-penyesuaian-gaji';
+    public const URL_HRD = '/hrd/permohonan/permohonan-penyesuaian-karyawan';
 
     public const URL_FINANCE = '/finance/pengajuan-penyesuaian-gaji';
 
@@ -20,9 +20,9 @@ class SalaryAdjustmentNotificationService
 
     /** @var array<string, string> */
     private const MENU_NAMES_BY_URL = [
-        self::URL_MANAGER => 'Penyesuaian Gaji',
-        self::URL_HRD => 'Permohonan Penyesuaian Gaji',
-        self::URL_FINANCE => 'Pengajuan Penyesuaian Gaji',
+        self::URL_MANAGER => 'Penyesuaian Karyawan',
+        self::URL_HRD => 'Permohonan Penyesuaian Karyawan',
+        self::URL_FINANCE => 'Pengajuan Penyesuaian Karyawan',
         self::URL_KONSELING => 'Konseling Karyawan',
     ];
 
@@ -47,10 +47,57 @@ class SalaryAdjustmentNotificationService
             switch ($action) {
                 case 'create':
                 case 'store':
+                    if ($record->request_type === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI
+                        && $record->status === SalaryAdjustmentWorkflowService::STATUS_WAITING_RECEIVER) {
+                        self::notifyKaryawanIdsWithMenuAccess(
+                            [(int) $record->receiver_manager_id],
+                            self::URL_MANAGER,
+                            'Permohonan Mutasi Menunggu Respons',
+                            "Anda menerima permohonan mutasi karyawan {$label}. Mohon tinjau dan respons di tab Inbox Mutasi.",
+                            $exclude
+                        );
+                    } else {
+                        self::notifyMenuUsers(
+                            self::URL_HRD,
+                            'Penyesuaian Karyawan Baru',
+                            "Permohonan penyesuaian Karyawan {$label} menunggu proses HRD.",
+                            $exclude
+                        );
+                    }
+                    break;
+
+                case 'mutasi_notify_receiver':
+                    self::notifyKaryawanIdsWithMenuAccess(
+                        [(int) $record->receiver_manager_id],
+                        self::URL_MANAGER,
+                        'Permohonan Mutasi Menunggu Respons',
+                        "Anda menerima permohonan mutasi karyawan {$label}. Mohon tinjau di tab Inbox Mutasi.",
+                        $exclude
+                    );
+                    break;
+
+                case 'receiver_accept':
                     self::notifyMenuUsers(
                         self::URL_HRD,
-                        'Penyesuaian Gaji Baru',
-                        "Permohonan penyesuaian gaji {$label} menunggu proses HRD.",
+                        'Mutasi Diterima Manager Penerima',
+                        "Permohonan mutasi {$label} diterima manager penerima. Menunggu proses HRD.",
+                        $exclude
+                    );
+                    self::notifyKaryawanIdsWithMenuAccess(
+                        [(int) $record->requested_by_id],
+                        self::URL_MANAGER,
+                        'Mutasi Diterima',
+                        "Permohonan mutasi {$label} telah diterima manager penerima.",
+                        $exclude
+                    );
+                    break;
+
+                case 'receiver_reject':
+                    self::notifyKaryawanIdsWithMenuAccess(
+                        [(int) $record->requested_by_id],
+                        self::URL_MANAGER,
+                        'Mutasi Ditolak',
+                        "Permohonan mutasi {$label} ditolak oleh manager penerima.",
                         $exclude
                     );
                     break;
@@ -59,8 +106,8 @@ class SalaryAdjustmentNotificationService
                     self::notifyKaryawanIdsWithMenuAccess(
                         [(int) $record->requested_by_id],
                         self::URL_MANAGER,
-                        'Penyesuaian Gaji Diproses',
-                        "Permohonan penyesuaian gaji {$label} sedang diproses HRD.",
+                        'Penyesuaian Karyawan Diproses',
+                        "Permohonan penyesuaian Karyawan {$label} sedang diproses HRD.",
                         $exclude
                     );
                     break;
@@ -73,8 +120,8 @@ class SalaryAdjustmentNotificationService
                     self::notifyKaryawanIdsWithMenuAccess(
                         [(int) $record->employee_id],
                         self::URL_MANAGER,
-                        'Assessment Penyesuaian Gaji',
-                        "Assessment penyesuaian gaji untuk {$label} telah dibuat. Silakan selesaikan assessment.",
+                        'Assessment Penyesuaian Karyawan',
+                        "Assessment Penyesuaian Karyawan untuk {$label} telah dibuat. Silakan selesaikan assessment.",
                         $exclude
                     );
                     break;
@@ -83,7 +130,7 @@ class SalaryAdjustmentNotificationService
                     self::notifyMenuUsers(
                         self::URL_HRD,
                         'Assessment Selesai',
-                        "Assessment penyesuaian gaji {$label} telah selesai. Lanjutkan proses HRD.",
+                        "Assessment Penyesuaian Karyawan {$label} telah selesai. Lanjutkan proses HRD.",
                         $exclude
                     );
                     break;
@@ -92,7 +139,7 @@ class SalaryAdjustmentNotificationService
                     self::notifyMenuUsers(
                         self::URL_KONSELING,
                         'Jadwal Konseling Baru',
-                        "Konseling penyesuaian gaji {$label} perlu dijadwalkan/dilaksanakan.",
+                        "Konseling Penyesuaian Karyawan {$label} perlu dijadwalkan/dilaksanakan.",
                         $exclude
                     );
                     break;
@@ -100,8 +147,15 @@ class SalaryAdjustmentNotificationService
                 case 'counseling_complete':
                     self::notifyMenuUsers(
                         self::URL_HRD,
+                        'Konseling Selesai — Evaluasi Final',
+                        "Hasil konseling permohonan {$label} telah diinput. Mohon segera proses di tab Evaluasi Final.",
+                        $exclude
+                    );
+                    self::notifyKaryawanIdsWithMenuAccess(
+                        [(int) $record->requested_by_id],
+                        self::URL_MANAGER,
                         'Konseling Selesai',
-                        "Konseling penyesuaian gaji {$label} selesai. Lanjut ke evaluasi final.",
+                        "Konseling permohonan {$label} telah selesai. HRD akan melanjutkan evaluasi final.",
                         $exclude
                     );
                     break;
@@ -110,7 +164,7 @@ class SalaryAdjustmentNotificationService
                     self::notifyMenuUsers(
                         self::URL_FINANCE,
                         'Review Finance Diperlukan',
-                        "Evaluasi final penyesuaian gaji {$label} menunggu review Finance.",
+                        "Evaluasi final Penyesuaian Karyawan {$label} menunggu review Finance.",
                         $exclude
                     );
                     break;
@@ -119,8 +173,8 @@ class SalaryAdjustmentNotificationService
                     self::notifyKaryawanIdsWithMenuAccess(
                         [(int) $record->requested_by_id],
                         self::URL_MANAGER,
-                        'Penyesuaian Gaji Ditolak',
-                        "Permohonan penyesuaian gaji {$label} ditolak pada evaluasi final HRD.",
+                        'Penyesuaian Karyawan Ditolak',
+                        "Permohonan penyesuaian Karyawan {$label} ditolak pada evaluasi final HRD.",
                         $exclude
                     );
                     break;
@@ -129,7 +183,7 @@ class SalaryAdjustmentNotificationService
                     self::notifyMenuUsers(
                         self::URL_HRD,
                         'Review Finance Disetujui',
-                        "Permohonan penyesuaian gaji {$label} disetujui Finance. Menunggu persetujuan Approval.",
+                        "Permohonan penyesuaian Karyawan {$label} disetujui Finance. Menunggu Waiting Approval.",
                         $exclude
                     );
                     break;
@@ -138,7 +192,7 @@ class SalaryAdjustmentNotificationService
                     self::notifyMenuUsers(
                         self::URL_HRD,
                         'Dikembalikan dari Finance',
-                        "Permohonan penyesuaian gaji {$label} dikembalikan Finance ke HRD untuk banding.",
+                        "Permohonan penyesuaian Karyawan {$label} dikembalikan Finance ke HRD untuk banding.",
                         $exclude
                     );
                     break;
@@ -147,14 +201,14 @@ class SalaryAdjustmentNotificationService
                     self::notifyMenuUsers(
                         self::URL_HRD,
                         'Finance Menolak',
-                        "Permohonan penyesuaian gaji {$label} ditolak Finance.",
+                        "Permohonan penyesuaian Karyawan {$label} ditolak Finance.",
                         $exclude
                     );
                     self::notifyKaryawanIdsWithMenuAccess(
                         [(int) $record->requested_by_id],
                         self::URL_MANAGER,
-                        'Penyesuaian Gaji Ditolak',
-                        "Permohonan penyesuaian gaji {$label} ditolak pada tahap Finance.",
+                        'Penyesuaian Karyawan Ditolak',
+                        "Permohonan penyesuaian Karyawan {$label} ditolak pada tahap Finance.",
                         $exclude
                     );
                     break;
@@ -163,7 +217,7 @@ class SalaryAdjustmentNotificationService
                     self::notifyMenuUsers(
                         self::URL_FINANCE,
                         'Banding HRD — Review Ulang',
-                        "HRD mengajukan banding untuk penyesuaian gaji {$label}. Mohon review ulang Finance.",
+                        "HRD mengajukan banding untuk Penyesuaian Karyawan {$label}. Mohon review ulang Finance.",
                         $exclude
                     );
                     break;
@@ -172,14 +226,14 @@ class SalaryAdjustmentNotificationService
                     self::notifyKaryawanIdsWithMenuAccess(
                         [(int) $record->requested_by_id],
                         self::URL_MANAGER,
-                        'Penyesuaian Gaji Ditolak',
-                        "Permohonan penyesuaian gaji {$label} ditolak setelah banding HRD.",
+                        'Penyesuaian Karyawan Ditolak',
+                        "Permohonan penyesuaian Karyawan {$label} ditolak setelah banding HRD.",
                         $exclude
                     );
                     self::notifyMenuUsers(
                         self::URL_HRD,
                         'Banding Ditolak',
-                        "Banding penyesuaian gaji {$label} ditolak HRD. Proses selesai.",
+                        "Banding Penyesuaian Karyawan {$label} ditolak HRD. Proses selesai.",
                         $exclude
                     );
                     break;
@@ -187,15 +241,15 @@ class SalaryAdjustmentNotificationService
                 case 'ibu_approve':
                     self::notifyMenuUsers(
                         self::URL_HRD,
-                        'Persetujuan Approval',
-                        "Permohonan penyesuaian gaji {$label} disetujui tahap Approval. Menunggu Approval Final.",
+                        'Waiting Approval',
+                        "Permohonan penyesuaian Karyawan {$label} disetujui tahap Waiting Approval. Menunggu Waiting Approval Final.",
                         $exclude
                     );
                     self::notifyKaryawanIdsWithMenuAccess(
                         [(int) $record->requested_by_id],
                         self::URL_MANAGER,
-                        'Penyesuaian Gaji — Approval',
-                        "Permohonan penyesuaian gaji {$label} telah disetujui tahap Approval.",
+                        'Penyesuaian Karyawan — Waiting Approval',
+                        "Permohonan penyesuaian Karyawan {$label} telah disetujui tahap Waiting Approval.",
                         $exclude
                     );
                     break;
@@ -207,15 +261,15 @@ class SalaryAdjustmentNotificationService
                 case 'bapak_approve':
                     self::notifyMenuUsers(
                         self::URL_HRD,
-                        'Penyesuaian Gaji Selesai',
-                        "Permohonan penyesuaian gaji {$label} disetujui Approval Final dan telah diterapkan.",
+                        'Penyesuaian Karyawan Selesai',
+                        "Permohonan penyesuaian Karyawan {$label} disetujui Waiting Approval Final dan telah diterapkan.",
                         $exclude
                     );
                     self::notifyKaryawanIdsWithMenuAccess(
                         [(int) $record->requested_by_id],
                         self::URL_MANAGER,
-                        'Penyesuaian Gaji Selesai',
-                        "Permohonan penyesuaian gaji {$label} telah selesai dan disetujui Approval Final.",
+                        'Penyesuaian Karyawan Selesai',
+                        "Permohonan penyesuaian Karyawan {$label} telah selesai dan disetujui Waiting Approval Final.",
                         $exclude
                     );
                     break;
@@ -254,15 +308,15 @@ class SalaryAdjustmentNotificationService
         self::notifyKaryawanIdsWithMenuAccess(
             [(int) $record->requested_by_id],
             self::URL_MANAGER,
-            'Penyesuaian Gaji Ditolak',
-            "Permohonan penyesuaian gaji {$label} ditolak{$by}.",
+            'Penyesuaian Karyawan Ditolak',
+            "Permohonan penyesuaian Karyawan {$label} ditolak{$by}.",
             $exclude
         );
 
         self::notifyMenuUsers(
             self::URL_HRD,
-            'Penyesuaian Gaji Ditolak',
-            "Permohonan penyesuaian gaji {$label} ditolak{$by}.",
+            'Penyesuaian Karyawan Ditolak',
+            "Permohonan penyesuaian Karyawan {$label} ditolak{$by}.",
             $exclude
         );
     }
@@ -277,8 +331,8 @@ class SalaryAdjustmentNotificationService
             case SalaryAdjustmentWorkflowService::STATUS_SUBMITTED:
                 self::notifyMenuUsers(
                     self::URL_HRD,
-                    'Penyesuaian Gaji Baru',
-                    "Permohonan penyesuaian gaji {$label} menunggu proses HRD.",
+                    'Penyesuaian Karyawan Baru',
+                    "Permohonan penyesuaian Karyawan {$label} menunggu proses HRD.",
                     $exclude
                 );
                 break;
@@ -287,7 +341,7 @@ class SalaryAdjustmentNotificationService
                 self::notifyMenuUsers(
                     self::URL_FINANCE,
                     'Review Finance Diperlukan',
-                    "Permohonan penyesuaian gaji {$label} menunggu review Finance.",
+                    "Permohonan penyesuaian Karyawan {$label} menunggu review Finance.",
                     $exclude
                 );
                 break;
@@ -295,15 +349,15 @@ class SalaryAdjustmentNotificationService
             case SalaryAdjustmentWorkflowService::STATUS_COMPLETED:
                 self::notifyMenuUsers(
                     self::URL_HRD,
-                    'Penyesuaian Gaji Selesai',
-                    "Permohonan penyesuaian gaji {$label} telah selesai.",
+                    'Penyesuaian Karyawan Selesai',
+                    "Permohonan penyesuaian Karyawan {$label} telah selesai.",
                     $exclude
                 );
                 self::notifyKaryawanIdsWithMenuAccess(
                     [(int) $record->requested_by_id],
                     self::URL_MANAGER,
-                    'Penyesuaian Gaji Selesai',
-                    "Permohonan penyesuaian gaji {$label} telah selesai diproses.",
+                    'Penyesuaian Karyawan Selesai',
+                    "Permohonan penyesuaian Karyawan {$label} telah selesai diproses.",
                     $exclude
                 );
                 break;
