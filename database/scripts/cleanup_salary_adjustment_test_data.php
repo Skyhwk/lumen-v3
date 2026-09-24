@@ -28,6 +28,8 @@ $tables = [
     'salary_adjustment_assessment_sessions',
     'salary_adjustment_counselings',
     'salary_adjustment_approval_tokens',
+    'employee_adjustment_rekap',
+    'employee_adjustment_apply_logs',
 ];
 
 echo $execute ? "=== EKSEKUSI PEMBERSIHAN ===\n" : "=== PREVIEW (tambahkan --run untuk eksekusi) ===\n\n";
@@ -147,6 +149,8 @@ DB::transaction(function () use ($applied, $notificationUrls) {
     DB::table('salary_adjustment_assessments')->delete();
     DB::table('salary_adjustment_approval_tokens')->delete();
     DB::table('salary_adjustment_counselings')->delete();
+    DB::table('employee_adjustment_apply_logs')->delete();
+    DB::table('employee_adjustment_rekap')->delete();
     DB::table('salary_adjustment_kpi')->delete();
     DB::table('salary_adjustment_status_logs')->delete();
     DB::table('salary_adjustment_requests')->delete();
@@ -174,7 +178,7 @@ if (is_dir($tempDir)) {
 }
 
 echo "\nPembersihan selesai.\n\nVerifikasi:\n";
-foreach (['salary_adjustment_requests', 'salary_adjustment_status_logs', 'salary_adjustment_assessments'] as $table) {
+foreach (['salary_adjustment_requests', 'salary_adjustment_status_logs', 'salary_adjustment_assessments', 'employee_adjustment_rekap', 'employee_adjustment_apply_logs'] as $table) {
     if (Schema::hasTable($table)) {
         echo "  {$table}: " . DB::table($table)->count() . " baris\n";
     }

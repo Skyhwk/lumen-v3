@@ -29,7 +29,7 @@ class EmployeeAdjustmentTypeRegistry
     /** @var array<string, array<string, mixed>> */
     private const DEFINITIONS = [
         self::TYPE_PENYESUAIAN_GAJI => [
-            'label' => 'Penyesuaian Gaji',
+            'label' => 'Penyesuaian Upah Kerja',
             'workflow_profile' => self::WORKFLOW_FULL,
             'kpi_required' => true,
             'salary_required' => true,

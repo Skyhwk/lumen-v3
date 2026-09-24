@@ -96,8 +96,9 @@ class EmployeeAdjustmentMutasiService
             }
 
             $bulanEfektif = trim((string) ($request->input('bulan_efektif') ?? ''));
-            if (!preg_match('/^\d{4}-\d{2}$/', $bulanEfektif)) {
-                return ['error' => 'Periode efektif penyesuaian gaji/tunjangan wajib diisi (format YYYY-MM)', 'data' => []];
+            $bulanError = EmployeeAdjustmentValidationService::validateBulanEfektif($bulanEfektif, true);
+            if ($bulanError) {
+                return ['error' => $bulanError, 'data' => []];
             }
 
             $hasSalaryAdjustment = true;

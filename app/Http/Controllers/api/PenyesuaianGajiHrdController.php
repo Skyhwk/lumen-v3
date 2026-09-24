@@ -45,23 +45,23 @@ class PenyesuaianGajiHrdController extends Controller
                         SalaryAdjustmentWorkflowService::HRD_TAB_WAITING_PROCESS
                     ))
                     ->count(),
-                'waiting_assessment' => (clone $base)
+                'monitor_assessment' => (clone $base)
                     ->whereIn('status', SalaryAdjustmentWorkflowService::statusesForHrdTab(
                         SalaryAdjustmentWorkflowService::HRD_TAB_WAITING_ASSESSMENT
                     ))
                     ->count(),
-                'counseling_schedule' => (clone $base)
-                    ->where('status', SalaryAdjustmentWorkflowService::STATUS_ASSESSMENT_COMPLETED)
-                    ->whereNotExists(function ($query) {
-                        $query->select(DB::raw(1))
-                            ->from('salary_adjustment_counselings as sac')
-                            ->whereColumn('sac.request_id', 'salary_adjustment_requests.id');
-                    })
+                'monitor_counseling' => (clone $base)
+                    ->whereIn('status', SalaryAdjustmentWorkflowService::statusesForHrdTab(
+                        SalaryAdjustmentWorkflowService::HRD_TAB_MONITOR_COUNSELING
+                    ))
                     ->count(),
                 'final_evaluation' => (clone $base)
                     ->whereIn('status', SalaryAdjustmentWorkflowService::statusesForHrdTab(
                         SalaryAdjustmentWorkflowService::HRD_TAB_FINAL_EVALUATION
                     ))
+                    ->count(),
+                'waiting_finance' => (clone $base)
+                    ->where('status', SalaryAdjustmentWorkflowService::STATUS_FINANCE_REVIEW)
                     ->count(),
                 'waiting_approval_ibu' => (clone $base)
                     ->where('status', SalaryAdjustmentWorkflowService::STATUS_WAITING_APPROVAL_IBU)
@@ -129,9 +129,77 @@ class PenyesuaianGajiHrdController extends Controller
         return $this->indexByHrdTab($request, SalaryAdjustmentWorkflowService::HRD_TAB_WAITING_ASSESSMENT, true);
     }
 
+    public function indexMonitorAssessment(Request $request)
+    {
+        return $this->indexByHrdTab($request, SalaryAdjustmentWorkflowService::HRD_TAB_WAITING_ASSESSMENT, false);
+    }
+
+    public function indexMonitorCounseling(Request $request)
+    {
+        $periode = $request->periode ?? date('Y');
+        $statuses = SalaryAdjustmentWorkflowService::statusesForHrdTab(
+            SalaryAdjustmentWorkflowService::HRD_TAB_MONITOR_COUNSELING
+        );
+
+        $query = DB::connection('mysql')
+            ->table('salary_adjustment_requests as sar')
+            ->leftJoin('master_karyawan as karyawan', 'sar.employee_id', '=', 'karyawan.id')
+            ->leftJoin('master_divisi as d', 'karyawan.id_department', '=', 'd.id')
+            ->leftJoin('master_karyawan as manager', 'sar.requested_by_id', '=', 'manager.id')
+            ->leftJoin('salary_adjustment_assessments as sa', 'sar.id', '=', 'sa.request_id')
+            ->leftJoin('salary_adjustment_counselings as sac', 'sar.id', '=', 'sac.request_id')
+            ->where('sar.is_active', true)
+            ->whereYear('sar.created_at', $periode)
+            ->whereIn('sar.status', $statuses)
+            ->select(
+                'sar.id',
+                'sar.no_document',
+                'sar.request_type',
+                'sar.employee_id',
+                'sar.jabatan',
+                'sar.bulan_efektif',
+                'sar.status',
+                'sar.created_at',
+                'karyawan.nama_lengkap',
+                'd.nama_divisi',
+                'manager.nama_lengkap as manager_nama',
+                'sa.total_score',
+                'sa.completed_at as assessment_completed_at',
+                'sac.scheduled_date',
+                'sac.scheduled_time',
+                'sac.counselor_name',
+                'sac.status as counseling_status'
+            )
+            ->orderByDesc('sar.id');
+
+        return $this->applyHrdDatatablesFilters(
+            $this->decorateRequestTypeColumn(
+                Datatables::of($query)
+                    ->addColumn('status_label', function ($row) {
+                        return SalaryAdjustmentWorkflowService::statusLabel($row->status);
+                    })
+                    ->addColumn('schedule_label', function ($row) {
+                        if (empty($row->scheduled_date)) {
+                            return '-';
+                        }
+
+                        $date = date('d/m/Y', strtotime($row->scheduled_date));
+                        $time = $row->scheduled_time ? substr((string) $row->scheduled_time, 0, 5) : '';
+
+                        return trim($date . ($time !== '' ? " {$time}" : ''));
+                    })
+            )
+        )->make(true);
+    }
+
     public function indexFinalEvaluation(Request $request)
     {
         return $this->indexByHrdTab($request, SalaryAdjustmentWorkflowService::HRD_TAB_FINAL_EVALUATION, false);
+    }
+
+    public function indexWaitingFinance(Request $request)
+    {
+        return $this->indexByHrdTab($request, SalaryAdjustmentWorkflowService::HRD_TAB_WAITING_FINANCE, false);
     }
 
     public function indexWaitingApprovalIbu(Request $request)
@@ -205,6 +273,7 @@ class PenyesuaianGajiHrdController extends Controller
         try {
             $from = $record->status;
             $hrdNotes = trim((string) ($request->hrd_final_adjustment_notes ?? ''));
+            $hrdApprovalNotes = trim((string) ($request->hrd_approval_notes ?? ''));
             $notes = trim((string) ($request->notes ?? '')) ?: 'HRD menyetujui evaluasi final';
 
             $this->ensureSubmittedSnapshot($record);
@@ -230,7 +299,32 @@ class PenyesuaianGajiHrdController extends Controller
                 $record->hrd_final_requested_tunjangan_kerja = $record->requested_tunjangan_kerja;
             }
 
+            $periodChange = ['changed' => false];
+            if ($request->has('bulan_efektif') && !empty($record->bulan_efektif)) {
+                $requestedPeriod = SalaryAdjustmentEvaluationService::normalizeBulanEfektif($request->bulan_efektif);
+                if ($requestedPeriod === null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Format periode mulai berlaku tidak valid (YYYY-MM)',
+                    ], 422);
+                }
+
+                $periodError = SalaryAdjustmentEvaluationService::validateBulanEfektif($requestedPeriod);
+                if ($periodError !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $periodError,
+                    ], 422);
+                }
+
+                $periodChange = SalaryAdjustmentEvaluationService::applyHrdEffectivePeriodChange(
+                    $record,
+                    $requestedPeriod
+                );
+            }
+
             $record->hrd_final_adjustment_notes = $hrdNotes !== '' ? $hrdNotes : null;
+            $record->hrd_approval_notes = $hrdApprovalNotes !== '' ? $hrdApprovalNotes : null;
             $record->status = $nextStatus;
             $record->final_eval_approved_by = $this->karyawan;
             $record->final_eval_approved_at = Carbon::now();
@@ -250,8 +344,15 @@ class PenyesuaianGajiHrdController extends Controller
                 || round($submittedSnapshot['requested_gaji_pokok'], 2) !== round($finalSnapshot['requested_gaji_pokok'], 2)
                 || round($submittedSnapshot['requested_tunjangan_kerja'], 2) !== round($finalSnapshot['requested_tunjangan_kerja'], 2)
             );
+            $changedByHrdPeriod = !empty($periodChange['changed']);
             if ($changedByHrd && $notes === 'HRD menyetujui evaluasi final') {
                 $notes = 'HRD menyetujui evaluasi final dengan penyesuaian nominal';
+            }
+            if ($changedByHrdPeriod && !$changedByHrd && $notes === 'HRD menyetujui evaluasi final') {
+                $notes = 'HRD menyetujui evaluasi final dengan penyesuaian periode berlaku';
+            }
+            if ($changedByHrd && $changedByHrdPeriod && str_contains($notes, 'penyesuaian nominal')) {
+                $notes = 'HRD menyetujui evaluasi final dengan penyesuaian nominal dan periode berlaku';
             }
             if ($skipFinance && $notes === 'HRD menyetujui evaluasi final') {
                 $notes = 'HRD menyetujui evaluasi final — lewati Finance';
@@ -269,7 +370,10 @@ class PenyesuaianGajiHrdController extends Controller
                     'submitted' => $submittedSnapshot,
                     'final' => $finalSnapshot,
                     'changed_by_hrd' => $changedByHrd,
+                    'period' => $periodChange,
+                    'changed_by_hrd_period' => $changedByHrdPeriod,
                     'hrd_final_adjustment_notes' => $hrdNotes !== '' ? $hrdNotes : null,
+                    'hrd_approval_notes' => $hrdApprovalNotes !== '' ? $hrdApprovalNotes : null,
                     'skip_finance' => $skipFinance,
                 ]
             );
@@ -1212,8 +1316,9 @@ class PenyesuaianGajiHrdController extends Controller
     public function reject(Request $request)
     {
         $reason = trim((string) ($request->reject_reason ?? $request->keterangan ?? ''));
-        if ($reason === '') {
-            return response()->json(['success' => false, 'message' => 'Alasan penolakan wajib diisi'], 400);
+        $plainReason = trim(strip_tags(html_entity_decode($reason)));
+        if ($plainReason === '') {
+            return response()->json(['success' => false, 'message' => 'Keterangan penolakan wajib diisi'], 400);
         }
 
         $record = SalaryAdjustmentRequest::find((int) $request->id);
