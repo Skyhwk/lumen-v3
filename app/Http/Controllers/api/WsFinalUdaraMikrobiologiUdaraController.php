@@ -133,7 +133,7 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
                 $subkontrak = Subkontrak::with(['ws_udara', 'createdByKaryawan'])
                     ->where('no_sampel', $request->no_sampel)
                     ->where('is_approve', 1)
-                    ->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
+                    ->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active', 'note')
                     ->addSelect(DB::raw("'subKontrak' as data_type"))
                     ->get();
                 $combinedData = collect()->merge($subkontrak)->merge($microbio);

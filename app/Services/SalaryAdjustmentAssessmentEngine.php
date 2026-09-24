@@ -431,19 +431,28 @@ class SalaryAdjustmentAssessmentEngine
         $assessment->link_deactivated_at = Carbon::now();
         $assessment->save();
 
+        $requestRecord = SalaryAdjustmentRequest::find($assessment->request_id);
+        $fromStatus = $requestRecord ? $requestRecord->status : SalaryAdjustmentWorkflowService::STATUS_ASSESSMENT_IN_PROGRESS;
+        $nextStatus = $requestRecord
+            ? (new EmployeeAdjustmentWorkflowResolver())->resolvePostAssessmentCompletedStatus($requestRecord)
+            : SalaryAdjustmentWorkflowService::STATUS_ASSESSMENT_COMPLETED;
+        $skipCounseling = $nextStatus === SalaryAdjustmentWorkflowService::STATUS_FINAL_EVALUATION;
+
         SalaryAdjustmentRequest::where('id', $assessment->request_id)->update([
-            'status' => SalaryAdjustmentWorkflowService::STATUS_ASSESSMENT_COMPLETED,
+            'status' => $nextStatus,
             'updated_by' => 'system',
         ]);
 
         SalaryAdjustmentLogService::log(
             $assessment->request_id,
-            SalaryAdjustmentWorkflowService::STATUS_ASSESSMENT_IN_PROGRESS,
-            SalaryAdjustmentWorkflowService::STATUS_ASSESSMENT_COMPLETED,
+            $fromStatus,
+            $nextStatus,
             'assessment_completed',
             null,
             'system',
-            'Assessment karyawan selesai'
+            $skipCounseling
+                ? 'Assessment karyawan selesai — langsung ke Evaluasi Final (lewati konseling)'
+                : 'Assessment karyawan selesai'
         );
     }
 
