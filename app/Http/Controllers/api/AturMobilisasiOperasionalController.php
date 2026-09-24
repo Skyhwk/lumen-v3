@@ -44,7 +44,10 @@ class AturMobilisasiOperasionalController extends Controller
     public function getOptions(Request $request)
     {
         $tanggal = $request->tanggal ?: date('Y-m-d', strtotime('+1 day'));
-        $data = $this->service->getOptions($tanggal, $request->id ?: null);
+        $durasi = $request->has('durasi') && $request->durasi !== '' && $request->durasi !== null
+            ? (int) $request->durasi
+            : null;
+        $data = $this->service->getOptions($tanggal, $request->id ?: null, $durasi);
 
         return response()->json([
             'message' => 'Options loaded successfully',

@@ -16,7 +16,8 @@ use Exception;
 /**
  * Assignment mobil + driver untuk Jadwal Tim.
  *
- * Sumber baru: tabel mobilisasi_operasional (+ detail by id_jadwal).
+ * Sumber baru: tabel mobilisasi_operasional (+ detail by id_sampling + anggota sampler).
+ * id_jadwal pada detail hanya snapshot pointer ke baris jadwal aktif (di-update saat sync).
  * Kolom lama jadwal.kendaraan / jadwal.driver tetap diisi dulu (dual-write)
  * supaya fitur lama sejak ~2020 tidak putus.
  *
@@ -31,6 +32,12 @@ use Exception;
  */
 class MobilisasiOperasionalService
 {
+    /** @var bool|null */
+    private static $moTablesReadyCache = null;
+
+    /** @var bool|null */
+    private static $detailSamplingColumnsCache = null;
+
     public const DUAL_WRITE_KENDARAAN = true;
     public const DUAL_WRITE_DRIVER = true;
 
@@ -47,16 +54,56 @@ class MobilisasiOperasionalService
 
     public function listSudahDiatur($tanggal)
     {
-        $rows = MobilisasiOperasional::with(['details.jadwal'])
+        $rows = MobilisasiOperasional::with([
+            'details.jadwal' => function ($q) {
+                $q->with([
+                    'quotationKontrakH' => function ($qq) {
+                        $qq->select('id', 'no_document', 'nama_pic_sampling', 'no_tlp_pic_sampling')
+                            ->where('is_active', true);
+                    },
+                    'quotationNonKontrak' => function ($qq) {
+                        $qq->select('id', 'no_document', 'nama_pic_sampling', 'no_tlp_pic_sampling')
+                            ->where('is_active', true);
+                    },
+                ]);
+            },
+        ])
             ->where('is_active', true)
             ->where('tanggal_sampling', $tanggal)
             ->orderBy('jam_keberangkatan')
             ->orderBy('id')
             ->get();
 
-        return $rows->map(function ($mo) {
-            return $this->presentMo($mo);
-        })->values();
+        $timList = collect();
+        foreach ($rows as $mo) {
+            $jadwalRows = $mo->details
+                ->map(function ($detail) use ($mo) {
+                    return $this->resolveJadwalForDetail($detail, $mo->tanggal_sampling);
+                })
+                ->filter()
+                ->values();
+
+            if ($jadwalRows->isEmpty()) {
+                continue;
+            }
+
+            $timGroups = $this->groupJadwalAsTim($jadwalRows, $mo->nama_driver);
+            foreach ($timGroups as $tim) {
+                $timList->push(array_merge($tim, [
+                    'id_mo' => $mo->id,
+                    'plat_mobil' => $mo->plat_mobil,
+                    'nama_driver' => $mo->nama_driver,
+                    'jam_keberangkatan' => $mo->jam_keberangkatan
+                        ? substr($mo->jam_keberangkatan, 0, 5)
+                        : null,
+                    'durasi_mo' => $mo->durasi,
+                    'tanggal_pulang' => $mo->tanggal_pulang,
+                    'catatan' => $mo->catatan,
+                ]));
+            }
+        }
+
+        return $timList->values();
     }
 
     public function show($id)
@@ -73,7 +120,7 @@ class MobilisasiOperasionalService
         return $this->presentMo($mo);
     }
 
-    public function getOptions($tanggal, $excludeMoId = null)
+    public function getOptions($tanggal, $excludeMoId = null, $durasi = null)
     {
         $driver = MasterDriver::where('is_active', true)
             ->orderBy('nama_driver')
@@ -86,7 +133,7 @@ class MobilisasiOperasionalService
                 ];
             });
 
-        $kendaraan = $this->fetchKendaraanAvailable($tanggal, $excludeMoId);
+        $kendaraan = $this->fetchKendaraanAvailable($tanggal, $excludeMoId, $durasi);
 
         $timQuery = $this->baseJadwalQuery($tanggal);
         $this->applyUnassignedFilter($timQuery, $excludeMoId);
@@ -101,8 +148,9 @@ class MobilisasiOperasionalService
                 $currentTim = $this->groupJadwalAsTim(
                     $current->details
                         ->map(function ($detail) use ($current) {
-                            if ($detail->jadwal) {
-                                return $detail->jadwal;
+                            $resolved = $this->resolveJadwalForDetail($detail, $current->tanggal_sampling);
+                            if ($resolved) {
+                                return $resolved;
                             }
 
                             return (object) [
@@ -185,6 +233,7 @@ class MobilisasiOperasionalService
 
         $moId = !empty($payload['id']) ? (int) $payload['id'] : null;
         $this->assertJadwalAvailable($idJadwal, $moId);
+        $this->assertMobilAvailable($kendaraan->id, $plat, $tanggal, $tanggalPulang, $moId);
 
         $now = Carbon::now()->format('Y-m-d H:i:s');
         $jamKeberangkatan = $payload['jam_keberangkatan'] ?: '06:00';
@@ -199,19 +248,8 @@ class MobilisasiOperasionalService
                     throw new Exception('Mobilisasi operasional tidak ditemukan', 404);
                 }
 
-                $oldIds = $header->details()->pluck('id_jadwal')->all();
+                $oldIds = $header->details()->where('is_active', true)->pluck('id_jadwal')->all();
                 $this->clearLegacyColumns($oldIds);
-
-                MobilisasiOperasionalDetail::where('id_mo', $header->id)
-                    ->where('is_active', true)
-                    ->update(array_merge([
-                        'is_active' => false,
-                        'deleted_at' => $now,
-                        'deleted_by' => $actor,
-                    ], $this->historyPayload([
-                        'alasan_perubahan' => 'Edit atur mobilisasi operasional',
-                        'sumber_perubahan' => 'atur_mo',
-                    ])));
 
                 $header->id_mobil = $kendaraan->id;
                 $header->plat_mobil = $plat;
@@ -242,32 +280,14 @@ class MobilisasiOperasionalService
                 ]);
             }
 
-            foreach ($jadwalRows as $row) {
-                MobilisasiOperasionalDetail::create(array_merge([
-                    'id_mo' => $header->id,
-                    'id_jadwal' => $row->id,
-                    'sampler' => $row->sampler,
-                    'no_quotation' => $row->no_quotation,
-                    'nama_perusahaan' => $row->nama_perusahaan,
-                    'jam_mulai' => $row->jam_mulai,
-                    'jam_selesai' => $row->jam_selesai,
-                    'wilayah' => $row->wilayah,
-                    'durasi' => $row->durasi,
-                    'created_at' => $now,
-                    'created_by' => $actor,
-                    'is_active' => true,
-                ], $this->historyPayload([
-                    'alasan_perubahan' => $moId
-                        ? 'Edit atur mobilisasi operasional'
-                        : 'Atur mobilisasi operasional',
-                    'sumber_perubahan' => 'atur_mo',
-                ])));
-            }
-
-            $this->applyLegacyColumns(
-                $idJadwal,
-                $plat,
-                $driver->nama_driver
+            $this->syncMoHeaderFromJadwalRows(
+                $header,
+                $jadwalRows,
+                $actor,
+                $now,
+                $moId ? 'Edit atur mobilisasi operasional' : 'Atur mobilisasi operasional',
+                'atur_mo',
+                true
             );
 
             DB::commit();
@@ -317,14 +337,18 @@ class MobilisasiOperasionalService
     }
 
     /**
-     * Dipanggil dari JadwalServices saat baris jadwal diganti (id lama mati, id baru insert)
-     * atau sampler/driver di-update in-place.
-     *
-     * Jangan menimpa baris detail: nonaktifkan yang lama, insert baris baru
-     * supaya pergerakan tim/driver bisa diaudit (pelaku, waktu, alasan).
+     * Setelah jadwal tim diubah (induk maupun parsial yang sudah punya MO):
+     * penugasan MO tetap aktif di tab Sudah; detail MO di-remap ke id jadwal baru.
+     * Jadwal parsial yang belum pernah MO diatur lewat prepareNewParsialJadwalForMo saat insert.
      */
-    public function remapAfterJadwalReplace(array $oldIds, array $newIds, $actor = null, $alasan = null)
-    {
+    public function reconcileAfterJadwalChange(
+        array $oldIds,
+        array $newIds,
+        $actor = null,
+        $alasan = null,
+        $oldJadwalBefore = null,
+        array $context = []
+    ) {
         if (!$this->tablesReady()) {
             return;
         }
@@ -335,23 +359,104 @@ class MobilisasiOperasionalService
             return;
         }
 
-        $details = MobilisasiOperasionalDetail::where('is_active', true)
-            ->whereIn('id_jadwal', $oldIds)
-            ->get();
+        $actor = $actor ?: 'System';
+        $alasan = $alasan ?: 'Update jadwal sampling plan';
 
-        if ($details->isEmpty()) {
+        if (!$this->hasMoAffectedByJadwalReplace($oldIds, $newIds)) {
+            return;
+        }
+
+        $this->remapAfterJadwalReplace($oldIds, $newIds, $actor, $alasan);
+    }
+
+    /**
+     * Cek ringan: apakah ada MO aktif yang terkait id jadwal lama (atau id_sampling-nya).
+     * Dipakai sebelum sync penuh agar update jadwal tanpa MO tidak kena query berat.
+     */
+    public function hasMoAffectedByJadwalReplace(array $oldIds, array $newIds = [])
+    {
+        if (!$this->tablesReady()) {
+            return false;
+        }
+
+        $oldIds = $this->normalizeIds($oldIds);
+        if (count($oldIds) === 0) {
+            return false;
+        }
+
+        if (MobilisasiOperasionalDetail::where('is_active', true)
+            ->whereIn('id_jadwal', $oldIds)
+            ->exists()) {
+            return true;
+        }
+
+        if (!$this->detailHasSamplingColumns()) {
+            return false;
+        }
+
+        $touchIds = array_values(array_unique(array_merge(
+            $oldIds,
+            $this->normalizeIds($newIds)
+        )));
+
+        $samplingIds = Jadwal::whereIn('id', $touchIds)
+            ->whereNotNull('id_sampling')
+            ->distinct()
+            ->pluck('id_sampling');
+
+        if ($samplingIds->isEmpty()) {
+            return false;
+        }
+
+        return MobilisasiOperasionalDetail::where('is_active', true)
+            ->whereIn('id_sampling', $samplingIds->all())
+            ->exists();
+    }
+
+    /** Baris jadwal parsial baru: tidak mewarisi mobil/driver induk → tab Belum Diatur MO. */
+    public function prepareNewParsialJadwalForMo(array $jadwalIds, $actor = null)
+    {
+        $ids = $this->normalizeIds($jadwalIds);
+        if (!$this->tablesReady() || count($ids) === 0) {
+            return;
+        }
+
+        $this->clearLegacyColumns($ids);
+    }
+
+    public function remapAfterJadwalReplace(array $oldIds, array $newIds, $actor = null, $alasan = null)
+    {
+        if (!$this->tablesReady()) {
+            return;
+        }
+
+        $oldIds = $this->normalizeIds($oldIds);
+        $newIds = $this->normalizeIds($newIds);
+        if (count($oldIds) === 0 && count($newIds) === 0) {
             return;
         }
 
         $actor = $actor ?: 'System';
         $alasan = $alasan ?: 'Update jadwal sampling plan';
         $now = Carbon::now()->format('Y-m-d H:i:s');
-        $newJadwal = Jadwal::whereIn('id', count($newIds) ? $newIds : $oldIds)
-            ->where('is_active', true)
-            ->get();
 
-        if ($newJadwal->isEmpty()) {
-            $this->deactivateDetails($details, $actor, $now, $alasan, 'update_jadwal');
+        $touchIds = array_values(array_unique(array_merge($oldIds, $newIds)));
+        $touchRows = Jadwal::whereIn('id', $touchIds)->get();
+        $samplingIds = $touchRows->pluck('id_sampling')->filter()->unique()->values();
+
+        $detailsQuery = MobilisasiOperasionalDetail::where('is_active', true);
+        $detailsQuery->where(function ($query) use ($oldIds, $samplingIds) {
+            if (count($oldIds) > 0) {
+                $query->whereIn('id_jadwal', $oldIds);
+            }
+            if ($this->detailHasSamplingColumns() && $samplingIds->isNotEmpty()) {
+                $method = count($oldIds) > 0 ? 'orWhereIn' : 'whereIn';
+                $query->{$method}('id_sampling', $samplingIds->all());
+            }
+        });
+
+        $details = $detailsQuery->get();
+        if ($details->isEmpty()) {
             return;
         }
 
@@ -364,112 +469,43 @@ class MobilisasiOperasionalService
                 continue;
             }
 
-            $pairs = $this->pairDetailsToNewJadwal($moDetails, $newJadwal);
-            $pairedOldIds = [];
-            $formDrivers = $newJadwal->pluck('driver')
-                ->map(function ($value) {
-                    return trim((string) $value);
-                })
-                ->filter()
-                ->unique()
-                ->values();
-            $driverWillChange = $formDrivers->count() === 1
-                && $formDrivers->first() !== trim((string) $header->nama_driver);
-            $reason = $alasan;
-            if ($driverWillChange) {
-                $reason .= ' | driver: ' . trim((string) $header->nama_driver) . ' → ' . $formDrivers->first();
+            $visitScopes = $this->collectVisitScopesFromDetails($moDetails);
+            $jadwalRows = $this->loadActiveJadwalForVisitScopes($visitScopes, $header->tanggal_sampling);
+
+            if ($jadwalRows->isEmpty()) {
+                $this->deactivateDetails($moDetails, $actor, $now, $alasan, 'update_jadwal');
+                continue;
             }
 
-            foreach ($pairs as $pair) {
-                $old = $pair['old'];
-                $row = $pair['new'];
-                if ($old) {
-                    $pairedOldIds[] = $old->id;
-                    $this->deactivateDetails(collect([$old]), $actor, $now, $reason, 'update_jadwal');
-                }
+            $this->syncMoHeaderFromJadwalRows(
+                $header,
+                $jadwalRows,
+                $actor,
+                $now,
+                $alasan,
+                'update_jadwal',
+                true
+            );
 
-                MobilisasiOperasionalDetail::create($this->makeDetailHistoryPayload(
-                    $header->id,
-                    $row,
-                    $actor,
-                    $now,
-                    $this->buildReplacementReason($reason, $old, $row),
-                    'update_jadwal',
-                    $old ? $old->id_jadwal : null,
-                    $old ? $old->sampler : null
-                ));
-            }
-
-            $unpaired = $moDetails->filter(function ($detail) use ($pairedOldIds) {
-                return !in_array($detail->id, $pairedOldIds, true);
-            });
-            if ($unpaired->isNotEmpty()) {
-                $this->deactivateDetails($unpaired, $actor, $now, $reason, 'update_jadwal');
-            }
-
-            $this->syncHeaderFromJadwal($header, $newJadwal, $actor, $now);
-
-            Log::channel('sampling')->info('MO remap setelah update jadwal', [
+            Log::channel('sampling')->info('MO sync setelah update jadwal (id_sampling)', [
                 'id_mo' => $header->id,
                 'actor' => $actor,
-                'alasan' => $reason,
+                'alasan' => $alasan,
                 'old_ids' => $oldIds,
-                'new_ids' => $newJadwal->pluck('id')->all(),
+                'new_ids' => $newIds,
+                'id_sampling' => $samplingIds->all(),
             ]);
         }
     }
 
     public function syncSnapshots(array $jadwalIds, $actor = null, $alasan = null)
     {
-        if (!$this->tablesReady()) {
-            return;
-        }
-
-        $jadwalIds = $this->normalizeIds($jadwalIds);
-        if (count($jadwalIds) === 0) {
-            return;
-        }
-
-        $rows = Jadwal::whereIn('id', $jadwalIds)->get()->keyBy('id');
-        $details = MobilisasiOperasionalDetail::where('is_active', true)
-            ->whereIn('id_jadwal', $jadwalIds)
-            ->get();
-
-        $now = Carbon::now()->format('Y-m-d H:i:s');
-        $actor = $actor ?: 'System';
-        $alasan = $alasan ?: 'Update jadwal sampling plan';
-
-        foreach ($details as $detail) {
-            $jadwal = $rows->get($detail->id_jadwal);
-            if (!$jadwal) {
-                continue;
-            }
-
-            if ($this->normalizeSamplerName($detail->sampler) !== $this->normalizeSamplerName($jadwal->sampler)) {
-                $this->deactivateDetails(collect([$detail]), $actor, $now, $alasan, 'update_jadwal');
-                MobilisasiOperasionalDetail::create($this->makeDetailHistoryPayload(
-                    $detail->id_mo,
-                    $jadwal,
-                    $actor,
-                    $now,
-                    $this->buildReplacementReason($alasan, $detail, $jadwal),
-                    'update_jadwal',
-                    $detail->id_jadwal,
-                    $detail->sampler
-                ));
-                continue;
-            }
-
-            $detail->no_quotation = $jadwal->no_quotation;
-            $detail->nama_perusahaan = $jadwal->nama_perusahaan;
-            $detail->jam_mulai = $jadwal->jam_mulai;
-            $detail->jam_selesai = $jadwal->jam_selesai;
-            $detail->wilayah = $jadwal->wilayah;
-            $detail->durasi = $jadwal->durasi;
-            $detail->updated_at = $now;
-            $detail->updated_by = $actor;
-            $detail->save();
-        }
+        $this->remapAfterJadwalReplace(
+            $this->normalizeIds($jadwalIds),
+            $this->normalizeIds($jadwalIds),
+            $actor,
+            $alasan
+        );
     }
 
     public function hitungTanggalPulang($tanggalSampling, $durasi)
@@ -527,16 +563,53 @@ class MobilisasiOperasionalService
     protected function applyUnassignedFilter($query, $excludeMoId = null)
     {
         if ($this->tablesReady()) {
-            $query->whereNotIn('id', function ($sub) use ($excludeMoId) {
-                $sub->select('id_jadwal')
-                    ->from('mobilisasi_operasional_detail')
-                    ->where('is_active', true)
-                    ->whereNotNull('id_jadwal');
+            if ($this->detailHasSamplingColumns()) {
+                $query->whereNotExists(function ($sub) use ($excludeMoId) {
+                    $sub->select(DB::raw(1))
+                        ->from('mobilisasi_operasional_detail as d')
+                        ->whereColumn('d.id_jadwal', 'jadwal.id')
+                        ->where('d.is_active', true);
 
-                if ($excludeMoId) {
-                    $sub->where('id_mo', '!=', $excludeMoId);
-                }
-            });
+                    if ($excludeMoId) {
+                        $sub->where('d.id_mo', '!=', $excludeMoId);
+                    }
+                })->whereNotExists(function ($sub) use ($excludeMoId) {
+                    $sub->select(DB::raw(1))
+                        ->from('mobilisasi_operasional_detail as d')
+                        ->where('d.is_active', true)
+                        ->whereNotNull('d.id_sampling')
+                        ->whereColumn('d.id_sampling', 'jadwal.id_sampling')
+                        ->where(function ($match) {
+                            $match->where(function ($withUser) {
+                                $withUser->whereNotNull('jadwal.userid')
+                                    ->whereColumn('d.userid', 'jadwal.userid');
+                            })->orWhere(function ($withName) {
+                                $withName->whereNull('jadwal.userid')
+                                    ->whereColumn('d.sampler', 'jadwal.sampler');
+                            });
+                        })
+                        ->where(function ($parsialMatch) {
+                            $parsialMatch->where(function ($bothNull) {
+                                $bothNull->whereNull('d.parsial')->whereNull('jadwal.parsial');
+                            })->orWhereColumn('d.parsial', 'jadwal.parsial');
+                        });
+
+                    if ($excludeMoId) {
+                        $sub->where('d.id_mo', '!=', $excludeMoId);
+                    }
+                });
+            } else {
+                $query->whereNotIn('id', function ($sub) use ($excludeMoId) {
+                    $sub->select('id_jadwal')
+                        ->from('mobilisasi_operasional_detail')
+                        ->where('is_active', true)
+                        ->whereNotNull('id_jadwal');
+
+                    if ($excludeMoId) {
+                        $sub->where('id_mo', '!=', $excludeMoId);
+                    }
+                });
+            }
         }
 
         if (self::UNASSIGNED_MODE === 'jadwal_columns') {
@@ -623,6 +696,9 @@ class MobilisasiOperasionalService
                     return $sampler;
                 })->implode(', ');
 
+                $driverJadwal = trim((string) ($first->driver ?? ''));
+                $kendaraanJadwal = trim((string) ($first->kendaraan ?? ''));
+
                 return [
                     'id_jadwal' => $ids->all(),
                     'team_sampler' => $normalizedTeam,
@@ -638,6 +714,8 @@ class MobilisasiOperasionalService
                     'note' => $first->note,
                     'kategori' => $kategoriItems,
                     'ringkasan_kategori' => $this->summarizeKategori($kategoriItems),
+                    'driver' => $driverJadwal !== '' ? $driverJadwal : null,
+                    'kendaraan' => $kendaraanJadwal !== '' ? $kendaraanJadwal : null,
                 ];
             })
             ->groupBy('team_sampler')
@@ -645,12 +723,20 @@ class MobilisasiOperasionalService
                 $first = $group->first();
                 $allIds = $group->pluck('id_jadwal')->flatten()->unique()->values()->all();
                 $maxDurasi = (int) $group->max('durasi');
+                $driverTim = $group->pluck('driver')->map(function ($name) {
+                    return trim((string) $name);
+                })->filter()->unique()->values()->first();
+                $kendaraanTim = $group->pluck('kendaraan')->map(function ($plat) {
+                    return trim((string) $plat);
+                })->filter()->unique()->values()->first();
 
                 return [
                     'tim_key' => md5(implode(',', $allIds)),
                     'tim_sampler' => $first['display_sampler'],
                     'id_jadwal' => $allIds,
                     'durasi' => $maxDurasi,
+                    'driver' => $driverTim ?: null,
+                    'kendaraan' => $kendaraanTim ?: null,
                     'list_pt' => $group->map(function ($item) {
                         return [
                             'id_jadwal' => $item['id_jadwal'],
@@ -737,8 +823,13 @@ class MobilisasiOperasionalService
 
     protected function presentMo($mo)
     {
-        $jadwalRows = $mo->details->map(function ($detail) {
-            return $detail->jadwal ?: (object) [
+        $jadwalRows = $mo->details->map(function ($detail) use ($mo) {
+            $resolved = $this->resolveJadwalForDetail($detail, $mo->tanggal_sampling);
+            if ($resolved) {
+                return $resolved;
+            }
+
+            return (object) [
                 'id' => $detail->id_jadwal,
                 'sampler' => $detail->sampler,
                 'no_quotation' => $detail->no_quotation,
@@ -795,15 +886,35 @@ class MobilisasiOperasionalService
             return;
         }
 
-        $query = MobilisasiOperasionalDetail::where('is_active', true)
-            ->whereIn('id_jadwal', $idJadwal);
+        $rows = Jadwal::whereIn('id', $idJadwal)->where('is_active', true)->get();
+        foreach ($rows as $row) {
+            $query = MobilisasiOperasionalDetail::where('is_active', true);
+            if ($excludeMoId) {
+                $query->where('id_mo', '!=', $excludeMoId);
+            }
 
-        if ($excludeMoId) {
-            $query->where('id_mo', '!=', $excludeMoId);
-        }
+            $query->where(function ($match) use ($row) {
+                $match->where('id_jadwal', $row->id);
+                if ($this->detailHasSamplingColumns() && $row->id_sampling) {
+                    $match->orWhere(function ($samplingMatch) use ($row) {
+                        $samplingMatch->where('id_sampling', $row->id_sampling);
+                        if ($row->parsial) {
+                            $samplingMatch->where('parsial', $row->parsial);
+                        } else {
+                            $samplingMatch->whereNull('parsial');
+                        }
+                        if ($row->userid) {
+                            $samplingMatch->where('userid', $row->userid);
+                        } else {
+                            $samplingMatch->where('sampler', $row->sampler);
+                        }
+                    });
+                }
+            });
 
-        if ($query->exists()) {
-            throw new Exception('Ada tim yang sudah diatur di mobilisasi operasional lain.', 422);
+            if ($query->exists()) {
+                throw new Exception('Ada tim yang sudah diatur di mobilisasi operasional lain.', 422);
+            }
         }
     }
 
@@ -844,48 +955,131 @@ class MobilisasiOperasionalService
         return $kendaraan;
     }
 
-    protected function fetchKendaraanAvailable($tanggal, $excludeMoId = null)
+    protected function fetchKendaraanAvailable($tanggal, $excludeMoId = null, $durasi = null)
     {
-        $data = DaftarMobil::where('is_active', true)
+        $tanggal = Carbon::parse($tanggal)->toDateString();
+        $durasi = $durasi === null ? 0 : (int) $durasi;
+        $windowEnd = $this->hitungTanggalPulang($tanggal, $durasi);
+
+        $allMobil = DaftarMobil::where('is_active', true)
             ->whereNotNull('plat_mobil')
             ->where('plat_mobil', '!=', '')
             ->orderBy('plat_mobil')
-            ->get()
-            ->map(function ($item) {
-                return $this->presentKendaraanOption($item);
-            })
-            ->values();
+            ->get();
 
-        $queryBentrok = DB::table('jadwal')
-            ->select('kendaraan', 'sampler', 'jam_mulai', 'created_at', 'updated_at')
-            ->where('tanggal', $tanggal)
-            ->whereNotNull('kendaraan')
-            ->where('is_active', 1);
+        $conflicts = [];
+        $available = collect();
 
-        $detailKonflik = [];
-        foreach ($queryBentrok->get() as $row) {
-            $veh = $row->kendaraan;
-            if (!isset($detailKonflik[$veh])) {
-                $detailKonflik[$veh] = $row;
+        foreach ($allMobil as $item) {
+            $plat = trim((string) $item->plat_mobil);
+            $overlap = $this->findOverlappingMobilMo(
+                $plat,
+                (int) $item->id,
+                $tanggal,
+                $windowEnd,
+                $excludeMoId
+            );
+
+            if ($overlap) {
+                $conflicts[$plat] = $this->presentMobilConflict($overlap);
                 continue;
             }
 
-            $existing = $detailKonflik[$veh];
-            if ($row->jam_mulai < $existing->jam_mulai) {
-                $detailKonflik[$veh] = $row;
-            } elseif ($row->jam_mulai == $existing->jam_mulai) {
-                $waktuRow = $row->created_at ? strtotime($row->created_at) : strtotime($row->updated_at);
-                $waktuExisting = $existing->created_at ? strtotime($existing->created_at) : strtotime($existing->updated_at);
-                if ($waktuRow && $waktuExisting && $waktuRow < $waktuExisting) {
-                    $detailKonflik[$veh] = $row;
-                }
-            }
+            $available->push($this->presentKendaraanOption($item));
         }
 
         return [
-            'data' => $data,
-            'conflicts' => $detailKonflik,
+            'data' => $available->values(),
+            'conflicts' => $conflicts,
         ];
+    }
+
+    protected function presentMobilConflict($mo)
+    {
+        $pulang = $mo->tanggal_pulang ?: $mo->tanggal_sampling;
+        $availableAgain = Carbon::parse($pulang)->addDay()->format('Y-m-d');
+
+        return [
+            'id_mo' => $mo->id,
+            'plat_mobil' => $mo->plat_mobil,
+            'tanggal_berangkat' => $mo->tanggal_sampling,
+            'tanggal_pulang' => $pulang,
+            'jam_keberangkatan' => $mo->jam_keberangkatan
+                ? substr($mo->jam_keberangkatan, 0, 5)
+                : null,
+            'nama_driver' => $mo->nama_driver,
+            'tersedia_lagi_dari' => $availableAgain,
+        ];
+    }
+
+    protected function mobilUsageRangesOverlap($startA, $endA, $startB, $endB)
+    {
+        $startA = Carbon::parse($startA)->toDateString();
+        $endA = Carbon::parse($endA ?: $startA)->toDateString();
+        $startB = Carbon::parse($startB)->toDateString();
+        $endB = Carbon::parse($endB ?: $startB)->toDateString();
+
+        return !($endA < $startB || $startA > $endB);
+    }
+
+    protected function findOverlappingMobilMo($plat, $idMobil, $tanggalBerangkat, $tanggalPulang, $excludeMoId = null)
+    {
+        if (!$this->tablesReady()) {
+            return null;
+        }
+
+        $plat = trim((string) $plat);
+        if ($plat === '') {
+            return null;
+        }
+
+        $query = MobilisasiOperasional::where('is_active', true)
+            ->where(function ($match) use ($plat, $idMobil) {
+                $match->where('plat_mobil', $plat);
+                if ($idMobil > 0) {
+                    $match->orWhere('id_mobil', $idMobil);
+                }
+            });
+
+        if ($excludeMoId) {
+            $query->where('id', '!=', (int) $excludeMoId);
+        }
+
+        foreach ($query->get() as $mo) {
+            $moStart = $mo->tanggal_sampling;
+            $moEnd = $mo->tanggal_pulang ?: $mo->tanggal_sampling;
+            if ($this->mobilUsageRangesOverlap($tanggalBerangkat, $tanggalPulang, $moStart, $moEnd)) {
+                return $mo;
+            }
+        }
+
+        return null;
+    }
+
+    protected function assertMobilAvailable($idMobil, $plat, $tanggalBerangkat, $tanggalPulang, $excludeMoId = null)
+    {
+        $overlap = $this->findOverlappingMobilMo(
+            $plat,
+            (int) $idMobil,
+            $tanggalBerangkat,
+            $tanggalPulang,
+            $excludeMoId
+        );
+
+        if (!$overlap) {
+            return;
+        }
+
+        $pulang = $overlap->tanggal_pulang ?: $overlap->tanggal_sampling;
+        $availableAgain = Carbon::parse($pulang)->addDay()->format('d/m/Y');
+
+        throw new Exception(
+            'Mobil ' . $plat . ' tidak tersedia: sedang dipakai mulai '
+            . Carbon::parse($overlap->tanggal_sampling)->format('d/m/Y')
+            . ' hingga ' . Carbon::parse($pulang)->format('d/m/Y')
+            . '. Bisa dipilih lagi mulai ' . $availableAgain . '.',
+            422
+        );
     }
 
     protected function presentKendaraanOption($item)
@@ -903,8 +1097,12 @@ class MobilisasiOperasionalService
 
     protected function tablesReady()
     {
-        return Schema::hasTable('mobilisasi_operasional')
-            && Schema::hasTable('mobilisasi_operasional_detail');
+        if (self::$moTablesReadyCache === null) {
+            self::$moTablesReadyCache = Schema::hasTable('mobilisasi_operasional')
+                && Schema::hasTable('mobilisasi_operasional_detail');
+        }
+
+        return self::$moTablesReadyCache;
     }
 
     protected function historyColumns()
@@ -946,7 +1144,7 @@ class MobilisasiOperasionalService
         $idJadwalAsal = null,
         $samplerSebelum = null
     ) {
-        return array_merge([
+        $payload = [
             'id_mo' => $idMo,
             'id_jadwal' => $jadwal->id,
             'sampler' => $jadwal->sampler,
@@ -959,12 +1157,224 @@ class MobilisasiOperasionalService
             'created_at' => $now,
             'created_by' => $actor,
             'is_active' => true,
-        ], $this->historyPayload([
+        ];
+
+        if ($this->detailHasSamplingColumns()) {
+            $payload['id_sampling'] = $jadwal->id_sampling;
+            $payload['userid'] = $jadwal->userid;
+            $payload['parsial'] = $jadwal->parsial;
+        }
+
+        return array_merge($payload, $this->historyPayload([
             'alasan_perubahan' => $alasan,
             'sumber_perubahan' => $sumber,
             'id_jadwal_asal' => $idJadwalAsal,
             'sampler_sebelum' => $samplerSebelum,
         ]));
+    }
+
+    protected function detailHasSamplingColumns()
+    {
+        if (self::$detailSamplingColumnsCache === null) {
+            self::$detailSamplingColumnsCache = Schema::hasTable('mobilisasi_operasional_detail')
+                && Schema::hasColumn('mobilisasi_operasional_detail', 'id_sampling');
+        }
+
+        return self::$detailSamplingColumnsCache;
+    }
+
+    protected function resolveJadwalForDetail($detail, $tanggal = null)
+    {
+        if ($detail->relationLoaded('jadwal') && $detail->jadwal && $detail->jadwal->is_active) {
+            return $detail->jadwal;
+        }
+
+        if ($detail->id_jadwal) {
+            $byId = Jadwal::where('id', $detail->id_jadwal)->where('is_active', true)->first();
+            if ($byId) {
+                return $byId;
+            }
+        }
+
+        if (!$this->detailHasSamplingColumns() || !$detail->id_sampling) {
+            return null;
+        }
+
+        $query = Jadwal::where('is_active', true)
+            ->where('id_sampling', $detail->id_sampling);
+
+        if ($tanggal) {
+            $query->where('tanggal', $tanggal);
+        }
+
+        if ($detail->parsial) {
+            $query->where('parsial', $detail->parsial);
+        } else {
+            $query->whereNull('parsial');
+        }
+
+        if ($detail->userid) {
+            $query->where('userid', $detail->userid);
+        } elseif ($detail->sampler) {
+            $query->where('sampler', $detail->sampler);
+        }
+
+        return $query->orderBy('id', 'desc')->first();
+    }
+
+    protected function collectVisitScopesFromDetails($details)
+    {
+        return collect($details)->map(function ($detail) {
+            $idSampling = $detail->id_sampling;
+            if (!$idSampling && $detail->id_jadwal) {
+                $idSampling = Jadwal::where('id', $detail->id_jadwal)->value('id_sampling');
+            }
+
+            return [
+                'id_sampling' => $idSampling,
+                'parsial' => $detail->parsial,
+            ];
+        })->filter(function ($scope) {
+            return !empty($scope['id_sampling']);
+        })->unique(function ($scope) {
+            return $scope['id_sampling'] . '|' . ($scope['parsial'] ?: 'null');
+        })->values();
+    }
+
+    protected function loadActiveJadwalForVisitScopes($visitScopes, $tanggal)
+    {
+        $rows = collect();
+        foreach ($visitScopes as $scope) {
+            $query = Jadwal::where('is_active', true)
+                ->where('tanggal', $tanggal)
+                ->where('id_sampling', $scope['id_sampling']);
+
+            if (!empty($scope['parsial'])) {
+                $query->where('parsial', $scope['parsial']);
+            } else {
+                $query->whereNull('parsial');
+            }
+
+            $rows = $rows->merge($query->get());
+        }
+
+        return $rows->unique('id')->values();
+    }
+
+    protected function findActiveDetailForJadwal($idMo, $jadwal)
+    {
+        $query = MobilisasiOperasionalDetail::where('id_mo', $idMo)->where('is_active', true);
+
+        if ($this->detailHasSamplingColumns() && $jadwal->id_sampling) {
+            $scoped = clone $query;
+            $scoped->where('id_sampling', $jadwal->id_sampling);
+            if ($jadwal->parsial) {
+                $scoped->where('parsial', $jadwal->parsial);
+            } else {
+                $scoped->whereNull('parsial');
+            }
+            if ($jadwal->userid) {
+                $scoped->where('userid', $jadwal->userid);
+            } else {
+                $scoped->where('sampler', $jadwal->sampler);
+            }
+            $found = $scoped->first();
+            if ($found) {
+                return $found;
+            }
+        }
+
+        return $query->where('id_jadwal', $jadwal->id)->first();
+    }
+
+    protected function applyDetailSnapshot($detail, $jadwal, $actor, $now)
+    {
+        $detail->id_jadwal = $jadwal->id;
+        $detail->sampler = $jadwal->sampler;
+        $detail->no_quotation = $jadwal->no_quotation;
+        $detail->nama_perusahaan = $jadwal->nama_perusahaan;
+        $detail->jam_mulai = $jadwal->jam_mulai;
+        $detail->jam_selesai = $jadwal->jam_selesai;
+        $detail->wilayah = $jadwal->wilayah;
+        $detail->durasi = $jadwal->durasi;
+        $detail->is_active = true;
+        $detail->updated_at = $now;
+        $detail->updated_by = $actor;
+
+        if ($this->detailHasSamplingColumns()) {
+            $detail->id_sampling = $jadwal->id_sampling;
+            $detail->userid = $jadwal->userid;
+            $detail->parsial = $jadwal->parsial;
+        }
+
+        $detail->save();
+    }
+
+    protected function syncMoHeaderFromJadwalRows(
+        $header,
+        $jadwalRows,
+        $actor,
+        $now,
+        $alasan,
+        $sumber,
+        $deactivateMissing = true
+    ) {
+        $jadwalRows = collect($jadwalRows)->filter(function ($row) {
+            return $row && $row->is_active;
+        })->unique('id')->values();
+
+        $keptDetailIds = [];
+
+        foreach ($jadwalRows as $row) {
+            $detail = $this->findActiveDetailForJadwal($header->id, $row);
+            if (!$detail) {
+                $detail = new MobilisasiOperasionalDetail(array_merge(
+                    $this->makeDetailHistoryPayload(
+                        $header->id,
+                        $row,
+                        $actor,
+                        $now,
+                        $alasan,
+                        $sumber
+                    ),
+                    ['updated_at' => $now, 'updated_by' => $actor]
+                ));
+            }
+
+            $this->applyDetailSnapshot($detail, $row, $actor, $now);
+            $keptDetailIds[] = $detail->id;
+        }
+
+        if ($deactivateMissing) {
+            $staleQuery = MobilisasiOperasionalDetail::where('id_mo', $header->id)
+                ->where('is_active', true);
+
+            if (count($keptDetailIds) > 0) {
+                $staleQuery->whereNotIn('id', $keptDetailIds);
+            }
+
+            $stale = $staleQuery->get();
+            if ($stale->isNotEmpty()) {
+                $this->deactivateDetails($stale, $actor, $now, $alasan, $sumber);
+            }
+        }
+
+        $linkedIds = MobilisasiOperasionalDetail::where('id_mo', $header->id)
+            ->where('is_active', true)
+            ->pluck('id_jadwal')
+            ->all();
+
+        if (count($linkedIds) === 0) {
+            $header->is_active = false;
+            $header->deleted_at = $now;
+            $header->deleted_by = $actor;
+            $header->save();
+            return;
+        }
+
+        $activeJadwal = Jadwal::whereIn('id', $linkedIds)->where('is_active', true)->get();
+        $this->syncHeaderFromJadwal($header, $activeJadwal, $actor, $now);
+        $this->applyLegacyColumns($linkedIds, $header->plat_mobil, $header->nama_driver);
     }
 
     protected function deactivateDetails($details, $actor, $now, $alasan, $sumber)
@@ -983,115 +1393,12 @@ class MobilisasiOperasionalService
             ]);
     }
 
-    protected function pairDetailsToNewJadwal($moDetails, $newJadwal)
-    {
-        $oldJadwal = Jadwal::whereIn('id', $moDetails->pluck('id_jadwal')->all())
-            ->get()
-            ->keyBy('id');
-        $used = [];
-        $pairs = [];
-        $pairedOld = [];
-
-        $take = function ($predicate) use ($newJadwal, &$used) {
-            foreach ($newJadwal as $row) {
-                if (isset($used[$row->id])) {
-                    continue;
-                }
-                if ($predicate($row)) {
-                    $used[$row->id] = true;
-                    return $row;
-                }
-            }
-
-            return null;
-        };
-
-        foreach ($moDetails as $detail) {
-            $match = $take(function ($row) use ($detail) {
-                return (int) $row->id === (int) $detail->id_jadwal;
-            });
-            if ($match) {
-                $pairs[] = ['old' => $detail, 'new' => $match];
-                $pairedOld[$detail->id] = true;
-            }
-        }
-
-        foreach ($moDetails as $detail) {
-            if (isset($pairedOld[$detail->id])) {
-                continue;
-            }
-            $old = $oldJadwal->get($detail->id_jadwal);
-            if (!$old || $old->userid === null || $old->userid === '') {
-                continue;
-            }
-            $match = $take(function ($row) use ($old) {
-                return (string) $row->userid === (string) $old->userid
-                    && (string) $row->no_quotation === (string) $old->no_quotation;
-            });
-            if ($match) {
-                $pairs[] = ['old' => $detail, 'new' => $match];
-                $pairedOld[$detail->id] = true;
-            }
-        }
-
-        foreach ($moDetails as $detail) {
-            if (isset($pairedOld[$detail->id])) {
-                continue;
-            }
-            $match = $take(function ($row) use ($detail) {
-                return $this->normalizeSamplerName($row->sampler) === $this->normalizeSamplerName($detail->sampler);
-            });
-            if ($match) {
-                $pairs[] = ['old' => $detail, 'new' => $match];
-                $pairedOld[$detail->id] = true;
-            }
-        }
-
-        $unpairedOld = $moDetails->filter(function ($detail) use ($pairedOld) {
-            return !isset($pairedOld[$detail->id]);
-        })->values();
-        $leftoverNew = $newJadwal->filter(function ($row) use ($used) {
-            return !isset($used[$row->id]);
-        })->values();
-
-        $limit = min($unpairedOld->count(), $leftoverNew->count());
-        for ($i = 0; $i < $limit; $i++) {
-            $pairs[] = ['old' => $unpairedOld[$i], 'new' => $leftoverNew[$i]];
-            $used[$leftoverNew[$i]->id] = true;
-        }
-
-        for ($i = $limit; $i < $leftoverNew->count(); $i++) {
-            $pairs[] = ['old' => null, 'new' => $leftoverNew[$i]];
-        }
-
-        return $pairs;
-    }
-
     protected function normalizeSamplerName($name)
     {
         $name = preg_replace('/\s*\(driver\)\s*/i', '', (string) $name);
         $name = preg_replace('/\s+/', ' ', trim($name));
 
         return mb_strtolower($name);
-    }
-
-    protected function buildReplacementReason($baseAlasan, $oldDetail, $newJadwal)
-    {
-        $parts = [trim((string) $baseAlasan)];
-        if ($oldDetail && $newJadwal) {
-            $from = trim((string) $oldDetail->sampler);
-            $to = trim((string) $newJadwal->sampler);
-            if ($this->normalizeSamplerName($from) !== $this->normalizeSamplerName($to)) {
-                $parts[] = $from . ' diganti ' . $to;
-            }
-            if ((int) $oldDetail->id_jadwal !== (int) $newJadwal->id) {
-                $parts[] = 'id_jadwal ' . $oldDetail->id_jadwal . ' → ' . $newJadwal->id;
-            }
-        } elseif ($newJadwal) {
-            $parts[] = 'Anggota baru: ' . trim((string) $newJadwal->sampler);
-        }
-
-        return implode(' | ', array_filter($parts));
     }
 
     protected function syncHeaderFromJadwal($header, $newJadwal, $actor, $now)

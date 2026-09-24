@@ -18,6 +18,7 @@ use Carbon\Carbon;
 use Exception;
 use App\Services\SendEmail;
 use App\Jobs\SendNotifPerubahanJadwalJob;
+use App\Jobs\SyncMobilisasiOperasionalAfterJadwalJob;
 
 
 class JadwalServices
@@ -498,6 +499,8 @@ class JadwalServices
         $i = 0;
         $lama = COUNT($data);
         $baru = COUNT($dir);
+        $batchIds = $this->normalizeJadwalBatchIds($dataUpdate->batch_id);
+
         DB::beginTransaction();
         try {
             $tracking = app(SamplerTrackingService::class);
@@ -834,6 +837,11 @@ class JadwalServices
             // without changing the legacy selection/count used by lama == baru.
             // $tracking->syncScheduleEdit($trackingBefore, $dataUpdate->no_quotation);
             DB::commit();
+
+            if (count($batchIds) && count($newJadwalIds)) {
+                $this->queueMobilisasiOperasionalSync($batchIds, $newJadwalIds, $dataUpdate);
+            }
+
             // $this->syncSamplerTrackingDates([$dataUpdate->tanggal_lama, $dataUpdate->tanggal]);
             return true;
         } catch (Exception $ex) {
@@ -891,6 +899,8 @@ class JadwalServices
         $i = 0;
         $lama = COUNT($data);
         $baru = COUNT($dir);
+        $batchIds = $this->normalizeJadwalBatchIds($dataUpdate->batch_id);
+
         DB::beginTransaction();
         try {
             $tracking = app(SamplerTrackingService::class);
@@ -1147,10 +1157,16 @@ class JadwalServices
                 // Tangkap error dengan detail yang cukup
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
+
             // Run for both lama == baru and changed team size, even when PSHEADER
             // itself has no dirty fields. Do not create a new tracking session here.
             // $tracking->syncScheduleEdit($trackingBefore, $dataUpdate->no_quotation);
             DB::commit();
+
+            if (count($batchIds) && count($newJadwalIds)) {
+                $this->queueMobilisasiOperasionalSync($batchIds, $newJadwalIds, $dataUpdate);
+            }
+
             // $this->syncSamplerTrackingDates([$dataUpdate->tanggal_lama, $dataUpdate->tanggal]);
             return true;
         } catch (Exception $ex) {
@@ -1159,20 +1175,46 @@ class JadwalServices
         }
     }
 
-    protected function syncMobilisasiOperasional(array $oldIds, array $newIds, $dataUpdate = null)
+    protected function normalizeJadwalBatchIds($batchId)
     {
-        try {
-            $actor = !empty($dataUpdate->karyawan) ? $dataUpdate->karyawan : 'System';
-            $service = app(MobilisasiOperasionalService::class);
-            $service->remapAfterJadwalReplace(
-                $oldIds,
-                $newIds,
-                $actor,
-                'Update jadwal sampling plan'
-            );
-        } catch (\Throwable $e) {
-            Log::channel('sampling')->warning('Gagal sync MO setelah update jadwal: ' . $e->getMessage());
+        if (is_array($batchId)) {
+            $ids = $batchId;
+        } elseif ($batchId === null || $batchId === '') {
+            $ids = [];
+        } else {
+            $ids = explode(',', (string) $batchId);
         }
+
+        return collect($ids)
+            ->map(function ($id) {
+                return (int) $id;
+            })
+            ->filter(function ($id) {
+                return $id > 0;
+            })
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Sync MO di luar transaksi penjadwalan (job queue) agar tidak memperpanjang lock DB.
+     * Lewati sepenuhnya jika tidak ada MO aktif yang terkait batch jadwal ini.
+     */
+    protected function queueMobilisasiOperasionalSync(array $oldIds, array $newIds, $dataUpdate = null)
+    {
+        $service = app(MobilisasiOperasionalService::class);
+        if (!$service->hasMoAffectedByJadwalReplace($oldIds, $newIds)) {
+            return;
+        }
+
+        $actor = !empty($dataUpdate->karyawan) ? $dataUpdate->karyawan : 'System';
+        dispatch(new SyncMobilisasiOperasionalAfterJadwalJob(
+            $oldIds,
+            $newIds,
+            $actor,
+            'Update jadwal sampling plan'
+        ));
     }
 
     public function addJadwalSP()
@@ -1533,6 +1575,7 @@ class JadwalServices
                 }
             }
             $samplers = $dataParsial->sampler;
+            $newParsialJadwalIds = [];
 
             foreach ($samplers as $key => $value) {
                 $sampler = explode(',', $value);
@@ -1558,7 +1601,8 @@ class JadwalServices
                     'status' => $dataParsial->status,
                     'notif' => 0,
                     'urutan' => $dataParsial->urutan,
-                    'kendaraan' => $dataParsial->kendaraan,
+                    'kendaraan' => null,
+                    'driver' => null,
                     'pendampingan_k3' => $dataParsial->pendampingan_k3,
                     'isokinetic' => $dataParsial->isokinetic,
                     'parsial' => $dataParsial->id,
@@ -1569,8 +1613,16 @@ class JadwalServices
                     'durasi_personal' => $dataParsial->durasi_personal[$key] ?? null,
                 ];
 
-                $update = Jadwal::insert($body);
+                $newParsialJadwalIds[] = Jadwal::insertGetId($body);
             }
+
+            if (count($newParsialJadwalIds)) {
+                app(MobilisasiOperasionalService::class)->prepareNewParsialJadwalForMo(
+                    $newParsialJadwalIds,
+                    $dataParsial->karyawan ?? 'System'
+                );
+            }
+
             if ($dataParsial->kategori != null) {
                 self::syncTanggalSamplingOrderDetail($dataParsial->no_quotation, $dataParsial->kategori, $dataParsial->tanggal);
             }
@@ -1697,6 +1749,7 @@ class JadwalServices
             }
 
             $samplers = $dataParsial->sampler;
+            $newParsialJadwalIds = [];
             foreach ($samplers as $key => $value) {
                 $sampler = explode(',', $value);
                 $nama_sampler = $sampler[1];
@@ -1724,13 +1777,21 @@ class JadwalServices
                     'urutan' => $dataParsial->urutan,
                     'created_by' => $dataParsial->karyawan,
                     'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'kendaraan' => $dataParsial->kendaraan,
+                    'kendaraan' => null,
+                    'driver' => null,
                     'parsial' => $dataParsial->id,
                     'id_sampling' => $dataParsial->id_sampling,
                     'id_cabang' => $dataParsial->id_cabang,
                     'durasi_personal' => $dataParsial->durasi_personal[$key] ?? null,
                 ];
-                $update = Jadwal::insert($body);
+                $newParsialJadwalIds[] = Jadwal::insertGetId($body);
+            }
+
+            if (count($newParsialJadwalIds)) {
+                app(MobilisasiOperasionalService::class)->prepareNewParsialJadwalForMo(
+                    $newParsialJadwalIds,
+                    $dataParsial->karyawan ?? 'System'
+                );
             }
 
             if ($dataParsial->kategori != null) {
