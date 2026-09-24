@@ -109,6 +109,31 @@ class PenyesuaianGajiFinanceController extends Controller
             $record->adjustment_tunjangan = $adjustmentTunjangan > 0 ? $adjustmentTunjangan : null;
             $record->requested_gaji_pokok = $currentGaji + max(0, $adjustmentGaji);
             $record->requested_tunjangan_kerja = $currentTunjangan + max(0, $adjustmentTunjangan);
+
+            $periodChange = ['changed' => false];
+            if ($request->has('bulan_efektif') && !empty($record->bulan_efektif)) {
+                $requestedPeriod = SalaryAdjustmentEvaluationService::normalizeBulanEfektif($request->bulan_efektif);
+                if ($requestedPeriod === null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Format periode mulai berlaku tidak valid (YYYY-MM)',
+                    ], 422);
+                }
+
+                $periodError = SalaryAdjustmentEvaluationService::validateBulanEfektif($requestedPeriod);
+                if ($periodError !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $periodError,
+                    ], 422);
+                }
+
+                $periodChange = SalaryAdjustmentEvaluationService::applyFinanceEffectivePeriodChange(
+                    $record,
+                    $requestedPeriod
+                );
+            }
+
             $record->finance_final_adjustment_notes = $financeNotes !== '' ? $financeNotes : null;
             $record->status = SalaryAdjustmentWorkflowService::STATUS_WAITING_APPROVAL_IBU;
             $record->finance_approved_by = $this->karyawan;
@@ -127,8 +152,15 @@ class PenyesuaianGajiFinanceController extends Controller
                 || round($hrdSnapshot['adjustment_tunjangan'], 2) !== round($financeSnapshot['adjustment_tunjangan'], 2)
                 || round($hrdSnapshot['requested_gaji_pokok'], 2) !== round($financeSnapshot['requested_gaji_pokok'], 2)
                 || round($hrdSnapshot['requested_tunjangan_kerja'], 2) !== round($financeSnapshot['requested_tunjangan_kerja'], 2);
+            $changedByFinancePeriod = !empty($periodChange['changed']);
             if ($changedByFinance && $notes === 'Finance menyetujui permohonan penyesuaian gaji') {
                 $notes = 'Finance menyetujui dengan penyesuaian nominal kebijakan keuangan';
+            }
+            if ($changedByFinancePeriod && !$changedByFinance && $notes === 'Finance menyetujui permohonan penyesuaian gaji') {
+                $notes = 'Finance menyetujui dengan penyesuaian periode berlaku';
+            }
+            if ($changedByFinance && $changedByFinancePeriod && str_contains($notes, 'penyesuaian nominal')) {
+                $notes = 'Finance menyetujui dengan penyesuaian nominal dan periode berlaku';
             }
 
             SalaryAdjustmentLogService::log(
@@ -143,6 +175,8 @@ class PenyesuaianGajiFinanceController extends Controller
                     'hrd_final' => $hrdSnapshot,
                     'finance_final' => $financeSnapshot,
                     'changed_by_finance' => $changedByFinance,
+                    'period' => $periodChange,
+                    'changed_by_finance_period' => $changedByFinancePeriod,
                     'finance_final_adjustment_notes' => $financeNotes !== '' ? $financeNotes : null,
                 ]
             );

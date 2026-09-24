@@ -7,6 +7,7 @@ use App\Models\MasterJabatan;
 use App\Models\MasterKaryawan;
 use App\Models\MasterSallary;
 use App\Models\SalaryAdjustmentRequest;
+use App\Services\EmployeeCompensationSnapshotService;
 use App\Services\EmployeeAdjustmentMutasiService;
 use App\Services\EmployeeAdjustmentRekapService;
 use App\Services\EmployeeAdjustmentTypeRegistry;
@@ -138,13 +139,7 @@ class PermohonanPenyesuaianGajiController extends Controller
             return response()->json(['success' => false, 'message' => 'Data karyawan tidak ditemukan'], 404);
         }
 
-        $salary = MasterSallary::where('is_active', true)
-            ->where(function ($q) use ($employee) {
-                $q->where('nik_karyawan', $employee->nik_karyawan)
-                    ->orWhere('karyawan', $employee->nama_lengkap);
-            })
-            ->orderByDesc('id')
-            ->first();
+        $compensation = (new EmployeeCompensationSnapshotService())->resolveForEmployee($employee);
 
         return response()->json([
             'success' => true,
@@ -153,8 +148,9 @@ class PermohonanPenyesuaianGajiController extends Controller
                 'nama_lengkap' => $employee->nama_lengkap,
                 'jabatan' => KaryawanProfileService::resolveJabatan($employee),
                 'nik_karyawan' => $employee->nik_karyawan,
-                'current_gaji_pokok' => (float) ($salary->gaji_pokok ?? 0),
-                'current_tunjangan_kerja' => (float) ($salary->tunjangan_kerja ?? 0),
+                'current_gaji_pokok' => (float) $compensation['gaji_pokok'],
+                'current_tunjangan_kerja' => (float) $compensation['tunjangan'],
+                'compensation' => $compensation,
             ],
         ]);
     }

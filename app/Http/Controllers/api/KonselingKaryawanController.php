@@ -26,7 +26,12 @@ class KonselingKaryawanController extends Controller
     {
         $periode = $request->periode ?? date('Y');
 
-        $base = DB::connection('mysql')
+        $requestBase = DB::connection('mysql')
+            ->table('salary_adjustment_requests')
+            ->where('is_active', true)
+            ->whereYear('created_at', $periode);
+
+        $counselingBase = DB::connection('mysql')
             ->table('salary_adjustment_counselings as sac')
             ->join('salary_adjustment_requests as sar', 'sac.request_id', '=', 'sar.id')
             ->where('sar.is_active', true)
@@ -35,8 +40,21 @@ class KonselingKaryawanController extends Controller
         return response()->json([
             'success' => true,
             'data' => [
-                'scheduled' => (clone $base)->where('sac.status', 'scheduled')->count(),
-                'completed' => (clone $base)->where('sac.status', 'completed')->count(),
+                'waiting_assessment' => (clone $requestBase)
+                    ->whereIn('status', SalaryAdjustmentWorkflowService::statusesForHrdTab(
+                        SalaryAdjustmentWorkflowService::HRD_TAB_WAITING_ASSESSMENT
+                    ))
+                    ->count(),
+                'counseling_schedule' => (clone $requestBase)
+                    ->where('status', SalaryAdjustmentWorkflowService::STATUS_ASSESSMENT_COMPLETED)
+                    ->whereNotExists(function ($query) {
+                        $query->select(DB::raw(1))
+                            ->from('salary_adjustment_counselings as sac')
+                            ->whereColumn('sac.request_id', 'salary_adjustment_requests.id');
+                    })
+                    ->count(),
+                'scheduled' => (clone $counselingBase)->where('sac.status', 'scheduled')->count(),
+                'completed' => (clone $counselingBase)->where('sac.status', 'completed')->count(),
             ],
         ]);
     }

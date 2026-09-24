@@ -8,6 +8,21 @@ use Illuminate\Http\Request;
 
 class EmployeeAdjustmentValidationService
 {
+    public static function validateBulanEfektif(?string $bulanEfektif, bool $required = true): ?string
+    {
+        $bulanEfektif = trim((string) $bulanEfektif);
+
+        if ($required && !preg_match('/^\d{4}-\d{2}$/', $bulanEfektif)) {
+            return 'Periode mulai berlaku wajib diisi (format YYYY-MM)';
+        }
+
+        if ($bulanEfektif !== '' && preg_match('/^\d{4}-\d{2}$/', $bulanEfektif) && $bulanEfektif < date('Y-m')) {
+            return 'Mulai berlaku tidak boleh periode yang sudah lampau';
+        }
+
+        return null;
+    }
+
     /** @var SalaryAdjustmentKpiService */
     private $kpiService;
 
@@ -91,11 +106,18 @@ class EmployeeAdjustmentValidationService
 
         $bulanEfektif = trim((string) ($request->bulan_efektif ?? ''));
         if ($hasSalaryAdjustment) {
-            if (!preg_match('/^\d{4}-\d{2}$/', $bulanEfektif)) {
-                return ['error' => 'Periode efektif penyesuaian gaji/tunjangan wajib diisi (format YYYY-MM)', 'data' => []];
+            $bulanError = self::validateBulanEfektif($bulanEfektif, true);
+            if ($bulanError) {
+                return ['error' => $bulanError, 'data' => []];
             }
         } else {
             $bulanEfektif = $bulanEfektif !== '' ? $bulanEfektif : null;
+            if ($bulanEfektif !== null) {
+                $bulanError = self::validateBulanEfektif($bulanEfektif, true);
+                if ($bulanError) {
+                    return ['error' => $bulanError, 'data' => []];
+                }
+            }
         }
 
         $tanggalEfektif = $this->normalizeDate($request->input('tanggal_efektif'));
