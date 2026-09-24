@@ -289,7 +289,8 @@ class AppsBasService
 
             foreach ($finalResult as &$res) {
                 $samplerKey = $res['nomor_quotation'] . '|' . $res['periode'] . '|' . $res['jadwal'] . '|' . $res['sampler'];
-                $res['is_sampler_duplicate'] = $samplerCounts[$samplerKey] > 1;
+                // $res['is_sampler_duplicate'] = $samplerCounts[$samplerKey] > 1;
+                $res['is_sampler_duplicate'] = false;
             }
             unset($res);
 
