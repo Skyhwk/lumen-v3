@@ -106,7 +106,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				->where('is_approved', 1)
 				->where('status', 0)
 				->where('is_active', 1)
-				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active', 'note')
 				->addSelect(DB::raw("'lingkungan' as data_type"))
 				->get();
 			$dustfallData = DustFallHeader::with(['ws_udara'])
