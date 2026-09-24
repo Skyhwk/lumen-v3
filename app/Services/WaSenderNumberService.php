@@ -85,6 +85,33 @@ class WaSenderNumberService
         ]);
     }
 
+    public function recordSend(array $entry): void
+    {
+        if (!Schema::hasTable('wa_send_logs')) {
+            return;
+        }
+
+        try {
+            $body = (string) ($entry['message'] ?? '');
+
+            DB::table('wa_send_logs')->insert([
+                'sender_number_id' => $entry['sender_id'] ?? null,
+                'sender_number' => $entry['sender_number'] ?? null,
+                'destination' => (string) ($entry['destination'] ?? ''),
+                'status' => (string) ($entry['status'] ?? 'failed'),
+                'attempt' => (int) ($entry['attempt'] ?? 1),
+                'reason' => isset($entry['reason']) ? substr((string) $entry['reason'], 0, 500) : null,
+                'response_meta' => isset($entry['response'])
+                    ? json_encode($entry['response'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                    : null,
+                'body' => $body !== '' ? $body : null,
+                'created_at' => Carbon::now('Asia/Jakarta')->format('Y-m-d H:i:s'),
+            ]);
+        } catch (\Throwable $e) {
+            \Log::warning('WhatsApp send log failed.', ['message' => $e->getMessage()]);
+        }
+    }
+
     private function envSenders(): array
     {
         $numbers = collect(explode(',', (string) env('NUMBER', '')))
