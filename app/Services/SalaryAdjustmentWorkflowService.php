@@ -29,8 +29,10 @@ class SalaryAdjustmentWorkflowService
 
     public const HRD_TAB_WAITING_PROCESS = 'waiting_process';
     public const HRD_TAB_WAITING_ASSESSMENT = 'waiting_assessment';
+    public const HRD_TAB_MONITOR_COUNSELING = 'monitor_counseling';
     public const HRD_TAB_COUNSELING_SCHEDULE = 'counseling_schedule';
     public const HRD_TAB_FINAL_EVALUATION = 'final_evaluation';
+    public const HRD_TAB_WAITING_FINANCE = 'waiting_finance';
     public const HRD_TAB_WAITING_APPROVAL_IBU = 'waiting_approval_ibu';
     public const HRD_TAB_WAITING_APPROVAL_BAPAK = 'waiting_approval_bapak';
     public const HRD_TAB_REKAP_COMPLETE = 'rekap_complete';
@@ -47,10 +49,15 @@ class SalaryAdjustmentWorkflowService
             self::STATUS_ASSESSMENT_IN_PROGRESS,
         ],
         self::HRD_TAB_COUNSELING_SCHEDULE => [self::STATUS_ASSESSMENT_COMPLETED],
+        self::HRD_TAB_MONITOR_COUNSELING => [
+            self::STATUS_ASSESSMENT_COMPLETED,
+            self::STATUS_COUNSELING_SCHEDULED,
+        ],
         self::HRD_TAB_FINAL_EVALUATION => [
             self::STATUS_FINAL_EVALUATION,
             self::STATUS_FINANCE_RETURNED,
         ],
+        self::HRD_TAB_WAITING_FINANCE => [self::STATUS_FINANCE_REVIEW],
         self::HRD_TAB_WAITING_APPROVAL_IBU => [self::STATUS_WAITING_APPROVAL_IBU],
         self::HRD_TAB_WAITING_APPROVAL_BAPAK => [self::STATUS_WAITING_APPROVAL_BAPAK],
         self::HRD_TAB_REKAP_COMPLETE => [self::STATUS_COMPLETED],
