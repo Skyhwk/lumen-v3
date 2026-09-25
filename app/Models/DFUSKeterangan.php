@@ -10,8 +10,4 @@ class DFUSKeterangan extends Sector
     public $timestamps = false;
 
     protected $guarded = [];
-
-    protected $casts = [
-        'keterangan_activity' => 'array',
-    ];
 }

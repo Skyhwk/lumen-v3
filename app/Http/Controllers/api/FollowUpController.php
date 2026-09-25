@@ -259,29 +259,6 @@ class FollowUpController extends Controller
             'proposal',
         ];
 
-        $keteranganActivityOrder = [
-            'perkenalan_awal',
-            'kirim_company_profile',
-            'review_management',
-            'revisi',
-            'negosiasi_harga',
-            'follow_up_po',
-            'arrange_schedule',
-            'follow_up_hasil_uji',
-            'maintain_customer',
-        ];
-        $keteranganActivityLabels = [
-            'perkenalan_awal' => 'Perkenalan Awal & Identifikasi Peluang',
-            'kirim_company_profile' => 'Kirim Company Profile',
-            'review_management' => 'Penawaran Masih Dalam Review Management',
-            'revisi' => 'Penawaran Masih Proses Penyesuaian Kebutuhan (Revisi)',
-            'negosiasi_harga' => 'Negosiasi Harga',
-            'follow_up_po' => 'Follow Up PO atau Sign Quote',
-            'arrange_schedule' => 'Arrange Schedule Pengujian',
-            'follow_up_hasil_uji' => 'Follow Up Hasil Uji & Next Pengujian',
-            'maintain_customer' => 'Maintain Customer',
-        ];
-
         return DataTables::of($dfus)
             ->editColumn('pelanggan', fn($row) => [
                 'id_pelanggan'  => $row->idPelanggan,
@@ -293,25 +270,12 @@ class FollowUpController extends Controller
             ->orderColumn('pelanggan.nama_pelanggan', 'p.nama_pelanggan $1')
             ->orderColumn('tanggal', 'dfus.tanggal $1')
             ->orderColumn('jam', 'dfus.jam $1')
-            ->filterColumn('keterangan_activity', function ($query, $keyword) use ($keteranganActivityLabels) {
+            ->filterColumn('keterangan_activity', function ($query, $keyword) {
                 $keyword = trim((string) $keyword);
                 if ($keyword === '') {
                     return;
                 }
-                $matchedKeys = [];
-                foreach ($keteranganActivityLabels as $key => $label) {
-                    if (stripos($label, $keyword) !== false || stripos($key, $keyword) !== false) {
-                        $matchedKeys[] = $key;
-                    }
-                }
-                $query->whereHas('keteranganTambahan', function ($q) use ($keyword, $matchedKeys) {
-                    $q->where(function ($x) use ($keyword, $matchedKeys) {
-                        $x->where('keterangan_activity', 'like', '%' . $keyword . '%');
-                        foreach ($matchedKeys as $key) {
-                            $x->orWhere('keterangan_activity', 'like', '%' . $key . '%');
-                        }
-                    });
-                });
+                $query->where('dfus.keterangan_activity', 'like', '%' . $keyword . '%');
             })
             ->filterColumn('keterangan_tambahan', function ($query, $value) use ($keteranganColumns) {
                 $data = json_decode($value, true);
@@ -344,14 +308,6 @@ class FollowUpController extends Controller
             })
             // ->addColumn('status_order', fn($row) => OrderHeader::where('id_pelanggan', $row->id_pelanggan)->where('is_active', true)->exists() ? 'REPEAT' : 'NEW')
             ->addColumn('status_order', fn() => 'Coming Soon')
-            ->addColumn('keterangan_activity', function ($row) use ($keteranganActivityOrder) {
-                $keys = $row->keteranganTambahan->keterangan_activity ?? [];
-                if (!is_array($keys)) {
-                    $keys = [];
-                }
-                $set = array_flip($keys);
-                return array_values(array_filter($keteranganActivityOrder, fn($k) => isset($set[$k])));
-            })
             ->addColumn('log_webphone', function ($row) use ($karyawanIdsByName, $logsByKaryawan) {
                 $karyawanId = $karyawanIdsByName[$row->sales_penanggung_jawab] ?? null;
                 if (!$karyawanId) {
@@ -904,60 +860,30 @@ class FollowUpController extends Controller
 
     public function saveKeteranganActivity(Request $request)
     {
-        $allowed = [
-            'perkenalan_awal',
-            'kirim_company_profile',
-            'review_management',
-            'revisi',
-            'negosiasi_harga',
-            'follow_up_po',
-            'arrange_schedule',
-            'follow_up_hasil_uji',
-            'maintain_customer',
-        ];
-
         $dfus = DFUS::where('id', $request->id)->first();
         if (!$dfus) {
             return response()->json(['message' => 'Data DFUS tidak ditemukan.', 'success' => false], 404);
         }
 
-        $items = $request->input('keterangan_activity', []);
-        if (!is_array($items)) {
-            return response()->json(['message' => 'Format keterangan_activity tidak valid.', 'success' => false], 422);
+        $text = trim((string) $request->input('keterangan_activity', ''));
+        if ($text === '') {
+            return response()->json(['message' => 'Keterangan activity wajib dipilih.', 'success' => false], 422);
         }
 
-        $normalized = [];
-        $seen = [];
-        foreach ($allowed as $key) {
-            if (in_array($key, $items, true) && !isset($seen[$key])) {
-                $seen[$key] = true;
-                $normalized[] = $key;
-            }
+        // Batasi panjang wajar (teks single-choice)
+        if (mb_strlen($text) > 500) {
+            return response()->json(['message' => 'Keterangan activity terlalu panjang.', 'success' => false], 422);
         }
 
-        $keterangan = DFUSKeterangan::where('dfus_id', $dfus->id)->first();
-        if (!$keterangan) {
-            $keterangan = new DFUSKeterangan();
-            $keterangan->dfus_id = $dfus->id;
-            // Kolom lama wajib di DB (tanpa default) — 0 = belum pakai step lama
-            $keterangan->step_active = 0;
-            $keterangan->created_by = $this->karyawan;
-            $keterangan->created_at = Carbon::now();
-        } else {
-            $keterangan->updated_by = $this->karyawan;
-            $keterangan->updated_at = Carbon::now();
-        }
-
-        $keterangan->keterangan_activity = $normalized;
-        // Kolom lama (keterangan_perkenalan, dst) tidak diubah —
-        // data historis ribuan baris tetap utuh di record yang sama.
-        $keterangan->save();
+        $dfus->keterangan_activity = $text;
+        $dfus->updated_by = $this->karyawan;
+        $dfus->save();
 
         return response()->json([
             'message' => 'Keterangan Activity berhasil disimpan.',
             'success' => true,
             'data' => [
-                'keterangan_activity' => $keterangan->keterangan_activity,
+                'keterangan_activity' => $dfus->keterangan_activity,
             ],
         ], 200);
     }
