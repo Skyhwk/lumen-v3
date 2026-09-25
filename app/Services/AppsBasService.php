@@ -3851,7 +3851,7 @@ class AppsBasService
                 foreach ($parameters as $parameter) {
                     $paramName = $parameter['parameter']; // Ambil nama parameter untuk mempermudah pengecekan
 
-                    if ($parameter['category'] == '6-Padatan' ) {
+                    if ($parameter['category'] == '6-Padatan') {
                         continue;
                     }
 
