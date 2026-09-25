@@ -41,6 +41,7 @@ class KaryawanArsipDokumenService
             ->get()
             ->map(function ($row) {
                 $row->is_image = $this->isImageMime($row->mime_type, $row->path_file);
+                $row->is_pdf = $this->isPdfMime($row->mime_type, $row->path_file);
                 return $row;
             });
     }
@@ -152,6 +153,7 @@ class KaryawanArsipDokumenService
 
         $row = DB::table('karyawan_dokumen_arsip')->where('id', $id)->first();
         $row->is_image = $this->isImageMime($row->mime_type, $row->path_file);
+        $row->is_pdf = $this->isPdfMime($row->mime_type, $row->path_file);
 
         return $row;
     }
@@ -207,5 +209,14 @@ class KaryawanArsipDokumenService
 
         $extension = strtolower(pathinfo($pathFile, PATHINFO_EXTENSION));
         return in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
+    }
+
+    private function isPdfMime($mimeType, $pathFile)
+    {
+        if ($mimeType && stripos($mimeType, 'application/pdf') === 0) {
+            return true;
+        }
+
+        return strtolower(pathinfo($pathFile, PATHINFO_EXTENSION)) === 'pdf';
     }
 }
