@@ -13,6 +13,7 @@ class NewRecruitment extends Model
         'pendidikan' => 'array',
         'pengalaman_kerja' => 'array',
         'referensi' => 'array',
+        'rekomendasi' => 'array',
         'bypass' => 'array',
         'tanggal_join_tercepat' => 'date',
         'is_reject_finance' => 'boolean',
