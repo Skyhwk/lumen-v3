@@ -78,34 +78,13 @@ class EmployeeHealthCheck extends Sector
     public static function generateSkkNumber(string $checkDate): string
     {
         $date = Carbon::parse($checkDate);
-        $yearPart = $date->format('y');
-        $monthPart = self::monthToRoman((int) $date->format('n'));
+        $datePart = $date->format('ymd');
 
         do {
             $hex = strtoupper(bin2hex(random_bytes(4)));
-            $skkNumber = 'SKK/' . $yearPart . '/' . $monthPart . '/' . $hex;
+            $skkNumber = 'SKS-' . $datePart . '-' . $hex;
         } while (static::query()->where('skk_number', $skkNumber)->exists());
 
         return $skkNumber;
-    }
-
-    private static function monthToRoman(int $month): string
-    {
-        $map = [
-            1 => 'I',
-            2 => 'II',
-            3 => 'III',
-            4 => 'IV',
-            5 => 'V',
-            6 => 'VI',
-            7 => 'VII',
-            8 => 'VIII',
-            9 => 'IX',
-            10 => 'X',
-            11 => 'XI',
-            12 => 'XII',
-        ];
-
-        return $map[$month] ?? 'I';
     }
 }
