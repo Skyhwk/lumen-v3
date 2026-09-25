@@ -57,9 +57,22 @@ class SendWhatsapp
     {
         $number = $this->formatNumber();
         $senderService = new WaSenderNumberService();
+        $senders = $senderService->availableSenders();
 
-        foreach ($senderService->availableSenders() as $sender) {
+        if ($senders === []) {
+            $senderService->recordSend([
+                'destination' => $number,
+                'status' => 'no_sender',
+                'attempt' => 0,
+                'reason' => 'Tidak ada nomor pengirim aktif',
+                'message' => $this->message,
+            ]);
+            return false;
+        }
+
+        foreach ($senders as $index => $sender) {
             $senderNumber = $sender->number;
+            $attempt = $index + 1;
             try {
                 $seasonID = $this->getSeason($senderNumber);
                 $response = Http::withHeaders(
@@ -76,19 +89,55 @@ class SendWhatsapp
                 $res = json_decode($response->getBody());
                 if ($this->wasSent($res)) {
                     $senderService->markSuccess($sender->id);
+                    $senderService->recordSend([
+                        'sender_id' => $sender->id,
+                        'sender_number' => $senderNumber,
+                        'destination' => $number,
+                        'status' => 'success',
+                        'attempt' => $attempt,
+                        'response' => $this->responseSummary($res),
+                        'message' => $this->message,
+                    ]);
                     return true;
                 }
 
+                $summary = $this->responseSummary($res);
                 $senderService->markFailure($sender->id, [
                     'reason' => 'Provider rejected message',
                     'at' => Carbon::now('Asia/Jakarta')->toDateTimeString(),
-                    'response' => $this->responseSummary($res),
+                    'response' => $summary,
+                ]);
+                $senderService->recordSend([
+                    'sender_id' => $sender->id,
+                    'sender_number' => $senderNumber,
+                    'destination' => $number,
+                    'status' => 'failed',
+                    'attempt' => $attempt,
+                    'reason' => 'Provider rejected message',
+                    'response' => $summary,
+                    'message' => $this->message,
                 ]);
             } catch (\Throwable $e) {
                 $senderService->markFailure($sender->id, [
                     'reason' => $e->getMessage(),
                     'at' => Carbon::now('Asia/Jakarta')->toDateTimeString(),
                     'type' => get_class($e),
+                    'line' => $e->getLine(),
+                    'file' => $e->getFile(),
+                ]);
+                $senderService->recordSend([
+                    'sender_id' => $sender->id,
+                    'sender_number' => $senderNumber,
+                    'destination' => $number,
+                    'status' => 'failed',
+                    'attempt' => $attempt,
+                    'reason' => $e->getMessage(),
+                    'response' => [
+                        'type' => get_class($e),
+                        'line' => $e->getLine(),
+                        'file' => $e->getFile(),
+                    ],
+                    'message' => $this->message,
                 ]);
                 \Log::warning('WhatsApp sender failed, trying next sender.', [
                     'sender' => $senderNumber,
