@@ -1882,20 +1882,24 @@ class GenerateMessageAtsEmail
             }
             
             $skill = is_string($recruitment->skill) ? json_decode($recruitment->skill, true) : ($recruitment->skill ?? []);
+            $referensiList = \App\Services\HrdEmailViewData::normalizePersonReferenceList($recruitment->referensi ?? null);
+            $rekomendasiList = \App\Services\HrdEmailViewData::normalizePersonRekomendasiList($recruitment->rekomendasi ?? null);
     
             $cv = [
                 'data' => $dataCv,
+                'profile' => $profile,
                 'medicalInfo' => $medicalInfo,
                 'photoUrl' => $photoUrl,
                 'pendidikan' => $pendidikan,
                 'pengalamanKerja' => $pengalamanKerja,
                 'skills' => $skill,
-                'skillBahasa' => [],
-                'minat' => [],
-                'organisasi' => [],
-                'referensi' => [],
-                'sertifikat' => [],
-                'kursus' => [],
+                'skillBahasa' => \App\Services\HrdEmailViewData::decodeJsonField($recruitment->skill_bahasa ?? null),
+                'minat' => \App\Services\HrdEmailViewData::decodeJsonField($recruitment->minat ?? null),
+                'organisasi' => \App\Services\HrdEmailViewData::decodeJsonField($recruitment->organisasi ?? null),
+                'referensi' => $referensiList,
+                'rekomendasi' => $rekomendasiList,
+                'sertifikat' => \App\Services\HrdEmailViewData::decodeJsonField($recruitment->sertifikat ?? null),
+                'kursus' => \App\Services\HrdEmailViewData::decodeJsonField($recruitment->kursus ?? null),
                 'salaryFormatted' => \App\Services\HrdEmailViewData::formatRupiah($recruitment->salary_user ?? null),
             ];
 

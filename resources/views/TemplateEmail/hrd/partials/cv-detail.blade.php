@@ -101,6 +101,14 @@
 <p style="{{ $sectionTitle }}">Address & Phone</p>
 @include('TemplateEmail.hrd.partials.info-table', ['rows' => $addressRows])
 
+@include('TemplateEmail.hrd.partials.emergency-referensi-rekomendasi', [
+    'data' => $data,
+    'profile' => $profile ?? null,
+    'referensi' => $referensi ?? null,
+    'rekomendasi' => $rekomendasi ?? null,
+    'infoTableView' => 'TemplateEmail.hrd.partials.info-table',
+])
+
 @if(!empty($pendidikan))
     <p style="{{ $sectionTitle }}">Education</p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="{{ $cardStyle }}">
