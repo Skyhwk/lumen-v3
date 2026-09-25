@@ -73,8 +73,11 @@ class SalaryAdjustmentEmailViewData
 
     public static function showHrdColumn(array $request): bool
     {
-        return !empty($request['changed_by_hrd'])
+        return !empty($request['has_hrd_final_decision'])
+            || !empty($request['final_eval_approved_at'])
+            || !empty($request['changed_by_hrd'])
             || !empty($request['hrd_final_adjustment_gaji_pokok'])
+            || !empty($request['hrd_final_adjustment_tunjangan'])
             || !empty($request['submitted_adjustment_gaji_pokok']);
     }
 

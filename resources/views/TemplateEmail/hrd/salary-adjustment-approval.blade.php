@@ -98,7 +98,10 @@
                 @endforeach
             </table>
             @if(!empty($request['hrd_final_adjustment_notes']))
-                <p style="margin:6px 0 0 0;font-size:11px;color:#71717a;">Catatan HRD: {{ $request['hrd_final_adjustment_notes'] }}</p>
+                <p style="margin:6px 0 0 0;font-size:11px;color:#71717a;">Catatan Penyesuaian HRD: {{ $request['hrd_final_adjustment_notes'] }}</p>
+            @endif
+            @if(!empty($request['hrd_approval_notes']))
+                <p style="margin:6px 0 0 0;font-size:11px;color:#71717a;">Catatan Approval HR: {{ $request['hrd_approval_notes'] }}</p>
             @endif
         </td>
         @endif

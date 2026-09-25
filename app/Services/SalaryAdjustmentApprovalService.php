@@ -156,17 +156,18 @@ class SalaryAdjustmentApprovalService
                     'ibu_approve',
                     null,
                     $actorLabel,
-                    'Persetujuan Approval disetujui'
+                    'Waiting Approval disetujui'
                 );
             } else {
-                $masterSalaryId = (new SalaryAdjustmentApplyService())->apply($record, $actorLabel);
+                $applyOrchestrator = new EmployeeAdjustmentApplyOrchestrator();
+                $completionNotes = 'Waiting Approval Final disetujui';
 
                 $record->status = SalaryAdjustmentWorkflowService::STATUS_COMPLETED;
                 $record->bapak_approved_by = $actorLabel;
                 $record->bapak_approved_at = $now;
-                $record->master_salary_id = $masterSalaryId;
-                $record->applied_by = $actorLabel;
-                $record->applied_at = $now;
+
+                $applyNote = $applyOrchestrator->scheduleOrApplyAfterBapakApproval($record, $actorLabel);
+                $completionNotes .= ' — ' . $applyNote;
 
                 SalaryAdjustmentLogService::log(
                     $record->id,
@@ -175,7 +176,7 @@ class SalaryAdjustmentApprovalService
                     'bapak_approve',
                     null,
                     $actorLabel,
-                    'Persetujuan Approval Final disetujui — master salary diperbarui'
+                    $completionNotes
                 );
             }
 

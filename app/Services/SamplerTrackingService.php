@@ -17,6 +17,7 @@ use Illuminate\Validation\ValidationException;
 class SamplerTrackingService
 {
     protected $columnsByTable = [];
+    protected $orderNumbersByQuotation = [];
 
     protected function now()
     {
@@ -195,10 +196,8 @@ class SamplerTrackingService
 
     public function snapshotSchedules($quotation)
     {
-        SamplingPlan::where('no_quotation', $quotation)->lockForUpdate()->get();
-
         return Jadwal::where('no_quotation', $quotation)
-            ->where('is_active', true)->lockForUpdate()->get();
+            ->where('is_active', true)->get();
     }
 
     public function syncQuotation($quotation, array $creationKeys = [])
@@ -248,7 +247,12 @@ class SamplerTrackingService
                     if ((int) ($revision[1] ?? 0) <= (int) ($oldRevision[1] ?? 0)) return false;
                     $old = clone $row;
                     $old->no_quotation = $session->no_quotation;
-                    return $this->makeTeamKey($old) === $session->team_key;
+
+                    // Sessions created before order-based identity still have
+                    // the quotation-based key. Accept that legacy key here so
+                    // a QT revision can be migrated without losing its events.
+                    return $this->makeTeamKey($old) === $session->team_key
+                        || $this->makeLegacyTeamKey($old) === $session->team_key;
                 })->groupBy(function ($row) { return $this->makeTeamKey($row); });
             if ($candidates->isEmpty()) continue;
             if ($candidates->count() !== 1) {
@@ -256,19 +260,30 @@ class SamplerTrackingService
             }
             $target = $candidates->first()->first();
             $this->rekeySessions([$session->team_key => $this->makeTeamKey($target)]);
-            SamplerTrackingSession::where('id', $session->id)->update(['no_quotation' => $target->no_quotation]);
+            SamplerTrackingSession::where('id', $session->id)->update([
+                'no_quotation' => $target->no_quotation,
+                'no_order' => $this->resolveOrderNumber($target),
+            ]);
             $revised[] = $target->no_quotation;
         }
         return array_values(array_unique($revised));
     }
 
-    /** Call inside the schedule edit transaction, using its pre-edit snapshot. */
+    /** Call after the schedule transaction commits, using its pre-edit snapshot. */
     public function syncScheduleEdit($before, $quotation)
     {
-        $previousMembers = SamplerTrackingSession::with('activeMembers.events')
-            ->where('no_quotation', $quotation)->where('is_active', true)->get()
-            ->mapWithKeys(function ($session) { return [$session->id => $session->activeMembers]; });
         $after = $this->snapshotSchedules($quotation);
+        $affectedScopes = $this->changedScheduleScopes($before, $after);
+        if (empty($affectedScopes)) {
+            return collect();
+        }
+        $affectedDates = array_keys($affectedScopes);
+
+        $previousMembers = SamplerTrackingSession::with('activeMembers.events')
+            ->where('no_quotation', $quotation)
+            ->whereIn('tanggal_sampling', $affectedDates)
+            ->where('is_active', true)->get()
+            ->mapWithKeys(function ($session) { return [$session->id => $session->activeMembers]; });
         $keyFor = function ($row) { return $this->makeTeamKey($row); };
         $mapping = SamplerTrackingScheduleIdentity::replacements($before, $after, $keyFor);
         $afterById = $after->keyBy('id');
@@ -281,7 +296,7 @@ class SamplerTrackingService
         });
         $this->rekeySessions($mapping);
 
-        $sessions = $this->syncQuotation($quotation);
+        $sessions = $this->syncQuotationDates($quotation, $after, $affectedScopes);
         foreach ($sessions as $session) {
             if ($editedKeys->contains($session->team_key) && $previousMembers->has($session->id)) {
                 $this->inheritCorrectedTeamEvents($session, $previousMembers->get($session->id));
@@ -376,8 +391,14 @@ class SamplerTrackingService
     public function syncScheduleCreation($before, $quotation)
     {
         $after = $this->snapshotSchedules($quotation);
+        $affectedScopes = $this->changedScheduleScopes($before, $after);
+        if (empty($affectedScopes)) {
+            return collect();
+        }
+        $affectedDates = array_keys($affectedScopes);
         $beforeIds = $before->pluck('id');
         $afterIds = $after->pluck('id');
+        $creationKeys = [];
         // Adding a partial visit may also change the parent reference of
         // existing rows. Preserve those visits using their unchanged row IDs.
         $this->rekeySessions(SamplerTrackingScheduleIdentity::replacements(
@@ -389,6 +410,7 @@ class SamplerTrackingService
             if ($rows->pluck('id')->intersect($beforeIds)->isNotEmpty()) {
                 continue;
             }
+            $creationKeys[] = $key;
             $previous = SamplerTrackingSession::where('team_key', $key)->lockForUpdate()->first();
             if ($previous) {
                 $previous->team_key = sha1('archived|' . $previous->id . '|' . $key);
@@ -397,16 +419,92 @@ class SamplerTrackingService
             }
         }
 
-        return $this->syncQuotation($quotation);
+        return $this->syncQuotationDates(
+            $quotation,
+            $after,
+            $affectedScopes,
+            array_values(array_unique($creationKeys))
+        );
     }
 
-    protected function syncJadwalRows($jadwals, $date, $deactivateMissingSessions = false, $quotation = null, array $creationKeys = [])
+    /**
+     * Limit a Jadwal Service change to its touched visits. The schedule rows
+     * still contain every sampler in those visits, so a team event remains
+     * consistent without re-syncing other orders on the same day.
+     */
+    protected function syncQuotationDates($quotation, $after, array $scopesByDate, array $creationKeys = [])
+    {
+        $sessions = collect();
+        foreach ($scopesByDate as $date => $scopeKeys) {
+            $rows = $after->filter(function ($row) use ($date, $scopeKeys) {
+                return Carbon::parse($row->tanggal)->toDateString() === $date
+                    && in_array($this->makeTeamKey($row), $scopeKeys, true);
+            });
+            $sessions = $sessions->merge($this->syncJadwalRows(
+                $rows,
+                $date,
+                true,
+                $quotation,
+                $creationKeys,
+                $scopeKeys
+            ));
+        }
+
+        return $sessions;
+    }
+
+    /** Return only old/new activity keys whose schedule or sampler membership changed. */
+    protected function changedScheduleScopes($before, $after)
+    {
+        $beforeById = collect($before)->keyBy('id');
+        $afterById = collect($after)->keyBy('id');
+        $scopes = [];
+
+        $addScope = function ($row) use (&$scopes) {
+            if (!$row || !$row->tanggal) return;
+            $date = Carbon::parse($row->tanggal)->toDateString();
+            $scopes[$date] = $scopes[$date] ?? [];
+            $scopes[$date][] = $this->makeTeamKey($row);
+        };
+
+        $beforeById->each(function ($row, $id) use ($afterById, $addScope) {
+            $current = $afterById->get($id);
+            if (!$current || $this->scheduleImpactFingerprint($row) !== $this->scheduleImpactFingerprint($current)) {
+                $addScope($row);
+                $addScope($current);
+            }
+        });
+
+        $afterById->each(function ($row, $id) use ($beforeById, $addScope) {
+            if (!$beforeById->has($id)) {
+                $addScope($row);
+            }
+        });
+
+        return collect($scopes)->map(function ($keys) {
+            return array_values(array_unique($keys));
+        })->all();
+    }
+
+    /** Includes the sampler, so member changes only touch the affected visit. */
+    protected function scheduleImpactFingerprint($row)
+    {
+        return implode('|', [
+            $this->makeTeamKey($row),
+            $row->userid ?: 'sampler-id-null',
+            $row->sampler ?: 'sampler-name-null',
+            $row->durasi ?: 'duration-null',
+            $row->durasi_personal ?: 'personal-duration-null',
+        ]);
+    }
+
+    protected function syncJadwalRows($jadwals, $date, $deactivateMissingSessions = false, $quotation = null, array $creationKeys = [], array $scopeTeamKeys = [])
     {
         $now = $this->now();
         $sessions = [];
         $activeTeamKeys = [];
 
-        DB::transaction(function () use ($jadwals, $now, &$sessions, &$activeTeamKeys, $date, $deactivateMissingSessions, $quotation, $creationKeys) {
+        DB::transaction(function () use ($jadwals, $now, &$sessions, &$activeTeamKeys, $date, $deactivateMissingSessions, $quotation, $creationKeys, $scopeTeamKeys) {
             $this->reconcileReplacedSessions($jadwals, $date, $quotation);
 
             $jadwals->groupBy(function ($row) {
@@ -427,7 +525,7 @@ class SamplerTrackingService
                     'id_sampling' => $first->id_sampling,
                     'parsial' => $first->parsial,
                     'no_quotation' => $first->no_quotation,
-                    'no_order' => $orderHeader->no_order ?? null,
+                    'no_order' => $this->resolveOrderNumber($first),
                     'tanggal_sampling' => $first->tanggal,
                     'jam_mulai' => $first->jam_mulai,
                     'jam_selesai' => $first->jam_selesai,
@@ -511,6 +609,9 @@ class SamplerTrackingService
                         ->when(count($activeTeamKeys) > 0, function ($query) use ($activeTeamKeys) {
                             $query->whereNotIn('team_key', $activeTeamKeys);
                         })
+                        ->when(count($scopeTeamKeys) > 0, function ($query) use ($scopeTeamKeys) {
+                            $query->whereIn('team_key', $scopeTeamKeys);
+                        })
                         ->update($sessionInactiveUpdate);
                     $inactiveSessionIds = SamplerTrackingSession::whereDate('tanggal_sampling', $date)
                         ->where('is_active', false)->pluck('id');
@@ -591,7 +692,7 @@ class SamplerTrackingService
         return implode('|', [
             $row->id_sampling ?: 'sampling-null',
             $row->parsial ?: 'parsial-null',
-            $row->no_quotation ?: 'qt-null',
+            $this->resolveOrderNumber($row) ?: ('qt:' . ($row->no_quotation ?: 'null')),
             $date,
             $row->jam_mulai ?: 'start-null',
             $row->jam_selesai ?: 'end-null',
@@ -1964,7 +2065,7 @@ public function buildTrackingRows($sessions)
         $sourceKey = implode('|', [
             $row->id_sampling ?: 'sampling-null',
             $row->parsial ?: 'parsial-null',
-            $row->no_quotation ?: 'qt-null',
+            $this->resolveOrderNumber($row) ?: ('qt:' . ($row->no_quotation ?: 'null')),
             $row->tanggal ?: 'date-null',
             $row->jam_mulai ?: 'start-null',
             $row->jam_selesai ?: 'end-null',
@@ -1973,6 +2074,45 @@ public function buildTrackingRows($sessions)
         ]);
 
         return sha1($sourceKey);
+    }
+
+    /**
+     * Keep tracking continuity across QT revisions. A quotation is mutable,
+     * while its order number remains the business identity of the sampling.
+     */
+    protected function resolveOrderNumber($row)
+    {
+        if (isset($row->no_order) && $row->no_order) {
+            return $row->no_order;
+        }
+
+        $quotation = $row->no_quotation ?? null;
+        if (!$quotation) {
+            return null;
+        }
+
+        if (!array_key_exists($quotation, $this->orderNumbersByQuotation)) {
+            $this->orderNumbersByQuotation[$quotation] = OrderHeader::where('no_document', $quotation)
+                ->orderByDesc('is_active')
+                ->value('no_order');
+        }
+
+        return $this->orderNumbersByQuotation[$quotation];
+    }
+
+    /** The pre-order-identity key, used only to safely upgrade existing sessions. */
+    protected function makeLegacyTeamKey($row)
+    {
+        return sha1(implode('|', [
+            $row->id_sampling ?: 'sampling-null',
+            $row->parsial ?: 'parsial-null',
+            $row->no_quotation ?: 'qt-null',
+            $row->tanggal ?: 'date-null',
+            $row->jam_mulai ?: 'start-null',
+            $row->jam_selesai ?: 'end-null',
+            $row->kendaraan ?: 'vehicle-null',
+            $row->id_cabang ?: 'branch-null',
+        ]));
     }
     protected function findSession($teamKey)
     {
