@@ -22,12 +22,11 @@ return new class extends Migration
             $table->date('check_date');
             $table->time('check_time');
 
-            $table->unsignedSmallInteger('tensi');
+            $table->unsignedSmallInteger('tensi_sistolik');
+            $table->unsignedSmallInteger('tensi_diastolik');
             $table->enum('tensi_classification', [
                 'Rendah',
                 'Rata-Rata',
-                'Normal',
-                'Normal Tinggi',
                 'Tinggi',
             ]);
 

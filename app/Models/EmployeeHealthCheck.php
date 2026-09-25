@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
+
 class EmployeeHealthCheck extends Sector
 {
     protected $table = 'employee_health_checks';
@@ -10,8 +12,6 @@ class EmployeeHealthCheck extends Sector
 
     public const TENSI_RENDAH = 'Rendah';
     public const TENSI_RATA_RATA = 'Rata-Rata';
-    public const TENSI_NORMAL = 'Normal';
-    public const TENSI_NORMAL_TINGGI = 'Normal Tinggi';
     public const TENSI_TINGGI = 'Tinggi';
 
     public const STOK_NORMAL = 'normal';
@@ -24,29 +24,42 @@ class EmployeeHealthCheck extends Sector
     public const KET_SAKIT = 'sakit';
     public const KET_LAINNYA = 'lainnya';
 
-    public static function classifyTensi(int $tensi): string
+    public static function classifyTensi(int $tensiSistolik): string
     {
-        if ($tensi < 90) {
+        if ($tensiSistolik <= 90) {
             return self::TENSI_RENDAH;
         }
 
-        if ($tensi <= 99) {
+        if ($tensiSistolik <= 135) {
             return self::TENSI_RATA_RATA;
-        }
-
-        if ($tensi <= 119) {
-            return self::TENSI_NORMAL;
-        }
-
-        if ($tensi <= 135) {
-            return self::TENSI_NORMAL_TINGGI;
         }
 
         return self::TENSI_TINGGI;
     }
 
+    public static function formatTensiLabel($sistolik, $diastolik): string
+    {
+        if ($sistolik === null || $diastolik === null) {
+            return '-';
+        }
+
+        return $sistolik . '/' . $diastolik;
+    }
+
     public function karyawan()
     {
         return $this->belongsTo(MasterKaryawan::class, 'employee_id', 'id');
+    }
+
+    public static function generateSkkNumber(string $checkDate): string
+    {
+        $datePart = Carbon::parse($checkDate)->format('d-m-Y');
+
+        do {
+            $hex = strtoupper(bin2hex(random_bytes(4)));
+            $skkNumber = 'SKK/' . $datePart . '/' . $hex;
+        } while (static::query()->where('skk_number', $skkNumber)->exists());
+
+        return $skkNumber;
     }
 }

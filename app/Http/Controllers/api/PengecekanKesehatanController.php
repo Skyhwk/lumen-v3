@@ -5,16 +5,14 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\EmployeeHealthCheck;
 use App\Models\MasterKaryawan;
+use App\Services\EmployeeHealthCheckDocumentService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 
-class ParamedisController extends Controller
+class PengecekanKesehatanController extends Controller
 {
-    /**
-     * Pengecekan Kesehatan — daftar pemeriksaan harian.
-     */
     public function index(Request $request)
     {
         try {
@@ -33,125 +31,6 @@ class ParamedisController extends Controller
             });
 
             return Datatables::of($data)->make(true);
-        } catch (\Exception $ex) {
-            return response()->json([
-                'success' => false,
-                'message' => $ex->getMessage(),
-                'line' => $ex->getLine(),
-            ], 500);
-        }
-    }
-
-    /**
-     * Data Kesehatan Karyawan — daftar karyawan + status data kesehatan.
-     */
-    public function indexKaryawan(Request $request)
-    {
-        try {
-            $periode = (int) ($request->periode ?: date('Y'));
-
-            $latestCheckSub = DB::table('employee_health_checks as lc')
-                ->select('lc.employee_id', DB::raw('MAX(lc.id) as latest_id'))
-                ->where('lc.is_active', 1)
-                ->when($periode >= 2000, function ($query) use ($periode) {
-                    $query->whereYear('lc.check_date', $periode);
-                })
-                ->groupBy('lc.employee_id');
-
-            $query = MasterKaryawan::query()
-                ->from('master_karyawan as mk')
-                ->leftJoin('master_divisi as d', 'mk.id_department', '=', 'd.id')
-                ->leftJoinSub($latestCheckSub, 'latest_map', function ($join) {
-                    $join->on('mk.id', '=', 'latest_map.employee_id');
-                })
-                ->leftJoin('employee_health_checks as ehc', 'ehc.id', '=', 'latest_map.latest_id')
-                ->where('mk.is_active', 1)
-                ->select(
-                    'mk.id as employee_id',
-                    'mk.nik_karyawan',
-                    'mk.nama_lengkap as karyawan',
-                    'd.nama_divisi',
-                    'ehc.id as last_check_id',
-                    'ehc.check_date as last_check_date',
-                    'ehc.check_time as last_check_time',
-                    'ehc.keterangan as last_keterangan',
-                    'ehc.tensi',
-                    'ehc.tensi_classification',
-                    DB::raw('CASE WHEN ehc.id IS NULL THEN 0 ELSE 1 END as has_health_data')
-                );
-
-            $data = $query->get()->map(function ($item) {
-                $item->has_health_data = (int) $item->has_health_data === 1;
-                $item->health_status_label = $item->has_health_data
-                    ? 'Sudah Ada Data'
-                    : 'Belum Ada Data';
-                $item->last_keterangan_label = $this->mapKeteranganLabel($item->last_keterangan);
-                $item->last_check_date_label = $item->last_check_date
-                    ? Carbon::parse($item->last_check_date)->format('d-m-Y')
-                    : '-';
-                $item->last_check_time_label = $item->last_check_time
-                    ? substr((string) $item->last_check_time, 0, 5)
-                    : '-';
-
-                return $item;
-            });
-
-            return Datatables::of($data)->make(true);
-        } catch (\Exception $ex) {
-            return response()->json([
-                'success' => false,
-                'message' => $ex->getMessage(),
-                'line' => $ex->getLine(),
-            ], 500);
-        }
-    }
-
-    /**
-     * Riwayat kesehatan satu karyawan (terbaru → terlama).
-     */
-    public function history(Request $request)
-    {
-        try {
-            $employeeId = (int) ($request->employee_id ?: $request->id);
-            if ($employeeId <= 0) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'ID karyawan wajib diisi',
-                ], 422);
-            }
-
-            $karyawan = MasterKaryawan::where('id', $employeeId)->where('is_active', 1)->first();
-            if ($karyawan === null) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Data karyawan tidak ditemukan',
-                ], 404);
-            }
-
-            $periode = (int) ($request->periode ?: date('Y'));
-            $query = $this->baseQuery($periode)->where('ehc.employee_id', $employeeId);
-
-            $records = $query
-                ->orderBy('ehc.check_date', 'desc')
-                ->orderBy('ehc.check_time', 'desc')
-                ->get()
-                ->map(function ($item) {
-                    return $this->decorate($item);
-                });
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'employee' => [
-                        'id' => $karyawan->id,
-                        'nik_karyawan' => $karyawan->nik_karyawan,
-                        'nama_lengkap' => $karyawan->nama_lengkap,
-                        'nama_divisi' => optional($karyawan->divisi)->nama_divisi ?: '-',
-                    ],
-                    'records' => $records,
-                    'total' => $records->count(),
-                ],
-            ], 200);
         } catch (\Exception $ex) {
             return response()->json([
                 'success' => false,
@@ -210,6 +89,7 @@ class ParamedisController extends Controller
 
             $record = EmployeeHealthCheck::create(array_merge($payload, [
                 'employee_id' => $employeeId,
+                'skk_number' => EmployeeHealthCheck::generateSkkNumber($payload['check_date']),
                 'created_by' => $this->karyawan,
                 'created_at' => $now,
                 'updated_by' => $this->karyawan,
@@ -341,10 +221,7 @@ class ParamedisController extends Controller
         }
     }
 
-    /**
-     * Cetak Surat Keterangan Kesehatan — generate nomor surat, template PDF menyusul.
-     */
-    public function printSkk(Request $request)
+    public function printSkk(Request $request, EmployeeHealthCheckDocumentService $documentService)
     {
         try {
             $record = $this->findActiveRecord($this->resolveId($request));
@@ -355,24 +232,15 @@ class ParamedisController extends Controller
                 ], 404);
             }
 
-            if (!$record->skk_number) {
-                $skkNumber = $this->generateSkkNumber($record);
-                EmployeeHealthCheck::where('id', $record->id)->update([
-                    'skk_number' => $skkNumber,
-                    'updated_by' => $this->karyawan,
-                    'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                ]);
-                $record->skk_number = $skkNumber;
-            }
+            $record = $this->ensureSkkNumber($record);
 
-            $payload = $this->decorate($record);
+            $pdfString = $documentService->generateSkkPdf($record);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Nomor SKK berhasil digenerate. Template PDF belum tersedia.',
-                'data' => $payload,
-                'skk_number' => $record->skk_number,
-                'pdf_ready' => false,
+                'message' => 'Surat Keterangan Kesehatan berhasil dibuat',
+                'data' => base64_encode($pdfString),
+                'pdf_ready' => true,
             ], 200);
         } catch (\Exception $ex) {
             return response()->json([
@@ -395,7 +263,8 @@ class ParamedisController extends Controller
                 'ehc.employee_id',
                 'ehc.check_date',
                 'ehc.check_time',
-                'ehc.tensi',
+                'ehc.tensi_sistolik',
+                'ehc.tensi_diastolik',
                 'ehc.tensi_classification',
                 'ehc.saturasi',
                 'ehc.nadi',
@@ -430,7 +299,7 @@ class ParamedisController extends Controller
             return null;
         }
 
-        return $this->baseQuery((int) date('Y'))
+        return $this->baseQuery(0)
             ->where('ehc.id', (int) $id)
             ->first();
     }
@@ -456,19 +325,46 @@ class ParamedisController extends Controller
         $item->kolesterol_label = $this->formatOptionalNumber($item->kolesterol);
         $item->keluhan = $item->keluhan ?: '-';
         $item->skk_number = $item->skk_number ?: '-';
+        $item->tensi_label = EmployeeHealthCheck::formatTensiLabel(
+            $item->tensi_sistolik ?? null,
+            $item->tensi_diastolik ?? null
+        );
 
         return $item;
     }
 
+    private function ensureSkkNumber($record)
+    {
+        $existingNumber = trim((string) ($record->skk_number ?? ''));
+        if ($existingNumber !== '' && $existingNumber !== '-') {
+            return $record;
+        }
+
+        $skkNumber = EmployeeHealthCheck::generateSkkNumber($record->check_date);
+        $now = Carbon::now()->format('Y-m-d H:i:s');
+
+        EmployeeHealthCheck::where('id', $record->id)->update([
+            'skk_number' => $skkNumber,
+            'updated_by' => $this->karyawan,
+            'updated_at' => $now,
+        ]);
+
+        $record->skk_number = $skkNumber;
+
+        return $record;
+    }
+
     private function buildPayload(Request $request)
     {
-        $tensi = (int) $request->tensi;
+        $tensiSistolik = (int) $request->tensi_sistolik;
+        $tensiDiastolik = (int) $request->tensi_diastolik;
 
         return [
             'check_date' => $request->check_date ?: Carbon::now()->format('Y-m-d'),
             'check_time' => $this->normalizeTime($request->check_time ?: Carbon::now()->format('H:i')),
-            'tensi' => $tensi,
-            'tensi_classification' => EmployeeHealthCheck::classifyTensi($tensi),
+            'tensi_sistolik' => $tensiSistolik,
+            'tensi_diastolik' => $tensiDiastolik,
+            'tensi_classification' => EmployeeHealthCheck::classifyTensi($tensiSistolik),
             'saturasi' => $this->parseDecimal($request->saturasi),
             'nadi' => (int) $request->nadi,
             'suhu' => $this->parseDecimal($request->suhu),
@@ -491,17 +387,26 @@ class ParamedisController extends Controller
             ], 422);
         }
 
-        if (!$request->filled('tensi') && $request->tensi !== '0' && $request->tensi !== 0) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Tensi wajib diisi',
-            ], 422);
+        foreach (['tensi_sistolik' => 'Tensi sistolik', 'tensi_diastolik' => 'Tensi diastolik'] as $field => $label) {
+            if (!$request->filled($field) && $request->input($field) !== '0' && $request->input($field) !== 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $label . ' wajib diisi',
+                ], 422);
+            }
+
+            if ((int) $request->input($field) <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $label . ' harus lebih dari 0',
+                ], 422);
+            }
         }
 
-        if ((int) $request->tensi <= 0) {
+        if ((int) $request->tensi_diastolik >= (int) $request->tensi_sistolik) {
             return response()->json([
                 'success' => false,
-                'message' => 'Tensi harus lebih dari 0',
+                'message' => 'Tensi diastolik harus lebih kecil dari tensi sistolik',
             ], 422);
         }
 
@@ -563,14 +468,9 @@ class ParamedisController extends Controller
 
     private function resolveId(Request $request)
     {
-        return (int) ($request->id ?: $request->health_check_id);
-    }
+        $id = $request->input('id', $request->input('health_check_id'));
 
-    private function generateSkkNumber($record)
-    {
-        $datePart = Carbon::parse($record->check_date)->format('Ymd');
-
-        return 'SKK-' . $datePart . '-' . str_pad((string) $record->id, 5, '0', STR_PAD_LEFT);
+        return (int) $id;
     }
 
     private function normalizeTime($time)
