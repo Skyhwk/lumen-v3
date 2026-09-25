@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\Log;
 
 class RejectOverdueAssessment extends Command
 {
-    protected $signature = 'assessmentrejection';
+    protected $signature = 'assessmentrejection
+                            {--dry-run : Tampilkan kandidat yang akan ditolak tanpa mengubah data}';
 
     protected $description = 'Reject otomatis kandidat assessment yang sudah dapat link tes tetapi tidak selesai dalam 6 hari';
 
@@ -22,13 +23,19 @@ class RejectOverdueAssessment extends Command
     public function handle(): int
     {
         $now = Carbon::now('Asia/Jakarta');
+        $dryRun = (bool) $this->option('dry-run');
         $affectedIds = [];
         $failed = [];
         $skipped = [];
 
         $this->log('info', 'Command assessmentrejection mulai', [
             'run_at' => $now->toDateTimeString(),
+            'dry_run' => $dryRun,
         ]);
+
+        if ($dryRun) {
+            $this->comment('Dry run aktif: tidak ada kandidat yang akan diubah.');
+        }
 
         NewRecruitment::query()
             ->where('status', 'assessment')
@@ -36,7 +43,7 @@ class RejectOverdueAssessment extends Command
             ->whereNotNull('personnel_request_id')
             ->where('personnel_request_id', '!=', '')
             ->orderBy('id')
-            ->chunkById(100, function ($candidates) use ($now, &$affectedIds, &$failed, &$skipped) {
+            ->chunkById(100, function ($candidates) use ($now, $dryRun, &$affectedIds, &$failed, &$skipped) {
                 foreach ($candidates as $candidate) {
                     $decision = $this->decision($candidate, $now);
                     if ($decision['action'] === 'skip') {
@@ -52,6 +59,16 @@ class RejectOverdueAssessment extends Command
                                 'assessment_at' => $decision['assessment_at'],
                             ]);
                         }
+                        continue;
+                    }
+
+                    if ($dryRun) {
+                        $affectedIds[] = (int) $candidate->id;
+                        $this->log('info', 'Dry run: kandidat akan di-reject otomatis', [
+                            'id' => (int) $candidate->id,
+                            'nama_lengkap' => $candidate->nama_lengkap,
+                            'assessment_at' => $decision['assessment_at'],
+                        ]);
                         continue;
                     }
 
@@ -101,9 +118,13 @@ class RejectOverdueAssessment extends Command
             'affected_count' => count($affectedIds),
             'failed' => $failed,
             'skipped' => $skipped,
+            'dry_run' => $dryRun,
         ]);
 
-        $this->info('Assessment rejection selesai. Terkena dampak: ' . count($affectedIds) . '. Gagal: ' . count($failed) . '.');
+        $summary = $dryRun
+            ? 'Dry run assessment rejection selesai. Akan ditolak: '
+            : 'Assessment rejection selesai. Terkena dampak: ';
+        $this->info($summary . count($affectedIds) . '. Gagal: ' . count($failed) . '.');
 
         return count($failed) > 0 ? 1 : 0;
     }
