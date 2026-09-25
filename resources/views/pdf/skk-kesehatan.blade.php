@@ -139,17 +139,35 @@
             line-height: 1.5;
         }
 
-        .signature .sign-block p {
-            margin: 0 0 5px;
-            line-height: 1;
+        .signature-inner {
+            width: 100%;
+            border-collapse: collapse;
         }
 
-        .signature .sign-block p:last-child {
-            margin-bottom: 0;
+        .signature-inner td {
+            padding: 0;
+            vertical-align: top;
+        }
+
+        .sign-date {
+            padding-bottom: 8px;
+            line-height: 1.5;
+        }
+
+        .sign-title {
+            padding-bottom: 4px;
+            line-height: 1.5;
         }
 
         .sign-space {
-            height: 56px;
+            height: 65px;
+            line-height: 65px;
+            font-size: 1px;
+            padding: 0;
+        }
+
+        .sign-name {
+            line-height: 1.5;
         }
 
         .muted {
@@ -299,10 +317,20 @@
     <table class="signature">
         <tr>
             <td class="sign-block">
-                <p class="muted">{{ $company['city'] ?? 'Tangerang' }}, {{ $issuedDateLong }}</p>
-                <p><strong>Petugas Paramedis</strong></p>
-                <div class="sign-space"></div>
-                <p><strong>{{ $petugasName }}</strong></p>
+                <table class="signature-inner">
+                    <tr>
+                        <td class="sign-date muted">{{ $company['city'] ?? 'Tangerang' }}, {{ $issuedDateLong }}</td>
+                    </tr>
+                    <tr>
+                        <td class="sign-title"><strong>Petugas Paramedis</strong></td>
+                    </tr>
+                    <tr>
+                        <td class="sign-space" style="height: 56px; line-height: 56px;">&nbsp;</td>
+                    </tr>
+                    <tr>
+                        <td class="sign-name"><strong>{{ $petugasName }}</strong></td>
+                    </tr>
+                </table>
             </td>
         </tr>
     </table>
