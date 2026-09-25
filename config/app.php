@@ -32,4 +32,6 @@ return [
 
     'fdl_index_subdays' => env('FDL_INDEX_SUBDAYS', 14),
 
+    'fdl_ergonomi_koreksi_personil' => env('FDL_ERGONOMI_KOREKSI_PERSONIL', ''),
+
 ];
