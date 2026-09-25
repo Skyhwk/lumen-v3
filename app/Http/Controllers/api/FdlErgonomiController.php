@@ -18,6 +18,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Schema;
 use Yajra\Datatables\Datatables;
 
 class FdlErgonomiController extends Controller
@@ -30,6 +31,10 @@ class FdlErgonomiController extends Controller
         try {
             $this->autoBlock();
             $data = DataLapanganErgonomi::with('detail')->orderBy('id', 'desc');
+
+            if ($request->filled('is_active') && Schema::hasColumn('data_lapangan_ergonomi', 'is_active')) {
+                $data->where('is_active', (int) $request->is_active);
+            }
 
             return Datatables::of($data)
                 ->filterColumn('created_by', function ($query, $keyword) {
