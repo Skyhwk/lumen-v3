@@ -9,6 +9,9 @@ class DFUSKeterangan extends Sector
     protected $table = 'dfus_keterangan';
     public $timestamps = false;
 
-
     protected $guarded = [];
+
+    protected $casts = [
+        'keterangan_activity' => 'array',
+    ];
 }

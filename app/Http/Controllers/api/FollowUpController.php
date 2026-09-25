@@ -19,6 +19,8 @@ use App\Models\OrderHeader;
 use App\Models\MasterPelanggan;
 use App\Models\MasterKaryawan;
 use App\Models\MasterPelangganBlacklist;
+use App\Models\QuotationKontrakH;
+use App\Models\QuotationNonKontrak;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -193,33 +195,92 @@ class FollowUpController extends Controller
 
     public function dfus(Request $request)
     {
-        $dfus = DFUS::with('keteranganTambahan')->select('dfus.*')
+        $tanggal = $request->tanggal ?: date('Y-m-d');
+        $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
+
+        $dfus = DFUS::with('keteranganTambahan')
+            ->select('dfus.*')
             ->addSelect('p.id_pelanggan as idPelanggan', 'p.nama_pelanggan as namaPelanggan')
             ->join('master_pelanggan as p', function ($join) {
                 $join->on('p.id_pelanggan', '=', 'dfus.id_pelanggan')->where('p.is_active', true);
             })
-            ->where('dfus.tanggal', $request->tanggal ?: date('Y-m-d'))
+            ->where('dfus.tanggal', $tanggal)
             ->orderBy('dfus.tanggal', 'desc')
             ->orderBy('dfus.jam', 'desc');
 
-        switch ($request->attributes->get('user')->karyawan->id_jabatan) {
+        $salesNames = null;
+        switch ($jabatan) {
             case 24: // Sales Staff
-                $dfus->where('dfus.sales_penanggung_jawab', $this->karyawan);
-                break;
-
             case 148: // Sales Staff
                 $dfus->where('dfus.sales_penanggung_jawab', $this->karyawan);
+                $salesNames = [$this->karyawan];
                 break;
 
             case 21: // Sales Supervisor
-                $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)
+                $salesNames = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)
                     ->pluck('nama_lengkap')
-                    ->toArray();
-                array_push($bawahan, $this->karyawan);
-
-                $dfus->whereIn('dfus.sales_penanggung_jawab', $bawahan);
+                    ->push($this->karyawan)
+                    ->unique()
+                    ->values()
+                    ->all();
+                $dfus->whereIn('dfus.sales_penanggung_jawab', $salesNames);
                 break;
         }
+
+        // Preload sekali: hindari N+1 (MasterKaryawan + LogWebphone per baris)
+        $karyawanQuery = MasterKaryawan::query()->select('id', 'nama_lengkap');
+        if ($salesNames !== null) {
+            $karyawanQuery->whereIn('nama_lengkap', $salesNames);
+        } else {
+            $karyawanQuery->whereIn('nama_lengkap', function ($query) use ($tanggal) {
+                $query->select('sales_penanggung_jawab')
+                    ->from('dfus')
+                    ->where('tanggal', $tanggal)
+                    ->whereNotNull('sales_penanggung_jawab')
+                    ->distinct();
+            });
+        }
+        $karyawanIdsByName = $karyawanQuery->pluck('id', 'nama_lengkap');
+
+        $logsByKaryawan = $karyawanIdsByName->isEmpty()
+            ? collect()
+            : LogWebphone::whereIn('karyawan_id', $karyawanIdsByName->values()->all())
+                ->whereDate('created_at', $tanggal)
+                ->orderByDesc('created_at')
+                ->get()
+                ->groupBy('karyawan_id');
+
+        $keteranganColumns = [
+            'keterangan_perkenalan',
+            'keterangan_proposal',
+            'keterangan_review_manager',
+            'keterangan_negosiasi_harga',
+            'keterangan_maintain_call',
+            'proposal',
+        ];
+
+        $keteranganActivityOrder = [
+            'perkenalan_awal',
+            'kirim_company_profile',
+            'review_management',
+            'revisi',
+            'negosiasi_harga',
+            'follow_up_po',
+            'arrange_schedule',
+            'follow_up_hasil_uji',
+            'maintain_customer',
+        ];
+        $keteranganActivityLabels = [
+            'perkenalan_awal' => 'Perkenalan Awal & Identifikasi Peluang',
+            'kirim_company_profile' => 'Kirim Company Profile',
+            'review_management' => 'Penawaran Masih Dalam Review Management',
+            'revisi' => 'Penawaran Masih Proses Penyesuaian Kebutuhan (Revisi)',
+            'negosiasi_harga' => 'Negosiasi Harga',
+            'follow_up_po' => 'Follow Up PO atau Sign Quote',
+            'arrange_schedule' => 'Arrange Schedule Pengujian',
+            'follow_up_hasil_uji' => 'Follow Up Hasil Uji & Next Pengujian',
+            'maintain_customer' => 'Maintain Customer',
+        ];
 
         return DataTables::of($dfus)
             ->editColumn('pelanggan', fn($row) => [
@@ -230,32 +291,85 @@ class FollowUpController extends Controller
                 $query->where('p.nama_pelanggan', 'like', "%{$keyword}%");
             })
             ->orderColumn('pelanggan.nama_pelanggan', 'p.nama_pelanggan $1')
-            ->filterColumn('keterangan_tambahan', function ($query, $value) {
+            ->orderColumn('tanggal', 'dfus.tanggal $1')
+            ->orderColumn('jam', 'dfus.jam $1')
+            ->filterColumn('keterangan_activity', function ($query, $keyword) use ($keteranganActivityLabels) {
+                $keyword = trim((string) $keyword);
+                if ($keyword === '') {
+                    return;
+                }
+                $matchedKeys = [];
+                foreach ($keteranganActivityLabels as $key => $label) {
+                    if (stripos($label, $keyword) !== false || stripos($key, $keyword) !== false) {
+                        $matchedKeys[] = $key;
+                    }
+                }
+                $query->whereHas('keteranganTambahan', function ($q) use ($keyword, $matchedKeys) {
+                    $q->where(function ($x) use ($keyword, $matchedKeys) {
+                        $x->where('keterangan_activity', 'like', '%' . $keyword . '%');
+                        foreach ($matchedKeys as $key) {
+                            $x->orWhere('keterangan_activity', 'like', '%' . $key . '%');
+                        }
+                    });
+                });
+            })
+            ->filterColumn('keterangan_tambahan', function ($query, $value) use ($keteranganColumns) {
                 $data = json_decode($value, true);
+                if (!is_array($data)) {
+                    return;
+                }
                 $kategori = $data['kategori'] ?? null;
                 $keyword  = $data['keyword'] ?? null;
 
-                if (!$keyword) return;
+                if (!$keyword) {
+                    return;
+                }
 
-                $query->whereHas('keteranganTambahan', function ($q) use ($kategori, $keyword) {
-                    if ($kategori) {
-                        return $q->where($kategori, 'like', "%$keyword%");
+                $query->whereHas('keteranganTambahan', function ($q) use ($kategori, $keyword, $keteranganColumns) {
+                    if ($kategori && in_array($kategori, $keteranganColumns, true)) {
+                        $q->where($kategori, 'like', "%{$keyword}%");
+                        return;
                     }
 
-                    // fallback kalau kategori kosong
-                    $q->where(function ($x) use ($keyword) {
-                        $x->where('keterangan_perkenalan', 'like', "%$keyword%")
-                            ->orWhere('keterangan_proposal', 'like', "%$keyword%")
-                            ->orWhere('keterangan_review_manager', 'like', "%$keyword%")
-                            ->orWhere('keterangan_negosiasi_harga', 'like', "%$keyword%")
-                            ->orWhere('keterangan_maintain_call', 'like', "%$keyword%")
-                            ->orWhere('proposal', 'like', "%$keyword%");
+                    $q->where(function ($x) use ($keyword, $keteranganColumns) {
+                        foreach ($keteranganColumns as $index => $column) {
+                            if ($index === 0) {
+                                $x->where($column, 'like', "%{$keyword}%");
+                            } else {
+                                $x->orWhere($column, 'like', "%{$keyword}%");
+                            }
+                        }
                     });
                 });
             })
             // ->addColumn('status_order', fn($row) => OrderHeader::where('id_pelanggan', $row->id_pelanggan)->where('is_active', true)->exists() ? 'REPEAT' : 'NEW')
-            ->addColumn('status_order', fn() => "Coming Soon")
-            ->addColumn('log_webphone', fn($row) => $row->getLogWebphoneAttribute()->toArray())
+            ->addColumn('status_order', fn() => 'Coming Soon')
+            ->addColumn('keterangan_activity', function ($row) use ($keteranganActivityOrder) {
+                $keys = $row->keteranganTambahan->keterangan_activity ?? [];
+                if (!is_array($keys)) {
+                    $keys = [];
+                }
+                $set = array_flip($keys);
+                return array_values(array_filter($keteranganActivityOrder, fn($k) => isset($set[$k])));
+            })
+            ->addColumn('log_webphone', function ($row) use ($karyawanIdsByName, $logsByKaryawan) {
+                $karyawanId = $karyawanIdsByName[$row->sales_penanggung_jawab] ?? null;
+                if (!$karyawanId) {
+                    return [];
+                }
+
+                $rowLogs = $logsByKaryawan->get($karyawanId, collect());
+                if (is_string($row->kontak) && strpos($row->kontak, ' - ') !== false) {
+                    $kontak = explode(' - ', $row->kontak, 2)[1] ?? '';
+                    if ($kontak !== '') {
+                        $rowLogs = $rowLogs->filter(function ($log) use ($kontak) {
+                            return strpos((string) $log->number, $kontak) !== false;
+                        });
+                    }
+                }
+
+                return $rowLogs->values()->toArray();
+            })
             ->make(true);
     }
 
@@ -274,8 +388,12 @@ class FollowUpController extends Controller
                     $dfus->email_pic = $request->email_pic;
                 if ($request->no_pic)
                     $dfus->no_pic = $request->no_pic;
-                if ($request->status)
+                if ($request->status) {
                     $dfus->status = $request->status == '-1' ? null : $request->status;
+                    if ($request->status !== 'qt') {
+                        $dfus->status_quotation = null;
+                    }
+                }
                 if ($request->keterangan)
                     $dfus->keterangan = $request->keterangan;
 
@@ -691,13 +809,27 @@ class FollowUpController extends Controller
 
     public function updateStatusCalling(Request $request)
     {
+        $allowed = ['NA', 'NI', 'D', 'PIC', 'FO'];
+        $status = strtoupper(trim((string) $request->status));
+        if (!in_array($status, $allowed, true)) {
+            return response()->json([
+                'message' => 'Status calling tidak valid. Gunakan: ' . implode(', ', $allowed),
+                'success' => false,
+            ], 422);
+        }
+
         DB::beginTransaction();
         try {
             $dfus = DFUS::where('id', $request->id)->first();
-            $dfus->keterangan = $request->status;
+            if (!$dfus) {
+                DB::rollBack();
+                return response()->json(['message' => 'Data DFUS tidak ditemukan.', 'success' => false], 404);
+            }
+
+            $dfus->keterangan = $status;
             $dfus->save();
 
-            if ($request->status == 'NI') {
+            if ($status === 'NI') {
                 $request->id = MasterPelanggan::where('id_pelanggan', $dfus->id_pelanggan)->first()->id;
                 $request->alasan = 'Nomor Invalid';
                 $mpController = new MasterPelangganController($request);
@@ -705,11 +837,246 @@ class FollowUpController extends Controller
                 $mpController->blacklist($request);
             }
             DB::commit();
-            return response()->json(['message' => 'Berhasil Update Status Calling ke ' . $request->status .  ($request->status == 'NI' ? ', serta menambahkan ke blacklist.' : ''), 'success' => true], 200);
+            return response()->json(['message' => 'Berhasil Update Status Calling ke ' . $status .  ($status === 'NI' ? ', serta menambahkan ke blacklist.' : ''), 'success' => true], 200);
         } catch (\Exception $th) {
             DB::rollBack();
             return  response()->json(['error' => $th], 400);
         }
+    }
+
+    public function getQuotationsByPelanggan(Request $request)
+    {
+        $idPelanggan = trim((string) ($request->id_pelanggan ?? ''));
+        if ($idPelanggan === '') {
+            return response()->json(['message' => 'id_pelanggan wajib diisi.', 'data' => []], 422);
+        }
+
+        $search = trim((string) ($request->search ?? ''));
+        $limit = 50;
+
+        $applyFilter = function ($query) use ($idPelanggan, $search) {
+            $query->where('pelanggan_ID', $idPelanggan)->where('is_active', true);
+            if ($search !== '') {
+                $query->where('no_document', 'like', '%' . $search . '%');
+            }
+            return $query->orderByDesc('id')->limit(50);
+        };
+
+        $nonKontrak = $applyFilter(QuotationNonKontrak::query())->get(['id', 'no_document']);
+        $kontrak = $applyFilter(QuotationKontrakH::query())->get(['id', 'no_document']);
+
+        $docs = $nonKontrak->pluck('no_document')
+            ->merge($kontrak->pluck('no_document'))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $orderedDocs = $docs
+            ? OrderHeader::whereIn('no_document', $docs)
+                ->where('is_active', true)
+                ->pluck('no_document')
+                ->flip()
+            : collect();
+
+        $mapRow = function ($row, $type) use ($orderedDocs) {
+            $noQuotation = $row->no_document;
+            $ordered = $orderedDocs->has($noQuotation);
+            return [
+                'id_quotation' => (int) $row->id,
+                'no_quotation' => $noQuotation,
+                'type' => $type,
+                'ordered' => $ordered,
+                'text' => $ordered ? ($noQuotation . ' (ordered)') : $noQuotation,
+            ];
+        };
+
+        $data = $nonKontrak->map(fn($row) => $mapRow($row, 'non_kontrak'))
+            ->merge($kontrak->map(fn($row) => $mapRow($row, 'kontrak')))
+            ->sortByDesc('id_quotation')
+            ->values()
+            ->take($limit)
+            ->values()
+            ->all();
+
+        return response()->json(['data' => $data], 200);
+    }
+
+    public function saveKeteranganActivity(Request $request)
+    {
+        $allowed = [
+            'perkenalan_awal',
+            'kirim_company_profile',
+            'review_management',
+            'revisi',
+            'negosiasi_harga',
+            'follow_up_po',
+            'arrange_schedule',
+            'follow_up_hasil_uji',
+            'maintain_customer',
+        ];
+
+        $dfus = DFUS::where('id', $request->id)->first();
+        if (!$dfus) {
+            return response()->json(['message' => 'Data DFUS tidak ditemukan.', 'success' => false], 404);
+        }
+
+        $items = $request->input('keterangan_activity', []);
+        if (!is_array($items)) {
+            return response()->json(['message' => 'Format keterangan_activity tidak valid.', 'success' => false], 422);
+        }
+
+        $normalized = [];
+        $seen = [];
+        foreach ($allowed as $key) {
+            if (in_array($key, $items, true) && !isset($seen[$key])) {
+                $seen[$key] = true;
+                $normalized[] = $key;
+            }
+        }
+
+        $keterangan = DFUSKeterangan::where('dfus_id', $dfus->id)->first();
+        if (!$keterangan) {
+            $keterangan = new DFUSKeterangan();
+            $keterangan->dfus_id = $dfus->id;
+            // Kolom lama wajib di DB (tanpa default) — 0 = belum pakai step lama
+            $keterangan->step_active = 0;
+            $keterangan->created_by = $this->karyawan;
+            $keterangan->created_at = Carbon::now();
+        } else {
+            $keterangan->updated_by = $this->karyawan;
+            $keterangan->updated_at = Carbon::now();
+        }
+
+        $keterangan->keterangan_activity = $normalized;
+        // Kolom lama (keterangan_perkenalan, dst) tidak diubah —
+        // data historis ribuan baris tetap utuh di record yang sama.
+        $keterangan->save();
+
+        return response()->json([
+            'message' => 'Keterangan Activity berhasil disimpan.',
+            'success' => true,
+            'data' => [
+                'keterangan_activity' => $keterangan->keterangan_activity,
+            ],
+        ], 200);
+    }
+
+    /** Cek no_quotation mana saja yang sudah ada di order_header (aktif) */
+    public function checkQuotationsOrdered(Request $request)
+    {
+        $docs = $request->input('no_quotations', []);
+        if (!is_array($docs)) {
+            $docs = [];
+        }
+        $docs = array_values(array_unique(array_filter(array_map(function ($d) {
+            return trim((string) $d);
+        }, $docs))));
+
+        $ordered = $docs
+            ? OrderHeader::whereIn('no_document', $docs)
+                ->where('is_active', true)
+                ->pluck('no_document')
+                ->values()
+                ->all()
+            : [];
+
+        return response()->json(['data' => $ordered], 200);
+    }
+
+    public function saveStatusQuotation(Request $request)
+    {
+        $allowedStatus = ['cold', 'warm', 'hot'];
+        $dfus = DFUS::where('id', $request->id)->first();
+        if (!$dfus) {
+            return response()->json(['message' => 'Data DFUS tidak ditemukan.', 'success' => false], 404);
+        }
+
+        $items = $request->input('items', []);
+        if (!is_array($items)) {
+            return response()->json(['message' => 'Format items tidak valid.', 'success' => false], 422);
+        }
+
+        $normalized = [];
+        $seen = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $idQuotation = (int) ($item['id_quotation'] ?? 0);
+            $noQuotation = trim((string) ($item['no_quotation'] ?? ''));
+            $status = strtolower(trim((string) ($item['status'] ?? '')));
+            if ($idQuotation <= 0 || $noQuotation === '' || !in_array($status, $allowedStatus, true)) {
+                return response()->json([
+                    'message' => 'Setiap item wajib punya id_quotation, no_quotation, dan status (cold/warm/hot).',
+                    'success' => false,
+                ], 422);
+            }
+
+            $type = strtolower(trim((string) ($item['type'] ?? '')));
+            if (!in_array($type, ['kontrak', 'non_kontrak'], true)) {
+                // QTC = kontrak, QT = non_kontrak
+                $type = (stripos($noQuotation, '/QTC/') !== false || stripos($noQuotation, 'QTC/') !== false)
+                    ? 'kontrak'
+                    : 'non_kontrak';
+            }
+
+            $key = $type . '|' . $idQuotation . '|' . $noQuotation;
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $normalized[] = [
+                'id_quotation' => $idQuotation,
+                'no_quotation' => $noQuotation,
+                'status' => $status,
+                'type' => $type,
+            ];
+        }
+
+        if (count($normalized) === 0) {
+            return response()->json(['message' => 'Pilih minimal satu quotation.', 'success' => false], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $dfus->status = 'qt';
+            $dfus->status_quotation = $normalized;
+            $dfus->updated_by = $this->karyawan;
+            $dfus->save();
+
+            foreach ($normalized as $row) {
+                if ($row['type'] === 'kontrak') {
+                    // QTC → request_quotation_kontrak_H.status_quotation
+                    QuotationKontrakH::where('id', $row['id_quotation'])->update([
+                        'status_quotation' => $row['status'],
+                    ]);
+                } else {
+                    // QT → request_quotation.status_quotation
+                    QuotationNonKontrak::where('id', $row['id_quotation'])->update([
+                        'status_quotation' => $row['status'],
+                    ]);
+                }
+            }
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Gagal menyimpan status quotation: ' . $e->getMessage(),
+                'success' => false,
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Status Quotation berhasil disimpan.',
+            'success' => true,
+            'data' => [
+                'status' => $dfus->status,
+                'status_quotation' => $dfus->status_quotation,
+            ],
+        ], 200);
     }
 
     public function getLog(Request $request)
