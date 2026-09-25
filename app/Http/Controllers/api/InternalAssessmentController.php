@@ -298,6 +298,27 @@ class InternalAssessmentController extends Controller
         })->filter(function ($item) {
             return $item['jenjang'] !== '' || $item['institusi'] !== '' || $item['jurusan'] !== '';
         })->values()->all();
+        $experiences = collect($request->input('pengalaman_kerja', []))->map(function ($item) {
+            return [
+                'nama_perusahaan' => trim((string) ($item['nama_perusahaan'] ?? '')),
+                'lokasi_perusahaan' => trim((string) ($item['lokasi_perusahaan'] ?? '')),
+                'posisi_kerja' => trim((string) ($item['posisi_kerja'] ?? '')),
+                'tgl_mulai_kerja' => trim((string) ($item['tgl_mulai_kerja'] ?? '')) ?: null,
+                'tgl_berakhir_kerja' => trim((string) ($item['tgl_berakhir_kerja'] ?? '')) ?: null,
+                'alasan_keluar' => trim((string) ($item['alasan_keluar'] ?? '')),
+            ];
+        })->filter(function ($item) {
+            return $item['nama_perusahaan'] !== '' || $item['posisi_kerja'] !== '';
+        })->values()->all();
+        $emergencyContacts = collect($request->input('kontak_darurat', []))->map(function ($item) {
+            return [
+                'nama_kontak' => trim((string) ($item['nama_kontak'] ?? '')),
+                'hubungan' => trim((string) ($item['hubungan'] ?? '')),
+                'nomor_kontak' => trim((string) ($item['nomor_kontak'] ?? '')),
+            ];
+        })->filter(function ($item) {
+            return $item['nama_kontak'] !== '' || $item['nomor_kontak'] !== '';
+        })->values()->all();
         $skills = collect($request->input('skill', []))->map(function ($item) {
             return [
                 'keahlian' => trim((string) ($item['keahlian'] ?? '')),
@@ -322,6 +343,7 @@ class InternalAssessmentController extends Controller
             'kode_pos' => trim((string) $request->kode_pos) ?: null,
             'pendidikan' => json_encode($educations),
             'skill' => json_encode($skills),
+            'pengalaman_kerja' => json_encode($experiences),
             'updated_by' => $employee->nama_lengkap,
             'updated_at' => Carbon::now(),
         ];
@@ -329,8 +351,50 @@ class InternalAssessmentController extends Controller
             $allowed['nik_kk'] = trim((string) $request->nik_kk) ?: null;
         }
 
-        DB::transaction(function () use ($employee, $attempt, $allowed) {
+        $medical = (array) $request->input('medical', []);
+        DB::transaction(function () use ($employee, $attempt, $allowed, $educations, $skills, $experiences, $emergencyContacts, $medical) {
+            $now = Carbon::now();
             DB::table('master_karyawan')->where('id', $employee->id)->update($allowed);
+            $replace = function ($table, array $rows) use ($employee, $now) {
+                if (!Schema::hasTable($table)) return;
+                $columns = Schema::getColumnListing($table);
+                $deactivate = [];
+                if (in_array('is_active', $columns, true)) $deactivate['is_active'] = 0;
+                if (in_array('updated_at', $columns, true)) $deactivate['updated_at'] = $now;
+                if ($deactivate) DB::table($table)->where('karyawan_id', $employee->id)->update($deactivate);
+                foreach ($rows as $row) {
+                    $values = array_merge($row, [
+                        'karyawan_id' => $employee->id,
+                        'is_active' => 1,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+                    DB::table($table)->insert(array_intersect_key($values, array_flip($columns)));
+                }
+            };
+            $replace('pendidikan_karyawan', $educations);
+            $replace('keahlian_karyawan', $skills);
+            $replace('pengalaman_kerja_karyawan', $experiences);
+            $replace('kontak_darurat_karyawan', $emergencyContacts);
+            if (Schema::hasTable('rekam_medis_karyawan')) {
+                $medicalValues = [
+                    'tinggi_badan' => $medical['tinggi_badan'] ?? null,
+                    'berat_badan' => $medical['berat_badan'] ?? null,
+                    'keterangan_mata' => $medical['keterangan_mata'] ?? null,
+                    'rate_mata' => $medical['rate_mata'] ?? null,
+                    'golongan_darah' => $medical['golongan_darah'] ?? null,
+                    'penyakit_bawaan_lahir' => $medical['penyakit_bawaan_lahir'] ?? null,
+                    'penyakit_kronis' => $medical['penyakit_kronis'] ?? null,
+                    'riwayat_kecelakaan' => $medical['riwayat_kecelakaan'] ?? null,
+                    'updated_at' => $now,
+                    'updated_by' => $employee->nama_lengkap,
+                ];
+                $existingMedical = DB::table('rekam_medis_karyawan')->where('karyawan_id', $employee->id)->where('is_active', 1)->first();
+                if ($existingMedical) DB::table('rekam_medis_karyawan')->where('id', $existingMedical->id)->update($medicalValues);
+                else DB::table('rekam_medis_karyawan')->insert(array_merge($medicalValues, [
+                    'karyawan_id' => $employee->id, 'is_active' => 1, 'created_at' => $now, 'created_by' => $employee->nama_lengkap,
+                ]));
+            }
             DB::table('assessment_internal_attempts')->where('id', $attempt->id)->update([
                 'profile_completed_at' => Carbon::now(),
                 'last_activity_at' => Carbon::now(),
@@ -1034,6 +1098,29 @@ class InternalAssessmentController extends Controller
             return null;
         }
 
+        $educationRows = Schema::hasTable('pendidikan_karyawan') ? DB::table('pendidikan_karyawan')->where('karyawan_id', $employee->id)->where('is_active', 1)->orderBy('id')->get()->map(function ($row) {
+            return (array) $row;
+        })->all() : [];
+        $experienceRows = Schema::hasTable('pengalaman_kerja_karyawan') ? DB::table('pengalaman_kerja_karyawan')->where('karyawan_id', $employee->id)->where('is_active', 1)->orderBy('id')->get()->map(function ($row) {
+            return (array) $row;
+        })->all() : [];
+        $skillRows = Schema::hasTable('keahlian_karyawan') ? DB::table('keahlian_karyawan')->where('karyawan_id', $employee->id)->orderBy('id')->get()->map(function ($row) {
+            return (array) $row;
+        })->all() : [];
+        $medical = Schema::hasTable('rekam_medis_karyawan') ? DB::table('rekam_medis_karyawan')->where('karyawan_id', $employee->id)->where('is_active', 1)->first() : null;
+        $contacts = Schema::hasTable('kontak_darurat_karyawan') ? DB::table('kontak_darurat_karyawan')->where('karyawan_id', $employee->id)->where('is_active', 1)->orderBy('id')->get()->map(function ($row) {
+            return (array) $row;
+        })->all() : [];
+        $documents = Schema::hasTable('karyawan_dokumen_arsip') ? DB::table('karyawan_dokumen_arsip')->where('karyawan_id', $employee->id)->where('is_active', 1)->orderByDesc('id')->get()->map(function ($row) {
+            return [
+                'id' => $row->id,
+                'jenis_dokumen' => $row->jenis_dokumen,
+                'nama_file' => $row->nama_file,
+                'path_file' => $row->path_file,
+                'mime_type' => $row->mime_type,
+            ];
+        })->all() : [];
+
         return [
             'nama_lengkap' => $employee->nama_lengkap,
             'email' => $employee->email,
@@ -1054,8 +1141,12 @@ class InternalAssessmentController extends Controller
             'provinsi' => $employee->provinsi,
             'negara' => $employee->negara,
             'kode_pos' => $employee->kode_pos,
-            'pendidikan' => json_decode($employee->pendidikan ?: '[]', true) ?: [],
-            'skill' => json_decode($employee->skill ?: '[]', true) ?: [],
+            'pendidikan' => $educationRows ?: (json_decode($employee->pendidikan ?: '[]', true) ?: []),
+            'pengalaman_kerja' => $experienceRows ?: (json_decode($employee->pengalaman_kerja ?: '[]', true) ?: []),
+            'skill' => $skillRows ?: (json_decode($employee->skill ?: '[]', true) ?: []),
+            'medical' => $medical ? (array) $medical : [],
+            'kontak_darurat' => $contacts,
+            'documents' => $documents,
         ];
     }
 }

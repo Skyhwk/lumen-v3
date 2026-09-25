@@ -1063,9 +1063,9 @@ class JadwalServices
                         $updateQuery->where('no_quotation', $dataAdd->no_quotation);
                     }
 
-                    // $trackingDates = $trackingDates->merge(
-                    //     (clone $updateQuery)->where('is_active', true)->pluck('tanggal')
-                    // );
+                    $trackingDates = $trackingDates->merge(
+                        (clone $updateQuery)->where('is_active', true)->pluck('tanggal')
+                    );
                     $updateQuery->update(['is_active' => false]);
                 }
             }
