@@ -143,5 +143,10 @@ $router->group(['prefix' => 'api/private/decision', 'middleware' => ['cors']], f
     $router->post('decide', 'api\PenyesuaianGajiApprovalPublicController@decide');
 });
 
+$router->group(['prefix' => 'api/public/recruitment', 'middleware' => ['cors']], function () use ($router) {
+    $router->get('jobs', 'api\PublicRecruitmentJobController@index');
+    $router->get('jobs/{no_request}', 'api\PublicRecruitmentJobController@show');
+});
+
 $router->post('/{any:.*}', ['uses' => 'R404Controller@r404']);
 $router->get('/{any:.*}', ['uses' => 'R404Controller@r404']);

@@ -28,10 +28,8 @@ use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
-use App\Services\PublicRecruitmentJobListService;
-use App\Services\PersonnelRequestImageService;
+use App\Services\PublicRecruitmentOpenJobService;
 use App\Services\RecruitmentApplicationDraftService;
-use App\Services\UserAssessmentCategoryService;
 use Carbon\Carbon;
 
 
@@ -1480,42 +1478,9 @@ class RecruitmentController extends Controller{
     public function jobList()
     {
         try {
-            $data = PersonnelRequest::query()
-                ->leftJoin('master_divisi as md', 'md.id', '=', 'personnel_requests.divisi')
-                ->leftJoin('master_cabang as mc', 'mc.id', '=', 'personnel_requests.lokasi_penempatan_cabang')
-                ->where('personnel_requests.is_active', true)
-                ->where('personnel_requests.is_reject', false)
-                ->where('personnel_requests.is_publish', true)
-                ->select([
-                    'personnel_requests.id',
-                    'personnel_requests.created_at',
-                    'no_request',
-                    'divisi',
-                    'jumlah_personal',
-                    'lokasi_penempatan_cabang',
-                    'pengalaman_kerja',
-                    'pendidikan',
-                    'gender',
-                    'prioritas',
-                    'divisi_alias',
-                    'grade_master_karyawan',
-                    'personnel_requests.gambar',
-                    'md.nama_divisi as divisi_name',
-                    'mc.nama_cabang as placement',
-                ])
-                ->get();
+            $data = app(PublicRecruitmentOpenJobService::class)->getOpenJobs();
 
-            $data = app(PublicRecruitmentJobListService::class)
-                ->filterDuplicatePositions($data);
-
-            $imageService = app(PersonnelRequestImageService::class);
-            $data->each(function ($job) use ($imageService) {
-                $imageService->appendToJob($job);
-            });
-
-            $data->each->makeHidden(['id', 'created_at', 'divisi', 'lokasi_penempatan_cabang']);
-
-            return response()->json($data->values(), 200);
+            return response()->json($data, 200);
         } catch (\Exception $th) {
             return response()->json([
                 'message' => 'Gagal mengambil data job list.',
@@ -1526,41 +1491,11 @@ class RecruitmentController extends Controller{
     public function getJob(Request $request)
     {
         try {
-            $data = PersonnelRequest::query()
-                ->leftJoin('master_divisi as md', 'md.id', '=', 'personnel_requests.divisi')
-                ->leftJoin('master_cabang as mc', 'mc.id', '=', 'personnel_requests.lokasi_penempatan_cabang')
-                ->where('personnel_requests.is_active', true)
-                ->where('personnel_requests.is_reject', false)
-                ->where('personnel_requests.is_publish', true)
-                ->where('no_request', $request->no_request)
-                ->select([
-                    'personnel_requests.id',
-                    'no_request',
-                    'divisi',
-                    'jumlah_personal',
-                    'lokasi_penempatan_cabang',
-                    'pengalaman_kerja',
-                    'pendidikan',
-                    'gender',
-                    'requirement',
-                    'prioritas',
-                    'divisi_alias',
-                    'grade_master_karyawan',
-                    'personnel_requests.created_by',
-                    'personnel_requests.gambar',
-                    'use_user_assessment',
-                    'md.nama_divisi as divisi_name',
-                    'mc.nama_cabang as placement',
-                ])
-                ->first();
+            $data = app(PublicRecruitmentOpenJobService::class)->getOpenJob((string) $request->no_request);
 
             if (!$data) {
                 return response()->json(['message' => 'Data job tidak ditemukan.'], 404);
             }
-
-            app(PersonnelRequestImageService::class)->appendToJob($data);
-            app(UserAssessmentCategoryService::class)->appendLegacyConfigFields($data);
-            $data->makeHidden(['divisi', 'lokasi_penempatan_cabang', 'created_by']);
 
             return response()->json($data, 200);
         } catch (\Exception $th) {
