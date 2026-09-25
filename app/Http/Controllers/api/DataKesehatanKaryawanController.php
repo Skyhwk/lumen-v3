@@ -274,7 +274,7 @@ class DataKesehatanKaryawanController extends Controller
         $item->gula_darah_label = $this->formatOptionalNumber($item->gula_darah);
         $item->asam_urat_label = $this->formatOptionalNumber($item->asam_urat);
         $item->kolesterol_label = $this->formatOptionalNumber($item->kolesterol);
-        $item->keluhan = $item->keluhan ?: '-';
+        $item->keluhan = EmployeeHealthCheck::formatKeluhanDisplay($item->keluhan);
         $item->skk_number = $item->skk_number ?: '-';
         $item->tensi_label = EmployeeHealthCheck::formatTensiLabel(
             $item->tensi_sistolik ?? null,
