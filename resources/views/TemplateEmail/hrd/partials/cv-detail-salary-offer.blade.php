@@ -91,17 +91,11 @@
         'Gender' => $data->jenis_kelamin ?? $data->gender ?? '-',
         'Email' => $data->email ?? '-',
         'Status Tempat Tinggal' => $profile->status_tempat_tinggal ?? '-',
-        'Kontak Darurat 1' => !empty($profile->nama_kontak_darurat)
-            ? ($profile->nama_kontak_darurat . ' (' . ($profile->hubungan_kontak_darurat ?? 'Kontak') . ') - ' . ($profile->no_telepon_darurat ?? '-'))
-            : '-',
-        'Kontak Darurat 2' => !empty($profile->nama_kontak_darurat_2)
-            ? ($profile->nama_kontak_darurat_2 . ' (' . ($profile->hubungan_kontak_darurat_2 ?? 'Kontak') . ') - ' . ($profile->no_telepon_darurat_2 ?? '-'))
-            : '-',
     ];
 @endphp
 
 <p style="{{ $sectionTitle }}">Personal Information</p>
-@include('TemplateEmail.hrd.partials.info-table-salary-offer    ', ['rows' => $personalRows])
+@include('TemplateEmail.hrd.partials.info-table-salary-offer', ['rows' => $personalRows])
 
 @php
     $medical = $medical ?? $data->candidateMedicalInformation ?? null;
@@ -134,6 +128,13 @@
 
 <p style="{{ $sectionTitle }}">Address & Phone</p>
 @include('TemplateEmail.hrd.partials.info-table-salary-offer', ['rows' => $addressRows])
+
+@include('TemplateEmail.hrd.partials.emergency-referensi-rekomendasi', [
+    'data' => $data,
+    'profile' => $profile ?? null,
+    'referensi' => $referensi ?? null,
+    'rekomendasi' => $rekomendasi ?? null,
+])
 
 @if(!empty($pendidikan))
     <p style="{{ $sectionTitle }}">Education</p>
