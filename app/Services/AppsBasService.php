@@ -3846,7 +3846,7 @@ class AppsBasService
 
             $status = 'selesai';
             if (!empty($parameters)) {
-                $parameterBypass = ['Gelombang Elektro', 'N-Propil Asetat (SC)', 'Xylene secara personil sampling (SC)'];
+                $parameterBypass = ['Gelombang Elektro', 'N-Propil Asetat (SC)', 'Xylene secara personil sampling (SC)', 'Psikologi'];
 
                 foreach ($parameters as $parameter) {
                     $paramName = $parameter['parameter']; // Ambil nama parameter untuk mempermudah pengecekan
