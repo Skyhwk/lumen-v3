@@ -115,7 +115,7 @@ class EmployeeHealthCheckDocumentService
         $record->gula_darah_label = $this->formatOptionalNumber($record->gula_darah ?? null);
         $record->asam_urat_label = $this->formatOptionalNumber($record->asam_urat ?? null);
         $record->kolesterol_label = $this->formatOptionalNumber($record->kolesterol ?? null);
-        $record->keluhan = trim((string) ($record->keluhan ?? '')) ?: '-';
+        $record->keluhan = EmployeeHealthCheck::formatKeluhanDisplay($record->keluhan ?? null);
         $record->tensi_label = EmployeeHealthCheck::formatTensiLabel(
             $record->tensi_sistolik ?? null,
             $record->tensi_diastolik ?? null

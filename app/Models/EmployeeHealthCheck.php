@@ -37,6 +37,30 @@ class EmployeeHealthCheck extends Sector
         return self::TENSI_TINGGI;
     }
 
+    public static function normalizeKeluhanInput($keluhan): ?string
+    {
+        $value = trim((string) ($keluhan ?? ''));
+        if ($value === '') {
+            return null;
+        }
+
+        $decoded = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $plainText = trim(preg_replace(
+            '/\s+/u',
+            ' ',
+            strip_tags(str_replace(['&nbsp;', '&#160;'], ' ', $decoded))
+        ));
+
+        return $plainText === '' ? null : $value;
+    }
+
+    public static function formatKeluhanDisplay($keluhan): string
+    {
+        $normalized = self::normalizeKeluhanInput($keluhan);
+
+        return $normalized === null ? '-' : $normalized;
+    }
+
     public static function formatTensiLabel($sistolik, $diastolik): string
     {
         if ($sistolik === null || $diastolik === null) {

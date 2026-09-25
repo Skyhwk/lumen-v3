@@ -235,7 +235,13 @@
         <tr>
             <td class="label">Keluhan</td>
             <td class="sep">:</td>
-            <td>{{ $record->keluhan ?? '-' }}</td>
+            <td>
+                @if (!empty($record->keluhan) && $record->keluhan !== '-')
+                    {!! $record->keluhan !!}
+                @else
+                    -
+                @endif
+            </td>
         </tr>
     </table>
 
