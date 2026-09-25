@@ -85,6 +85,10 @@ return [
             '9' => "The time period for document production is 2-3 months, and the customer is obligated to complete the documents before sampling is carried out.",
             '10' => "Costs include :costs.",
             '11' => "The laboratory upholds the principles of independence, impartiality, objectivity, and management of potential conflicts of interest in all testing activities in accordance with applicable policies and procedures.",
+            '12' => "The data required for psychological testing must be received no later than 3 (three) calendar days before sampling is conducted.",
+            '13' => "Completion of the psychological testing questionnaire must be finished no later than 10 (ten) calendar days after the questionnaire link is sent. Filling time extensions may be granted up to 3 (three) times, with a maximum total filling period of 30 (thirty) calendar days from the date the first link was sent. If delays in completion cause the questionnaire link to become inactive and cannot be reactivated, the customer shall bear full responsibility.",
+            '14' => "For genset emission testing, the customer must ensure the genset is ready for operation and functions normally/stably during the test. The genset must be prepared and operated first under its normal operating conditions before testing is performed, to ensure that test conditions accurately represent actual genset operating conditions.",
+            '15' => "Ergonomics testing can only be conducted with the customer's consent for documentation (photos/videos) during the testing process, which is required as part of the implementation and/or documentation of test results.",
         ],
     ],
     'tax' => [
