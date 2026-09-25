@@ -313,12 +313,23 @@ class AppsBasService
 
             // Check persiapan by exact order and date match
 
-            // Cek sampel mana yang masih tidak selesai (is_finished = 0)
-            $unfinishedSamplesList = \App\Models\SampelTidakSelesai::whereIn('no_order', $orderNos)
-                ->where('is_finished', 0)
+            // Cek sampel mana yang masih tidak selesai (is_finished = 0).
+            // Orphan STS yang sudah ada di bas_sampel_selesai tidak dihitung unfinished,
+            // tapi tidak dihapus di sini agar Moment 2 (rewrite) masih terdeteksi di form.
+            $completedSamplesList = BasSampelSelesai::whereIn('no_order', $orderNos)
                 ->pluck('no_sampel')
                 ->unique()
                 ->toArray();
+            $unfinishedSamplesList = array_values(array_diff(
+                \App\Models\SampelTidakSelesai::whereIn('no_order', $orderNos)
+                    ->where(function ($query) {
+                        $query->where('is_finished', 0)->orWhereNull('is_finished');
+                    })
+                    ->pluck('no_sampel')
+                    ->unique()
+                    ->toArray(),
+                $completedSamplesList
+            ));
 
             // Add detail_bas_documents to each item
             foreach ($finalResult as &$item) {
@@ -539,6 +550,8 @@ class AppsBasService
                         if (!$isSelesai) {
                             if ($item->kategori_2 === "1-Air") {
                                 $isSelesai = DataLapanganAir::where('no_sampel', $item->no_sample)->exists();
+                            } else if ($item->kategori_3 === "118-Psikologi") {
+                                $isSelesai = true;
                             } else {
                                 $status_sample = $this->getStatusSampling($item);
                                 $isSelesai = ($status_sample === 'parsial' || $status_sample === 'selesai');
@@ -1155,7 +1168,6 @@ class AppsBasService
                         if (!BasDocumentScope::filename($detailData['filename'])) {
                             throw new \InvalidArgumentException('Filename BAS harus basename PDF yang valid.');
                         }
-                        $existingEmailSentAt = null;
                         $found = false;
                         foreach ($existingDetails as &$detail) {
                             $sameSamples = !empty($detail['no_sampel']) && BasDocumentScope::samples($detail['no_sampel'], $item['no_order']) === $item['expectedNoSampel'];
@@ -1163,14 +1175,19 @@ class AppsBasService
                                 throw new \InvalidArgumentException('Filename sudah digunakan dokumen lain.');
                             }
                             if ($sameSamples) {
-                                if (!empty($detail['email_pending']) && empty($detail['email_sent_at'])) {
+                                // Draft diblokir saat email pending; Submit Selesai (Moment 2) boleh rewrite
+                                // agar PDF + STS/BSS ikut diperbarui sebelum email.
+                                if (
+                                    !$request->boolean('is_final')
+                                    && !empty($detail['email_pending'])
+                                    && empty($detail['email_sent_at'])
+                                ) {
                                     throw new \InvalidArgumentException('Kirim email dokumen pending sebelum mengubah BAS.');
                                 }
-                                $existingEmailSentAt = $detail['email_sent_at'] ?? null;
                                 if ($request->boolean('is_final')) {
-                                    $alreadyEmailed = !empty($existingEmailSentAt);
-                                    $detailData['email_pending'] = !$alreadyEmailed;
-                                    $detailData['email_sent_at'] = $alreadyEmailed ? $existingEmailSentAt : null;
+                                    // Rewrite Moment 2: wajib email ulang PDF terbaru.
+                                    $detailData['email_pending'] = true;
+                                    $detailData['email_sent_at'] = null;
                                 } else {
                                     $detailData['email_pending'] = (bool) ($detail['email_pending'] ?? false);
                                     $detailData['email_sent_at'] = $detail['email_sent_at'] ?? null;
@@ -1862,6 +1879,8 @@ class AppsBasService
                     if ($vv->kategori_2 === "1-Air") {
                         $exists = DataLapanganAir::where('no_sampel', $vv->no_sampel)->exists();
                         $status[$vv->no_sampel] = $exists ? 'selesai' : 'belum selesai';
+                    } else if ($vv->kategori_3 === "118-Psikologi") {
+                        $status[$vv->no_sampel] = 'selesai';
                     } else {
                         $status_sample = $this->getStatusSampling($vv);
                         $status[$vv->no_sampel] = ($status_sample === 'parsial' || $status_sample === 'selesai') ? 'selesai' : 'belum selesai';
@@ -3660,6 +3679,8 @@ class AppsBasService
             $data = DataLapanganSwab::where('no_sampel', $no_sample)->get();
         } else if ($kategori_2 === "4-Udara" && $kategori_3 === "53-Ergonomi") {
             $data = DataLapanganErgonomi::where('no_sampel', $no_sample)->get();
+        } else if ($kategori_2 === "4-Udara" && $kategori_3 === "118-Psikologi") {
+            $data = DataLapanganPsikologi::where('no_sampel', $no_sample)->get();
         } else if ($kategori_2 === "5-Emisi" && $kategori_3 === "34-Emisi Sumber Tidak Bergerak") {
             $data = DataLapanganEmisiCerobong::where('no_sampel', $no_sample)->get()
                 ?? DataLapanganIsokinetikHasil::where('no_sampel', $no_sample)->get();
