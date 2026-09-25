@@ -20,7 +20,7 @@ class ItSupportAssetController extends Controller
         }
     }
 
-    public function index()
+    public function index(Request $request)
     {
         $this->ready();
         $assets = DB::table('it_support_assets as a')
@@ -30,6 +30,9 @@ class ItSupportAssetController extends Controller
             ->leftJoin('master_karyawan as k', 'k.id', '=', 'a.assigned_karyawan_id')
             ->select('a.*', 'l.name as location_name', DB::raw("CONCAT_WS(' / ', b.name, f.name, l.name) as location_path"), 'k.nama_lengkap as assigned_name')
             ->orderByDesc('a.updated_at');
+        if ($request->filled('location_id')) {
+            $assets->where('a.location_id', (int) $request->location_id);
+        }
         return Datatables::of($assets)->editColumn('specifications', function ($row) {
             return json_decode($row->specifications ?: '{}', true) ?: [];
         })->editColumn('map_position', function ($row) {
