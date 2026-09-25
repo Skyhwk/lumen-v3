@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\SalaryAdjustmentRequest;
+use App\Services\EmployeeAdjustmentTypeRegistry;
 use App\Services\SalaryAdjustmentEmailService;
 use App\Services\SalaryAdjustmentEvaluationService;
 use App\Services\SalaryAdjustmentLogService;
@@ -108,6 +109,31 @@ class PenyesuaianGajiFinanceController extends Controller
             $record->adjustment_tunjangan = $adjustmentTunjangan > 0 ? $adjustmentTunjangan : null;
             $record->requested_gaji_pokok = $currentGaji + max(0, $adjustmentGaji);
             $record->requested_tunjangan_kerja = $currentTunjangan + max(0, $adjustmentTunjangan);
+
+            $periodChange = ['changed' => false];
+            if ($request->has('bulan_efektif') && !empty($record->bulan_efektif)) {
+                $requestedPeriod = SalaryAdjustmentEvaluationService::normalizeBulanEfektif($request->bulan_efektif);
+                if ($requestedPeriod === null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Format periode mulai berlaku tidak valid (YYYY-MM)',
+                    ], 422);
+                }
+
+                $periodError = SalaryAdjustmentEvaluationService::validateBulanEfektif($requestedPeriod);
+                if ($periodError !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $periodError,
+                    ], 422);
+                }
+
+                $periodChange = SalaryAdjustmentEvaluationService::applyFinanceEffectivePeriodChange(
+                    $record,
+                    $requestedPeriod
+                );
+            }
+
             $record->finance_final_adjustment_notes = $financeNotes !== '' ? $financeNotes : null;
             $record->status = SalaryAdjustmentWorkflowService::STATUS_WAITING_APPROVAL_IBU;
             $record->finance_approved_by = $this->karyawan;
@@ -126,8 +152,15 @@ class PenyesuaianGajiFinanceController extends Controller
                 || round($hrdSnapshot['adjustment_tunjangan'], 2) !== round($financeSnapshot['adjustment_tunjangan'], 2)
                 || round($hrdSnapshot['requested_gaji_pokok'], 2) !== round($financeSnapshot['requested_gaji_pokok'], 2)
                 || round($hrdSnapshot['requested_tunjangan_kerja'], 2) !== round($financeSnapshot['requested_tunjangan_kerja'], 2);
+            $changedByFinancePeriod = !empty($periodChange['changed']);
             if ($changedByFinance && $notes === 'Finance menyetujui permohonan penyesuaian gaji') {
                 $notes = 'Finance menyetujui dengan penyesuaian nominal kebijakan keuangan';
+            }
+            if ($changedByFinancePeriod && !$changedByFinance && $notes === 'Finance menyetujui permohonan penyesuaian gaji') {
+                $notes = 'Finance menyetujui dengan penyesuaian periode berlaku';
+            }
+            if ($changedByFinance && $changedByFinancePeriod && str_contains($notes, 'penyesuaian nominal')) {
+                $notes = 'Finance menyetujui dengan penyesuaian nominal dan periode berlaku';
             }
 
             SalaryAdjustmentLogService::log(
@@ -142,6 +175,8 @@ class PenyesuaianGajiFinanceController extends Controller
                     'hrd_final' => $hrdSnapshot,
                     'finance_final' => $financeSnapshot,
                     'changed_by_finance' => $changedByFinance,
+                    'period' => $periodChange,
+                    'changed_by_finance_period' => $changedByFinancePeriod,
                     'finance_final_adjustment_notes' => $financeNotes !== '' ? $financeNotes : null,
                 ]
             );
@@ -157,8 +192,8 @@ class PenyesuaianGajiFinanceController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => $emailSent
-                    ? 'Permohonan berhasil disetujui Finance. Email Persetujuan Approval terkirim.'
-                    : 'Permohonan berhasil disetujui Finance. Email Persetujuan Approval gagal dikirim — periksa EMAIL_DIREKTUR_IBU.',
+                    ? 'Permohonan berhasil disetujui Finance. Email Waiting Approval terkirim.'
+                    : 'Permohonan berhasil disetujui Finance. Email Waiting Approval gagal dikirim — periksa konfigurasi email Waiting Approval.',
                 'email_sent' => $emailSent,
             ]);
         } catch (\Throwable $e) {
@@ -250,8 +285,11 @@ class PenyesuaianGajiFinanceController extends Controller
             ->select(
                 'sar.id',
                 'sar.no_document',
+                'sar.request_type',
                 'sar.employee_id',
                 'sar.jabatan',
+                'sar.current_gaji_pokok',
+                'sar.current_tunjangan_kerja',
                 'sar.adjustment_gaji_pokok',
                 'sar.adjustment_tunjangan',
                 'sar.requested_gaji_pokok',
@@ -277,6 +315,11 @@ class PenyesuaianGajiFinanceController extends Controller
         }
 
         return Datatables::of($query)
+            ->addColumn('request_type_label', function ($row) {
+                return EmployeeAdjustmentTypeRegistry::label(
+                    $row->request_type ?? EmployeeAdjustmentTypeRegistry::TYPE_PENYESUAIAN_GAJI
+                );
+            })
             ->addColumn('status_label', function ($row) {
                 if ($row->finance_approved_at) {
                     return 'Disetujui Finance';
@@ -297,8 +340,39 @@ class PenyesuaianGajiFinanceController extends Controller
             ->filterColumn('manager_nama', function ($query, $keyword) {
                 $query->where('manager.nama_lengkap', 'like', "%{$keyword}%");
             })
+            ->filterColumn('request_type_label', function ($query, $keyword) {
+                $query->where(function ($sub) use ($keyword) {
+                    $sub->where('sar.request_type', 'like', "%{$keyword}%");
+                    foreach (EmployeeAdjustmentTypeRegistry::all() as $type => $definition) {
+                        if (stripos($definition['label'], $keyword) !== false) {
+                            $sub->orWhere('sar.request_type', $type);
+                        }
+                    }
+                });
+            })
+            ->filterColumn('jabatan', function ($query, $keyword) {
+                $query->where('sar.jabatan', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('current_gaji_pokok', function ($query, $keyword) {
+                $query->where('sar.current_gaji_pokok', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('current_tunjangan_kerja', function ($query, $keyword) {
+                $query->where('sar.current_tunjangan_kerja', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('requested_gaji_pokok', function ($query, $keyword) {
+                $query->where('sar.requested_gaji_pokok', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('requested_tunjangan_kerja', function ($query, $keyword) {
+                $query->where('sar.requested_tunjangan_kerja', 'like', "%{$keyword}%");
+            })
             ->filterColumn('adjustment_gaji_pokok', function ($query, $keyword) {
                 $query->where('sar.adjustment_gaji_pokok', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('adjustment_tunjangan', function ($query, $keyword) {
+                $query->where('sar.adjustment_tunjangan', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('bulan_efektif', function ($query, $keyword) {
+                $query->where('sar.bulan_efektif', 'like', "%{$keyword}%");
             })
             ->filterColumn('kpi_score', function ($query, $keyword) {
                 $query->where('sk.total_score_avg', 'like', "%{$keyword}%");

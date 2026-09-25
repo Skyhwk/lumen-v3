@@ -205,7 +205,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                 ->where('no_sampel', $request->no_sampel)
                 ->where('is_approved', 1)
                 ->where('status', 0)
-                ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+                ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active', 'note')
                 ->addSelect(DB::raw("'lingkungan' as data_type"))
                 ->get();
             $subkontrak = Subkontrak::with(['ws_udara'])

@@ -57,6 +57,7 @@ class Kernel extends ConsoleKernel
         Commands\SendPendingAssessmentInvitations::class,
         Commands\RejectOverdueAssessment::class,
         Commands\RollbackOverdueAssessment::class,
+        Commands\ApplyScheduledEmployeeAdjustments::class,
         Commands\CustomerServiceAutoCloseCommand::class,
         Commands\CustomerServiceAutoArchiveCommand::class,
         // Commands\LhpBackfillCommand::class,
@@ -83,6 +84,10 @@ class Kernel extends ConsoleKernel
         //     ->dailyAt('23:00')
         //     ->timezone('Asia/Jakarta')
         //     ->withoutOverlapping();
+        $schedule->command('employee-adjustment:apply-scheduled')
+            ->dailyAt('07:00')
+            ->timezone('Asia/Jakarta')
+            ->withoutOverlapping(30);
     }
 
     protected function commands()

@@ -207,6 +207,27 @@ class PortalSdController extends Controller
         //cek apakah sudah pernah order sebelumnya
     }
 
+    private function nextSampelDiantarDocument(): string
+    {
+        $bulanRomawi = [
+            1 => 'I', 2 => 'II', 3 => 'III', 4 => 'IV', 5 => 'V', 6 => 'VI',
+            7 => 'VII', 8 => 'VIII', 9 => 'IX', 10 => 'X', 11 => 'XI', 12 => 'XII',
+        ];
+        $prefix = 'ISL/TSD';
+        $year = date('y');
+        $month = $bulanRomawi[(int) date('n')];
+        $series = $prefix . '/' . $year . '-';
+
+        $lastNumber = SampelDiantar::where('no_document', 'like', $series . '%')
+            ->lockForUpdate()
+            ->selectRaw('MAX(CAST(RIGHT(no_document, 6) AS UNSIGNED)) as last_number')
+            ->value('last_number');
+
+        $newNumber = str_pad(((int) $lastNumber) + 1, 6, '0', STR_PAD_LEFT);
+
+        return "{$prefix}/{$year}-{$month}/{$newNumber}";
+    }
+
     public function storeHeader(Request $request)
     {
         
@@ -221,32 +242,6 @@ class PortalSdController extends Controller
             if ($chek == null) {
                 $data = new SampelDiantar;
 
-                $bulanRomawi = [
-                    1 => 'I',
-                    2 => 'II',
-                    3 => 'III',
-                    4 => 'IV',
-                    5 => 'V',
-                    6 => 'VI',
-                    7 => 'VII',
-                    8 => 'VIII',
-                    9 => 'IX',
-                    10 => 'X',
-                    11 => 'XI',
-                    12 => 'XII',
-                ];
-
-                $prefix = 'ISL/TSD';
-                $year = date('y'); // 2 digit tahun
-                $month = $bulanRomawi[intval(date('n'))]; // bulan dalam Romawi
-                $lastDocument = SampelDiantar::latest('no_document')->first();
-
-                if ($lastDocument) {
-                    $lastNumber = intval(substr($lastDocument->no_document, -6));
-                    $newNumber = str_pad($lastNumber + 1, 6, '0', STR_PAD_LEFT);
-                } else {
-                    $newNumber = '000001';
-                }
                 $data->no_quotation = $request->no_quotation;
                 $data->no_order = $request->no_order;
                 $data->nama_perusahaan = $request->nama_perusahaan;
@@ -313,7 +308,7 @@ class PortalSdController extends Controller
                 // $data->nomor_pic = $request->nomor_pic;
                 // $data->ekspedisi = $request->ekspedisi;
 
-                $data->no_document = "{$prefix}/{$year}-{$month}/{$newNumber}";
+                $data->no_document = $this->nextSampelDiantarDocument();
                 $data->created_at = DATE('Y-m-d H:i:s');
                 $data->save();
                 $getId = $data->id;
@@ -391,36 +386,10 @@ class PortalSdController extends Controller
             if ($chek == null) {
                 $data = new SampelDiantar;
 
-                $bulanRomawi = [
-                    1 => 'I',
-                    2 => 'II',
-                    3 => 'III',
-                    4 => 'IV',
-                    5 => 'V',
-                    6 => 'VI',
-                    7 => 'VII',
-                    8 => 'VIII',
-                    9 => 'IX',
-                    10 => 'X',
-                    11 => 'XI',
-                    12 => 'XII',
-                ];
-
-                $prefix = 'ISL/TSD';
-                $year = date('y'); // 2 digit tahun
-                $month = $bulanRomawi[intval(date('n'))]; // bulan dalam Romawi
-                $lastDocument = SampelDiantar::latest('no_document')->first();
-
-                if ($lastDocument) {
-                    $lastNumber = intval(substr($lastDocument->no_document, -6));
-                    $newNumber = str_pad($lastNumber + 1, 6, '0', STR_PAD_LEFT);
-                } else {
-                    $newNumber = '000001';
-                }
                 $data->no_quotation = $request->no_document;
                 $data->no_order = $request->no_order;
                 $data->nama_perusahaan = $request->nama_perusahaan;
-                $data->no_document = "{$prefix}/{$year}-{$month}/{$newNumber}";
+                $data->no_document = $this->nextSampelDiantarDocument();
                 $data->created_at = DATE('Y-m-d H:i:s');
                 $data->save();
                 $getId = $data;
