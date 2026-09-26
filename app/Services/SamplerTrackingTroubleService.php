@@ -185,6 +185,10 @@ class SamplerTrackingTroubleService
                 $q->whereNull('s.nama_perusahaan')
                     ->orWhereRaw('LOWER(TRIM(s.nama_perusahaan)) != ?', ['cuti']);
             })
+            ->whereRaw("NOT (
+                (s.no_quotation IS NULL OR TRIM(COALESCE(s.no_quotation, '')) = '')
+                AND (s.no_order IS NULL OR TRIM(COALESCE(s.no_order, '')) = '')
+            )")
             ->whereDate('s.tanggal_sampling', '>=', $startDate)->whereDate('s.tanggal_sampling', '<=', $day)
             ->when($samplerIds, function ($query) use ($samplerIds) { $query->whereIn('m.sampler_id', $samplerIds); })
             ->whereNotNull('m.sampler_id')
