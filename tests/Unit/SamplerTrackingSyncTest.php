@@ -210,6 +210,7 @@ class SamplerTrackingSyncTest extends TestCase
         foreach ($cases as $index => [$date, $duration, $samplerId, $complete]) {
             $session = SamplerTrackingSession::create([
                 'team_key' => 'collect-' . $index, 'tanggal_sampling' => $date, 'is_active' => true,
+                'no_quotation' => 'Q-COLLECT-' . $index,
             ]);
             $member = SamplerTrackingMember::create([
                 'sampler_tracking_session_id' => $session->id, 'sampler_id' => $samplerId,
@@ -266,6 +267,7 @@ class SamplerTrackingSyncTest extends TestCase
             $session = SamplerTrackingSession::create([
                 'team_key' => 'mixed-leave-' . $index, 'tanggal_sampling' => '2026-09-21',
                 'nama_perusahaan' => $name, 'is_active' => true,
+                'no_quotation' => $name === 'Client' ? 'Q-MIXED-CLIENT' : null,
             ]);
             SamplerTrackingMember::create([
                 'sampler_tracking_session_id' => $session->id, 'sampler_id' => 10,
@@ -281,7 +283,7 @@ class SamplerTrackingSyncTest extends TestCase
     {
         $session = SamplerTrackingSession::create([
             'team_key' => $key, 'tanggal_sampling' => $date, 'nama_perusahaan' => 'Client ' . $key,
-            'is_active' => true,
+            'no_quotation' => 'Q-' . $key, 'is_active' => true,
         ]);
         $member = SamplerTrackingMember::create([
             'sampler_tracking_session_id' => $session->id, 'sampler_id' => 10,
