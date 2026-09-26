@@ -716,6 +716,151 @@ class SamplerTrackingSyncTest extends TestCase
     }
 
 
+    public function testBlockedTabRowIgnoresTeammateReturnWhenPinningTroubleSampler(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-24 10:00:00', 'Asia/Jakarta'));
+        $session = SamplerTrackingSession::create([
+            'team_key' => 'enseval-team',
+            'tanggal_sampling' => '2026-09-23',
+            'nama_perusahaan' => 'ENSEVAL PUTERA MEGATRADING, PT',
+            'jam_mulai' => '08:00:00',
+            'jam_selesai' => '10:00:00',
+            'is_active' => true,
+        ]);
+        $erik = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'Erik Suhendar',
+            'effective_duration' => 1,
+            'is_active' => true,
+        ]);
+        $dhanu = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_id' => 20,
+            'sampler_name' => 'Dhanuarta Dwika Apriansyah',
+            'effective_duration' => 1,
+            'is_active' => true,
+        ]);
+        $connection = $this->db->getConnection('mysql');
+        foreach (['departure', 'checkin', 'checkout'] as $type) {
+            $connection->table('sampler_tracking_events')->insert([
+                'sampler_tracking_session_id' => $session->id,
+                'sampler_tracking_member_id' => $erik->id,
+                'event_type' => $type,
+                'event_at' => '2026-09-23 09:00:00',
+            ]);
+            $connection->table('sampler_tracking_events')->insert([
+                'sampler_tracking_session_id' => $session->id,
+                'sampler_tracking_member_id' => $dhanu->id,
+                'event_type' => $type,
+                'event_at' => '2026-09-23 09:30:00',
+            ]);
+        }
+        $connection->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_tracking_member_id' => $erik->id,
+            'event_type' => 'return',
+            'event_at' => '2026-09-24 10:54:00',
+        ]);
+        $troubleId = $connection->table('sampler_tracking_troubles')->insertGetId([
+            'tracking_session_id' => $session->id,
+            'sampler_id' => 20,
+            'activity_date' => '2026-09-23',
+            'is_clear' => 0,
+        ]);
+        $trouble = $connection->table('sampler_tracking_troubles')->find($troubleId);
+        $reflection = new \ReflectionClass(\App\Http\Controllers\api\SamplerTrackingController::class);
+        $controller = $reflection->newInstanceWithoutConstructor();
+        $serviceProperty = $reflection->getProperty('service');
+        $serviceProperty->setAccessible(true);
+        $serviceProperty->setValue($controller, $this->service);
+        $attach = $reflection->getMethod('attachTroubleToTrackingRows');
+        $attach->setAccessible(true);
+        $sampler = (object) ['id' => 20, 'nama_lengkap' => 'Dhanuarta Dwika Apriansyah'];
+        $attached = $attach->invoke($controller, $trouble, $sampler, []);
+        $consolidate = $reflection->getMethod('consolidateBlockedTeamRows');
+        $consolidate->setAccessible(true);
+        $rows = $consolidate->invoke($controller, $attached);
+        $this->assertCount(1, $rows);
+        $row = $rows->first();
+        $this->assertSame('Dhanuarta Dwika Apriansyah', $row['sampler']);
+        $this->assertSame('overdue', $row['tracking_status']);
+        $this->assertStringNotContainsString('return', strtolower($row['last_event']));
+    }
+
+
+    public function testBlockedTabMergesSameSessionWhileWholeTeamStillOut(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-24 10:00:00', 'Asia/Jakarta'));
+        $session = SamplerTrackingSession::create([
+            'team_key' => 'sesaat-duo',
+            'tanggal_sampling' => '2026-09-23',
+            'nama_perusahaan' => 'PT Contoh Tim',
+            'is_active' => true,
+        ]);
+        $first = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'Erik Suhendar',
+            'effective_duration' => 0,
+            'is_active' => true,
+        ]);
+        $second = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_id' => 20,
+            'sampler_name' => 'Dhanuarta Dwika Apriansyah',
+            'effective_duration' => 0,
+            'is_active' => true,
+        ]);
+        foreach ([$first, $second] as $member) {
+            foreach (['departure', 'checkin', 'checkout'] as $type) {
+                $this->db->getConnection('mysql')->table('sampler_tracking_events')->insert([
+                    'sampler_tracking_session_id' => $session->id,
+                    'sampler_tracking_member_id' => $member->id,
+                    'event_type' => $type,
+                    'event_at' => '2026-09-23 09:00:00',
+                ]);
+            }
+        }
+        $connection = $this->db->getConnection('mysql');
+        $ids = [];
+        foreach ([10, 20] as $samplerId) {
+            $ids[] = $connection->table('sampler_tracking_troubles')->insertGetId([
+                'tracking_session_id' => $session->id,
+                'sampler_id' => $samplerId,
+                'activity_date' => '2026-09-23',
+                'is_clear' => 0,
+            ]);
+        }
+        $reflection = new \ReflectionClass(\App\Http\Controllers\api\SamplerTrackingController::class);
+        $controller = $reflection->newInstanceWithoutConstructor();
+        $serviceProperty = $reflection->getProperty('service');
+        $serviceProperty->setAccessible(true);
+        $serviceProperty->setValue($controller, $this->service);
+        $attach = $reflection->getMethod('attachTroubleToTrackingRows');
+        $attach->setAccessible(true);
+        $consolidate = $reflection->getMethod('consolidateBlockedTeamRows');
+        $consolidate->setAccessible(true);
+        $rows = collect();
+        foreach ($ids as $troubleId) {
+            $trouble = $connection->table('sampler_tracking_troubles')->find($troubleId);
+            $samplerId = (int) $trouble->sampler_id;
+            $name = $samplerId === 10 ? 'Erik Suhendar' : 'Dhanuarta Dwika Apriansyah';
+            $rows = $rows->merge($attach->invoke(
+                $controller,
+                $trouble,
+                (object) ['id' => $samplerId, 'nama_lengkap' => $name],
+                []
+            ));
+        }
+        $merged = $consolidate->invoke($controller, $rows);
+        $this->assertCount(1, $merged);
+        $this->assertSame('Erik Suhendar, Dhanuarta Dwika Apriansyah', $merged->first()['sampler']);
+        $this->assertSame('overdue', $merged->first()['tracking_status']);
+        $this->assertSame('trouble-session-' . $session->id, $merged->first()['row_id']);
+    }
+
+
     public function testBlockedRowsAndUnblockAreScopedToSession(): void
     {
         \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-22 10:00:00', 'Asia/Jakarta'));
@@ -734,10 +879,40 @@ class SamplerTrackingSyncTest extends TestCase
         $method = $reflection->getMethod('uniqueTrackingRows');
         $method->setAccessible(true);
         $rows = collect([
-            ['row_id' => 'trouble-' . $ids[0], 'tracking_session_id' => $first->id, 'trouble_id' => $ids[0], 'sampler' => 'Agung, Amru'],
-            ['row_id' => 'trouble-' . $ids[1], 'tracking_session_id' => $first->id, 'trouble_id' => $ids[1], 'sampler' => 'Agung, Amru'],
-            ['row_id' => 'trouble-' . $ids[2], 'tracking_session_id' => $second->id, 'trouble_id' => $ids[2], 'sampler' => 'Agung'],
+            [
+                'row_id' => 'trouble-' . $ids[0],
+                'tracking_session_id' => $first->id,
+                'trouble_id' => $ids[0],
+                'tanggal_sampling' => '2026-09-21',
+                'sampler' => 'Agung',
+                'members' => [],
+                'events' => [],
+                'trouble' => ['sampler_id' => 10, 'sampler_name' => 'Agung'],
+            ],
+            [
+                'row_id' => 'trouble-' . $ids[1],
+                'tracking_session_id' => $first->id,
+                'trouble_id' => $ids[1],
+                'tanggal_sampling' => '2026-09-21',
+                'sampler' => 'Amru',
+                'members' => [],
+                'events' => [],
+                'trouble' => ['sampler_id' => 20, 'sampler_name' => 'Amru'],
+            ],
+            [
+                'row_id' => 'trouble-' . $ids[2],
+                'tracking_session_id' => $second->id,
+                'trouble_id' => $ids[2],
+                'tanggal_sampling' => '2026-09-21',
+                'sampler' => 'Agung',
+                'members' => [],
+                'events' => [],
+                'trouble' => ['sampler_id' => 10, 'sampler_name' => 'Agung'],
+            ],
         ]);
+        $consolidate = $reflection->getMethod('consolidateBlockedTeamRows');
+        $consolidate->setAccessible(true);
+        $rows = $consolidate->invoke($controller, $rows);
         $grouped = $method->invoke($controller, $rows);
         $this->assertCount(2, $grouped);
         $this->assertSame('Agung, Amru', $grouped->first()['sampler']);
@@ -946,10 +1121,10 @@ class SamplerTrackingSyncTest extends TestCase
         $row = $this->schedule();
         $session = $this->prepare('2026-09-17')->first();
         $member = $this->attendance($session);
+        $before = $this->service->snapshotSchedules('Q1');
         $row->is_active = false;
         $row->save();
-        $this->assertSame(1, $this->service->previewSync('2026-09-17')['akan_dinonaktifkan']);
-        $this->service->sync('2026-09-17');
+        $this->service->syncAfterScheduleVoid('Q1', $before);
         $this->assertFalse((bool) $session->fresh()->is_active);
         $this->assertCount(2, $member->events);
         $this->assertCount(0, $this->service->listByDate('2026-09-17'));

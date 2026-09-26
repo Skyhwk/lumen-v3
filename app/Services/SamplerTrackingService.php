@@ -10,6 +10,7 @@ use App\Models\SamplerTrackingEvent;
 use App\Models\SamplerTrackingMember;
 use App\Models\SamplerTrackingSession;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
@@ -267,6 +268,119 @@ class SamplerTrackingService
             $revised[] = $target->no_quotation;
         }
         return array_values(array_unique($revised));
+    }
+
+    /** Call after jadwal di-void; snapshot diambil saat baris jadwal masih aktif. */
+    public function syncAfterScheduleVoid($quotation, $beforeSnapshot)
+    {
+        $before = $beforeSnapshot instanceof Collection
+            ? $beforeSnapshot
+            : collect($beforeSnapshot);
+
+        return $this->syncScheduleEdit($before, $quotation);
+    }
+
+    /**
+     * Penutup void dari menu jadwal: nonaktifkan session yang tersisa bila visit/tanggal
+     * sudah tidak punya jadwal aktif (mis. team_key lama vs baru karena kendaraan null).
+     */
+    public function finalizeMenuJadwalVoid(Collection $voidedRows): void
+    {
+        if ($voidedRows->isEmpty()) {
+            return;
+        }
+
+        DB::transaction(function () use ($voidedRows) {
+            foreach ($voidedRows->groupBy(function ($row) {
+                $date = $row->tanggal ? Carbon::parse($row->tanggal)->toDateString() : 'date-null';
+
+                return ($row->no_quotation ?? '') . '|' . $date;
+            }) as $group) {
+                $first = $group->first();
+                $quotation = $first->no_quotation ?? null;
+                if (!$quotation || !$first->tanggal) {
+                    continue;
+                }
+                $date = Carbon::parse($first->tanggal)->toDateString();
+
+                $stillActiveOnDate = Jadwal::where('no_quotation', $quotation)
+                    ->whereDate('tanggal', $date)
+                    ->where('is_active', true)
+                    ->exists();
+
+                if (!$stillActiveOnDate) {
+                    $this->deactivateAllSessionsForQuotationDate($quotation, $date);
+                    continue;
+                }
+
+                foreach ($group as $row) {
+                    $this->deactivateSessionIfNoActiveJadwalForTeamKey($quotation, $row);
+                }
+            }
+        }, 5);
+    }
+
+    protected function deactivateAllSessionsForQuotationDate(string $quotation, string $date): void
+    {
+        $sessionUpdate = $this->onlyExistingColumns((new SamplerTrackingSession())->getTable(), ['is_active' => false]);
+        if ($sessionUpdate === []) {
+            return;
+        }
+
+        $sessionIds = SamplerTrackingSession::where('no_quotation', $quotation)
+            ->whereDate('tanggal_sampling', $date)
+            ->where('is_active', true)
+            ->pluck('id');
+
+        if ($sessionIds->isEmpty()) {
+            return;
+        }
+
+        SamplerTrackingSession::whereIn('id', $sessionIds)->update($sessionUpdate);
+
+        $memberUpdate = $this->onlyExistingColumns((new SamplerTrackingMember())->getTable(), ['is_active' => false]);
+        if ($memberUpdate !== []) {
+            SamplerTrackingMember::whereIn('sampler_tracking_session_id', $sessionIds)->update($memberUpdate);
+        }
+    }
+
+    protected function deactivateSessionIfNoActiveJadwalForTeamKey(string $quotation, $row): void
+    {
+        $teamKey = $this->makeTeamKey($row);
+        $legacyKey = $this->makeLegacyTeamKey($row);
+        $visit = $this->visitIdentity($row);
+        $date = Carbon::parse($row->tanggal)->toDateString();
+
+        $stillActiveForTeam = Jadwal::where('no_quotation', $quotation)
+            ->where('is_active', true)
+            ->get()
+            ->contains(function ($jadwal) use ($teamKey) {
+                return $this->makeTeamKey($jadwal) === $teamKey;
+            });
+
+        if ($stillActiveForTeam) {
+            return;
+        }
+
+        $sessions = SamplerTrackingSession::where('no_quotation', $quotation)
+            ->whereDate('tanggal_sampling', $date)
+            ->where('is_active', true)
+            ->get()
+            ->filter(function ($session) use ($teamKey, $legacyKey, $visit) {
+                return $session->team_key === $teamKey
+                    || $session->team_key === $legacyKey
+                    || $this->visitIdentity($session) === $visit;
+            });
+
+        foreach ($sessions as $session) {
+            $session->fill($this->onlyExistingColumns($session->getTable(), ['is_active' => false]));
+            $session->save();
+
+            $memberUpdate = $this->onlyExistingColumns((new SamplerTrackingMember())->getTable(), ['is_active' => false]);
+            if ($memberUpdate !== []) {
+                SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)->update($memberUpdate);
+            }
+        }
     }
 
     /** Call after the schedule transaction commits, using its pre-edit snapshot. */

@@ -380,7 +380,7 @@ class SamplerTrackingController extends Controller
             return collect([$this->syntheticTroubleRow($trouble, $samplerName, $troubleObj)]);
         }
 
-        return $trackingRows->map(function ($row) use ($trouble, $troubleObj, $samplerName, $troubleSessionId) {
+        return $trackingRows->map(function ($row) use ($trouble, $troubleObj, $samplerName, $samplerId, $troubleSessionId) {
             $sessionIds = collect($row['sessions'] ?? [])
                 ->map(function ($session) {
                     return is_object($session) ? ($session->id ?? null) : ($session['id'] ?? null);
@@ -393,18 +393,246 @@ class SamplerTrackingController extends Controller
                 ->values()
                 ->all();
 
-            $troubleObj['sampler_name'] = $row['sampler'] ?? $samplerName;
+            $troubleObj['sampler_id'] = $samplerId;
+            $troubleObj['sampler_name'] = $samplerName;
             $troubleObj['session_id'] = $troubleSessionId ?: ($sessionIds[0] ?? null);
             $troubleObj['session_ids'] = $troubleSessionId ? [(int) $troubleSessionId] : $sessionIds;
             $row['trouble'] = $troubleObj;
             $row['trouble_id'] = $trouble->id;
             $row['tracking_session_id'] = $trouble->tracking_session_id;
-            $row['row_id'] = 'trouble-session-' . $trouble->tracking_session_id;
+            $row['row_id'] = 'trouble-' . $trouble->id;
             $row['session_id'] = $troubleObj['session_id'];
             $row['session_ids'] = $troubleObj['session_ids'];
 
             return $row;
         });
+    }
+
+    /**
+     * Satu session: gabung seluruh tim jika semua yang kendala belum pulang;
+     * jika ada rekan yang sudah pulang, tampilkan hanya sampler yang masih belum pulang.
+     */
+    protected function consolidateBlockedTeamRows($rows)
+    {
+        $rows = collect($rows);
+        $withoutSession = $rows->filter(function ($row) {
+            return empty($row['tracking_session_id']);
+        })->values();
+
+        $grouped = $rows->filter(function ($row) {
+            return !empty($row['tracking_session_id']);
+        })->groupBy(function ($row) {
+            $date = $row['tanggal_sampling'] ?? '-';
+            try {
+                $date = Carbon::parse($date)->toDateString();
+            } catch (\Exception $exception) {
+                // keep raw date token for grouping
+            }
+
+            return (string) $row['tracking_session_id'] . '|' . $date;
+        });
+
+        $merged = $grouped->map(function ($groupRows) {
+            return $this->mergeBlockedTeamGroup($groupRows);
+        })->filter()->values();
+
+        return $withoutSession->concat($merged)->values();
+    }
+
+    protected function mergeBlockedTeamGroup($groupRows)
+    {
+        $groupRows = collect($groupRows);
+        $baseRow = $groupRows->sortByDesc(function ($row) {
+            return count($row['members'] ?? []);
+        })->first();
+
+        $troubleSamplerIds = $groupRows->map(function ($row) {
+            return $row['trouble']['sampler_id'] ?? null;
+        })->filter()->unique()->values();
+
+        $pendingIds = $troubleSamplerIds->filter(function ($samplerId) use ($baseRow) {
+            return !$this->blockedSamplerHasReturn($baseRow, $samplerId);
+        })->values();
+
+        if ($pendingIds->isEmpty()) {
+            return null;
+        }
+
+        $samplerNames = $pendingIds->map(function ($samplerId) use ($groupRows, $baseRow) {
+            return $this->blockedSamplerDisplayName($samplerId, $groupRows, $baseRow);
+        })->unique()->values()->all();
+
+        $merged = $this->pinBlockedRowToSamplers($baseRow, $pendingIds->all(), $samplerNames);
+        $sessionId = $baseRow['tracking_session_id'];
+        $pendingTroubleRows = $groupRows->filter(function ($row) use ($pendingIds) {
+            return $pendingIds->contains((string) ($row['trouble']['sampler_id'] ?? ''));
+        })->values();
+
+        $hasReturnedTeammate = collect($baseRow['members'] ?? [])->contains(function ($member) use ($baseRow, $pendingIds) {
+            $samplerId = (string) $this->trackingRowMemberField($member, 'sampler_id');
+            if ($pendingIds->contains($samplerId)) {
+                return false;
+            }
+
+            return $this->blockedSamplerHasReturn($baseRow, $samplerId);
+        });
+
+        $wholeTeamStillOut = !$hasReturnedTeammate
+            && $pendingIds->count() === $troubleSamplerIds->count()
+            && $troubleSamplerIds->count() > 1;
+
+        if ($wholeTeamStillOut) {
+            $merged['row_id'] = 'trouble-session-' . $sessionId;
+            $merged['trouble_id'] = $pendingTroubleRows->pluck('trouble_id')->filter()->min();
+            $merged['trouble_ids'] = $pendingTroubleRows->pluck('trouble_id')->filter()->values()->all();
+            $merged['trouble'] = $pendingTroubleRows->first()['trouble'] ?? $merged['trouble'] ?? null;
+        } else {
+            $primary = $pendingTroubleRows->sortBy('trouble_id')->first();
+            $merged['row_id'] = 'trouble-' . ($primary['trouble_id'] ?? $groupRows->first()['trouble_id']);
+            $merged['trouble_id'] = $primary['trouble_id'] ?? null;
+            $merged['trouble'] = $primary['trouble'] ?? null;
+            unset($merged['trouble_ids']);
+        }
+
+        return $merged;
+    }
+
+    protected function blockedSamplerDisplayName($samplerId, $groupRows, $baseRow)
+    {
+        $fromTrouble = $groupRows->first(function ($row) use ($samplerId) {
+            return (string) ($row['trouble']['sampler_id'] ?? '') === (string) $samplerId;
+        });
+        if ($fromTrouble && !empty($fromTrouble['trouble']['sampler_name'])) {
+            return $fromTrouble['trouble']['sampler_name'];
+        }
+
+        $member = collect($baseRow['members'] ?? [])->first(function ($member) use ($samplerId) {
+            return (string) $this->trackingRowMemberField($member, 'sampler_id') === (string) $samplerId;
+        });
+        if ($member) {
+            $name = $this->trackingRowMemberField($member, 'sampler_name');
+            if ($name) {
+                return $name;
+            }
+        }
+
+        return (string) $samplerId;
+    }
+
+    protected function blockedSamplerHasReturn(array $row, $samplerId)
+    {
+        $members = collect($row['members'] ?? [])->filter(function ($member) use ($samplerId) {
+            return (string) $this->trackingRowMemberField($member, 'sampler_id') === (string) $samplerId;
+        });
+
+        foreach ($members as $member) {
+            if (is_object($member) && $member->relationLoaded('events')
+                && \App\Services\SamplerTrackingActivity::hasEvent($member, 'return')) {
+                return true;
+            }
+        }
+
+        $memberIds = $members->map(function ($member) {
+            return (string) $this->trackingRowMemberField($member, 'id');
+        })->filter()->values();
+
+        return collect($row['events'] ?? [])->contains(function ($event) use ($memberIds) {
+            return $this->trackingRowEventField($event, 'event_type') === 'return'
+                && $memberIds->contains((string) $this->trackingRowEventField($event, 'sampler_tracking_member_id'));
+        });
+    }
+
+    /**
+     * Scope baris blocked ke sampler tertentu; event/status tidak ikut rekan yang sudah pulang.
+     */
+    protected function pinBlockedRowToSamplers(array $row, array $samplerIds, array $samplerNames)
+    {
+        $samplerKeys = collect($samplerIds)->map(function ($id) {
+            return (string) $id;
+        })->values();
+
+        $members = collect($row['members'] ?? [])->filter(function ($member) use ($samplerKeys) {
+            return $samplerKeys->contains((string) $this->trackingRowMemberField($member, 'sampler_id'));
+        })->values();
+
+        $memberIds = $members->map(function ($member) {
+            return (string) $this->trackingRowMemberField($member, 'id');
+        })->filter()->values();
+
+        $events = collect($row['events'] ?? [])->filter(function ($event) use ($memberIds) {
+            $eventMemberId = $this->trackingRowEventField($event, 'sampler_tracking_member_id');
+
+            return $eventMemberId && $memberIds->contains((string) $eventMemberId);
+        })->values();
+
+        if ($events->isEmpty()) {
+            foreach ($members as $member) {
+                if (!is_object($member) || !$member->relationLoaded('events')) {
+                    continue;
+                }
+                $events = $events->merge($member->events ?: collect());
+            }
+            $events = $events->unique(function ($event) {
+                return $this->trackingRowEventField($event, 'id');
+            })->values();
+        }
+
+        $durationValue = $members->map(function ($member) {
+            foreach (['effective_duration', 'durasi_personal', 'duration', 'durasi'] as $field) {
+                $value = $this->trackingRowMemberField($member, $field);
+                if ($value !== null && $value !== '') {
+                    return (int) $value;
+                }
+            }
+
+            return null;
+        })->filter(function ($value) {
+            return $value !== null;
+        })->max();
+
+        $names = collect($samplerNames)->filter()->unique()->values();
+        $row['sampler'] = $names->implode(', ');
+        $row['sampler_list'] = $names->all();
+        $row['samplers'] = $names->all();
+        $row['members'] = $members->values()->all();
+        $row['events'] = $events->values()->all();
+        $row['total_event'] = $events->count();
+
+        $lastEvent = $events->sortByDesc(function ($event) {
+            $at = $this->trackingRowEventField($event, 'event_at');
+
+            return $at ? strtotime($at) : 0;
+        })->first();
+        $row['last_event'] = $lastEvent
+            ? (($this->trackingRowEventField($lastEvent, 'event_type') ?: '-') . ' - ' . ($this->trackingRowEventField($lastEvent, 'event_at') ?: '-'))
+            : '-';
+
+        $row['tracking_status'] = 'overdue';
+        if (!empty($row['trouble']['reopened_at'] ?? null)) {
+            $row['tracking_status'] = $this->service->resolveTrackingStatus(
+                $events,
+                $row['tanggal_sampling'] ?? null,
+                $row['jam_mulai'] ?? null,
+                $row['jam_selesai'] ?? null,
+                $durationValue
+            );
+        }
+
+        if (!empty($row['trouble']) && is_array($row['trouble'])) {
+            $row['trouble']['sampler_name'] = $row['sampler'];
+        }
+
+        return $row;
+    }
+
+    protected function trackingRowMemberField($member, $field)
+    {
+        return is_object($member) ? ($member->$field ?? null) : ($member[$field] ?? null);
+    }
+
+    protected function trackingRowEventField($event, $field)
+    {
+        return is_object($event) ? ($event->$field ?? null) : ($event[$field] ?? null);
     }
 
     protected function syntheticTroubleRow($trouble, $samplerName, $troubleObj)
@@ -466,7 +694,7 @@ class SamplerTrackingController extends Controller
             return strtolower(trim($row['nama_perusahaan'] ?? '')) !== 'cuti';
         })->values();
 
-        return $this->uniqueTrackingRows($rows);
+        return $this->uniqueTrackingRows($this->consolidateBlockedTeamRows($rows));
     }
 
     protected function teamTroubleRows($date = null, $status = 'trouble')
@@ -504,7 +732,7 @@ class SamplerTrackingController extends Controller
             return strtolower(trim($row['nama_perusahaan'] ?? '')) !== 'cuti';
         })->values();
 
-        return $this->uniqueTrackingRows($rows);
+        return $this->uniqueTrackingRows($this->consolidateBlockedTeamRows($rows));
     }
 
     protected function uniqueTrackingRows($rows)
@@ -584,12 +812,12 @@ class SamplerTrackingController extends Controller
 
     protected function trackingMergeKey($row)
     {
-        if (!empty($row['tracking_session_id'])) {
-            return 'trouble-session-' . $row['tracking_session_id'];
-        }
-
         if (!empty($row['row_id'])) {
             return $row['row_id'];
+        }
+
+        if (!empty($row['tracking_session_id'])) {
+            return 'trouble-session-' . $row['tracking_session_id'];
         }
 
         return implode('|', [
