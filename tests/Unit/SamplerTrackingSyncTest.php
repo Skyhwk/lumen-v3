@@ -996,6 +996,54 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertFalse((bool) $archived->fresh()->is_active);
     }
 
+    public function testRescheduleSamplingPlanOnSameOrderDatePromotesSessionWithEvidence(): void
+    {
+        $this->db->getConnection('mysql')->table('order_header')->insert([
+            'no_document' => 'Q1',
+            'no_order' => 'ORD-RESCHEDULE',
+            'is_active' => 1,
+        ]);
+        $this->db->getConnection('mysql')->table('sampling_plan')->insert([
+            ['id' => 100, 'no_quotation' => 'Q1'],
+            ['id' => 200, 'no_quotation' => 'Q1'],
+        ]);
+
+        $row = $this->schedule([
+            'id_sampling' => 100,
+            'tanggal' => '2026-09-23',
+            'kendaraan' => 'B 1963 NZK',
+        ]);
+        $session = $this->prepare('2026-09-23')->first();
+        $member = $this->attendance($session);
+        $eventIds = $member->events()->pluck('id')->all();
+
+        Jadwal::where('id', $row->id)->update(['is_active' => false]);
+        $this->schedule([
+            'id_sampling' => 200,
+            'parsial' => 203540,
+            'tanggal' => '2026-09-23',
+            'kendaraan' => 'B 9030 JMV',
+        ]);
+
+        $header = new PersiapanSampelHeader();
+        $header->no_quotation = 'Q1';
+        $header->tanggal_sampling = '2026-09-23';
+        $this->service->syncByPersiapanHeader($header);
+
+        $active = SamplerTrackingSession::where('no_quotation', 'Q1')
+            ->where('tanggal_sampling', '2026-09-23')
+            ->where('is_active', true)
+            ->get();
+
+        $this->assertCount(1, $active);
+        $keeper = $active->first();
+        $this->assertSame((int) $session->id, (int) $keeper->id);
+        $this->assertSame(200, (int) $keeper->id_sampling);
+        $this->assertSame(203540, (int) $keeper->parsial);
+        $this->assertSame('B 9030 JMV', $keeper->kendaraan);
+        $this->assertSame($eventIds, $member->fresh()->events()->pluck('id')->all());
+    }
+
     public function testRevisionDoesNotMoveEvidenceToDifferentVisit(): void
     {
         $old = 'ISL/QT/26-IX/456R1';
