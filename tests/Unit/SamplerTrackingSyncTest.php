@@ -1132,7 +1132,27 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertCount(0, $this->service->listByDate('2026-09-17'));
     }
 
-    public function testEditDateTimeAndVehicleKeepsSessionMemberAndAttendanceIds(): void
+    public function testEditSameDayTimeAndVehicleKeepsSessionMemberAndAttendanceIds(): void
+    {
+        $row = $this->schedule();
+        $session = $this->prepare('2026-09-17')->first();
+        $member = $this->attendance($session);
+        $eventIds = $member->events()->pluck('id')->all();
+        $before = $this->service->snapshotSchedules('Q1');
+        $row->jam_mulai = '09:00:00';
+        $row->kendaraan = 'B 2';
+        $row->save();
+        $this->service->syncScheduleEdit($before, 'Q1');
+        $this->assertSame(1, SamplerTrackingSession::where('is_active', true)->count());
+        $this->assertSame('2026-09-17', $session->fresh()->tanggal_sampling);
+        $this->assertSame('B 2', $session->fresh()->kendaraan);
+        $this->assertSame($member->id, $session->activeMembers()->first()->id);
+        $this->assertSame($eventIds, $member->events()->pluck('id')->all());
+        $this->assertSame('existing-proof.jpg', $member->events()->first()->photo);
+        $this->assertCount(1, $this->service->listByDate('2026-09-17'));
+    }
+
+    public function testEditSamplingDateCreatesNewActivityAndDeactivatesOldSession(): void
     {
         $this->schedule();
         $session = $this->prepare('2026-09-17')->first();
@@ -1144,12 +1164,15 @@ class SamplerTrackingSyncTest extends TestCase
             $this->schedule(['tanggal' => '2026-09-18', 'jam_mulai' => '09:00:00', 'kendaraan' => 'B 2']);
             $this->service->syncScheduleEdit($before, 'Q1');
         });
-        $this->assertSame(1, SamplerTrackingSession::count());
-        $this->assertSame('2026-09-18', $session->fresh()->tanggal_sampling);
-        $this->assertSame('B 2', $session->fresh()->kendaraan);
-        $this->assertSame($member->id, $session->activeMembers()->first()->id);
+        $this->assertSame(2, SamplerTrackingSession::count());
+        $this->assertFalse((bool) $session->fresh()->is_active);
+        $this->assertSame('2026-09-17', $session->fresh()->tanggal_sampling);
         $this->assertSame($eventIds, $member->events()->pluck('id')->all());
-        $this->assertSame('existing-proof.jpg', $member->events()->first()->photo);
+        $newSession = SamplerTrackingSession::where('is_active', true)
+            ->whereDate('tanggal_sampling', '2026-09-18')->firstOrFail();
+        $this->assertNotEquals($session->id, $newSession->id);
+        $this->assertSame('B 2', $newSession->kendaraan);
+        $this->assertSame(0, $newSession->events()->count());
         $this->assertCount(1, $this->service->listByDate('2026-09-18'));
         $this->assertCount(0, $this->service->listByDate('2026-09-17'));
     }
@@ -1325,8 +1348,8 @@ class SamplerTrackingSyncTest extends TestCase
         $header->sampler_jadwal = 'Old sampler name';
         $this->service->syncByPersiapanHeader($header);
         $this->assertSame(2, SamplerTrackingSession::where('is_active', true)->count());
-        $this->assertSame('2026-09-18', SamplerTrackingSession::where('no_quotation', 'Q1')->first()->tanggal_sampling);
-        $this->assertSame('2026-09-17', SamplerTrackingSession::where('no_quotation', 'Q2')->first()->tanggal_sampling);
+        $this->assertSame('2026-09-18', SamplerTrackingSession::where('no_quotation', 'Q1')->where('is_active', true)->value('tanggal_sampling'));
+        $this->assertSame('2026-09-17', SamplerTrackingSession::where('no_quotation', 'Q2')->where('is_active', true)->value('tanggal_sampling'));
     }
 
     public function testActiveScheduleStillAcceptsDepartureAfterSynchronization(): void
