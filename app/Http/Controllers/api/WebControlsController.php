@@ -11,6 +11,19 @@ use DB;
 
 class WebControlsController extends Controller
 {
+    private function pageControlImageUrl(?string $filename): ?string
+    {
+        if (empty($filename)) {
+            return null;
+        }
+
+        $relative = 'profile/page-control/' . ltrim($filename, '/');
+        $absolute = public_path($relative);
+        $version = file_exists($absolute) ? filemtime($absolute) : time();
+
+        return rtrim(env('APP_URL', ''), '/') . '/public/' . $relative . '?v=' . $version;
+    }
+
     // Start Main Control Function
     public function indexMain()
     {
@@ -170,7 +183,7 @@ class WebControlsController extends Controller
     {
         $data = CompanyPageControl::get();
         $data->map(function ($item) {
-            $item->image = env('APP_URL') . '/public/profile/page-control/' . $item->image;
+            $item->image = $this->pageControlImageUrl($item->image);
             return $item;
         });
         return DataTables::of($data)->make(true);
@@ -180,7 +193,7 @@ class WebControlsController extends Controller
     {
         $data = CompanyPageControl::get();
         $data->map(function ($item) {
-            $item->image = env('APP_URL') . '/public/profile/page-control/' . $item->image;
+            $item->image = $this->pageControlImageUrl($item->image);
             return $item;
         });
         return response()->json($data,200);
@@ -213,7 +226,13 @@ class WebControlsController extends Controller
                     mkdir($destinationPath, 0777, true);
                 }
                 $file = $request->file('image');
-                $filename = "BG_" . preg_replace('/\s+/', '_', $request->name) . '.' . $file->getClientOriginalExtension();
+                $pageSlug = preg_replace('/\s+/', '_', trim((string) $request->name));
+                $filename = sprintf(
+                    'BG_%s_%s.%s',
+                    $pageSlug,
+                    Carbon::now()->format('YmdHis'),
+                    $file->getClientOriginalExtension()
+                );
                 $file->move($destinationPath, $filename);
                 $data->image = $filename;
             }
