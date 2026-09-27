@@ -393,15 +393,26 @@ class SamplerTrackingService
         }
         $affectedDates = array_keys($affectedScopes);
 
+        $rescheduledIds = $this->rescheduledJadwalIds($before, $after);
+        $this->deactivateRescheduledSessions($before, $rescheduledIds, $quotation);
+
         $previousMembers = SamplerTrackingSession::with('activeMembers.events')
             ->where('no_quotation', $quotation)
             ->whereIn('tanggal_sampling', $affectedDates)
             ->where('is_active', true)->get()
             ->mapWithKeys(function ($session) { return [$session->id => $session->activeMembers]; });
         $keyFor = function ($row) { return $this->makeTeamKey($row); };
-        $mapping = SamplerTrackingScheduleIdentity::replacements($before, $after, $keyFor);
+        $mapping = $this->continuityMappingForScheduleEdit(
+            SamplerTrackingScheduleIdentity::replacements($before, $after, $keyFor),
+            $before,
+            $rescheduledIds,
+            $keyFor
+        );
         $afterById = $after->keyBy('id');
-        $editedKeys = $before->filter(function ($row) use ($afterById) {
+        $editedKeys = $before->filter(function ($row) use ($afterById, $rescheduledIds) {
+            if (in_array((int) $row->id, $rescheduledIds, true)) {
+                return false;
+            }
             $current = $afterById->get($row->id);
             return !$current || $current->getAttributes() !== $row->getAttributes();
         })->map(function ($row) use ($keyFor, $mapping) {
@@ -418,6 +429,93 @@ class SamplerTrackingService
         }
 
         return $sessions;
+    }
+
+    /** Same jadwal row with a different sampling date is a new activity, not a correction. */
+    protected function rescheduledJadwalIds($before, $after)
+    {
+        $afterById = $after->keyBy('id');
+
+        return $before->filter(function ($row) use ($afterById) {
+            $current = $afterById->get($row->id);
+            if (!$current) {
+                return false;
+            }
+            $oldDate = $this->normalizeScheduleDate($row->tanggal ?? null);
+            $newDate = $this->normalizeScheduleDate($current->tanggal ?? null);
+
+            return $oldDate && $newDate && $oldDate !== $newDate;
+        })->pluck('id')->map(function ($id) {
+            return (int) $id;
+        })->all();
+    }
+
+    protected function normalizeScheduleDate($value)
+    {
+        if (!$value) {
+            return null;
+        }
+
+        return Carbon::parse($value)->toDateString();
+    }
+
+    protected function continuityMappingForScheduleEdit(array $mapping, $before, array $rescheduledIds, callable $keyFor)
+    {
+        if (empty($rescheduledIds)) {
+            return $mapping;
+        }
+        $rescheduledOldKeys = $before->whereIn('id', $rescheduledIds)->map($keyFor)->flip()->all();
+        $continuity = [];
+        foreach ($mapping as $oldKey => $newKey) {
+            if (isset($rescheduledOldKeys[$oldKey])) {
+                continue;
+            }
+            $continuity[$oldKey] = $newKey;
+        }
+
+        return $continuity;
+    }
+
+    protected function deactivateRescheduledSessions($before, array $rescheduledIds, $quotation)
+    {
+        if (empty($rescheduledIds)) {
+            return;
+        }
+
+        $sessionUpdate = $this->onlyExistingColumns((new SamplerTrackingSession())->getTable(), ['is_active' => false]);
+        $memberUpdate = $this->onlyExistingColumns((new SamplerTrackingMember())->getTable(), ['is_active' => false]);
+        if ($sessionUpdate === []) {
+            return;
+        }
+
+        foreach ($before->whereIn('id', $rescheduledIds) as $row) {
+            $session = $this->findActiveSessionForScheduleRow($row, $quotation);
+            if (!$session) {
+                continue;
+            }
+            SamplerTrackingSession::where('id', $session->id)->update($sessionUpdate);
+            if ($memberUpdate !== []) {
+                SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)->update($memberUpdate);
+            }
+        }
+    }
+
+    protected function findActiveSessionForScheduleRow($row, $quotation)
+    {
+        foreach ([$this->makeTeamKey($row), $this->makeLegacyTeamKey($row)] as $teamKey) {
+            $session = SamplerTrackingSession::where('team_key', $teamKey)
+                ->where('is_active', true)
+                ->when($quotation !== null, function ($query) use ($quotation) {
+                    $query->where('no_quotation', $quotation);
+                })
+                ->orderByDesc('id')
+                ->first();
+            if ($session) {
+                return $session;
+            }
+        }
+
+        return null;
     }
 
     /** A schedule edit corrects the original team; a new visit never uses this path. */
