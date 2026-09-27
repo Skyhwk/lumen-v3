@@ -1,11 +1,14 @@
 <?php
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
+use Illuminate\Auth\Authenticatable;
+use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
+use Illuminate\Database\Eloquent\Model;
 
-class MasterKaryawan extends Sector
+class MasterKaryawan extends Sector implements AuthenticatableContract
 {
+    use Authenticatable;
 
     protected $table = 'master_karyawan';
     protected $guarded = [];

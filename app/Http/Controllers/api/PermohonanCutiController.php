@@ -8,6 +8,9 @@ use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
 use App\Services\GetAtasan;
 use App\Services\GetBawahan;
+use App\Services\Hr\HrTableMode;
+use App\Services\Hr\Portal\PortalLeaveDatatableQuery;
+use App\Services\Hr\PortalHrSync;
 use App\Services\Notification;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -26,6 +29,22 @@ class PermohonanCutiController extends Controller
         $bawahan = GetBawahan::where('id', $this->user_id)->get();
         $bawahanIds = $bawahan->pluck('id')->toArray();
         $bawahanNames = $bawahan->pluck('nama_lengkap')->toArray();
+
+        if (HrTableMode::portalReadsHrTables()) {
+            $portalQuery = app(PortalLeaveDatatableQuery::class);
+            $year = (int) ($request->periode ?? date('Y'));
+            $query = $portalQuery->unprocessed($year, $bawahanIds, $bawahanNames);
+            $dt = Datatables::of($query);
+            $dt = $portalQuery->applyDatatablesFilters($dt);
+
+            return $dt->addColumn('can_approve', function ($row) {
+                $isAtasan = ($this->grade === 'MANAGER') || ($this->grade === 'SENIOR MANAGER');
+                $isBukanDiriSendiri = ($row->employee_id != $this->user_id);
+                $belumDiApprove = is_null($row->approved_atasan_by);
+
+                return $isAtasan && $isBukanDiriSendiri && $belumDiApprove;
+            })->make(true);
+        }
 
         $query = LeaveRequest::on('intilab_apps')
             ->leftJoin('intilab_produksi.master_karyawan as karyawan', 'leave_requests.employee_id', '=', 'karyawan.id')
@@ -113,6 +132,16 @@ class PermohonanCutiController extends Controller
         $bawahanIds = $bawahan->pluck('id')->toArray();
         $bawahanNames = $bawahan->pluck('nama_lengkap')->toArray();
 
+        if (HrTableMode::portalReadsHrTables()) {
+            $portalQuery = app(PortalLeaveDatatableQuery::class);
+            $year = (int) ($request->periode ?? date('Y'));
+            $query = $portalQuery->processed($year, $bawahanIds, $bawahanNames);
+            $dt = Datatables::of($query);
+            $dt = $portalQuery->applyDatatablesFilters($dt);
+
+            return $dt->make(true);
+        }
+
         $query = LeaveRequest::on('intilab_apps')
             ->leftJoin('intilab_produksi.master_karyawan as karyawan', 'leave_requests.employee_id', '=', 'karyawan.id')
             ->leftJoin('intilab_produksi.master_divisi as d', 'karyawan.id_department', '=', 'd.id')
@@ -186,29 +215,36 @@ class PermohonanCutiController extends Controller
         $bawahanIds = $bawahan->pluck('id')->toArray();
         $bawahanNames = $bawahan->pluck('nama_lengkap')->toArray();
 
-        $base = LeaveRequest::on('intilab_apps')
-            ->whereYear('leave_requests.start_date', $periode);
+        if (HrTableMode::portalReadsHrTables()) {
+            $portalQuery = app(PortalLeaveDatatableQuery::class);
+            $year = (int) $periode;
+            $onProgress = $portalQuery->countUnprocessed($year, $bawahanIds, $bawahanNames);
+            $processed = $portalQuery->countProcessed($year, $bawahanIds, $bawahanNames);
+        } else {
+            $base = LeaveRequest::on('intilab_apps')
+                ->whereYear('leave_requests.start_date', $periode);
 
-        if (!empty($bawahanIds)) {
-            $base->where(function ($q) use ($bawahanIds, $bawahanNames) {
-                $q->whereIn('leave_requests.employee_id', $bawahanIds)
-                  ->orWhereIn('leave_requests.created_by', $bawahanNames);
-            });
+            if (!empty($bawahanIds)) {
+                $base->where(function ($q) use ($bawahanIds, $bawahanNames) {
+                    $q->whereIn('leave_requests.employee_id', $bawahanIds)
+                      ->orWhereIn('leave_requests.created_by', $bawahanNames);
+                });
+            }
+
+            $onProgress = (clone $base)
+                ->whereNull('leave_requests.approved_hrd_by')
+                ->whereNull('leave_requests.rejected_atasan_by')
+                ->whereNull('leave_requests.rejected_hrd_by')
+                ->count();
+
+            $processed = (clone $base)
+                ->where(function ($q) {
+                    $q->whereNotNull('leave_requests.approved_hrd_by')
+                      ->orWhereNotNull('leave_requests.rejected_atasan_by')
+                      ->orWhereNotNull('leave_requests.rejected_hrd_by');
+                })
+                ->count();
         }
-
-        $onProgress = (clone $base)
-            ->whereNull('leave_requests.approved_hrd_by')
-            ->whereNull('leave_requests.rejected_atasan_by')
-            ->whereNull('leave_requests.rejected_hrd_by')
-            ->count();
-
-        $processed = (clone $base)
-            ->where(function ($q) {
-                $q->whereNotNull('leave_requests.approved_hrd_by')
-                  ->orWhereNotNull('leave_requests.rejected_atasan_by')
-                  ->orWhereNotNull('leave_requests.rejected_hrd_by');
-            })
-            ->count();
 
         return response()->json([
             'success' => true,
@@ -306,6 +342,8 @@ class PermohonanCutiController extends Controller
             $leave->approved_atasan_at = Carbon::now()->format('Y-m-d H:i:s');
             $leave->save();
 
+            app(PortalHrSync::class)->syncLeaveFromLegacy((int) $leave->id);
+
             $message = 'Permohonan cuti telah di-approve atasan';
             $userId = GetAtasan::where('nama_lengkap', $leave->created_by)->get()->pluck('id')->toArray();
             if (!empty($userId)) {
@@ -360,6 +398,8 @@ class PermohonanCutiController extends Controller
             $leave->reject_atasan_reason = $request->keterangan;
             $leave->save();
 
+            app(PortalHrSync::class)->syncLeaveFromLegacy((int) $leave->id);
+
             $message = 'Permohonan cuti telah ditolak atasan';
             $userId = GetAtasan::where('nama_lengkap', $leave->created_by)->get()->pluck('id')->toArray();
             if (!empty($userId)) {
@@ -391,7 +431,11 @@ class PermohonanCutiController extends Controller
     public function getSpecialLeaveTypes()
     {
         try {
-            $types = DB::connection('mysql')->table('special_leave_types')->where('is_active', 1)->get();
+            if (HrTableMode::portalReadsHrTables()) {
+                $types = DB::table('hr_special_leave_type')->where('is_active', 1)->get();
+            } else {
+                $types = DB::connection('mysql')->table('special_leave_types')->where('is_active', 1)->get();
+            }
             return response()->json([
                 'success' => true,
                 'data' => $types
@@ -483,6 +527,8 @@ class PermohonanCutiController extends Controller
                     ->send();
             }
 
+            app(PortalHrSync::class)->syncLeaveFromLegacy((int) $leave->id);
+
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -562,6 +608,8 @@ class PermohonanCutiController extends Controller
                 'updated_by' => $this->karyawan,
                 'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
+
+            app(PortalHrSync::class)->syncLeaveFromLegacy((int) $leave->id);
 
             DB::commit();
             return response()->json([
