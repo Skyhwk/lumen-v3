@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Greatday;
 use App\Services\Greatday\AtasanApprovalScope;
 use App\Services\Greatday\GetAtasan;
 use App\Services\Greatday\FirebaseService;
+use App\Services\Greatday\LeaveRequestValidationService;
 use App\Services\Hr\Greatday\LeaveRequestHrService;
 use App\Support\Greatday\HrdPayroll;
 use App\Models\Greatday\{LeaveRequest, SpecialLeaveType};
@@ -59,7 +60,7 @@ class LeaveRequestsController extends Controller
     public function getSpecialLeaveTypes()
     {
         if ($this->usesHrTables()) {
-            return app(LeaveRequestHrService::class)->specialLeaveTypes();
+            return app(LeaveRequestHrService::class)->specialLeaveTypes($this->karyawan);
         }
 
         $specialLeaveTypes = SpecialLeaveType::where('is_active', true)->latest()->get();
@@ -70,6 +71,31 @@ class LeaveRequestsController extends Controller
         ], 200);
     }
 
+    public function validateSubmission(Request $request)
+    {
+        $employee = $this->karyawan;
+        if (!$employee) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $message = app(LeaveRequestValidationService::class)->validateForStore(
+            $employee,
+            (string) $request->input('type', ''),
+            $request->input('start_date'),
+            $request->input('end_date'),
+            $request->input('id') ? (int) $request->input('id') : null,
+            $request->input('id') ? (int) $request->input('id') : null,
+            $request->input('special_leave_id') ? (int) $request->input('special_leave_id') : null,
+            $request->hasFile('attachment')
+        );
+
+        if ($message !== null) {
+            return response()->json(['message' => $message, 'valid' => false], 422);
+        }
+
+        return response()->json(['message' => 'OK', 'valid' => true], 200);
+    }
+
     public function store(Request $request)
     {
         if ($this->usesHrTables()) {
@@ -77,6 +103,20 @@ class LeaveRequestsController extends Controller
         }
 
         $employee = $this->karyawan;
+
+        $validationMessage = app(LeaveRequestValidationService::class)->validateForStore(
+            $employee,
+            (string) $request->type,
+            $request->start_date,
+            $request->end_date,
+            null,
+            $request->id ? (int) $request->id : null,
+            $request->special_leave_id ? (int) $request->special_leave_id : null,
+            $request->hasFile('attachment')
+        );
+        if ($validationMessage !== null) {
+            return response()->json(['message' => $validationMessage], 422);
+        }
 
         $leaveRequest = $request->id ? LeaveRequest::find($request->id) : new LeaveRequest();
 
@@ -147,7 +187,7 @@ class LeaveRequestsController extends Controller
             if ($deny = $this->assertPendingForAtasan($resolved->status)) {
                 return $deny;
             }
-            if ($deny = $this->assertApproverIsAtasanOf((int) $resolved->karyawan_id)) {
+            if ($deny = $this->assertHrChainApprover($resolved)) {
                 return $deny;
             }
 
@@ -191,7 +231,7 @@ class LeaveRequestsController extends Controller
             if ($deny = $this->assertPendingForAtasanReject($resolved->status)) {
                 return $deny;
             }
-            if ($deny = $this->assertApproverIsAtasanOf((int) $resolved->karyawan_id)) {
+            if ($deny = $this->assertHrChainApprover($resolved)) {
                 return $deny;
             }
 

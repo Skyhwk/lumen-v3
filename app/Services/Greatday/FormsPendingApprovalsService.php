@@ -107,7 +107,7 @@ class FormsPendingApprovalsService
     {
         $this->bindKaryawanOnRequest($employee);
 
-        $isManagerOrSupervisor = in_array($employee->grade, ['MANAGER', 'SUPERVISOR', 'SENIOR MANAGER'], true);
+        $isAtasanGrade = in_array($employee->grade, ['MANAGER', 'SUPERVISOR', 'SENIOR MANAGER'], true);
         $isPayroll = HrdPayroll::canAccessHrdQueue($employee);
         $isAccounting = $employee->jabatan === 'Accounting & Expense Manager';
         $isHRCounselling = $employee->jabatan === 'HR Counselling & Development Supervisor';
@@ -126,7 +126,7 @@ class FormsPendingApprovalsService
 
             foreach ($data as $item) {
                 $status = $item->status ?? null;
-                if (!$this->shouldIncludeLegacyPendingItem($c['name'], $status, $isManagerOrSupervisor, $isPayroll, $isAccounting, $isHRCounselling)) {
+                if (!$this->shouldIncludeLegacyPendingItem($c['name'], $status, $isAtasanGrade, $isPayroll, $isAccounting, $isHRCounselling)) {
                     continue;
                 }
 
@@ -151,7 +151,7 @@ class FormsPendingApprovalsService
     private function shouldIncludeLegacyPendingItem(
         string $controllerName,
         ?string $status,
-        bool $isManagerOrSupervisor,
+        bool $isAtasanGrade,
         bool $isPayroll,
         bool $isAccounting,
         bool $isHRCounselling
@@ -159,13 +159,13 @@ class FormsPendingApprovalsService
         switch ($controllerName) {
             case 'OvertimeRequestsController':
             case 'OvertimeReimbursementsController':
-                return ($isManagerOrSupervisor && $status === WorkflowStatus::PENDING)
+                return ($isAtasanGrade && $status === WorkflowStatus::PENDING)
                     || ($isPayroll && $status === WorkflowStatus::APPROVED_ATASAN)
                     || ($isAccounting && $status === WorkflowStatus::APPROVED_HRD);
             case 'LeaveRequestsController':
             case 'PermissionRequestsController':
             case 'AttendanceCorrectionsController':
-                return ($isManagerOrSupervisor && $status === WorkflowStatus::PENDING)
+                return ($isAtasanGrade && $status === WorkflowStatus::PENDING)
                     || ($isPayroll && $status === WorkflowStatus::APPROVED_ATASAN);
             case 'ConsultationRequestsController':
                 return $isHRCounselling && $status === WorkflowStatus::PENDING;

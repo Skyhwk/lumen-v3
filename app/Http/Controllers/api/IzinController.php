@@ -92,6 +92,7 @@ class IzinController extends Controller
             WHEN lr.type = "Annual Leave" THEN "cuti"
             WHEN lr.type = "Special Leave" THEN "cuti_khusus"
             WHEN lr.type = "Unpaid Leave" THEN "unpaid_leave"
+            WHEN lr.type = "Holiday Replacement Leave" THEN "pengganti_hari_libur"
             ELSE lr.type
         END as type_document'),
                 'lr.start_date as tanggal_mulai',
@@ -201,6 +202,7 @@ class IzinController extends Controller
             WHEN lr.type = "Annual Leave" THEN "cuti"
             WHEN lr.type = "Special Leave" THEN "cuti_khusus"
             WHEN lr.type = "Unpaid Leave" THEN "unpaid_leave"
+            WHEN lr.type = "Holiday Replacement Leave" THEN "pengganti_hari_libur"
             ELSE lr.type
         END as type_document'),
                 'lr.start_date as tanggal_mulai',

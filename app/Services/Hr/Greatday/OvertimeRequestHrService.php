@@ -9,8 +9,10 @@ use App\Models\MasterDivisi;
 use App\Models\MasterKaryawan;
 use App\Services\Greatday\FirebaseService;
 use App\Services\Greatday\GetAtasan;
+use App\Services\Greatday\GreatdayOvertimeAccess;
+use App\Services\Hr\Greatday\Concerns\BootstrapsHrAtasanChain;
 use App\Services\Hr\ApprovalService;
-use App\Services\Hr\AtasanStepService;
+use App\Services\Hr\HrApprovalChainService;
 use App\Services\Hr\GreatdayIndexScope;
 use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\LegacyHrMirror;
@@ -24,6 +26,8 @@ use Illuminate\Support\Str;
 
 class OvertimeRequestHrService
 {
+    use BootstrapsHrAtasanChain;
+
     public function index(MasterKaryawan $employee)
     {
         $rows = HrRequest::with(['overtimeDetail', 'overtimeParticipants'])
@@ -42,6 +46,10 @@ class OvertimeRequestHrService
 
     public function store(Request $request, MasterKaryawan $employee, string $actorName)
     {
+        if (!GreatdayOvertimeAccess::canCreate($employee)) {
+            return response()->json(['message' => GreatdayOvertimeAccess::denyCreateMessage()], 403);
+        }
+
         DB::beginTransaction();
         try {
             $now = Carbon::now();
@@ -70,9 +78,9 @@ class OvertimeRequestHrService
             $header->updated_by_name = $actorName;
             $header->updated_at = $now;
 
-            if ($employee->grade === 'MANAGER') {
-                $header->status = WorkflowStatus::APPROVED_ATASAN;
-            } elseif ($existing) {
+            if ($existing) {
+                $header->status = WorkflowStatus::PENDING;
+            } elseif ($isNew) {
                 $header->status = WorkflowStatus::PENDING;
             }
 
@@ -91,7 +99,7 @@ class OvertimeRequestHrService
             if ($existing) {
                 HrOvertimeParticipant::where('request_id', $header->id)->update(['is_active' => false]);
             } elseif ($isNew) {
-                app(AtasanStepService::class)->seedPendingAtasanStep($header->id);
+                $this->bootstrapAtasanChain($header, $employee, '/forms/overtimeRequests');
             }
 
             $employeeIds = collect($request->employees)
@@ -108,10 +116,6 @@ class OvertimeRequestHrService
                 );
             }
 
-            if ($header->status === WorkflowStatus::APPROVED_ATASAN) {
-                app(ApprovalService::class)->approveAtasan($header->fresh(), $employee, ApprovalService::CHANNEL_GREATDAY);
-            }
-
             DB::commit();
 
             $service = new FirebaseService();
@@ -120,19 +124,6 @@ class OvertimeRequestHrService
                 'body'  => 'Anda termasuk kedalam tim lembur yang diajukan oleh: ' . $header->created_by_name,
                 'url'   => '/forms/overtimeRequests',
             ]);
-
-            if ($employee->grade !== 'MANAGER' && $header->status === WorkflowStatus::PENDING) {
-                foreach (GetAtasan::where('id', $employee->id)->get() as $atasan) {
-                    if ($atasan->grade === 'MANAGER') {
-                        $department = MasterDivisi::find($header->id_department);
-                        $service->sendNotifications([$atasan->id], [
-                            'title' => 'Permohonan Lembur Diajukan!',
-                            'body'  => 'Permohonan Lembur dari divisi: ' . ($department->nama_divisi ?? '') . ' menunggu persetujuan Anda',
-                            'url'   => '/forms/overtimeRequests',
-                        ]);
-                    }
-                }
-            }
 
             app(LegacyHrMirror::class)->mirrorCreateFromHrRequest(
                 $header->fresh(['overtimeDetail', 'overtimeParticipants'])
@@ -154,15 +145,22 @@ class OvertimeRequestHrService
 
         $row->load('overtimeParticipants');
 
+        if (!app(HrApprovalChainService::class)->viewerCanApprove($row, $approver)) {
+            return response()->json(['message' => 'Bukan giliran Anda menyetujui pengajuan ini'], 403);
+        }
+
         app(ApprovalService::class)->approveAtasan($row, $approver, ApprovalService::CHANNEL_GREATDAY);
         app(LegacyHrMirror::class)->syncAtasanApproval($row->fresh());
 
-        $department = MasterDivisi::find($row->id_department);
-        (new FirebaseService())->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
-            'title' => 'Permohonan Lembur Diajukan!',
-            'body'  => 'Permohonan Lembur dari divisi: ' . ($department->nama_divisi ?? '') . ' menunggu persetujuan Anda',
-            'url'   => '/forms/overtimeRequests',
-        ]);
+        $row = $row->fresh();
+        if ($row->status === WorkflowStatus::APPROVED_ATASAN) {
+            $department = MasterDivisi::find($row->id_department);
+            (new FirebaseService())->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
+                'title' => 'Permohonan Lembur Diajukan!',
+                'body'  => 'Permohonan Lembur dari divisi: ' . ($department->nama_divisi ?? '') . ' menunggu persetujuan Anda',
+                'url'   => '/forms/overtimeRequests',
+            ]);
+        }
 
         return response()->json(['message' => 'The overtime request has been approved successfully'], 200);
     }
@@ -175,6 +173,10 @@ class OvertimeRequestHrService
         }
 
         $row->load('overtimeParticipants');
+
+        if (!app(HrApprovalChainService::class)->viewerCanApprove($row, $approver)) {
+            return response()->json(['message' => 'Bukan giliran Anda menolak pengajuan ini'], 403);
+        }
 
         app(ApprovalService::class)->rejectAtasan($row, $approver, $reason, ApprovalService::CHANNEL_GREATDAY);
         app(LegacyHrMirror::class)->syncAtasanApproval($row->fresh());

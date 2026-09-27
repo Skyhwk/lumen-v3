@@ -8,8 +8,11 @@ use App\Models\Hr\HrSpecialLeaveType;
 use App\Models\MasterKaryawan;
 use App\Services\Greatday\FirebaseService;
 use App\Services\Greatday\GetAtasan;
+use App\Services\Greatday\LeaveRequestValidationService;
+use App\Services\Hr\Greatday\Concerns\BootstrapsHrAtasanChain;
 use App\Services\Hr\ApprovalService;
 use App\Services\Hr\AtasanStepService;
+use App\Services\Hr\HrApprovalChainService;
 use App\Services\Hr\GreatdayIndexScope;
 use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\LegacyHrMirror;
@@ -22,6 +25,8 @@ use Illuminate\Support\Str;
 
 class LeaveRequestHrService
 {
+    use BootstrapsHrAtasanChain;
+
     public function index(MasterKaryawan $employee)
     {
         $rows = HrRequest::with(['leaveDetail'])
@@ -40,9 +45,24 @@ class LeaveRequestHrService
         ], 200);
     }
 
-    public function specialLeaveTypes()
+    public function specialLeaveTypes(?MasterKaryawan $employee = null)
     {
-        $types = HrSpecialLeaveType::where('is_active', true)->orderByDesc('id')->get();
+        $types = HrSpecialLeaveType::where('is_active', true)->orderBy('name')->get()->map(function ($row) use ($employee) {
+            $payload = $row->toArray();
+            if ($employee) {
+                $stats = app(\App\Services\Greatday\LeaveBalanceService::class)->specialLeaveUsageStats(
+                    $employee,
+                    (int) $row->id
+                );
+                $payload['used_submissions'] = $stats['submission_count'];
+                $maxUses = $row->max_uses !== null ? (int) $row->max_uses : null;
+                $payload['remaining_submissions'] = $maxUses === null
+                    ? null
+                    : max(0, $maxUses - $stats['submission_count']);
+            }
+
+            return $payload;
+        });
 
         return response()->json([
             'data' => $types,
@@ -52,6 +72,20 @@ class LeaveRequestHrService
 
     public function store(Request $request, MasterKaryawan $employee, string $actorName)
     {
+        $validationMessage = app(LeaveRequestValidationService::class)->validateForStore(
+            $employee,
+            (string) $request->type,
+            $request->start_date,
+            $request->end_date,
+            $request->id ? (int) $request->id : null,
+            null,
+            $request->special_leave_id ? (int) $request->special_leave_id : null,
+            $request->hasFile('attachment')
+        );
+        if ($validationMessage !== null) {
+            return response()->json(['message' => $validationMessage], 422);
+        }
+
         $now = Carbon::now();
         $noDocument = str_replace('.', '/', microtime(true));
 
@@ -60,14 +94,11 @@ class LeaveRequestHrService
             $leaveKind = 'special';
         } elseif ($request->type === 'Unpaid Leave') {
             $leaveKind = 'unpaid';
+        } elseif ($request->type === 'Holiday Replacement Leave') {
+            $leaveKind = 'phl';
         }
 
         $status = WorkflowStatus::PENDING;
-        $approvedAtasan = null;
-        if ($employee->grade === 'MANAGER') {
-            $status = WorkflowStatus::APPROVED_ATASAN;
-            $approvedAtasan = $actorName;
-        }
 
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
@@ -109,13 +140,7 @@ class LeaveRequestHrService
             'attachment_path' => $attachmentPath,
         ]);
 
-        app(AtasanStepService::class)->seedPendingAtasanStep($header->id);
-
-        if ($status === WorkflowStatus::APPROVED_ATASAN) {
-            app(ApprovalService::class)->approveAtasan($header->fresh(), $employee, ApprovalService::CHANNEL_GREATDAY);
-        }
-
-        $this->notifyManagersOnSubmit($employee, $actorName, $status);
+        $header = $this->bootstrapAtasanChain($header, $employee, '/forms/leaveRequests');
 
         app(LegacyHrMirror::class)->mirrorCreateFromHrRequest($header->fresh(['leaveDetail']));
 
@@ -129,15 +154,22 @@ class LeaveRequestHrService
             return response()->json(['message' => 'Leave request not found'], 404);
         }
 
+        if (!app(HrApprovalChainService::class)->viewerCanApprove($leave, $approver)) {
+            return response()->json(['message' => 'Bukan giliran Anda menyetujui pengajuan ini'], 403);
+        }
+
         app(ApprovalService::class)->approveAtasan($leave, $approver, ApprovalService::CHANNEL_GREATDAY);
         app(LegacyHrMirror::class)->syncAtasanApproval($leave->fresh());
 
-        $service = new FirebaseService();
-        $service->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
-            'title' => 'Permohonan Cuti Diajukan!',
-            'body'  => 'Terdapat Permohonan Cuti yang diajukan oleh: ' . $leave->created_by_name . ' menunggu persetujuan Anda',
-            'url'   => '/forms/leaveRequests',
-        ]);
+        $leave = $leave->fresh();
+        if ($leave->status === WorkflowStatus::APPROVED_ATASAN) {
+            $service = new FirebaseService();
+            $service->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
+                'title' => 'Permohonan Cuti Diajukan!',
+                'body'  => 'Terdapat Permohonan Cuti yang diajukan oleh: ' . $leave->created_by_name . ' menunggu persetujuan Anda',
+                'url'   => '/forms/leaveRequests',
+            ]);
+        }
 
         return response()->json(['message' => 'The leave request has been approved successfully'], 200);
     }
@@ -147,6 +179,10 @@ class LeaveRequestHrService
         $leave = HrRequestResolver::findByApiId(HrRequest::TYPE_LEAVE, $apiId);
         if (!$leave) {
             return response()->json(['message' => 'Leave request not found'], 404);
+        }
+
+        if (!app(HrApprovalChainService::class)->viewerCanApprove($leave, $approver)) {
+            return response()->json(['message' => 'Bukan giliran Anda menolak pengajuan ini'], 403);
         }
 
         app(ApprovalService::class)->rejectAtasan($leave, $approver, $reason, ApprovalService::CHANNEL_GREATDAY);

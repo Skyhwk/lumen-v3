@@ -19,6 +19,8 @@ class LeaveRequestPresenter
                 $type = 'Special Leave';
             } elseif ($detail->leave_kind === 'unpaid') {
                 $type = 'Unpaid Leave';
+            } elseif ($detail->leave_kind === 'phl') {
+                $type = 'Holiday Replacement Leave';
             }
         }
 

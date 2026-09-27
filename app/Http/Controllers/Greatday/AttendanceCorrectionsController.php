@@ -125,7 +125,7 @@ class AttendanceCorrectionsController extends Controller
             if ($deny = $this->assertPendingForAtasan($resolved->status)) {
                 return $deny;
             }
-            if ($deny = $this->assertApproverIsAtasanOf((int) $resolved->karyawan_id)) {
+            if ($deny = $this->assertHrChainApprover($resolved)) {
                 return $deny;
             }
 
@@ -169,7 +169,7 @@ class AttendanceCorrectionsController extends Controller
             if ($deny = $this->assertPendingForAtasanReject($resolved->status)) {
                 return $deny;
             }
-            if ($deny = $this->assertApproverIsAtasanOf((int) $resolved->karyawan_id)) {
+            if ($deny = $this->assertHrChainApprover($resolved)) {
                 return $deny;
             }
 

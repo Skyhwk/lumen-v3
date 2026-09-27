@@ -7,8 +7,9 @@ use App\Models\Hr\HrRequest;
 use App\Models\MasterKaryawan;
 use App\Services\Greatday\FirebaseService;
 use App\Services\Greatday\GetAtasan;
+use App\Services\Hr\Greatday\Concerns\BootstrapsHrAtasanChain;
 use App\Services\Hr\ApprovalService;
-use App\Services\Hr\AtasanStepService;
+use App\Services\Hr\HrApprovalChainService;
 use App\Services\Hr\GreatdayIndexScope;
 use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\LegacyHrMirror;
@@ -21,6 +22,8 @@ use Illuminate\Support\Str;
 
 class AttendanceCorrectionHrService
 {
+    use BootstrapsHrAtasanChain;
+
     public function index(MasterKaryawan $employee)
     {
         $rows = HrRequest::with(['attendanceCorrectionDetail'])
@@ -45,9 +48,6 @@ class AttendanceCorrectionHrService
         $noDocument = 'AC/' . str_replace('.', '/', microtime(true));
 
         $status = WorkflowStatus::PENDING;
-        if ($employee->grade === 'MANAGER') {
-            $status = WorkflowStatus::APPROVED_ATASAN;
-        }
 
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
@@ -88,13 +88,7 @@ class AttendanceCorrectionHrService
             'attachment_path' => $attachmentPath,
         ]);
 
-        app(AtasanStepService::class)->seedPendingAtasanStep($header->id);
-
-        if ($status === WorkflowStatus::APPROVED_ATASAN) {
-            app(ApprovalService::class)->approveAtasan($header->fresh(), $employee, ApprovalService::CHANNEL_GREATDAY);
-        } elseif ($employee->grade !== 'MANAGER') {
-            $this->notifyManager($employee, $actorName);
-        }
+        $header = $this->bootstrapAtasanChain($header, $employee, '/forms/attendanceCorrections');
 
         app(LegacyHrMirror::class)->mirrorCreateFromHrRequest($header->fresh(['attendanceCorrectionDetail']));
 
@@ -108,15 +102,22 @@ class AttendanceCorrectionHrService
             return response()->json(['message' => 'Attendance correction not found'], 404);
         }
 
+        if (!app(HrApprovalChainService::class)->viewerCanApprove($row, $approver)) {
+            return response()->json(['message' => 'Bukan giliran Anda menyetujui pengajuan ini'], 403);
+        }
+
         app(ApprovalService::class)->approveAtasan($row, $approver, ApprovalService::CHANNEL_GREATDAY);
         app(LegacyHrMirror::class)->syncAtasanApproval($row->fresh());
 
-        $service = new FirebaseService();
-        $service->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
-            'title' => 'Permohonan Koreksi Kehadiran Diajukan!',
-            'body'  => 'Terdapat Permohonan Koreksi Kehadiran yang diajukan oleh: ' . $row->created_by_name . ' menunggu persetujuan Anda',
-            'url'   => '/forms/attendanceCorrections',
-        ]);
+        $row = $row->fresh();
+        if ($row->status === WorkflowStatus::APPROVED_ATASAN) {
+            $service = new FirebaseService();
+            $service->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
+                'title' => 'Permohonan Koreksi Kehadiran Diajukan!',
+                'body'  => 'Terdapat Permohonan Koreksi Kehadiran yang diajukan oleh: ' . $row->created_by_name . ' menunggu persetujuan Anda',
+                'url'   => '/forms/attendanceCorrections',
+            ]);
+        }
 
         return response()->json(['message' => 'The attendance correction has been approved successfully'], 200);
     }
@@ -126,6 +127,10 @@ class AttendanceCorrectionHrService
         $row = HrRequestResolver::findByApiId(HrRequest::TYPE_ATTENDANCE_CORRECTION, $apiId);
         if (!$row) {
             return response()->json(['message' => 'Attendance correction not found'], 404);
+        }
+
+        if (!app(HrApprovalChainService::class)->viewerCanApprove($row, $approver)) {
+            return response()->json(['message' => 'Bukan giliran Anda menolak pengajuan ini'], 403);
         }
 
         app(ApprovalService::class)->rejectAtasan($row, $approver, $reason, ApprovalService::CHANNEL_GREATDAY);

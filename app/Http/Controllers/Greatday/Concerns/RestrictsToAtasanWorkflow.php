@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Greatday\Concerns;
 use App\Models\Hr\HrRequest;
 use App\Models\MasterKaryawan;
 use App\Services\Greatday\AtasanApprovalScope;
+use App\Services\Hr\HrApprovalChainService;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -53,11 +54,25 @@ trait RestrictsToAtasanWorkflow
         }
 
         if (!AtasanApprovalScope::isAtasanGrade($approver)) {
-            return response()->json(['message' => 'Hanya atasan (Manager/Supervisor) yang dapat menyetujui di Greatday'], 403);
+            return response()->json(['message' => 'Hanya atasan (Supervisor/Manager/Senior Manager) yang dapat menyetujui di Greatday'], 403);
         }
 
         if (!AtasanApprovalScope::isSubordinateKaryawan($approver, $employeeId)) {
             return response()->json(['message' => 'Pengajuan bukan dari bawahan Anda'], 403);
+        }
+
+        return null;
+    }
+
+    protected function assertHrChainApprover(HrRequest $request): ?JsonResponse
+    {
+        $approver = $this->karyawan;
+        if (!$approver) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if (!app(HrApprovalChainService::class)->viewerCanApprove($request, $approver)) {
+            return response()->json(['message' => 'Bukan giliran Anda atau pengajuan tidak menunggu persetujuan Anda'], 403);
         }
 
         return null;

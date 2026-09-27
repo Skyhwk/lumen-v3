@@ -7,8 +7,9 @@ use App\Models\Hr\HrRequest;
 use App\Models\MasterKaryawan;
 use App\Services\Greatday\FirebaseService;
 use App\Services\Greatday\GetAtasan;
+use App\Services\Hr\Greatday\Concerns\BootstrapsHrAtasanChain;
 use App\Services\Hr\ApprovalService;
-use App\Services\Hr\AtasanStepService;
+use App\Services\Hr\HrApprovalChainService;
 use App\Services\Hr\GreatdayIndexScope;
 use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\LegacyHrMirror;
@@ -21,6 +22,8 @@ use Illuminate\Support\Str;
 
 class PermissionRequestHrService
 {
+    use BootstrapsHrAtasanChain;
+
     public function index(MasterKaryawan $employee)
     {
         $rows = HrRequest::with(['permissionDetail'])
@@ -48,9 +51,6 @@ class PermissionRequestHrService
         }
 
         $status = WorkflowStatus::PENDING;
-        if ($employee->grade === 'MANAGER') {
-            $status = WorkflowStatus::APPROVED_ATASAN;
-        }
 
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
@@ -93,23 +93,7 @@ class PermissionRequestHrService
             'attachment_path' => $attachmentPath,
         ]);
 
-        app(AtasanStepService::class)->seedPendingAtasanStep($header->id);
-        if ($status === WorkflowStatus::APPROVED_ATASAN) {
-            app(ApprovalService::class)->approveAtasan($header->fresh(), $employee, ApprovalService::CHANNEL_GREATDAY);
-        }
-
-        if ($employee->grade !== 'MANAGER' && $status === WorkflowStatus::PENDING) {
-            $service = new FirebaseService();
-            foreach (GetAtasan::where('id', $employee->id)->get() as $atasan) {
-                if ($atasan->grade === 'MANAGER') {
-                    $service->sendNotifications([$atasan->id], [
-                        'title' => 'Permohonan Izin Diajukan!',
-                        'body' => 'Permohonan izin baru telah diajukan oleh ' . $employee->nama_lengkap . ' menunggu persetujuan Anda',
-                        'url' => '/forms/permissionRequests',
-                    ]);
-                }
-            }
-        }
+        $header = $this->bootstrapAtasanChain($header, $employee, '/forms/permissionRequests');
 
         app(LegacyHrMirror::class)->mirrorCreateFromHrRequest($header->fresh(['permissionDetail']));
 
@@ -123,14 +107,21 @@ class PermissionRequestHrService
             return response()->json(['message' => 'Permission request not found'], 404);
         }
 
+        if (!app(HrApprovalChainService::class)->viewerCanApprove($row, $approver)) {
+            return response()->json(['message' => 'Bukan giliran Anda menyetujui pengajuan ini'], 403);
+        }
+
         app(ApprovalService::class)->approveAtasan($row, $approver, ApprovalService::CHANNEL_GREATDAY);
         app(LegacyHrMirror::class)->syncAtasanApproval($row->fresh());
 
-        (new FirebaseService())->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
-            'title' => 'Permohonan Izin Diajukan!',
-            'body' => 'Terdapat Permohonan Izin yang diajukan oleh: ' . $row->created_by_name . ' menunggu persetujuan Anda',
-            'url' => '/forms/permissionRequests',
-        ]);
+        $row = $row->fresh();
+        if ($row->status === WorkflowStatus::APPROVED_ATASAN) {
+            (new FirebaseService())->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
+                'title' => 'Permohonan Izin Diajukan!',
+                'body' => 'Terdapat Permohonan Izin yang diajukan oleh: ' . $row->created_by_name . ' menunggu persetujuan Anda',
+                'url' => '/forms/permissionRequests',
+            ]);
+        }
 
         return response()->json(['message' => 'The permission request has been approved successfully'], 200);
     }
@@ -140,6 +131,10 @@ class PermissionRequestHrService
         $row = HrRequestResolver::findByApiId(HrRequest::TYPE_PERMISSION, $apiId);
         if (!$row) {
             return response()->json(['message' => 'Permission request not found'], 404);
+        }
+
+        if (!app(HrApprovalChainService::class)->viewerCanApprove($row, $approver)) {
+            return response()->json(['message' => 'Bukan giliran Anda menolak pengajuan ini'], 403);
         }
 
         app(ApprovalService::class)->rejectAtasan($row, $approver, $reason, ApprovalService::CHANNEL_GREATDAY);

@@ -131,6 +131,7 @@ class PortalHrdIzinDatatableQuery
             DB::raw("CASE ld.leave_kind
                 WHEN 'special' THEN 'cuti_khusus'
                 WHEN 'unpaid' THEN 'unpaid_leave'
+                WHEN 'phl' THEN 'pengganti_hari_libur'
                 ELSE 'cuti'
             END as type_document"),
             'ld.start_date as tanggal_mulai',

@@ -177,4 +177,38 @@ class OfficeCalendarService
             return null;
         }
     }
+
+    /**
+     * Tanggal libur (nasional + perusahaan, setelah override masuk) dalam rentang inclusive.
+     *
+     * @return list<string> Y-m-d
+     */
+    public function holidayDatesBetween(string $fromYmd, string $toYmd): array
+    {
+        try {
+            $from = Carbon::parse($fromYmd);
+            $to = Carbon::parse($toYmd);
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        if ($to->lt($from)) {
+            return [];
+        }
+
+        $dates = [];
+        for ($year = (int) $from->year; $year <= (int) $to->year; $year++) {
+            $payload = $this->forYear($year);
+            foreach ($payload['calendar']['holiday_dates'] as $d) {
+                if ($d >= $fromYmd && $d <= $toYmd) {
+                    $dates[] = $d;
+                }
+            }
+        }
+
+        $dates = array_values(array_unique($dates));
+        sort($dates);
+
+        return $dates;
+    }
 }

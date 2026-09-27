@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 
 use App\Models\Hr\HrRequest;
 use App\Services\Greatday\AtasanApprovalScope;
+use App\Services\Greatday\GreatdayOvertimeAccess;
 use App\Services\Greatday\GetAtasan;
 use App\Services\Greatday\GetBawahan;
 use App\Services\Greatday\FirebaseService;
@@ -105,6 +106,10 @@ class OvertimeRequestsController extends Controller
         try {
             $employee = $this->karyawan;
 
+            if (!$request->id && !GreatdayOvertimeAccess::canCreate($employee)) {
+                return response()->json(['message' => GreatdayOvertimeAccess::denyCreateMessage()], 403);
+            }
+
             $overtimeRequest = $request->id ? OvertimeRequest::find($request->id) : new OvertimeRequest();
 
             $overtimeRequest->start_date = $request->start_date;
@@ -123,16 +128,12 @@ class OvertimeRequestsController extends Controller
             $overtimeRequest->updated_by = $this->nama_lengkap;
             $overtimeRequest->updated_at = date('Y-m-d H:i:s');
 
-            if ($employee->grade === 'MANAGER') {
-                $overtimeRequest->status = 'Approved Atasan';
-                $overtimeRequest->approved_atasan_by = $this->nama_lengkap;
-                $overtimeRequest->approved_atasan_at = date('Y-m-d H:i:s');
-            } else {
-                if ($request->id) {
-                    $overtimeRequest->status = 'Pending';
-                    $overtimeRequest->approved_atasan_by = null;
-                    $overtimeRequest->approved_atasan_at = null;
-                }
+            if ($request->id) {
+                $overtimeRequest->status = 'Pending';
+                $overtimeRequest->approved_atasan_by = null;
+                $overtimeRequest->approved_atasan_at = null;
+            } elseif (!$overtimeRequest->status) {
+                $overtimeRequest->status = 'Pending';
             }
 
             $overtimeRequest->save();
@@ -221,6 +222,9 @@ class OvertimeRequestsController extends Controller
             if ($deny = $this->assertOvertimeHrAtasanCanAct($resolved)) {
                 return $deny;
             }
+            if ($deny = $this->assertHrChainApprover($resolved)) {
+                return $deny;
+            }
 
             return app(OvertimeRequestHrService::class)->approve((int) $request->id, $this->karyawan);
         }
@@ -262,6 +266,9 @@ class OvertimeRequestsController extends Controller
                 return $deny;
             }
             if ($deny = $this->assertOvertimeHrAtasanCanAct($resolved)) {
+                return $deny;
+            }
+            if ($deny = $this->assertHrChainApprover($resolved)) {
                 return $deny;
             }
 

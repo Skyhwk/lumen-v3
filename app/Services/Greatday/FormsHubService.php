@@ -74,16 +74,13 @@ class FormsHubService
     private function statsFromHr(MasterKaryawan $employee): array
     {
         $ownBase = $this->ownHrRequestsQuery($employee, true);
+        $leaveBalance = app(LeaveBalanceService::class)->summary($employee);
 
         return [
-            'sisa_cuti' => $this->remainingAnnualLeaveHr($employee),
-            'jumlah_cuti' => $this->usedAnnualLeaveDaysHr($employee),
-            'jumlah_lembur' => (clone $ownBase)
-                ->where('request_type', HrRequest::TYPE_OVERTIME)
-                ->count(),
-            'jumlah_izin' => (clone $ownBase)
-                ->where('request_type', HrRequest::TYPE_PERMISSION)
-                ->count(),
+            'sisa_cuti' => $leaveBalance['sisa_cuti'],
+            'jumlah_cuti' => $leaveBalance['jumlah_cuti'],
+            'jumlah_lembur' => $this->countPersonalOvertimeHr($employee, true),
+            'jumlah_izin' => $this->countPersonalPermissionHr($employee, true),
             'counts' => [
                 'submission' => (clone $ownBase)->where('status', WorkflowStatus::PENDING)->count(),
                 'history' => (clone $this->formsHubHrQuery($employee, true, AtasanApprovalScope::isAtasanGrade($employee)))
@@ -108,11 +105,15 @@ class FormsHubService
 
         $historyCount = $this->legacyHistoryTabCount($employee);
 
+        $leaveBalance = app(LeaveBalanceService::class)->summary($employee);
+
         return [
-            'sisa_cuti' => max(0, self::ANNUAL_LEAVE_QUOTA - $this->usedAnnualLeaveDaysLegacy($employee)),
-            'jumlah_cuti' => $this->usedAnnualLeaveDaysLegacy($employee),
-            'jumlah_lembur' => $this->countLegacyOvertimeTotal($employee, true),
-            'jumlah_izin' => $inWorkYear(PermissionRequest::where('is_active', true)->where('employee_id', $employeeId))->count(),
+            'sisa_cuti' => $leaveBalance['sisa_cuti'],
+            'jumlah_cuti' => $leaveBalance['jumlah_cuti'],
+            'jumlah_lembur' => $this->countLegacyPersonalOvertime($employee, true),
+            'jumlah_izin' => $inWorkYear(
+                PermissionRequest::where('is_active', true)->where('employee_id', $employeeId)
+            )->count(),
             'counts' => [
                 'submission' => $submissionCount,
                 'history' => $historyCount,
@@ -490,9 +491,7 @@ class FormsHubService
             'description' => $row->description ?? $row->no_document,
             'status' => $row->status,
             'raw' => $raw,
-            'can_approve' => $viewer->grade && in_array($viewer->grade, ['MANAGER', 'SUPERVISOR'], true)
-                && $row->status === WorkflowStatus::PENDING
-                && (int) $row->karyawan_id !== (int) $viewer->id,
+            'can_approve' => app(\App\Services\Hr\HrApprovalChainService::class)->viewerCanApprove($row, $viewer),
         ];
     }
 
@@ -535,21 +534,7 @@ class FormsHubService
      */
     private function leaveYearBounds(MasterKaryawan $employee): array
     {
-        $join = $employee->tgl_mulai_kerja ? Carbon::parse($employee->tgl_mulai_kerja) : Carbon::now()->startOfYear();
-        $today = Carbon::now()->startOfDay();
-        $currentYear = $today->year;
-
-        $anniversaryThisYear = $join->copy()->year($currentYear)->startOfDay();
-
-        if ($today->lt($anniversaryThisYear)) {
-            $from = $join->copy()->year($currentYear - 1)->startOfDay();
-            $to = $anniversaryThisYear->copy()->subSecond();
-        } else {
-            $from = $anniversaryThisYear;
-            $to = $join->copy()->year($currentYear + 1)->endOfDay();
-        }
-
-        return [$from, $to];
+        return app(LeaveBalanceService::class)->leaveYearBounds($employee);
     }
 
     private function countWeekdays(?string $start, ?string $end): int
@@ -629,6 +614,65 @@ class FormsHubService
     private function countLegacyOvertimeTotal(MasterKaryawan $employee, bool $currentWorkYearOnly = false): int
     {
         return $this->legacyOwnOvertimeBaseQuery($employee, $currentWorkYearOnly)->count();
+    }
+
+    /** Kartu stat formulir — lembur saya (peserta aktif), bukan seluruh pengajuan tim sebagai pembuat. */
+    private function countPersonalOvertimeHr(MasterKaryawan $employee, bool $currentWorkYearOnly = false): int
+    {
+        $query = HrRequest::query()
+            ->where('is_active', true)
+            ->where('request_type', HrRequest::TYPE_OVERTIME)
+            ->whereHas('overtimeParticipants', function ($p) use ($employee) {
+                $p->where('karyawan_id', $employee->id)->where('is_active', true);
+            });
+
+        if ($currentWorkYearOnly) {
+            [$from, $to] = $this->leaveYearBounds($employee);
+            $query->whereBetween('created_at', [$from, $to]);
+        }
+
+        return $query->count();
+    }
+
+    /** Kartu stat formulir — izin saya (pengaju), bukan bawahan. */
+    private function countPersonalPermissionHr(MasterKaryawan $employee, bool $currentWorkYearOnly = false): int
+    {
+        $query = HrRequest::query()
+            ->where('is_active', true)
+            ->where('request_type', HrRequest::TYPE_PERMISSION)
+            ->where('karyawan_id', $employee->id);
+
+        if ($currentWorkYearOnly) {
+            [$from, $to] = $this->leaveYearBounds($employee);
+            $query->whereBetween('created_at', [$from, $to]);
+        }
+
+        return $query->count();
+    }
+
+    /** Kartu stat formulir — lembur saya via membership, bukan semua yang pernah dibuat atasan untuk tim. */
+    private function countLegacyPersonalOvertime(MasterKaryawan $employee, bool $currentWorkYearOnly = false): int
+    {
+        $employeeId = (int) $employee->id;
+        $memberOvertimeIds = OvertimeRequestMember::query()
+            ->where('employee_id', $employeeId)
+            ->where('is_active', true)
+            ->pluck('overtime_request_id');
+
+        if ($memberOvertimeIds->isEmpty()) {
+            return 0;
+        }
+
+        $query = OvertimeRequest::query()
+            ->where('is_active', true)
+            ->whereIn('id', $memberOvertimeIds);
+
+        if ($currentWorkYearOnly) {
+            [$from, $to] = $this->leaveYearBounds($employee);
+            $query->whereBetween('created_at', [$from, $to]);
+        }
+
+        return $query->count();
     }
 
     /** @return \Illuminate\Database\Eloquent\Builder */

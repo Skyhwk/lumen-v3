@@ -14,6 +14,9 @@ final class HrLegacyFieldMapper
         if ($kind === 'unpaid') {
             return 'Unpaid Leave';
         }
+        if ($kind === 'phl') {
+            return 'Holiday Replacement Leave';
+        }
 
         return 'Annual Leave';
     }
@@ -25,6 +28,9 @@ final class HrLegacyFieldMapper
         }
         if ($type === 'Unpaid Leave') {
             return 'unpaid';
+        }
+        if ($type === 'Holiday Replacement Leave') {
+            return 'phl';
         }
 
         return 'annual';

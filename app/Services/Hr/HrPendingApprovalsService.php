@@ -27,71 +27,47 @@ class HrPendingApprovalsService
             return [];
         }
 
-        $subordinateIds = AtasanApprovalScope::subordinateKaryawanIds($approver);
-        $subordinateNames = AtasanApprovalScope::subordinateKaryawanNames($approver);
+        $requestIds = \App\Models\Hr\HrApprovalStep::query()
+            ->where('step', \App\Models\Hr\HrApprovalStep::STEP_ATASAN)
+            ->where('state', \App\Models\Hr\HrApprovalStep::STATE_PENDING)
+            ->where('expected_karyawan_id', (int) $approver->id)
+            ->pluck('request_id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
 
-        if (empty($subordinateIds) && empty($subordinateNames)) {
+        if ($requestIds === []) {
             return [];
         }
 
+        $rows = HrRequest::query()
+            ->with(['leaveDetail', 'permissionDetail', 'attendanceCorrectionDetail', 'overtimeDetail', 'overtimeParticipants'])
+            ->whereIn('id', $requestIds)
+            ->where('status', WorkflowStatus::PENDING)
+            ->where('is_active', true)
+            ->orderByDesc('id')
+            ->get();
+
+        $chain = app(HrApprovalChainService::class);
         $pending = [];
-
-        $leavePermissionCorrection = HrRequest::with(['leaveDetail', 'permissionDetail', 'attendanceCorrectionDetail'])
-            ->where('status', WorkflowStatus::PENDING)
-            ->whereIn('request_type', [
-                HrRequest::TYPE_LEAVE,
-                HrRequest::TYPE_PERMISSION,
-                HrRequest::TYPE_ATTENDANCE_CORRECTION,
-            ])
-            ->where(function ($q) use ($subordinateIds) {
-                if (!empty($subordinateIds)) {
-                    $q->whereIn('karyawan_id', $subordinateIds);
-                } else {
-                    $q->whereRaw('0 = 1');
-                }
-            })
-            ->where('is_active', true)
-            ->orderByDesc('id')
-            ->get();
-
-        foreach ($leavePermissionCorrection as $row) {
-            $pending[] = $this->mapRow($row);
-        }
-
-        $overtimeRows = HrRequest::with(['overtimeDetail', 'overtimeParticipants'])
-            ->where('request_type', HrRequest::TYPE_OVERTIME)
-            ->where('status', WorkflowStatus::PENDING)
-            ->where('is_active', true)
-            ->where(function ($q) use ($subordinateIds, $subordinateNames) {
-                $q->where(function ($inner) use ($subordinateIds, $subordinateNames) {
-                    if (!empty($subordinateIds)) {
-                        $inner->whereIn('karyawan_id', $subordinateIds)
-                            ->orWhereHas('overtimeParticipants', fn ($p) => $p->whereIn('karyawan_id', $subordinateIds));
-                    }
-                    if (!empty($subordinateNames)) {
-                        $inner->orWhereIn('created_by_name', $subordinateNames);
-                    }
-                    if (empty($subordinateIds) && empty($subordinateNames)) {
-                        $inner->whereRaw('0 = 1');
-                    }
-                });
-            })
-            ->orderByDesc('id')
-            ->get();
-
-        foreach ($overtimeRows as $row) {
-            $pending[] = $this->mapRow($row);
+        foreach ($rows as $row) {
+            if (!$chain->viewerCanApprove($row, $approver)) {
+                continue;
+            }
+            $pending[] = $this->mapRow($row, $approver);
         }
 
         return $pending;
     }
 
-    private function mapRow(HrRequest $row): array
+    private function mapRow(HrRequest $row, MasterKaryawan $viewer): array
     {
         $meta = self::TYPE_META[$row->request_type] ?? ['title' => 'HR Request', 'controller' => 'HrRequestController'];
         $karyawan = MasterKaryawan::find($row->karyawan_id);
         $raw = $this->presentRaw($row);
         $controller = $meta['controller'];
+        $canApprove = app(HrApprovalChainService::class)->viewerCanApprove($row, $viewer);
 
         return [
             'id' => $row->id,
@@ -103,7 +79,7 @@ class HrPendingApprovalsService
             'status' => $row->status,
             'raw' => $raw,
             'highlights' => PendingApprovalSummary::forController($controller, $raw),
-            'can_approve' => true,
+            'can_approve' => $canApprove,
         ];
     }
 

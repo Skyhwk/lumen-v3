@@ -310,6 +310,9 @@ class MigrateHrRequestsFromAppsCommand extends Command
         if ($type === 'Unpaid Leave') {
             return 'unpaid';
         }
+        if ($type === 'Holiday Replacement Leave') {
+            return 'phl';
+        }
 
         return 'annual';
     }
