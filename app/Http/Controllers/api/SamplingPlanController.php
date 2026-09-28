@@ -22,9 +22,9 @@ use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
 use App\Services\GetAtasan;
 use App\Services\JadwalServices;
+use App\Services\JadwalVoidTrackingSync;
 use App\Services\Notification;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
-use App\Services\SamplerTrackingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -905,11 +905,9 @@ class SamplingPlanController extends Controller
             } else {
                 $batchId = $request->mode['batchId'];
             }
-            $tracking = app(SamplerTrackingService::class);
-            $trackingQuotations = Jadwal::whereIn('id', $batchId)->pluck('no_quotation')->unique();
-            foreach ($trackingQuotations as $quotation) {
-                $tracking->snapshotSchedules($quotation);
-            }
+            $voidTracking = app(JadwalVoidTrackingSync::class);
+            $voidedRowsBeforeVoid = $voidTracking->captureVoidedRows($batchId);
+            $trackingSnapshots = $voidTracking->captureSnapshotsForJadwalIds($batchId);
             $temptMessage = '';
             if ($request->mode['parsial'] !== "") { //menandakan data yg terpilih adalah partial
               
@@ -954,9 +952,7 @@ class SamplingPlanController extends Controller
             $atasan = GetAtasan::where('id', $this->user_id)->get();
             Notification::whereIn('id', $atasan)->title('Cancel QT')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
 
-            foreach ($trackingQuotations as $quotation) {
-                $tracking->syncQuotation($quotation);
-            }
+            $voidTracking->apply($trackingSnapshots, $voidedRowsBeforeVoid);
             DB::commit();
             return response()->json([
                 'message' => 'Jadwal berhasil dicancel',

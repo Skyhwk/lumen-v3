@@ -270,12 +270,32 @@ class FollowUpController extends Controller
             ->orderColumn('pelanggan.nama_pelanggan', 'p.nama_pelanggan $1')
             ->orderColumn('tanggal', 'dfus.tanggal $1')
             ->orderColumn('jam', 'dfus.jam $1')
-            ->filterColumn('keterangan_activity', function ($query, $keyword) {
+            ->filterColumn('keterangan_activity', function ($query, $keyword) use ($keteranganColumns) {
                 $keyword = trim((string) $keyword);
                 if ($keyword === '') {
                     return;
                 }
-                $query->where('dfus.keterangan_activity', 'like', '%' . $keyword . '%');
+                $query->where(function ($q) use ($keyword, $keteranganColumns) {
+                    $q->where('dfus.keterangan_activity', 'like', '%' . $keyword . '%')
+                        ->orWhereHas('keteranganTambahan', function ($sub) use ($keyword, $keteranganColumns) {
+                            $sub->where(function ($x) use ($keyword, $keteranganColumns) {
+                                foreach ($keteranganColumns as $index => $column) {
+                                    if ($index === 0) {
+                                        $x->where($column, 'like', '%' . $keyword . '%');
+                                    } else {
+                                        $x->orWhere($column, 'like', '%' . $keyword . '%');
+                                    }
+                                }
+                            });
+                        });
+                });
+            })
+            ->filterColumn('status_quotation', function ($query, $keyword) {
+                $keyword = trim((string) $keyword);
+                if ($keyword === '') {
+                    return;
+                }
+                $query->where('dfus.status_quotation', 'like', '%' . $keyword . '%');
             })
             ->filterColumn('keterangan_tambahan', function ($query, $value) use ($keteranganColumns) {
                 $data = json_decode($value, true);

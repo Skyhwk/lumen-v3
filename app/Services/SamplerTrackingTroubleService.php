@@ -185,6 +185,10 @@ class SamplerTrackingTroubleService
                 $q->whereNull('s.nama_perusahaan')
                     ->orWhereRaw('LOWER(TRIM(s.nama_perusahaan)) != ?', ['cuti']);
             })
+            ->whereRaw("NOT (
+                (s.no_quotation IS NULL OR TRIM(COALESCE(s.no_quotation, '')) = '')
+                AND (s.no_order IS NULL OR TRIM(COALESCE(s.no_order, '')) = '')
+            )")
             ->whereDate('s.tanggal_sampling', '>=', $startDate)->whereDate('s.tanggal_sampling', '<=', $day)
             ->when($samplerIds, function ($query) use ($samplerIds) { $query->whereIn('m.sampler_id', $samplerIds); })
             ->whereNotNull('m.sampler_id')
@@ -295,6 +299,22 @@ class SamplerTrackingTroubleService
         return DB::table(self::TABLE)->where('sampler_id', $samplerId)
             ->where('tracking_session_id', $sessionId)->where('is_clear', 0)
             ->whereNotNull('reopened_by')->whereNotNull('reopened_at')->exists();
+    }
+
+    /** Whether this sampler may submit events (same rules as assertAllowed, without throwing). */
+    public function isRecordingBlocked($samplerId, $activityDate, $sessionId = null): bool
+    {
+        try {
+            $this->assertAllowed($samplerId, $activityDate, $sessionId);
+
+            return false;
+        } catch (HttpException $exception) {
+            if ($exception->getStatusCode() === 423) {
+                return true;
+            }
+
+            throw $exception;
+        }
     }
 
     public function assertAllowed($samplerId, $activityDate, $sessionId = null)

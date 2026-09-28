@@ -56,6 +56,10 @@ class Handler extends ExceptionHandler
             return $this->handleDatabaseTimeout($exception);
         }
 
+        if ($this->isDebugMode()) {
+            return $this->renderDebug($request, $exception);
+        }
+
         // Tangani HttpException
         if ($exception instanceof HttpException) {
             $statusCode = $exception->getStatusCode();
@@ -74,8 +78,6 @@ class Handler extends ExceptionHandler
             return response()->json([
                 'error' => 'Terjadi kesalahan pada server.',
                 'message' => $exception->getMessage(),
-                'line' => $exception->getLine(),
-                'file' => $exception->getFile(),
             ], 500);
         }
 
@@ -84,13 +86,39 @@ class Handler extends ExceptionHandler
             return response()->json([
                 'error' => 'Terjadi kesalahan pada server.',
                 'message' => $exception->getMessage(),
-                'line' => $exception->getLine(),
-                'file' => $exception->getFile(),
             ], 500);
         }
 
         // Fallback ke parent
         return parent::render($request, $exception);
+    }
+
+    private function isDebugMode(): bool
+    {
+        return filter_var(env('APP_DEBUG', false), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Throwable|\Exception  $exception
+     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse
+     */
+    private function renderDebug($request, $exception)
+    {
+        $status = $exception instanceof HttpException ? $exception->getStatusCode() : 500;
+
+        if (!$request->expectsJson() && !$request->is('api/*') && !$request->is('*/api/*')) {
+            return parent::render($request, $exception);
+        }
+
+        return response()->json([
+            'error' => 'Debug error',
+            'message' => $exception->getMessage(),
+            'exception' => get_class($exception),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+            'trace' => collect($exception->getTrace())->take(25)->values()->all(),
+        ], $status);
     }
 
     /**

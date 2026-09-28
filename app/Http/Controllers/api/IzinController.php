@@ -5,6 +5,9 @@ namespace App\Http\Controllers\api;
 use App\Models\PermissionRequest;
 use App\Models\LeaveRequest;
 use App\Http\Controllers\Controller;
+use App\Services\Hr\HrTableMode;
+use App\Services\Hr\Portal\PortalHrdIzinDatatableQuery;
+use App\Services\Hr\PortalHrSync;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +17,12 @@ class IzinController extends Controller
 {
     public function indexUnprocessed(Request $request)
     {
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalHrdIzinDatatableQuery::class)->unprocessed((int) $request->periode);
+
+            return Datatables::of($data)->make(true);
+        }
+
         $permissions = PermissionRequest::query()->toBase()
             ->from('intilab_apps.permission_requests as pr')
             ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.id')
@@ -83,6 +92,7 @@ class IzinController extends Controller
             WHEN lr.type = "Annual Leave" THEN "cuti"
             WHEN lr.type = "Special Leave" THEN "cuti_khusus"
             WHEN lr.type = "Unpaid Leave" THEN "unpaid_leave"
+            WHEN lr.type = "Holiday Replacement Leave" THEN "pengganti_hari_libur"
             ELSE lr.type
         END as type_document'),
                 'lr.start_date as tanggal_mulai',
@@ -121,6 +131,12 @@ class IzinController extends Controller
 
     public function indexProcessed(Request $request)
     {
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalHrdIzinDatatableQuery::class)->processed((int) $request->periode);
+
+            return Datatables::of($data)->make(true);
+        }
+
          $permissions = PermissionRequest::query()->toBase()
             ->from('intilab_apps.permission_requests as pr')
             ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.id')
@@ -186,6 +202,7 @@ class IzinController extends Controller
             WHEN lr.type = "Annual Leave" THEN "cuti"
             WHEN lr.type = "Special Leave" THEN "cuti_khusus"
             WHEN lr.type = "Unpaid Leave" THEN "unpaid_leave"
+            WHEN lr.type = "Holiday Replacement Leave" THEN "pengganti_hari_libur"
             ELSE lr.type
         END as type_document'),
                 'lr.start_date as tanggal_mulai',
@@ -314,6 +331,14 @@ class IzinController extends Controller
                 'updated_by' => $this->karyawan,
                 'updated_at' => Carbon::now()->format('Y-m-d H:i:s')
             ]);
+
+            $sync = app(PortalHrSync::class);
+            if (strpos($idStr, 'PR-') === 0) {
+                $sync->syncPermissionFromLegacy((int) $id);
+            } else {
+                $sync->syncLeaveFromLegacy((int) $id);
+            }
+
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -364,6 +389,13 @@ class IzinController extends Controller
                 'updated_by' => $this->karyawan,
                 'updated_at' => Carbon::now()->format('Y-m-d H:i:s')
             ]);
+
+            $sync = app(PortalHrSync::class);
+            if (strpos($idStr, 'PR-') === 0) {
+                $sync->syncPermissionFromLegacy((int) $id);
+            } else {
+                $sync->syncLeaveFromLegacy((int) $id);
+            }
 
             DB::commit();
             return response()->json([

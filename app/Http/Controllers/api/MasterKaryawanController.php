@@ -700,14 +700,14 @@ class MasterKaryawanController extends Controller
                 $user->save();
             }
 
-            DB::connection('mysql')
-                ->table('users')
-                ->where('user_id', $karyawan->id)
-                ->update([
-                    'updated_by' => $this->karyawan,
-                    'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'is_active' => false
-                ]);
+            // DB::connection('mysql')
+            //     ->table('users')
+            //     ->where('user_id', $karyawan->id)
+            //     ->update([
+            //         'updated_by' => $this->karyawan,
+            //         'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+            //         'is_active' => false
+            //     ]);
 
             $job = new NonaktifKaryawanJob($karyawan);
             $this->dispatch($job);
@@ -716,6 +716,7 @@ class MasterKaryawanController extends Controller
             return response()->json(['message' => 'Berhasil menonaktifkan karyawan, silahkan tunggu beberapa saat'], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
+            dd($th);
             return response()->json(['message' => 'Gagal menonaktifkan karyawan: ' . $th->getMessage()], 500);
             //throw $th;
         }

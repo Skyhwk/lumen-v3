@@ -11,12 +11,16 @@ use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
 use App\Services\GetAtasan;
 use App\Services\GetBawahan;
+use App\Services\Hr\HrTableMode;
+use App\Services\Hr\Portal\PortalOvertimeDatatableQuery;
+use App\Services\Hr\PortalHrSync;
 use App\Services\Notification;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
+use App\Services\Greatday\FirebaseService;
+use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -28,6 +32,12 @@ class LemburController extends Controller
 {
     public function indexUnprocessed(Request $request)
     {
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalOvertimeDatatableQuery::class)->hrdUnprocessed((int) $request->periode);
+
+            return Datatables::of($data)->make(true);
+        }
+
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
@@ -86,6 +96,11 @@ class LemburController extends Controller
 
     public function indexProcessed(Request $request)
     {
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalOvertimeDatatableQuery::class)->hrdProcessed((int) $request->periode);
+
+            return Datatables::of($data)->make(true);
+        }
 
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
@@ -147,6 +162,12 @@ class LemburController extends Controller
 
     public function indexUnprocessedFinance(Request $request)
     {
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalOvertimeDatatableQuery::class)->financeUnprocessed((int) $request->periode);
+
+            return Datatables::of($data)->make(true);
+        }
+
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
@@ -208,6 +229,12 @@ class LemburController extends Controller
 
     public function indexProcessedFinance(Request $request)
     {
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalOvertimeDatatableQuery::class)->financeProcessed((int) $request->periode);
+
+            return Datatables::of($data)->make(true);
+        }
+
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
@@ -268,6 +295,17 @@ class LemburController extends Controller
     public function indexByOwner(Request $request)
     {
         $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
+
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalOvertimeDatatableQuery::class)->ownerUnprocessed((int) $request->periode, $bawahan);
+
+            return Datatables::of($data)
+                ->addColumn('can_approve', function ($row) {
+                    return $this->grade == 'MANAGER' || $this->grade == 'SENIOR MANAGER';
+                })
+                ->make(true);
+        }
+
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
@@ -333,6 +371,17 @@ class LemburController extends Controller
     public function indexByOwnerProcessed(Request $request)
     {
         $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
+
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalOvertimeDatatableQuery::class)->ownerProcessed((int) $request->periode, $bawahan);
+
+            return Datatables::of($data)
+                ->addColumn('can_approve', function ($row) {
+                    return $this->grade == 'MANAGER' || $this->grade == 'SENIOR MANAGER';
+                })
+                ->make(true);
+        }
+
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
@@ -681,6 +730,8 @@ class LemburController extends Controller
                 'Waktu: ' . $request->jam_mulai . ' - ' . $request->jam_selesai . ' WIB (' . $request->keterangan . ')',
             );
 
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $header->id);
+
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -731,6 +782,8 @@ class LemburController extends Controller
             $formHeader->rejected_finance_by = null;
             $formHeader->rejected_finance_at = null;
             $formHeader->save();
+
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $formHeader->id);
 
             $userId = GetAtasan::where('nama_lengkap', $formHeader->created_by)->get()->pluck('id')->toArray();
 
@@ -783,6 +836,8 @@ class LemburController extends Controller
             $formHeader->reject_hrd_reason = $request->keterangan;
             $formHeader->save();
 
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $formHeader->id);
+
             $message = 'Form lembur telah di reject';
             $userId = GetAtasan::where('nama_lengkap', $formHeader->created_by)->get()->pluck('id')->toArray();
 
@@ -830,6 +885,8 @@ class LemburController extends Controller
             $formHeader->approved_atasan_at = Carbon::now()->format('Y-m-d H:i:s');
             $formHeader->save();
 
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $formHeader->id);
+
             $message = 'Form lembur telah di approve';
             $userId = GetAtasan::where('nama_lengkap', $formHeader->created_by)->get()->pluck('id')->toArray();
 
@@ -872,6 +929,8 @@ class LemburController extends Controller
             $formHeader->rejected_atasan_at = Carbon::now()->format('Y-m-d H:i:s');
             $formHeader->reject_atasan_reason = $request->keterangan;
             $formHeader->save();
+
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $formHeader->id);
 
             $message = 'Form lembur telah di reject';
             $userId = GetAtasan::where('nama_lengkap', $formHeader->created_by)->get()->pluck('id')->toArray();
@@ -918,6 +977,8 @@ class LemburController extends Controller
             $formHeader->approved_finance_at = Carbon::now()->format('Y-m-d H:i:s');
             $formHeader->save();
 
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $formHeader->id);
+
             $message = 'Form lembur telah di approve';
             $userId = GetAtasan::where('nama_lengkap', $formHeader->created_by)->get()->pluck('id')->toArray();
             Notification::whereIn('id', $userId)
@@ -962,6 +1023,8 @@ class LemburController extends Controller
             $formHeader->reject_finance_reason = $request->keterangan;
             $formHeader->save();
 
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $formHeader->id);
+
             $message = 'Form lembur telah di reject';
             $userId = GetAtasan::where('nama_lengkap', $formHeader->created_by)->get()->pluck('id')->toArray();
             Notification::whereIn('id', $userId)
@@ -1004,23 +1067,23 @@ class LemburController extends Controller
 
     private function sendNotificationLembur($users, $title, $body)
     {
-        $payload = [
-            'data[title]' => $title,
-            'data[body]'  => $body,
-            'data[url]'   => '/form-lembur',
-            'data[type]'  => 'lembur',
-        ];
-
-        foreach ($users as $index => $userId) {
-            $payload["users[$index]"] = $userId;
+        $userIds = array_values(array_unique(array_filter(array_map('intval', (array) $users))));
+        if ($userIds === []) {
+            return;
         }
 
-        Http::asForm()
-            ->withHeaders([
-                'Accept' => 'application/json',
-                'x-slice' => env('APPS_NOTIFICATION_SLICE'),
-            ])
-            ->withToken(env('APPS_INTERNAL_TOKEN'))
-            ->post('https://apps.intilab.com/android-attendance/api/route', $payload);
+        try {
+            app(FirebaseService::class)->sendNotifications($userIds, [
+                'title' => $title,
+                'body' => $body,
+                'url' => '/form-lembur',
+                'type' => 'lembur',
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('sendNotificationLembur failed', [
+                'users' => $userIds,
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 }

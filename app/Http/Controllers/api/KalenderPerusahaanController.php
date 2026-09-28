@@ -7,7 +7,8 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Http;
+use App\Services\Greatday\IndonesiaNationalHolidayService;
+
 class KalenderPerusahaanController extends Controller
 {
     public function indexKalender(Request $request)
@@ -231,19 +232,15 @@ class KalenderPerusahaanController extends Controller
         }
     }
 
-    public function hariLibur(Request $request)
+    public function hariLibur(Request $request, IndonesiaNationalHolidayService $nationalHolidayService)
     {
         try {
-            $response = Http::get('https://libur.deno.dev/api?year=' . $request->tahun);
-            $data = collect($response->json())->map(function ($item) {
-                return [
-                    'tanggal' => $item['date'],
-                    'keterangan' => $item['name'],
-                ];
-            });
+            $year = (int) ($request->tahun ?? date('Y'));
+            $national = $nationalHolidayService->forYear($year);
 
             return response()->json([
-                'data' => $data,
+                'data' => $national['items'],
+                'source' => $national['source'],
             ], 200);
         } catch (Exception $e) {
             return response()->json([
