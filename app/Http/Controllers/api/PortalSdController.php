@@ -18,6 +18,36 @@ use App\Models\{
 
 class PortalSdController extends Controller
 {
+    /**
+     * Sync no_order di sampel_diantar (pra-order) setelah QT sudah punya OrderHeader.
+     * Dipanggil saat user input/search no QT.
+     */
+    private function syncSampelDiantarNoOrder(string $noDocument, ?string $noOrder = null): ?string
+    {
+        if (empty($noOrder)) {
+            $order = OrderHeader::where('no_document', $noDocument)
+                ->where('is_revisi', 0)
+                ->first();
+
+            if (!$order || empty($order->no_order)) {
+                return null;
+            }
+
+            $noOrder = $order->no_order;
+        }
+
+        SampelDiantar::where('no_quotation', $noDocument)
+            ->where(function ($q) {
+                $q->whereNull('no_order')->orWhere('no_order', '');
+            })
+            ->update([
+                'no_order' => $noOrder,
+                'updated_at' => DATE('Y-m-d H:i:s'),
+            ]);
+
+        return $noOrder;
+    }
+
     public function search(Request $request)
     {
         try {
@@ -31,6 +61,12 @@ class PortalSdController extends Controller
                 ->where('no_document', $request->no_document)
                 ->where('is_revisi',0)
                 ->first();
+
+            // QT sudah order: sync no_order ke header SD yang dibuat saat pra-order
+            if ($search != null && !empty($search->no_order)) {
+                $this->syncSampelDiantarNoOrder($request->no_document, $search->no_order);
+                $search->load('SampelDiantar');
+            }
 
             // logic untuk pra-order:
             if($search == null){
@@ -336,10 +372,20 @@ class PortalSdController extends Controller
                 $chek->volume = $request->volume;
                 $chek->kondisi_ubnormal = json_encode($request->kondisi_ubnormal);
                 $chek->alamat_perusahaan = $request->alamat_perusahaan;
+                // Jika header SD dibuat pra-order (no_order null) tapi QT sudah order, isi no_order
+                if (empty($chek->no_order)) {
+                    $syncedNoOrder = $this->syncSampelDiantarNoOrder(
+                        $chek->no_quotation,
+                        !empty($request->no_order) ? $request->no_order : null
+                    );
+                    if (!empty($syncedNoOrder)) {
+                        $chek->no_order = $syncedNoOrder;
+                    }
+                }
                 $chek->updated_at = DATE('Y-m-d H:i:s');
                 $chek->save();
 
-                if ($request->no_order !== null) {
+                if ($request->no_order !== null || !empty($chek->no_order)) {
                     // Looping langsung dari data request
                     foreach ($request->tanggal_sampling as $item) {
                         OrderDetail::where('no_sampel', $item['no_sampel'])
@@ -759,7 +805,17 @@ class PortalSdController extends Controller
     public function listSampel(Request $request)
     {
         try {
-            
+            // Pastikan header SD pra-order ikut ter-update no_order jika QT sudah order
+            if (!empty($request->no_document)) {
+                $syncedNoOrder = $this->syncSampelDiantarNoOrder(
+                    $request->no_document,
+                    !empty($request->no_order) ? $request->no_order : null
+                );
+                if (empty($request->no_order) && !empty($syncedNoOrder)) {
+                    $request->merge(['no_order' => $syncedNoOrder]);
+                }
+            }
+
             $type = explode('/', $request->no_document);
             $datas = OrderDetail::where('kategori_1', 'SD')
                 ->where('no_order', $request->no_order?: null)
