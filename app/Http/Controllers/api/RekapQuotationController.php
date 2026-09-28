@@ -65,6 +65,10 @@ class RekapQuotationController extends Controller
                     break;
             }
 
+            $tableName = $request->mode === 'kontrak'
+                ? 'request_quotation_kontrak_H'
+                : 'request_quotation';
+
             return DataTables::of($data)
                 ->addColumn('count_jadwal', function ($row) {
                     return $row->sampling ? $row->sampling->sum(function ($sampling) {
@@ -73,6 +77,13 @@ class RekapQuotationController extends Controller
                 })
                 ->addColumn('count_detail', function ($row) {
                     return $row->detail ? $row->detail->count() : 0;
+                })
+                ->filterColumn('status_quotation', function ($query, $keyword) use ($tableName) {
+                    $keyword = trim((string) $keyword);
+                    if ($keyword === '') {
+                        return;
+                    }
+                    $query->where($tableName . '.status_quotation', 'like', '%' . $keyword . '%');
                 })
                 ->make(true);
         } catch (Exception $e) {
