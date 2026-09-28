@@ -998,6 +998,54 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertFalse((bool) $archived->fresh()->is_active);
     }
 
+    public function testRescheduleSamplingPlanOnSameOrderDatePromotesSessionWithEvidence(): void
+    {
+        $this->db->getConnection('mysql')->table('order_header')->insert([
+            'no_document' => 'Q1',
+            'no_order' => 'ORD-RESCHEDULE',
+            'is_active' => 1,
+        ]);
+        $this->db->getConnection('mysql')->table('sampling_plan')->insert([
+            ['id' => 100, 'no_quotation' => 'Q1'],
+            ['id' => 200, 'no_quotation' => 'Q1'],
+        ]);
+
+        $row = $this->schedule([
+            'id_sampling' => 100,
+            'tanggal' => '2026-09-23',
+            'kendaraan' => 'B 1963 NZK',
+        ]);
+        $session = $this->prepare('2026-09-23')->first();
+        $member = $this->attendance($session);
+        $eventIds = $member->events()->pluck('id')->all();
+
+        Jadwal::where('id', $row->id)->update(['is_active' => false]);
+        $this->schedule([
+            'id_sampling' => 200,
+            'parsial' => 203540,
+            'tanggal' => '2026-09-23',
+            'kendaraan' => 'B 9030 JMV',
+        ]);
+
+        $header = new PersiapanSampelHeader();
+        $header->no_quotation = 'Q1';
+        $header->tanggal_sampling = '2026-09-23';
+        $this->service->syncByPersiapanHeader($header);
+
+        $active = SamplerTrackingSession::where('no_quotation', 'Q1')
+            ->where('tanggal_sampling', '2026-09-23')
+            ->where('is_active', true)
+            ->get();
+
+        $this->assertCount(1, $active);
+        $keeper = $active->first();
+        $this->assertSame((int) $session->id, (int) $keeper->id);
+        $this->assertSame(200, (int) $keeper->id_sampling);
+        $this->assertSame(203540, (int) $keeper->parsial);
+        $this->assertSame('B 9030 JMV', $keeper->kendaraan);
+        $this->assertSame($eventIds, $member->fresh()->events()->pluck('id')->all());
+    }
+
     public function testRevisionDoesNotMoveEvidenceToDifferentVisit(): void
     {
         $old = 'ISL/QT/26-IX/456R1';
@@ -1456,5 +1504,38 @@ class SamplerTrackingSyncTest extends TestCase
         $this->service->syncScheduleEdit($before, 'Q1');
         $eko = $session->activeMembers()->where('sampler_name', 'Eko')->firstOrFail();
         $this->assertSame(['checkin'], $eko->events()->pluck('event_type')->all());
+    }
+
+    public function testBlockedTeammateStillReceivesAutoEventAndTeamLockNotice(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-27 08:00:00', 'Asia/Jakarta'));
+        $this->schedule(['tanggal' => '2026-09-27', 'userid' => 10, 'sampler' => 'Geo']);
+        $this->schedule(['tanggal' => '2026-09-27', 'userid' => 20, 'sampler' => 'Rizki']);
+        $session = $this->prepare('2026-09-27')->firstOrFail();
+        $geo = $session->activeMembers()->where('sampler_id', 10)->firstOrFail();
+        $rizki = $session->activeMembers()->where('sampler_id', 20)->firstOrFail();
+        $this->db->getConnection('mysql')->table('sampler_tracking_troubles')->insert([
+            'sampler_id' => 20,
+            'tracking_session_id' => $session->id,
+            'activity_date' => '2026-09-21',
+            'is_clear' => 0,
+            'created_at' => '2026-09-27 07:00:00',
+            'updated_at' => '2026-09-27 07:00:00',
+        ]);
+        Container::getInstance()->instance(\App\Services\NotificationFdlService::class, new class {
+            public function sendToUserId($userId, $title, $message)
+            {
+            }
+        });
+
+        $events = $this->service->storeEvent(['member_id' => $geo->id, 'event_type' => 'departure']);
+        $this->assertSame(2, $events->count());
+        $auto = $rizki->events()->where('event_type', 'departure')->firstOrFail();
+        $this->assertEquals(1, $auto->is_auto);
+        $this->assertEquals($geo->id, $auto->triggered_by_member_id);
+        $notice = $this->service->consumeTeamLockNotice();
+        $this->assertNotNull($notice);
+        $this->assertStringContainsString('Rizki', $notice);
+        $this->assertStringContainsString('terkunci', $notice);
     }
 }

@@ -301,6 +301,22 @@ class SamplerTrackingTroubleService
             ->whereNotNull('reopened_by')->whereNotNull('reopened_at')->exists();
     }
 
+    /** Whether this sampler may submit events (same rules as assertAllowed, without throwing). */
+    public function isRecordingBlocked($samplerId, $activityDate, $sessionId = null): bool
+    {
+        try {
+            $this->assertAllowed($samplerId, $activityDate, $sessionId);
+
+            return false;
+        } catch (HttpException $exception) {
+            if ($exception->getStatusCode() === 423) {
+                return true;
+            }
+
+            throw $exception;
+        }
+    }
+
     public function assertAllowed($samplerId, $activityDate, $sessionId = null)
     {
         $activityDate = $this->normalizeActivityDate($activityDate);
