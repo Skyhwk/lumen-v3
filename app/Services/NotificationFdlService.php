@@ -88,4 +88,20 @@ class NotificationFdlService
             dispatch(new SendNotificationFdl($token->fcm_token ?? null, $title, $message, ['title' => $title, 'body' => $message], $user->id));
         }
     }
+
+    public function sendToUserId($userId, $title, $message)
+    {
+        if (!$userId) {
+            return;
+        }
+
+        $token = FcmTokenFdl::where('user_id', $userId)->first();
+        dispatch(new SendNotificationFdl(
+            $token ? $token->fcm_token : null,
+            $title,
+            $message,
+            ['title' => $title, 'body' => $message],
+            $userId
+        ));
+    }
 }

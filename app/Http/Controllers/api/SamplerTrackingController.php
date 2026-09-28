@@ -140,13 +140,19 @@ class SamplerTrackingController extends Controller
         }
 
         $events = $this->service->storeEvent($request->all());
+        $teamLockNotice = $this->service->consumeTeamLockNotice();
 
-        return response()->json([
+        $response = [
             'success' => true,
             'message' => 'Tracking sampler berhasil disimpan.',
             'total_event' => $events->count(),
             'data' => $events,
-        ]);
+        ];
+        if ($teamLockNotice) {
+            $response['team_lock_notice'] = $teamLockNotice;
+        }
+
+        return response()->json($response);
     }
 
     public function updateRouteOrder(Request $request)

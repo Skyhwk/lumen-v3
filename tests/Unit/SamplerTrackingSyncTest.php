@@ -1505,4 +1505,37 @@ class SamplerTrackingSyncTest extends TestCase
         $eko = $session->activeMembers()->where('sampler_name', 'Eko')->firstOrFail();
         $this->assertSame(['checkin'], $eko->events()->pluck('event_type')->all());
     }
+
+    public function testBlockedTeammateStillReceivesAutoEventAndTeamLockNotice(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-27 08:00:00', 'Asia/Jakarta'));
+        $this->schedule(['tanggal' => '2026-09-27', 'userid' => 10, 'sampler' => 'Geo']);
+        $this->schedule(['tanggal' => '2026-09-27', 'userid' => 20, 'sampler' => 'Rizki']);
+        $session = $this->prepare('2026-09-27')->firstOrFail();
+        $geo = $session->activeMembers()->where('sampler_id', 10)->firstOrFail();
+        $rizki = $session->activeMembers()->where('sampler_id', 20)->firstOrFail();
+        $this->db->getConnection('mysql')->table('sampler_tracking_troubles')->insert([
+            'sampler_id' => 20,
+            'tracking_session_id' => $session->id,
+            'activity_date' => '2026-09-21',
+            'is_clear' => 0,
+            'created_at' => '2026-09-27 07:00:00',
+            'updated_at' => '2026-09-27 07:00:00',
+        ]);
+        Container::getInstance()->instance(\App\Services\NotificationFdlService::class, new class {
+            public function sendToUserId($userId, $title, $message)
+            {
+            }
+        });
+
+        $events = $this->service->storeEvent(['member_id' => $geo->id, 'event_type' => 'departure']);
+        $this->assertSame(2, $events->count());
+        $auto = $rizki->events()->where('event_type', 'departure')->firstOrFail();
+        $this->assertEquals(1, $auto->is_auto);
+        $this->assertEquals($geo->id, $auto->triggered_by_member_id);
+        $notice = $this->service->consumeTeamLockNotice();
+        $this->assertNotNull($notice);
+        $this->assertStringContainsString('Rizki', $notice);
+        $this->assertStringContainsString('terkunci', $notice);
+    }
 }

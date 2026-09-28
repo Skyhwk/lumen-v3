@@ -19,6 +19,7 @@ class SamplerTrackingService
 {
     protected $columnsByTable = [];
     protected $orderNumbersByQuotation = [];
+    protected $teamLockNotice = null;
 
     protected function now()
     {
@@ -2071,7 +2072,8 @@ public function buildTrackingRows($sessions)
         }
         // Run clearance outside the event transaction: a later validation failure must not undo it.
         (new SamplerTrackingTroubleService())->assertAllowed($source->sampler_id, $source->session->tanggal_sampling, $source->sampler_tracking_session_id);
-        return DB::transaction(function () use ($payload) {
+        $lockedTeammates = collect();
+        $events = DB::transaction(function () use ($payload, &$lockedTeammates) {
             $member = SamplerTrackingMember::with('session')
                 ->where('id', $payload['member_id'])
                 ->where('is_active', true)
@@ -2107,17 +2109,13 @@ public function buildTrackingRows($sessions)
                 // menutup anggota tim yang masih punya durasi lanjutan.
                 ->get();
             $ownActivityMember = $activity ? $this->sessionMemberForSampler($activity, $member) : $member;
-            $members = $members->filter(function ($target) use ($activity, $ownActivityMember, $eventType, $member) {
+            $troubleService = new SamplerTrackingTroubleService();
+            $members = $members->filter(function ($target) use ($activity, $ownActivityMember, $eventType) {
                 $logical = $activity ? $this->sessionMemberForSampler($activity, $target) : $target;
-                if (in_array($eventType, ['checkout', 'return'], true) && SamplerTrackingActivity::duration($logical) !== SamplerTrackingActivity::duration($ownActivityMember)) return false;
-                if ((string) $target->id !== (string) $member->id) {
-                    try {
-                        (new SamplerTrackingTroubleService())->assertAllowed($target->sampler_id, $member->session->tanggal_sampling, $target->sampler_tracking_session_id);
-                    } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
-                        if ($e->getStatusCode() !== 423) throw $e;
-                        return false;
-                    }
+                if (in_array($eventType, ['checkout', 'return'], true) && SamplerTrackingActivity::duration($logical) !== SamplerTrackingActivity::duration($ownActivityMember)) {
+                    return false;
                 }
+
                 return !$this->memberHasTrackingEvent($target->id, $eventType);
             });
 
@@ -2144,6 +2142,15 @@ public function buildTrackingRows($sessions)
             $longitude = $this->normalizeCoordinate($payload['longitude'] ?? $payload['longi'] ?? $payload['long'] ?? null);
 
             foreach ($members as $targetMember) {
+                if ((string) $targetMember->id !== (string) $member->id
+                    && $troubleService->isRecordingBlocked(
+                        $targetMember->sampler_id,
+                        $member->session->tanggal_sampling,
+                        $targetMember->sampler_tracking_session_id
+                    )) {
+                    $lockedTeammates->push($targetMember);
+                }
+
                 $events[] = SamplerTrackingEvent::create($this->onlyExistingColumns($eventModel->getTable(), [
                     'sampler_tracking_session_id' => $targetMember->sampler_tracking_session_id,
                     'sampler_tracking_member_id' => $targetMember->id,
@@ -2167,6 +2174,44 @@ public function buildTrackingRows($sessions)
 
             return collect($events);
         });
+
+        $this->notifyTeamLockAfterFanout($source, $lockedTeammates);
+
+        return $events;
+    }
+
+    public function consumeTeamLockNotice()
+    {
+        $notice = $this->teamLockNotice;
+        $this->teamLockNotice = null;
+
+        return $notice;
+    }
+
+    protected function notifyTeamLockAfterFanout(SamplerTrackingMember $trigger, $lockedTeammates): void
+    {
+        $lockedTeammates = collect($lockedTeammates)->filter(function ($item) {
+            return $item instanceof SamplerTrackingMember;
+        })->unique('id')->values();
+        if ($lockedTeammates->isEmpty()) {
+            return;
+        }
+
+        $names = $lockedTeammates->pluck('sampler_name')->filter()->unique()->values()->implode(', ');
+        $notice = 'Rekan tim (' . $names . ') memiliki activity terkunci. Event tim tetap tercatat otomatis; rekan tersebut harus menyelesaikan activity yang terkunci (hubungi atasan untuk unblock).';
+        $this->teamLockNotice = $notice;
+
+        $notification = app(NotificationFdlService::class);
+        if ($trigger->sampler_id) {
+            $notification->sendToUserId($trigger->sampler_id, 'Activity rekan tim terkunci', $notice);
+        }
+
+        $lockedMessage = 'Activity Anda masih terkunci karena penugasan sebelumnya belum selesai. Event tim hari ini sudah tercatat otomatis; selesaikan activity terkunci setelah atasan membuka unblock.';
+        foreach ($lockedTeammates as $lockedMember) {
+            if ($lockedMember->sampler_id) {
+                $notification->sendToUserId($lockedMember->sampler_id, 'Activity sampling terkunci', $lockedMessage);
+            }
+        }
     }
 
     /**
