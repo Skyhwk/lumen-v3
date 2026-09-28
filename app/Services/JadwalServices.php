@@ -62,6 +62,10 @@ class JadwalServices
      */
     private function syncSamplerTrackingChange($before, $quotation, $isCreation = false): void
     {
+        if (!app(SamplerTrackingService::class)->quotationHasActivePersiapan($quotation)) {
+            return;
+        }
+
         dispatch(new SyncSamplerTrackingScheduleJob(
             $quotation,
             collect($before)->map(function ($row) {
