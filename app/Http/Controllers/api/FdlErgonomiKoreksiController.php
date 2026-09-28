@@ -170,7 +170,29 @@ class FdlErgonomiKoreksiController extends Controller
             case 5:
                 $formatted = RlwFormatter::format($request->all(), []);
                 unset($formatted['id_datalapangan'], $formatted['no_sampel'], $formatted['method']);
-                return array_merge(['pengukuran' => json_encode($formatted, JSON_UNESCAPED_SLASHES)], $meta);
+                $fields = array_merge([
+                    'pengukuran' => json_encode($formatted, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ], $meta);
+                if ($request->exists('berat_beban')) {
+                    $fields['berat_beban'] = $request->input('berat_beban');
+                }
+                $frek = $request->input('frek_jml_angkatan');
+                if ($frek === null || $frek === '') {
+                    $frek = $request->input('frekuensi_jumlah_angkatan');
+                }
+                if ($frek !== null && $frek !== '') {
+                    $fields['frekuensi_jumlah_angkatan'] = str_replace(',', '.', (string) $frek);
+                }
+                if ($request->filled('kopling_tangan')) {
+                    $fields['kopling_tangan'] = $request->input('kopling_tangan');
+                }
+                if ($request->exists('jarak_vertikal')) {
+                    $fields['jarak_vertikal'] = $request->input('jarak_vertikal');
+                }
+                if ($request->exists('durasi_jam_kerja')) {
+                    $fields['durasi_jam_kerja'] = $request->input('durasi_jam_kerja');
+                }
+                return $fields;
             case 7:
                 $payload = $request->except([
                     'id_lapangan_sumber',
