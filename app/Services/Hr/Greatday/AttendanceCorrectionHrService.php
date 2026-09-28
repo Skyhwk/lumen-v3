@@ -11,10 +11,12 @@ use App\Services\Hr\Greatday\Concerns\BootstrapsHrAtasanChain;
 use App\Services\Hr\ApprovalService;
 use App\Services\Hr\HrApprovalChainService;
 use App\Services\Hr\GreatdayIndexScope;
+use App\Services\Hr\HrFormAttachmentStorage;
 use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\LegacyHrMirror;
 use App\Services\Hr\Presenters\AttendanceCorrectionPresenter;
 use App\Services\Hr\WorkflowStatus;
+use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -49,17 +51,10 @@ class AttendanceCorrectionHrService
 
         $status = WorkflowStatus::PENDING;
 
-        $attachmentPath = null;
-        if ($request->hasFile('attachment')) {
-            $file = $request->file('attachment');
-            $destinationPath = public_path('attendance-corrections');
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0777, true);
-            }
-            $fileName = str_replace('.', '', microtime(true)) . '.' . $file->getClientOriginalExtension();
-            $file->move($destinationPath, $fileName);
-            $attachmentPath = $fileName;
-        }
+        $attachmentPath = HrFormAttachmentStorage::storeImages(
+            HrFormAttachmentStorage::collectUploadedImages($request),
+            GreatdayAssetPaths::KEY_KOREKSI_ABSEN
+        );
 
         $header = HrRequest::create([
             'uuid' => (string) Str::uuid(),

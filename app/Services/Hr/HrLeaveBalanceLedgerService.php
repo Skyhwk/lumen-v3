@@ -112,6 +112,33 @@ class HrLeaveBalanceLedgerService
             ->all();
     }
 
+    /**
+     * Batalkan entri alpa otomatis untuk satu hari jika aturan absensi/izin berubah.
+     */
+    public function voidAutomaticAlpaDay(
+        MasterKaryawan $employee,
+        string $referenceDateYmd,
+        string $reason = 'Alpa dibatalkan — ada absen masuk/keluar atau izin/cuti disetujui'
+    ): bool {
+        $externalRef = 'alpa:' . $employee->id . ':' . Carbon::parse($referenceDateYmd)->format('Y-m-d');
+        $existing = HrLeaveBalanceLedger::query()->where('external_ref', $externalRef)->first();
+        if (!$existing || $existing->is_void) {
+            return false;
+        }
+        if ($existing->entry_type !== HrLeaveBalanceLedger::TYPE_ALPA
+            || $existing->source !== HrLeaveBalanceLedger::SOURCE_ATTENDANCE) {
+            return false;
+        }
+
+        $existing->is_void = true;
+        $existing->voided_at = Carbon::now();
+        $existing->voided_by_name = 'system:attendance';
+        $existing->void_reason = $reason;
+        $existing->save();
+
+        return true;
+    }
+
     public function recordAlpaDay(
         MasterKaryawan $employee,
         string $referenceDateYmd,

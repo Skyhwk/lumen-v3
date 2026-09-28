@@ -2,15 +2,24 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Models\Hr\HrRequest;
 use App\Models\LeaveRequest;
 use App\Models\MasterDivisi;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
 use App\Services\GetAtasan;
 use App\Services\GetBawahan;
+use App\Services\Greatday\LeaveRequestValidationService;
+use App\Services\Hr\ApprovalService;
+use App\Services\Hr\Greatday\LeaveRequestHrService;
+use App\Services\Hr\HrApprovalChainService;
+use App\Services\Hr\HrFormAttachmentStorage;
+use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\HrTableMode;
+use App\Services\Hr\LegacyHrMirror;
 use App\Services\Hr\Portal\PortalLeaveDatatableQuery;
 use App\Services\Hr\PortalHrSync;
+use App\Services\Hr\WorkflowStatus;
 use App\Services\Notification;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -38,11 +47,7 @@ class PermohonanCutiController extends Controller
             $dt = $portalQuery->applyDatatablesFilters($dt);
 
             return $dt->addColumn('can_approve', function ($row) {
-                $isAtasan = ($this->grade === 'MANAGER') || ($this->grade === 'SENIOR MANAGER');
-                $isBukanDiriSendiri = ($row->employee_id != $this->user_id);
-                $belumDiApprove = is_null($row->approved_atasan_by);
-
-                return $isAtasan && $isBukanDiriSendiri && $belumDiApprove;
+                return $this->canApproveAtasanOnRow($row);
             })->make(true);
         }
 
@@ -106,11 +111,7 @@ class PermohonanCutiController extends Controller
         $dt = $this->applyDatatablesFilter($dt);
 
         return $dt->addColumn('can_approve', function ($row) {
-                $isAtasan = ($this->grade === 'MANAGER') || ($this->grade === 'SENIOR MANAGER');
-                $isBukanDiriSendiri = ($row->employee_id != $this->user_id);
-                $belumDiApprove = is_null($row->approved_atasan_by);
-
-                return $isAtasan && $isBukanDiriSendiri && $belumDiApprove;
+                return $this->canApproveAtasanOnRow($row);
             })
             ->make(true);
     }
@@ -121,6 +122,172 @@ class PermohonanCutiController extends Controller
     public function indexUnprocessed(Request $request)
     {
         return $this->indexByOwner($request);
+    }
+
+    /**
+     * Antrian HRD — hanya cuti yang sudah lewat seluruh rantai persetujuan atasan.
+     */
+    public function indexHrdUnprocessed(Request $request)
+    {
+        $year = (int) ($request->periode ?? date('Y'));
+
+        if (HrTableMode::portalReadsHrTables()) {
+            $portalQuery = app(PortalLeaveDatatableQuery::class);
+            $query = $portalQuery->hrdUnprocessed($year);
+            $dt = Datatables::of($query);
+            $dt = $portalQuery->applyDatatablesFilters($dt);
+
+            return $dt->make(true);
+        }
+
+        $query = LeaveRequest::on('intilab_apps')
+            ->leftJoin('intilab_produksi.master_karyawan as karyawan', 'leave_requests.employee_id', '=', 'karyawan.id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'karyawan.id_department', '=', 'd.id')
+            ->leftJoin('intilab_apps.special_leave_types as slt', 'leave_requests.special_leave_id', '=', 'slt.id')
+            ->select(
+                'leave_requests.id',
+                'leave_requests.no_document',
+                'leave_requests.type',
+                'leave_requests.special_leave_id',
+                'slt.name as special_leave_name',
+                'leave_requests.start_date',
+                'leave_requests.end_date',
+                'leave_requests.start_date as tanggal',
+                'd.nama_divisi',
+                DB::raw('CASE
+                        WHEN leave_requests.status = "Approved Atasan" THEN "Approve Atasan"
+                        WHEN leave_requests.status = "Rejected Atasan" THEN "Rejected Atasan"
+                        WHEN leave_requests.status = "Approved HRD" THEN "Approved HRD"
+                        WHEN leave_requests.status = "Rejected HRD" THEN "Rejected HRD"
+                        ELSE "Pending"
+                    END as status'),
+                'karyawan.id as employee_id',
+                'karyawan.nama_lengkap',
+                'karyawan.grade as jabatan',
+                'leave_requests.approved_atasan_by',
+                'leave_requests.approved_atasan_at',
+                'leave_requests.rejected_atasan_by',
+                'leave_requests.rejected_atasan_at',
+                'leave_requests.reject_atasan_reason',
+                'leave_requests.approved_hrd_by',
+                'leave_requests.approved_hrd_at',
+                'leave_requests.rejected_hrd_by',
+                'leave_requests.rejected_hrd_at',
+                'leave_requests.reject_hrd_reason',
+                'leave_requests.attachment',
+                'leave_requests.created_by as nama_pengaju',
+                'leave_requests.created_at as diajukan_pada',
+                'leave_requests.description as keterangan'
+            )
+            ->where('leave_requests.status', 'Approved Atasan')
+            ->whereNull('leave_requests.approved_hrd_by')
+            ->whereNull('leave_requests.rejected_atasan_by')
+            ->whereNull('leave_requests.rejected_hrd_by')
+            ->whereYear('leave_requests.start_date', $year);
+
+        $dt = Datatables::of($query);
+        $dt = $this->applyDatatablesFilter($dt);
+
+        return $dt->make(true);
+    }
+
+    public function indexHrdProcessed(Request $request)
+    {
+        $year = (int) ($request->periode ?? date('Y'));
+
+        if (HrTableMode::portalReadsHrTables()) {
+            $portalQuery = app(PortalLeaveDatatableQuery::class);
+            $query = $portalQuery->hrdProcessed($year);
+            $dt = Datatables::of($query);
+            $dt = $portalQuery->applyDatatablesFilters($dt);
+
+            return $dt->make(true);
+        }
+
+        $query = LeaveRequest::on('intilab_apps')
+            ->leftJoin('intilab_produksi.master_karyawan as karyawan', 'leave_requests.employee_id', '=', 'karyawan.id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'karyawan.id_department', '=', 'd.id')
+            ->leftJoin('intilab_apps.special_leave_types as slt', 'leave_requests.special_leave_id', '=', 'slt.id')
+            ->select(
+                'leave_requests.id',
+                'leave_requests.no_document',
+                'leave_requests.type',
+                'leave_requests.special_leave_id',
+                'slt.name as special_leave_name',
+                'leave_requests.start_date',
+                'leave_requests.end_date',
+                'leave_requests.start_date as tanggal',
+                'd.nama_divisi',
+                DB::raw('CASE
+                        WHEN leave_requests.status = "Approved Atasan" THEN "Approve Atasan"
+                        WHEN leave_requests.status = "Rejected Atasan" THEN "Rejected Atasan"
+                        WHEN leave_requests.status = "Approved HRD" THEN "Approved HRD"
+                        WHEN leave_requests.status = "Rejected HRD" THEN "Rejected HRD"
+                        ELSE "Pending"
+                    END as status'),
+                'karyawan.id as employee_id',
+                'karyawan.nama_lengkap',
+                'karyawan.grade as jabatan',
+                'leave_requests.approved_atasan_by',
+                'leave_requests.approved_atasan_at',
+                'leave_requests.rejected_atasan_by',
+                'leave_requests.rejected_atasan_at',
+                'leave_requests.reject_atasan_reason',
+                'leave_requests.approved_hrd_by',
+                'leave_requests.approved_hrd_at',
+                'leave_requests.rejected_hrd_by',
+                'leave_requests.rejected_hrd_at',
+                'leave_requests.reject_hrd_reason',
+                'leave_requests.attachment',
+                'leave_requests.created_by as nama_pengaju',
+                'leave_requests.created_at as diajukan_pada',
+                'leave_requests.description as keterangan'
+            )
+            ->where(function ($q) {
+                $q->whereNotNull('leave_requests.approved_hrd_by')
+                    ->orWhereNotNull('leave_requests.rejected_atasan_by')
+                    ->orWhereNotNull('leave_requests.rejected_hrd_by');
+            })
+            ->whereYear('leave_requests.start_date', $year);
+
+        $dt = Datatables::of($query);
+        $dt = $this->applyDatatablesFilter($dt);
+
+        return $dt->make(true);
+    }
+
+    public function tabCountsHrd(Request $request)
+    {
+        $year = (int) ($request->periode ?? date('Y'));
+
+        if (HrTableMode::portalReadsHrTables()) {
+            $portalQuery = app(PortalLeaveDatatableQuery::class);
+            $onProgress = $portalQuery->countHrdUnprocessed($year);
+            $processed = $portalQuery->countHrdProcessed($year);
+        } else {
+            $base = LeaveRequest::on('intilab_apps')->whereYear('leave_requests.start_date', $year);
+            $onProgress = (clone $base)
+                ->where('leave_requests.status', 'Approved Atasan')
+                ->whereNull('leave_requests.approved_hrd_by')
+                ->whereNull('leave_requests.rejected_atasan_by')
+                ->whereNull('leave_requests.rejected_hrd_by')
+                ->count();
+            $processed = (clone $base)
+                ->where(function ($q) {
+                    $q->whereNotNull('leave_requests.approved_hrd_by')
+                        ->orWhereNotNull('leave_requests.rejected_atasan_by')
+                        ->orWhereNotNull('leave_requests.rejected_hrd_by');
+                })
+                ->count();
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'on_progress' => $onProgress,
+                'processed' => $processed,
+            ],
+        ]);
     }
 
     /**
@@ -315,10 +482,112 @@ class PermohonanCutiController extends Controller
     }
 
     /**
+     * Approve Permohonan Cuti oleh HRD (antrian portal).
+     */
+    public function approveHrd(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $response = $this->approveLeaveHrdOnHrTables($this->resolveLeavePortalApiId($request->id));
+            if ($response !== null) {
+                DB::commit();
+
+                return $response;
+            }
+
+            $leave = LeaveRequest::on('intilab_apps')->where('id', $request->id)->first();
+            if (!$leave || $leave->status !== 'Approved Atasan') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Permohonan cuti tidak ditemukan atau belum disetujui atasan',
+                ], 404);
+            }
+
+            $leave->status = 'Approved HRD';
+            $leave->approved_hrd_by = $this->karyawan;
+            $leave->approved_hrd_at = Carbon::now()->format('Y-m-d H:i:s');
+            $leave->save();
+
+            app(PortalHrSync::class)->syncLeaveFromLegacy((int) $leave->id);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Permohonan cuti berhasil disetujui HRD',
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollback();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan sistem',
+                'error' => 'Error: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function rejectHrd(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $response = $this->rejectLeaveHrdOnHrTables($this->resolveLeavePortalApiId($request->id), $request->keterangan);
+            if ($response !== null) {
+                DB::commit();
+
+                return $response;
+            }
+
+            $leave = LeaveRequest::on('intilab_apps')->where('id', $request->id)->first();
+            if (!$leave) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Permohonan cuti tidak ditemukan',
+                ], 404);
+            }
+
+            $leave->status = 'Rejected HRD';
+            $leave->rejected_hrd_by = $this->karyawan;
+            $leave->rejected_hrd_at = Carbon::now()->format('Y-m-d H:i:s');
+            $leave->reject_hrd_reason = $request->keterangan;
+            $leave->save();
+
+            app(PortalHrSync::class)->syncLeaveFromLegacy((int) $leave->id);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Permohonan cuti berhasil ditolak HRD',
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollback();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan sistem',
+                'error' => 'Error: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Approve Permohonan Cuti oleh Atasan Langsung
      */
     public function approveAtasan(Request $request)
     {
+        if (HrTableMode::portalReadsHrTables()) {
+            $approver = MasterKaryawan::find($this->user_id);
+            if (!$approver) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data karyawan tidak ditemukan',
+                ], 403);
+            }
+
+            return app(LeaveRequestHrService::class)->approve((int) $request->id, $approver);
+        }
+
         if ($this->grade !== 'MANAGER' && $this->grade !== 'SENIOR MANAGER') {
             return response()->json([
                 'success' => false,
@@ -374,6 +643,22 @@ class PermohonanCutiController extends Controller
      */
     public function rejectAtasan(Request $request)
     {
+        if (HrTableMode::portalReadsHrTables()) {
+            $approver = MasterKaryawan::find($this->user_id);
+            if (!$approver) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data karyawan tidak ditemukan',
+                ], 403);
+            }
+
+            return app(LeaveRequestHrService::class)->reject(
+                (int) $request->id,
+                $approver,
+                $request->keterangan
+            );
+        }
+
         if ($this->grade !== 'MANAGER' && $this->grade !== 'SENIOR MANAGER') {
             return response()->json([
                 'success' => false,
@@ -480,6 +765,26 @@ class PermohonanCutiController extends Controller
                     'success' => false,
                     'message' => 'Tanggal mulai cuti wajib diisi'
                 ], 400);
+            }
+
+            $employee = MasterKaryawan::find($this->user_id);
+            if ($employee) {
+                $validationMessage = app(LeaveRequestValidationService::class)->validateForStore(
+                    $employee,
+                    (string) $type,
+                    $startDate,
+                    $endDate,
+                    null,
+                    null,
+                    $specialLeaveId ? (int) $specialLeaveId : null,
+                    HrFormAttachmentStorage::hasUploadedImages($request)
+                );
+                if ($validationMessage !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $validationMessage,
+                    ], 422);
+                }
             }
 
             $attachment = '';
@@ -624,5 +929,118 @@ class PermohonanCutiController extends Controller
                 'error' => 'Error: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    private function canApproveAtasanOnRow($row): bool
+    {
+        if (HrTableMode::portalReadsHrTables()) {
+            if (($row->raw_status ?? '') !== WorkflowStatus::PENDING) {
+                return false;
+            }
+            $viewer = MasterKaryawan::find($this->user_id);
+            if (!$viewer) {
+                return false;
+            }
+            $hrRequest = HrRequestResolver::findByApiId(HrRequest::TYPE_LEAVE, (int) $row->id);
+            if (!$hrRequest) {
+                return false;
+            }
+
+            return app(HrApprovalChainService::class)->viewerCanApprove($hrRequest, $viewer);
+        }
+
+        $isAtasan = ($this->grade === 'MANAGER') || ($this->grade === 'SENIOR MANAGER');
+        $isBukanDiriSendiri = ($row->employee_id != $this->user_id);
+        $belumDiApprove = is_null($row->approved_atasan_by);
+
+        return $isAtasan && $isBukanDiriSendiri && $belumDiApprove;
+    }
+
+    private function approveLeaveHrdOnHrTables(int $apiId)
+    {
+        $hrRequest = HrRequestResolver::findByPortalSliceId(HrRequest::TYPE_LEAVE, $apiId);
+        if (!$hrRequest) {
+            return HrTableMode::portalReadsHrTables()
+                ? response()->json([
+                    'success' => false,
+                    'message' => 'Data pengajuan cuti tidak ditemukan di HR',
+                ], 404)
+                : null;
+        }
+
+        if ($hrRequest->status !== WorkflowStatus::APPROVED_ATASAN) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Menunggu persetujuan atasan (rantai manager) terlebih dahulu',
+            ], 422);
+        }
+
+        $approver = MasterKaryawan::find($this->user_id);
+        if (!$approver) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data karyawan HRD tidak ditemukan',
+            ], 403);
+        }
+
+        app(ApprovalService::class)->approveHrd($hrRequest, $approver, $this->karyawan);
+        $hrRequest = $hrRequest->fresh();
+        app(LegacyHrMirror::class)->syncPortalHrdDecision($hrRequest);
+
+        $legacyId = HrRequestResolver::legacyIdForHrRequest($hrRequest);
+        if ($legacyId) {
+            app(PortalHrSync::class)->syncLeaveFromLegacy($legacyId);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Permohonan cuti berhasil disetujui HRD',
+        ], 200);
+    }
+
+    /** ID datatable portal: legacy id, hr_request.id, atau LR-{id}. */
+    private function resolveLeavePortalApiId($raw): int
+    {
+        $s = trim((string) $raw);
+        if (str_starts_with($s, 'LR-')) {
+            return (int) substr($s, 3);
+        }
+
+        return (int) $s;
+    }
+
+    private function rejectLeaveHrdOnHrTables(int $apiId, ?string $reason)
+    {
+        $hrRequest = HrRequestResolver::findByPortalSliceId(HrRequest::TYPE_LEAVE, $apiId);
+        if (!$hrRequest) {
+            return HrTableMode::portalReadsHrTables()
+                ? response()->json([
+                    'success' => false,
+                    'message' => 'Data pengajuan cuti tidak ditemukan di HR',
+                ], 404)
+                : null;
+        }
+
+        $approver = MasterKaryawan::find($this->user_id);
+        if (!$approver) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data karyawan HRD tidak ditemukan',
+            ], 403);
+        }
+
+        app(ApprovalService::class)->rejectHrd($hrRequest, $approver, $reason, $this->karyawan);
+        $hrRequest = $hrRequest->fresh();
+        app(LegacyHrMirror::class)->syncPortalHrdDecision($hrRequest);
+
+        $legacyId = HrRequestResolver::legacyIdForHrRequest($hrRequest);
+        if ($legacyId) {
+            app(PortalHrSync::class)->syncLeaveFromLegacy($legacyId);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Permohonan cuti berhasil ditolak HRD',
+        ], 200);
     }
 }

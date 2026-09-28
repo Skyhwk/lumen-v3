@@ -25,7 +25,7 @@ class OvertimeRequestPresenter
             ];
         });
 
-        return (object) [
+        return (object) array_merge([
             'id' => $request->id,
             'no_document' => $request->no_document,
             'department_id' => $request->id_department,
@@ -36,8 +36,10 @@ class OvertimeRequestPresenter
             'end_time' => $detail->end_time ?? null,
             'description' => $request->description,
             'status' => $request->status,
+            'created_at' => $request->created_at,
             'created_by' => $request->created_by_name,
+            'atasan_approval_steps' => HrApprovalChainPresenter::atasanStepsForGreatday($request),
             'members' => $members,
-        ];
+        ], HrApprovalChainPresenter::workflowRejectionFields($request));
     }
 }

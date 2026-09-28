@@ -9,7 +9,10 @@ use App\Services\Greatday\AtasanApprovalScope;
 use App\Services\Greatday\FirebaseService;
 use App\Services\Greatday\GetAtasan;
 use App\Services\Hr\Greatday\AttendanceCorrectionHrService;
+use App\Services\Hr\Greatday\FormSubmitterVoidService;
+use App\Services\Hr\HrFormAttachmentStorage;
 use App\Services\Hr\HrRequestResolver;
+use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
 use Illuminate\Http\Request;
 
@@ -47,7 +50,9 @@ class AttendanceCorrectionsController extends Controller
                 $employee = MasterKaryawan::find($item->employee_id);
                 $item->employee_name = $employee->nama_lengkap;
                 $item->employee_position = $employee->jabatan;
-                $item->attachment = !$item->attachment ?: url('attendance-corrections/' . $item->attachment);
+                $attachments = HrFormAttachmentStorage::resolvePublicUrls($item->attachment, GreatdayAssetPaths::KEY_KOREKSI_ABSEN);
+                $item->attachments = $attachments;
+                $item->attachment = $attachments[0] ?? null;
 
                 return $item;
             });
@@ -74,16 +79,12 @@ class AttendanceCorrectionsController extends Controller
         $attendanceCorrection->time = $request->time;
         $attendanceCorrection->description = $request->description;
 
-        if ($request->hasFile('attachment')) {
-            $file = $request->file('attachment');
-            $destinationPath = public_path('attendance-corrections');
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0777, true);
-            }
-            $fileName = str_replace('.', '', microtime(true)) . '.' . $file->getClientOriginalExtension();
-            $file->move($destinationPath, $fileName);
-
-            $attendanceCorrection->attachment = $fileName;
+        $storedAttachments = HrFormAttachmentStorage::storeImages(
+            HrFormAttachmentStorage::collectUploadedImages($request),
+            GreatdayAssetPaths::KEY_KOREKSI_ABSEN
+        );
+        if ($storedAttachments !== null) {
+            $attendanceCorrection->attachment = $storedAttachments;
         }
 
         if (!$request->id) {
@@ -202,5 +203,24 @@ class AttendanceCorrectionsController extends Controller
         ]);
 
         return response()->json(['message' => 'The attendance correction has been rejected successfully'], 200);
+    }
+
+    public function void(Request $request)
+    {
+        try {
+            if ($this->usesHrTables()) {
+                $resolved = HrRequestResolver::findByApiId(HrRequest::TYPE_ATTENDANCE_CORRECTION, (int) $request->id);
+                if (!$resolved) {
+                    return response()->json(['message' => 'Attendance correction not found'], 404);
+                }
+                app(FormSubmitterVoidService::class)->voidHrRequest($resolved, $this->karyawan);
+            } else {
+                app(FormSubmitterVoidService::class)->voidLegacyAttendanceCorrection((int) $request->id, $this->karyawan);
+            }
+
+            return response()->json(['message' => 'Koreksi absensi berhasil dibatalkan.'], 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 }

@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use App\Services\Greatday\AtasanApprovalScope;
 use App\Services\Greatday\GetAtasan;
 use App\Services\Greatday\FirebaseService;
+use App\Services\Hr\HrFormAttachmentStorage;
+use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
 
 use App\Models\Greatday\{OvertimeReimbursement};
@@ -48,7 +50,12 @@ class OvertimeReimbursementsController extends Controller
                 $employee = MasterKaryawan::find($item->employee_id);
                 $item->employee_name = $employee->nama_lengkap;
                 $item->employee_position = $employee->jabatan;
-                $item->attachment = !$item->attachment ?: url('overtime-reimbursements/' . $item->attachment);
+                $attachments = HrFormAttachmentStorage::resolvePublicUrls(
+                    $item->attachment,
+                    GreatdayAssetPaths::KEY_LEMBUR_REIMBURSE
+                );
+                $item->attachments = $attachments;
+                $item->attachment = $attachments[0] ?? null;
 
                 return $item;
             });
@@ -70,16 +77,12 @@ class OvertimeReimbursementsController extends Controller
         $overtimeReimbursement->amount = $request->amount;
         $overtimeReimbursement->description = $request->description;
 
-        if ($request->hasFile('attachment')) {
-            $file = $request->file('attachment');
-            $destinationPath = public_path('overtime-reimbursements');
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0777, true);
-            }
-            $fileName = str_replace('.', '', microtime(true)) . '.' . $file->getClientOriginalExtension();
-            $file->move($destinationPath, $fileName);
-
-            $overtimeReimbursement->attachment = $fileName;
+        $storedAttachments = HrFormAttachmentStorage::storeImages(
+            HrFormAttachmentStorage::collectUploadedImages($request),
+            GreatdayAssetPaths::KEY_LEMBUR_REIMBURSE
+        );
+        if ($storedAttachments !== null) {
+            $overtimeReimbursement->attachment = $storedAttachments;
         }
 
         if (!$request->id) {

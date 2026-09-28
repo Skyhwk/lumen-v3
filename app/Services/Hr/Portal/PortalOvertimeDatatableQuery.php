@@ -12,7 +12,8 @@ class PortalOvertimeDatatableQuery
     public function hrdUnprocessed(int $periode): Collection
     {
         return $this->fetchGrouped($periode, function ($q) {
-            $q->where('overtime_requests.status', WorkflowStatus::APPROVED_ATASAN);
+            $q->where('overtime_requests.status', WorkflowStatus::APPROVED_ATASAN)
+                ->whereRaw(PortalHrApprovalStepSql::noPendingAtasanSteps('overtime_requests'));
         });
     }
 

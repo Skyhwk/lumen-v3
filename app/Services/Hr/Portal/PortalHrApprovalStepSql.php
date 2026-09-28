@@ -10,4 +10,15 @@ final class PortalHrApprovalStepSql
             WHERE s.request_id = {$requestTableAlias}.id AND s.step = '{$step}' AND s.state = '{$state}'
             ORDER BY s.id DESC LIMIT 1)";
     }
+
+    /** Tidak ada step atasan yang masih pending (rantai manager selesai). */
+    public static function noPendingAtasanSteps(string $requestTableAlias): string
+    {
+        return "NOT EXISTS (
+            SELECT 1 FROM hr_approval_step s
+            WHERE s.request_id = {$requestTableAlias}.id
+              AND s.step = 'atasan'
+              AND s.state = 'pending'
+        )";
+    }
 }

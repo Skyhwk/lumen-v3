@@ -18,6 +18,7 @@ use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\LegacyHrMirror;
 use App\Services\Hr\Presenters\OvertimeRequestPresenter;
 use App\Services\Hr\WorkflowStatus;
+use App\Support\Greatday\FormSubmissionDates;
 use App\Support\Greatday\HrdPayroll;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -48,6 +49,11 @@ class OvertimeRequestHrService
     {
         if (!GreatdayOvertimeAccess::canCreate($employee)) {
             return response()->json(['message' => GreatdayOvertimeAccess::denyCreateMessage()], 403);
+        }
+
+        $dateError = FormSubmissionDates::validateRangeNotBackdated($request->start_date, $request->end_date);
+        if ($dateError !== null) {
+            return response()->json(['message' => $dateError], 422);
         }
 
         DB::beginTransaction();

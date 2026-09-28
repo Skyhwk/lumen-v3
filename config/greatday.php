@@ -15,8 +15,6 @@ return [
 
     'foto_karyawan_path' => env('V3_FOTO_PATH', '/var/www/html/v3/public/Foto_Karyawan'),
 
-    'foto_absen_relative' => env('GREATDAY_FOTO_ABSEN_PATH', 'android-image/absensi'),
-
     /** RFID sync setelah absen mobile (MesinAbsenHandler /api/absen) */
     'absen_api_url' => rtrim(env('ABSEN_API', 'https://apps.intilab.com/v3/public/api/absen'), '/'),
 
@@ -25,6 +23,37 @@ return [
     'login_token_ttl_days' => (int) env('GREATDAY_LOGIN_TOKEN_TTL_DAYS', 7),
 
     'web_public' => rtrim(env('WEB_PUBLIC', env('APP_PUBLIC_URL', 'https://apps.intilab.com/v3/public')), '/') . '/',
+
+    /** Root folder aset publik Greatday: public/{asset_base}/{folder}/file */
+    'asset_base' => trim(env('GREATDAY_ASSET_BASE', 'greatday'), '/'),
+
+    'asset_folders' => [
+        'cuti' => 'cuti',
+        'izin' => 'izin',
+        'koreksi_absen' => 'koreksi-absen',
+        'absensi' => 'absensi',
+        'lembur_reimburse' => 'lembur-reimburse',
+        'laporan_kegiatan' => 'laporan-kegiatan',
+    ],
+
+    /** Lokasi lama (relatif public/) — dipakai resolve URL & sync file ke greatday/ */
+    'asset_legacy_relative' => [
+        'cuti' => ['leave-requests', 'android-image/leave-requests'],
+        'izin' => ['permission-requests', 'android-image/lampiran_izin', 'android-image/permission-requests'],
+        'koreksi_absen' => ['attendance-corrections', 'android-image/attendance-corrections', 'android-image/koreksi-absen'],
+        'absensi' => ['android-image/absensi'],
+        'lembur_reimburse' => ['overtime-reimbursements', 'android-image/overtime-reimbursements'],
+        'laporan_kegiatan' => ['event-reports', 'android-image/event-reports'],
+    ],
+
+    /** Root public lama untuk artisan greatday:sync-form-attachment-files (bisa lebih dari satu). */
+    'form_attachment_legacy_roots' => array_values(array_filter(array_map('trim', explode(',', env(
+        'GREATDAY_LEGACY_PUBLIC_ROOTS',
+        env('GREATDAY_LEGACY_PUBLIC_ROOT', '/var/www/html/v3/public')
+    ))))),
+
+    /** Intilab-Internal Super Apps lama — untuk greatday:import-assets-from-internal */
+    'intilab_internal_public' => env('GREATDAY_INTILAB_INTERNAL_PUBLIC', ''),
 
     /** Phase 2B: false = baca/tulis hr_* di produksi (setelah backfill + cutover) */
     'use_legacy_hr_tables' => filter_var(env('HR_USE_LEGACY_TABLES', true), FILTER_VALIDATE_BOOLEAN),

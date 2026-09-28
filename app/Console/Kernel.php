@@ -71,6 +71,8 @@ class Kernel extends ConsoleKernel
         Commands\ImportHrLeaveOpeningBalanceCommand::class,
         Commands\SyncHrSpecialLeaveTypesCommand::class,
         Commands\SyncLeaveAlpaLedgerCommand::class,
+        Commands\SyncGreatdayFormAttachmentFilesCommand::class,
+        Commands\ImportGreatdayAssetsFromInternalCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,

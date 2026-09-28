@@ -11,10 +11,13 @@ use App\Services\Hr\Greatday\Concerns\BootstrapsHrAtasanChain;
 use App\Services\Hr\ApprovalService;
 use App\Services\Hr\HrApprovalChainService;
 use App\Services\Hr\GreatdayIndexScope;
+use App\Services\Hr\HrFormAttachmentStorage;
 use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\LegacyHrMirror;
 use App\Services\Hr\Presenters\PermissionRequestPresenter;
 use App\Services\Hr\WorkflowStatus;
+use App\Support\Greatday\FormSubmissionDates;
+use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -52,17 +55,22 @@ class PermissionRequestHrService
 
         $status = WorkflowStatus::PENDING;
 
-        $attachmentPath = null;
-        if ($request->hasFile('attachment')) {
-            $file = $request->file('attachment');
-            $destinationPath = public_path('permission-requests');
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0777, true);
-            }
-            $fileName = str_replace('.', '', microtime(true)) . '.' . $file->getClientOriginalExtension();
-            $file->move($destinationPath, $fileName);
-            $attachmentPath = $fileName;
+        if (!$request->id && !HrFormAttachmentStorage::hasUploadedImages($request)) {
+            return response()->json(['message' => 'Lampiran wajib — ambil foto dari kamera.'], 422);
         }
+
+        $startDate = $request->start_date;
+        $endDate = $kind === 'event' ? $startDate : ($request->end_date ?: $startDate);
+
+        $dateError = FormSubmissionDates::validateRangeNotBackdated($startDate, $endDate);
+        if ($dateError !== null) {
+            return response()->json(['message' => $dateError], 422);
+        }
+
+        $attachmentPath = HrFormAttachmentStorage::storeImages(
+            HrFormAttachmentStorage::collectUploadedImages($request),
+            GreatdayAssetPaths::KEY_IZIN
+        );
 
         $header = HrRequest::create([
             'uuid' => (string) Str::uuid(),
@@ -86,8 +94,8 @@ class PermissionRequestHrService
         HrPermissionDetail::create([
             'request_id' => $header->id,
             'permission_kind' => $kind,
-            'start_date' => $request->start_date,
-            'end_date' => $request->end_date,
+            'start_date' => $startDate,
+            'end_date' => $endDate,
             'start_time' => $request->start_time,
             'end_time' => $request->end_time,
             'attachment_path' => $attachmentPath,

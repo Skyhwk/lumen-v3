@@ -9,6 +9,7 @@ use App\Models\Hr\HrSpecialLeaveType;
 use App\Models\MasterKaryawan;
 use App\Services\Greatday\LeaveAlpaAttendanceScope;
 use App\Services\Hr\HrLeaveBalanceLedgerService;
+use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\HrTableMode;
 use App\Services\Hr\WorkflowStatus;
 use Carbon\Carbon;
@@ -135,13 +136,14 @@ class LeaveBalanceService
 
         $openingUsed = (int) $period->opening_used_days;
         $systemUsed = $this->systemUsedDays($employee, $period);
-        $pendingUsed = $this->pendingAnnualLeaveWeekdays($employee, $period);
+        $reservedUsed = $this->reservedAnnualLeaveWeekdays($employee, $period);
         $ledger = app(HrLeaveBalanceLedgerService::class);
         $ledgerTotals = $ledger->totalsForSummary($employee, $period);
         $ledgerNet = $ledgerTotals['ledger_net'];
         $alpaDays = $ledgerTotals['alpa_days'];
         $quota = (int) $period->quota_days;
-        $totalUsed = $openingUsed + $systemUsed + $pendingUsed + $ledgerNet;
+        // Saldo tampilan: hanya cuti yang sudah disetujui HRD (+ opening & ledger).
+        $totalUsed = $openingUsed + $systemUsed + $ledgerNet;
         $remaining = max(0, $quota - $totalUsed);
 
         return [
@@ -152,7 +154,8 @@ class LeaveBalanceService
             'quota_days' => $quota,
             'opening_used_days' => $openingUsed,
             'system_used_days' => $systemUsed,
-            'pending_used_days' => $pendingUsed,
+            'pending_used_days' => $reservedUsed,
+            'reserved_used_days' => $reservedUsed,
             'ledger_used_days' => $ledgerTotals['ledger_used_days'],
             'alpa_days' => $alpaDays,
             'ledger_net_days' => $ledgerNet,
@@ -186,19 +189,23 @@ class LeaveBalanceService
             ];
         }
 
-        foreach ($this->pendingAnnualLeaveRows($employee, $period) as $row) {
+        foreach ($this->reservedAnnualLeaveRows($employee, $period) as $row) {
             $days = $this->countWeekdays($row['start_date'] ?? null, $row['end_date'] ?? null);
             if ($days <= 0) {
                 continue;
             }
+            $rowStatus = $row['status'] ?? WorkflowStatus::PENDING;
+            $title = $rowStatus === WorkflowStatus::APPROVED_ATASAN
+                ? 'Cuti tahunan (menunggu HRD)'
+                : 'Cuti tahunan (menunggu persetujuan)';
             $items[] = [
                 'kind' => 'leave_request',
-                'title' => 'Cuti tahunan (menunggu persetujuan)',
+                'title' => $title,
                 'days' => $days,
                 'date_label' => $this->formatDateRange($row['start_date'] ?? null, $row['end_date'] ?? null),
-                'status' => WorkflowStatus::PENDING,
+                'status' => $rowStatus,
                 'request_id' => $row['id'] ?? null,
-                'no_document' => null,
+                'no_document' => $row['no_document'] ?? null,
             ];
         }
 
@@ -263,7 +270,7 @@ class LeaveBalanceService
         $ledgerNet = $ledgerTotals['ledger_net'];
         $used = (int) $period->opening_used_days
             + $this->systemUsedDays($employee, $period)
-            + $this->pendingAnnualLeaveWeekdays($employee, $period, $excludeHrRequestId, $excludeLegacyId)
+            + $this->reservedAnnualLeaveWeekdays($employee, $period, $excludeHrRequestId, $excludeLegacyId)
             + $ledgerNet;
 
         return max(0, $quota - $used);
@@ -427,13 +434,117 @@ class LeaveBalanceService
     ): array {
         $dates = [];
         foreach ($this->leaveRowsByKind($employee, $leaveKind, $excludeHrRequestId, $excludeLegacyId) as $row) {
-            $dates = array_merge($dates, $this->expandWeekdayDates($row['start_date'] ?? null, $row['end_date'] ?? null));
+            if ($leaveKind === 'phl') {
+                $dates = array_merge($dates, $this->expandWeekdayDates($row['end_date'] ?? null, $row['end_date'] ?? null));
+            } else {
+                $dates = array_merge($dates, $this->expandWeekdayDates($row['start_date'] ?? null, $row['end_date'] ?? null));
+            }
         }
 
         $dates = array_values(array_unique($dates));
         sort($dates);
 
         return $dates;
+    }
+
+    /**
+     * Rentang tanggal cuti yang “menempati” kalender (PHL = hanya tanggal pengganti / end_date).
+     *
+     * @return array{0: ?string, 1: ?string} [startYmd, endYmd]
+     */
+    public function effectiveLeaveSpan(string $leaveKind, ?string $startDate, ?string $endDate): array
+    {
+        if ($leaveKind === 'phl') {
+            $replacement = $this->formatDateYmd($endDate) ?? $this->formatDateYmd($startDate);
+
+            return [$replacement, $replacement];
+        }
+
+        return [$this->formatDateYmd($startDate), $this->formatDateYmd($endDate)];
+    }
+
+    public function leaveKindForRequestType(string $type): string
+    {
+        if ($type === 'Special Leave') {
+            return 'special';
+        }
+        if ($type === 'Unpaid Leave') {
+            return 'unpaid';
+        }
+        if ($type === 'Holiday Replacement Leave') {
+            return 'phl';
+        }
+
+        return 'annual';
+    }
+
+    /**
+     * Pengajuan cuti aktif (pending + approved) beserta rentang efektif — semua jenis.
+     *
+     * @return list<array{leave_kind: string, start: string, end: string}>
+     */
+    public function activeLeaveOccupancyRanges(
+        MasterKaryawan $employee,
+        ?int $excludeHrRequestId = null,
+        ?int $excludeLegacyId = null
+    ): array {
+        $out = [];
+
+        if (HrTableMode::usesLegacyHrTables()) {
+            $query = LeaveRequest::where('employee_id', $employee->id)
+                ->where('is_active', true)
+                ->whereIn('status', [
+                    WorkflowStatus::PENDING,
+                    WorkflowStatus::APPROVED_ATASAN,
+                    WorkflowStatus::APPROVED_HRD,
+                ]);
+
+            if ($excludeLegacyId !== null) {
+                $query->where('id', '!=', $excludeLegacyId);
+            }
+
+            foreach ($query->get() as $row) {
+                $kind = $this->leaveKindForRequestType((string) $row->type);
+                [$start, $end] = $this->effectiveLeaveSpan($kind, $row->start_date, $row->end_date);
+                if ($start && $end) {
+                    $out[] = ['leave_kind' => $kind, 'start' => $start, 'end' => $end];
+                }
+            }
+
+            return $out;
+        }
+
+        $query = HrRequest::with('leaveDetail')
+            ->where('karyawan_id', $employee->id)
+            ->where('request_type', HrRequest::TYPE_LEAVE)
+            ->where('is_active', true)
+            ->whereIn('status', [
+                WorkflowStatus::PENDING,
+                WorkflowStatus::APPROVED_ATASAN,
+                WorkflowStatus::APPROVED_HRD,
+            ]);
+
+        if ($excludeHrRequestId !== null) {
+            $query->where('id', '!=', $excludeHrRequestId);
+        }
+
+        foreach ($query->get() as $row) {
+            $detail = $row->leaveDetail;
+            if (!$detail) {
+                continue;
+            }
+            $kind = (string) ($detail->leave_kind ?? 'annual');
+            [$start, $end] = $this->effectiveLeaveSpan(
+                $kind,
+                $this->formatDateYmd($detail->start_date),
+                $this->formatDateYmd($detail->end_date)
+            );
+            if ($start && $end) {
+                $out[] = ['leave_kind' => $kind, 'start' => $start, 'end' => $end];
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -533,7 +644,7 @@ class LeaveBalanceService
             $dates = array_merge($dates, $this->expandWeekdayDates($row['start_date'] ?? null, $row['end_date'] ?? null));
         }
 
-        foreach ($this->pendingAnnualLeaveRows($employee, $period, $excludeHrRequestId, $excludeLegacyId) as $row) {
+        foreach ($this->reservedAnnualLeaveRows($employee, $period, $excludeHrRequestId, $excludeLegacyId) as $row) {
             $dates = array_merge($dates, $this->expandWeekdayDates($row['start_date'] ?? null, $row['end_date'] ?? null));
         }
 
@@ -598,7 +709,7 @@ class LeaveBalanceService
             ->where('karyawan_id', $employee->id)
             ->where('request_type', HrRequest::TYPE_LEAVE)
             ->where('is_active', true)
-            ->whereIn('status', [WorkflowStatus::APPROVED_ATASAN, WorkflowStatus::APPROVED_HRD])
+            ->where('status', WorkflowStatus::APPROVED_HRD)
             ->where(function ($q) use ($periodStart, $periodEnd, $cutover) {
                 $q->whereBetween('created_at', [$periodStart, $periodEnd])
                     ->where('created_at', '>=', $cutover);
@@ -625,30 +736,40 @@ class LeaveBalanceService
         $rows = LeaveRequest::where('employee_id', $employee->id)
             ->where('is_active', true)
             ->where('type', 'Annual Leave')
-            ->whereIn('status', [WorkflowStatus::APPROVED_ATASAN, WorkflowStatus::APPROVED_HRD])
             ->whereBetween('created_at', [$periodStart, $periodEnd])
             ->where('created_at', '>=', $cutover)
             ->get();
 
         $total = 0;
         foreach ($rows as $row) {
+            if ($this->effectiveLegacyLeaveStatus($row) !== WorkflowStatus::APPROVED_HRD) {
+                continue;
+            }
             $total += $this->countWeekdays($row->start_date, $row->end_date);
         }
 
         return $total;
     }
 
+    private function effectiveLegacyLeaveStatus(LeaveRequest $row): string
+    {
+        return HrRequestResolver::hrStatusForLegacyRow('leave_requests', (int) $row->id) ?? $row->status;
+    }
+
     /**
      * @return list<array<string, mixed>>
      */
-    private function pendingAnnualLeaveWeekdays(
+    /**
+     * Hari cuti tahunan dalam alur persetujuan (belum final HRD) — dipakai validasi, tidak mengurangi sisa tampilan.
+     */
+    private function reservedAnnualLeaveWeekdays(
         MasterKaryawan $employee,
         HrLeaveBalancePeriod $period,
         ?int $excludeHrRequestId = null,
         ?int $excludeLegacyId = null
     ): int {
         $total = 0;
-        foreach ($this->pendingAnnualLeaveRows($employee, $period, $excludeHrRequestId, $excludeLegacyId) as $row) {
+        foreach ($this->reservedAnnualLeaveRows($employee, $period, $excludeHrRequestId, $excludeLegacyId) as $row) {
             $total += $this->countWeekdays($row['start_date'] ?? null, $row['end_date'] ?? null);
         }
 
@@ -656,9 +777,11 @@ class LeaveBalanceService
     }
 
     /**
+     * Cuti tahunan Pending atau Approved Atasan (belum Approved HRD).
+     *
      * @return list<array<string, mixed>>
      */
-    private function pendingAnnualLeaveRows(
+    private function reservedAnnualLeaveRows(
         MasterKaryawan $employee,
         HrLeaveBalancePeriod $period,
         ?int $excludeHrRequestId = null,
@@ -666,32 +789,41 @@ class LeaveBalanceService
     ): array {
         $periodStart = $this->periodStartAt($period);
         $periodEnd = $this->periodEndAt($period);
+        $inPipeline = [WorkflowStatus::PENDING, WorkflowStatus::APPROVED_ATASAN];
 
         if (HrTableMode::usesLegacyHrTables()) {
             $query = LeaveRequest::where('employee_id', $employee->id)
                 ->where('is_active', true)
                 ->where('type', 'Annual Leave')
-                ->where('status', WorkflowStatus::PENDING)
                 ->whereBetween('created_at', [$periodStart, $periodEnd]);
 
             if ($excludeLegacyId !== null) {
                 $query->where('id', '!=', $excludeLegacyId);
             }
 
-            return $query->orderByDesc('id')->get()->map(function ($row) {
-                return [
+            $out = [];
+            foreach ($query->orderByDesc('id')->get() as $row) {
+                $status = $this->effectiveLegacyLeaveStatus($row);
+                if (!in_array($status, $inPipeline, true)) {
+                    continue;
+                }
+                $out[] = [
                     'id' => $row->id,
+                    'no_document' => $row->no_document,
                     'start_date' => $row->start_date,
                     'end_date' => $row->end_date,
+                    'status' => $status,
                 ];
-            })->all();
+            }
+
+            return $out;
         }
 
         $query = HrRequest::with('leaveDetail')
             ->where('karyawan_id', $employee->id)
             ->where('request_type', HrRequest::TYPE_LEAVE)
             ->where('is_active', true)
-            ->where('status', WorkflowStatus::PENDING)
+            ->whereIn('status', $inPipeline)
             ->whereBetween('created_at', [$periodStart, $periodEnd]);
 
         if ($excludeHrRequestId !== null) {
@@ -707,8 +839,10 @@ class LeaveBalanceService
             }
             $out[] = [
                 'id' => $row->id,
+                'no_document' => $row->no_document,
                 'start_date' => $this->formatDateYmd($detail->start_date),
                 'end_date' => $this->formatDateYmd($detail->end_date),
+                'status' => $row->status,
             ];
         }
 
@@ -728,29 +862,35 @@ class LeaveBalanceService
             $models = LeaveRequest::where('employee_id', $employee->id)
                 ->where('is_active', true)
                 ->where('type', 'Annual Leave')
-                ->whereIn('status', [WorkflowStatus::APPROVED_ATASAN, WorkflowStatus::APPROVED_HRD])
                 ->whereBetween('created_at', [$periodStart, $periodEnd])
                 ->where('created_at', '>=', $cutover)
                 ->orderByDesc('id')
                 ->get();
 
-            return $models->map(function ($row) {
-                return [
+            $out = [];
+            foreach ($models as $row) {
+                $status = $this->effectiveLegacyLeaveStatus($row);
+                if ($status !== WorkflowStatus::APPROVED_HRD) {
+                    continue;
+                }
+                $out[] = [
                     'id' => $row->id,
                     'no_document' => $row->no_document,
                     'start_date' => $row->start_date,
                     'end_date' => $row->end_date,
-                    'status' => $row->status,
+                    'status' => $status,
                     'title' => 'Cuti tahunan',
                 ];
-            })->all();
+            }
+
+            return $out;
         }
 
         $rows = HrRequest::with('leaveDetail')
             ->where('karyawan_id', $employee->id)
             ->where('request_type', HrRequest::TYPE_LEAVE)
             ->where('is_active', true)
-            ->whereIn('status', [WorkflowStatus::APPROVED_ATASAN, WorkflowStatus::APPROVED_HRD])
+            ->where('status', WorkflowStatus::APPROVED_HRD)
             ->whereBetween('created_at', [$periodStart, $periodEnd])
             ->where('created_at', '>=', $cutover)
             ->orderByDesc('id')

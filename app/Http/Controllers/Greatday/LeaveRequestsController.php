@@ -6,7 +6,12 @@ use App\Services\Greatday\AtasanApprovalScope;
 use App\Services\Greatday\GetAtasan;
 use App\Services\Greatday\FirebaseService;
 use App\Services\Greatday\LeaveRequestValidationService;
+use App\Models\Hr\HrRequest;
+use App\Services\Hr\Greatday\FormSubmitterVoidService;
 use App\Services\Hr\Greatday\LeaveRequestHrService;
+use App\Services\Hr\HrRequestResolver;
+use App\Services\Hr\HrFormAttachmentStorage;
+use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
 use App\Models\Greatday\{LeaveRequest, SpecialLeaveType};
 use App\Models\{MasterKaryawan};
@@ -46,7 +51,9 @@ class LeaveRequestsController extends Controller
                 $employee = MasterKaryawan::find($item->employee_id);
                 $item->employee_name = $employee->nama_lengkap;
                 $item->employee_position = $employee->jabatan;
-                $item->attachment = !$item->attachment ?: url('leave-requests/' . $item->attachment);
+                $attachments = HrFormAttachmentStorage::resolvePublicUrls($item->attachment, GreatdayAssetPaths::KEY_CUTI);
+                $item->attachments = $attachments;
+                $item->attachment = $attachments[0] ?? null;
 
                 return $item;
             });
@@ -86,7 +93,7 @@ class LeaveRequestsController extends Controller
             $request->input('id') ? (int) $request->input('id') : null,
             $request->input('id') ? (int) $request->input('id') : null,
             $request->input('special_leave_id') ? (int) $request->input('special_leave_id') : null,
-            $request->hasFile('attachment')
+            HrFormAttachmentStorage::hasUploadedImages($request)
         );
 
         if ($message !== null) {
@@ -112,7 +119,7 @@ class LeaveRequestsController extends Controller
             null,
             $request->id ? (int) $request->id : null,
             $request->special_leave_id ? (int) $request->special_leave_id : null,
-            $request->hasFile('attachment')
+            HrFormAttachmentStorage::hasUploadedImages($request)
         );
         if ($validationMessage !== null) {
             return response()->json(['message' => $validationMessage], 422);
@@ -125,21 +132,19 @@ class LeaveRequestsController extends Controller
         $leaveRequest->type = $request->type;
         if ($request->type === 'Special Leave') {
             $leaveRequest->special_leave_id = $request->special_leave_id;
+        } else {
+            $leaveRequest->special_leave_id = null;
         }
         $leaveRequest->start_date = $request->start_date;
         $leaveRequest->end_date = $request->end_date;
         $leaveRequest->description = $request->description;
 
-        if ($request->hasFile('attachment')) {
-            $file = $request->file('attachment');
-            $destinationPath = public_path('leave-requests');
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0777, true);
-            }
-            $fileName = str_replace('.', '', microtime(true)) . '.' . $file->getClientOriginalExtension();
-            $file->move($destinationPath, $fileName);
-
-            $leaveRequest->attachment = $fileName;
+        $storedAttachments = HrFormAttachmentStorage::storeImages(
+            HrFormAttachmentStorage::collectUploadedImages($request),
+            GreatdayAssetPaths::KEY_CUTI
+        );
+        if ($storedAttachments !== null) {
+            $leaveRequest->attachment = $storedAttachments;
         }
 
         if (!$request->id) {
@@ -264,5 +269,24 @@ class LeaveRequestsController extends Controller
         ]);
 
         return response()->json(['message' => 'The leave request has been rejected successfully'], 200);
+    }
+
+    public function void(Request $request)
+    {
+        try {
+            if ($this->usesHrTables()) {
+                $resolved = HrRequestResolver::findByApiId(HrRequest::TYPE_LEAVE, (int) $request->id);
+                if (!$resolved) {
+                    return response()->json(['message' => 'Leave request not found'], 404);
+                }
+                app(FormSubmitterVoidService::class)->voidHrRequest($resolved, $this->karyawan);
+            } else {
+                app(FormSubmitterVoidService::class)->voidLegacyLeave((int) $request->id, $this->karyawan);
+            }
+
+            return response()->json(['message' => 'Pengajuan cuti berhasil dibatalkan.'], 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 }

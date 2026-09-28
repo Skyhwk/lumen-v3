@@ -2,15 +2,19 @@
 
 namespace App\Services\Greatday;
 
+use App\Services\Hr\HrTableMode;
 use App\Http\Controllers\Greatday\AttendanceCorrectionsController;
 use App\Http\Controllers\Greatday\ConsultationRequestsController;
 use App\Http\Controllers\Greatday\LeaveRequestsController;
 use App\Http\Controllers\Greatday\OvertimeReimbursementsController;
 use App\Http\Controllers\Greatday\OvertimeRequestsController;
 use App\Http\Controllers\Greatday\PermissionRequestsController;
+use App\Models\Hr\HrRequest;
 use App\Models\MasterKaryawan;
+use App\Services\Greatday\AtasanApprovalScope;
+use App\Services\Hr\HrApprovalChainService;
 use App\Services\Hr\HrPendingApprovalsService;
-use App\Services\Hr\HrTableMode;
+use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\WorkflowStatus;
 use App\Support\Greatday\HrdPayroll;
 use Illuminate\Http\Request;
@@ -20,6 +24,14 @@ use Illuminate\Http\Request;
  */
 class FormsPendingApprovalsService
 {
+    /** @var array<string, string> */
+    private const CONTROLLER_REQUEST_TYPE = [
+        'LeaveRequestsController' => HrRequest::TYPE_LEAVE,
+        'PermissionRequestsController' => HrRequest::TYPE_PERMISSION,
+        'OvertimeRequestsController' => HrRequest::TYPE_OVERTIME,
+        'AttendanceCorrectionsController' => HrRequest::TYPE_ATTENDANCE_CORRECTION,
+    ];
+
     /** @var array<int, array{class: class-string, name: string, title: string}> */
     private const LEGACY_CONTROLLERS = [
         ['class' => OvertimeRequestsController::class, 'name' => 'OvertimeRequestsController', 'title' => 'Overtime Request'],
@@ -35,10 +47,17 @@ class FormsPendingApprovalsService
         return $this->buildPendingItems($employee, false);
     }
 
-    /** Hitung badge tanpa memanggil index() legacy untuk form yang sudah di hr_requests. */
+    /**
+     * Badge tab persetujuan harus selaras dengan pendingItems().
+     * Mode ringan (hanya reimbursement/konsultasi legacy) hanya aman bila semua antrian
+     * cuti/izin/lembur/koreksi sudah lewat hr_approval_step — di praktik masih sering
+     * mengandalkan index HR scope (GreatdayIndexScope), sehingga count jadi 0.
+     */
     public function pendingCount(MasterKaryawan $employee): int
     {
-        return count($this->buildPendingItems($employee, true));
+        $lightweightForStats = HrTableMode::usesLegacyHrTables();
+
+        return count($this->buildPendingItems($employee, $lightweightForStats));
     }
 
     private function buildPendingItems(MasterKaryawan $employee, bool $lightweightForStats): array
@@ -130,6 +149,12 @@ class FormsPendingApprovalsService
                     continue;
                 }
 
+                if (!$this->legacyPendingVisibleToViewer($employee, $c['name'], $item, $status)) {
+                    continue;
+                }
+
+                $canApprove = $this->legacyPendingCanApprove($employee, $c['name'], $item, $status);
+
                 $allPending[] = [
                     'id' => $item->id,
                     'controller' => $c['name'],
@@ -140,12 +165,86 @@ class FormsPendingApprovalsService
                     'status' => $status,
                     'raw' => $item,
                     'highlights' => PendingApprovalSummary::forController($c['name'], $item),
-                    'can_approve' => true,
+                    'can_approve' => $canApprove,
                 ];
             }
         }
 
         return $allPending;
+    }
+
+    /**
+     * Index controller Greatday memuat pengajuan sendiri + antrian bawahan; tab Persetujuan hanya untuk yang memang giliran viewer.
+     */
+    private function legacyPendingVisibleToViewer(
+        MasterKaryawan $viewer,
+        string $controllerName,
+        object $item,
+        ?string $status
+    ): bool {
+        $submitterId = $this->legacyItemSubmitterKaryawanId($item);
+        if ($submitterId !== null && $submitterId === (int) $viewer->id) {
+            return false;
+        }
+
+        if ($status !== WorkflowStatus::PENDING || !AtasanApprovalScope::isAtasanGrade($viewer)) {
+            return true;
+        }
+
+        $hrRequest = $this->resolveHrRequestForLegacyController($controllerName, $item);
+        if ($hrRequest) {
+            return app(HrApprovalChainService::class)->viewerCanApprove($hrRequest, $viewer);
+        }
+
+        if ($submitterId === null) {
+            return false;
+        }
+
+        return AtasanApprovalScope::isSubordinateKaryawan($viewer, $submitterId);
+    }
+
+    private function legacyPendingCanApprove(
+        MasterKaryawan $viewer,
+        string $controllerName,
+        object $item,
+        ?string $status
+    ): bool {
+        if ($status === WorkflowStatus::PENDING && AtasanApprovalScope::isAtasanGrade($viewer)) {
+            $hrRequest = $this->resolveHrRequestForLegacyController($controllerName, $item);
+            if ($hrRequest) {
+                return app(HrApprovalChainService::class)->viewerCanApprove($hrRequest, $viewer);
+            }
+
+            $submitterId = $this->legacyItemSubmitterKaryawanId($item);
+
+            return $submitterId !== null
+                && $submitterId !== (int) $viewer->id
+                && AtasanApprovalScope::isSubordinateKaryawan($viewer, $submitterId);
+        }
+
+        return true;
+    }
+
+    private function legacyItemSubmitterKaryawanId(object $item): ?int
+    {
+        if (isset($item->employee_id) && (int) $item->employee_id > 0) {
+            return (int) $item->employee_id;
+        }
+        if (isset($item->karyawan_id) && (int) $item->karyawan_id > 0) {
+            return (int) $item->karyawan_id;
+        }
+
+        return null;
+    }
+
+    private function resolveHrRequestForLegacyController(string $controllerName, object $item): ?HrRequest
+    {
+        $type = self::CONTROLLER_REQUEST_TYPE[$controllerName] ?? null;
+        if ($type === null || !isset($item->id)) {
+            return null;
+        }
+
+        return HrRequestResolver::findByApiId($type, (int) $item->id);
     }
 
     private function shouldIncludeLegacyPendingItem(

@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers\Greatday;
 
+use App\Models\Greatday\EventReport;
+use App\Models\MasterKaryawan;
+use App\Services\Hr\HrFormAttachmentStorage;
+use App\Support\Greatday\GreatdayAssetPaths;
 use Illuminate\Http\Request;
-
-use App\Models\Greatday\{EventReport};
-use App\Models\{MasterKaryawan};
 
 class EventReportsController extends Controller
 {
@@ -21,7 +22,12 @@ class EventReportsController extends Controller
                 $employee = MasterKaryawan::find($item->employee_id);
                 $item->employee_name = $employee->nama_lengkap;
                 $item->employee_position = $employee->jabatan;
-                $item->attachment = !$item->attachment ?: url('event-reports/' . $item->attachment);
+                $attachments = HrFormAttachmentStorage::resolvePublicUrls(
+                    $item->attachment,
+                    GreatdayAssetPaths::KEY_LAPORAN_KEGIATAN
+                );
+                $item->attachments = $attachments;
+                $item->attachment = $attachments[0] ?? null;
 
                 return $item;
             });
@@ -42,16 +48,12 @@ class EventReportsController extends Controller
         $eventReport->time = $request->time;
         $eventReport->description = $request->description;
 
-        if ($request->hasFile('attachment')) {
-            $file = $request->file('attachment');
-            $destinationPath = public_path('event-reports');
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0777, true);
-            }
-            $fileName = str_replace('.', '', microtime(true)) . '.' . $file->getClientOriginalExtension();
-            $file->move($destinationPath, $fileName);
-
-            $eventReport->attachment = $fileName;
+        $storedAttachments = HrFormAttachmentStorage::storeImages(
+            HrFormAttachmentStorage::collectUploadedImages($request),
+            GreatdayAssetPaths::KEY_LAPORAN_KEGIATAN
+        );
+        if ($storedAttachments !== null) {
+            $eventReport->attachment = $storedAttachments;
         }
 
         if (!$request->id) {

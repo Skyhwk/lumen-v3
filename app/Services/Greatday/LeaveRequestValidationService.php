@@ -4,6 +4,7 @@ namespace App\Services\Greatday;
 
 use App\Models\Hr\HrSpecialLeaveType;
 use App\Models\MasterKaryawan;
+use App\Support\Greatday\FormSubmissionDates;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 
@@ -46,10 +47,41 @@ class LeaveRequestValidationService
             return 'Tanggal mulai dan tanggal selesai wajib diisi.';
         }
 
+        $integrityError = $this->validateLeavePayloadIntegrity($type, $specialLeaveTypeId);
+        if ($integrityError !== null) {
+            return $integrityError;
+        }
+
+        $overlapError = $this->validateNoOverlappingActiveLeave(
+            $employee,
+            $type,
+            $startDate,
+            $endDate,
+            $excludeHrRequestId,
+            $excludeLegacyId
+        );
+        if ($overlapError !== null) {
+            return $overlapError;
+        }
+
+        if ($type === self::TYPE_PHL) {
+            $phlDateError = FormSubmissionDates::validatePhlDates($startDate, $endDate);
+            if ($phlDateError !== null) {
+                return $phlDateError;
+            }
+
+            return $this->validatePhlLeave($employee, $startDate, $endDate, $excludeHrRequestId, $excludeLegacyId);
+        }
+
         $start = Carbon::parse($startDate)->startOfDay();
         $end = Carbon::parse($endDate)->startOfDay();
         if ($end->lt($start)) {
             return 'Tanggal selesai tidak boleh sebelum tanggal mulai.';
+        }
+
+        $backdateError = FormSubmissionDates::validateRangeNotBackdated($startDate, $endDate);
+        if ($backdateError !== null) {
+            return $backdateError;
         }
 
         switch ($type) {
@@ -67,11 +99,59 @@ class LeaveRequestValidationService
                 );
             case self::TYPE_UNPAID:
                 return $this->validateUnpaidLeave($employee, $startDate, $endDate, $excludeHrRequestId, $excludeLegacyId);
-            case self::TYPE_PHL:
-                return $this->validatePhlLeave($employee, $startDate, $endDate, $excludeHrRequestId, $excludeLegacyId);
             default:
                 return 'Jenis cuti tidak dikenali.';
         }
+    }
+
+    /**
+     * Satu pengajuan = satu jenis cuti (tidak boleh kirim special_leave_id pada cuti tahunan/dll).
+     */
+    private function validateLeavePayloadIntegrity(string $type, ?int $specialLeaveTypeId): ?string
+    {
+        $allowed = [self::TYPE_ANNUAL, self::TYPE_SPECIAL, self::TYPE_UNPAID, self::TYPE_PHL];
+        if (!in_array($type, $allowed, true)) {
+            return 'Jenis cuti tidak dikenali.';
+        }
+
+        $hasSpecialId = $specialLeaveTypeId !== null && (int) $specialLeaveTypeId > 0;
+
+        if ($type === self::TYPE_SPECIAL) {
+            if (!$hasSpecialId) {
+                return 'Jenis cuti khusus wajib dipilih.';
+            }
+
+            return null;
+        }
+
+        if ($hasSpecialId) {
+            return 'Satu pengajuan hanya untuk satu jenis cuti. Cuti tahunan/unpaid/PHL tidak boleh digabung dengan cuti khusus — ajukan terpisah.';
+        }
+
+        return null;
+    }
+
+    private function validateNoOverlappingActiveLeave(
+        MasterKaryawan $employee,
+        string $type,
+        string $startDate,
+        string $endDate,
+        ?int $excludeHrRequestId,
+        ?int $excludeLegacyId
+    ): ?string {
+        $kind = $this->leaveBalance->leaveKindForRequestType($type);
+        [$newStart, $newEnd] = $this->leaveBalance->effectiveLeaveSpan($kind, $startDate, $endDate);
+        if (!$newStart || !$newEnd) {
+            return null;
+        }
+
+        foreach ($this->leaveBalance->activeLeaveOccupancyRanges($employee, $excludeHrRequestId, $excludeLegacyId) as $existing) {
+            if ($existing['start'] <= $newEnd && $newStart <= $existing['end']) {
+                return 'Tanggal bentrok dengan pengajuan cuti lain yang masih aktif. Ajukan satu jenis cuti per pengajuan; pilih tanggal yang tidak overlap.';
+            }
+        }
+
+        return null;
     }
 
     private function validateAnnualLeave(
@@ -132,10 +212,6 @@ class LeaveRequestValidationService
         ?int $excludeHrRequestId,
         ?int $excludeLegacyId
     ): ?string {
-        if (!$specialLeaveTypeId) {
-            return 'Jenis cuti khusus wajib dipilih.';
-        }
-
         $typeRow = HrSpecialLeaveType::query()
             ->where('id', $specialLeaveTypeId)
             ->where('is_active', true)
@@ -207,9 +283,10 @@ class LeaveRequestValidationService
         ?int $excludeHrRequestId,
         ?int $excludeLegacyId
     ): ?string {
-        $requestedDays = $this->leaveBalance->countWeekdaysBetween($startDate, $endDate);
+        $replacementDate = $endDate;
+        $requestedDays = $this->leaveBalance->countWeekdaysBetween($replacementDate, $replacementDate);
         if ($requestedDays <= 0) {
-            return 'Pengganti hari libur harus pada hari kerja.';
+            return 'Tanggal pengganti harus jatuh pada hari kerja.';
         }
 
         if ($requestedDays > 1) {
@@ -218,8 +295,8 @@ class LeaveRequestValidationService
 
         $rollingError = $this->validateRolling30DayLimit(
             $employee,
-            $startDate,
-            $endDate,
+            $replacementDate,
+            $replacementDate,
             $excludeHrRequestId,
             $excludeLegacyId,
             self::TYPE_PHL
@@ -273,7 +350,7 @@ class LeaveRequestValidationService
             ? $this->leaveBalance->expandWeekdayDates($startDate, $endDate)
             : [];
         $newPhl = $forType === self::TYPE_PHL
-            ? $this->leaveBalance->expandWeekdayDates($startDate, $endDate)
+            ? $this->leaveBalance->expandWeekdayDates($endDate, $endDate)
             : [];
 
         $anchors = array_unique(array_merge($newAnnual, $newPhl));

@@ -66,6 +66,8 @@ class LeaveAlpaSyncService
             $monthCursor->addMonth();
         }
 
+        $excuseCalendar = LeaveAlpaExcuseCalendar::forEmployees($eligibleIds, $from, $to);
+
         $this->log($output, sprintf(
             'Sync alpa: %d karyawan, %d bulan (%s — %s)…',
             $employeesProcessed,
@@ -81,11 +83,11 @@ class LeaveAlpaSyncService
                 $records = $absensi->getMonthlyAttendanceBulk($chunk, $month);
 
                 foreach ($records as $row) {
-                    if (!$this->isAlpaRecord($row, $today)) {
+                    $ymd = (string) ($row['tanggal'] ?? '');
+                    if ($ymd === '') {
                         continue;
                     }
 
-                    $ymd = (string) ($row['tanggal'] ?? '');
                     $day = Carbon::parse($ymd)->startOfDay();
                     if ($day->lt($from) || $day->gt($to)) {
                         continue;
@@ -94,6 +96,13 @@ class LeaveAlpaSyncService
                     $empId = (int) ($row['karyawan_id'] ?? 0);
                     $employee = $employeeById[$empId] ?? null;
                     if (!$employee || LeaveAlpaAttendanceScope::isExemptFromAlpaLedger($employee)) {
+                        continue;
+                    }
+
+                    if (!$this->isAlpaRecord($row, $today, $empId, $excuseCalendar)) {
+                        if ($ledger->voidAutomaticAlpaDay($employee, $ymd)) {
+                            $skipped++;
+                        }
                         continue;
                     }
 
@@ -122,10 +131,17 @@ class LeaveAlpaSyncService
     /**
      * @param array<string, mixed> $row
      */
-    private function isAlpaRecord(array $row, string $today): bool
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function isAlpaRecord(array $row, string $today, int $karyawanId, LeaveAlpaExcuseCalendar $excuseCalendar): bool
     {
-        $tanggal = $row['tanggal'] ?? '';
+        $tanggal = (string) ($row['tanggal'] ?? '');
         if ($tanggal === '' || $tanggal > $today) {
+            return false;
+        }
+
+        if ($excuseCalendar->isExcused($karyawanId, $tanggal)) {
             return false;
         }
 
@@ -137,15 +153,30 @@ class LeaveAlpaSyncService
             return false;
         }
 
-        if ($isWeekend && empty($row['masuk'])) {
+        if ($this->hasAttendancePunch($row)) {
             return false;
         }
 
-        if (!empty($row['masuk'])) {
+        if ($isWeekend) {
             return false;
         }
 
         return true;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function hasAttendancePunch(array $row): bool
+    {
+        return $this->timeValueFilled($row['masuk'] ?? null)
+            || $this->timeValueFilled($row['keluar'] ?? null);
+    }
+
+    /** @param mixed $value */
+    private function timeValueFilled($value): bool
+    {
+        return trim((string) $value) !== '';
     }
 
     private function log(?OutputInterface $output, string $message, bool $newline = true): void

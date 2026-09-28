@@ -4,6 +4,8 @@ namespace App\Services\Hr\Presenters;
 
 use App\Models\Hr\HrRequest;
 use App\Models\MasterKaryawan;
+use App\Services\Hr\HrFormAttachmentStorage;
+use App\Support\Greatday\GreatdayAssetPaths;
 
 class PermissionRequestPresenter
 {
@@ -21,12 +23,11 @@ class PermissionRequestPresenter
             }
         }
 
-        $attachment = $detail->attachment_path ?? null;
-        if ($attachment) {
-            $attachment = url('permission-requests/' . $attachment);
-        }
+        $stored = $detail->attachment_path ?? null;
+        $attachments = HrFormAttachmentStorage::resolvePublicUrls($stored, GreatdayAssetPaths::KEY_IZIN);
+        $attachment = $attachments[0] ?? null;
 
-        return (object) [
+        return (object) array_merge([
             'id' => $request->id,
             'employee_id' => $request->karyawan_id,
             'no_document' => $request->no_document,
@@ -37,10 +38,13 @@ class PermissionRequestPresenter
             'end_time' => $detail->end_time ?? null,
             'description' => $request->description,
             'attachment' => $attachment,
+            'attachments' => $attachments,
             'status' => $request->status,
+            'created_at' => $request->created_at,
             'created_by' => $request->created_by_name,
+            'atasan_approval_steps' => HrApprovalChainPresenter::atasanStepsForGreatday($request),
             'employee_name' => $karyawan->nama_lengkap ?? '',
             'employee_position' => $karyawan->jabatan ?? '',
-        ];
+        ], HrApprovalChainPresenter::workflowRejectionFields($request));
     }
 }

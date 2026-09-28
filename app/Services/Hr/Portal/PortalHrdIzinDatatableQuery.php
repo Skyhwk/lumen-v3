@@ -44,7 +44,7 @@ class PortalHrdIzinDatatableQuery
                 $q->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
                     ->orWhereNull('u.atasan_langsung');
             })
-            ->whereNotNull(DB::raw(PortalHrApprovalStepSql::scalar('pr', 'atasan', 'approved', 'actor_name')));
+            ->whereRaw(PortalHrApprovalStepSql::noPendingAtasanSteps('pr'));
 
         if ($processed) {
             $query->where('pr.status', WorkflowStatus::APPROVED_HRD);
@@ -52,7 +52,7 @@ class PortalHrdIzinDatatableQuery
             $query->where('pr.status', WorkflowStatus::APPROVED_ATASAN);
         }
 
-        return collect($query->select($this->permissionSelect())->get());
+        return collect($query->select($this->permissionSelect($processed))->get());
     }
 
     private function leaveRows(int $periode, bool $processed): Collection
@@ -67,6 +67,7 @@ class PortalHrdIzinDatatableQuery
             })
             ->leftJoin('master_karyawan as u', 'lr.karyawan_id', '=', 'u.id')
             ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
+            ->leftJoin('hr_special_leave_type as slt', 'ld.special_leave_type_id', '=', 'slt.id')
             ->where('lr.request_type', HrRequest::TYPE_LEAVE)
             ->where('lr.is_active', true)
             ->whereYear('lr.created_at', $periode ?: date('Y'))
@@ -74,7 +75,7 @@ class PortalHrdIzinDatatableQuery
                 $q->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
                     ->orWhereNull('u.atasan_langsung');
             })
-            ->whereNotNull(DB::raw(PortalHrApprovalStepSql::scalar('lr', 'atasan', 'approved', 'actor_name')));
+            ->whereRaw(PortalHrApprovalStepSql::noPendingAtasanSteps('lr'));
 
         if ($processed) {
             $query->where('lr.status', WorkflowStatus::APPROVED_HRD);
@@ -82,18 +83,19 @@ class PortalHrdIzinDatatableQuery
             $query->where('lr.status', WorkflowStatus::APPROVED_ATASAN);
         }
 
-        return collect($query->select($this->leaveSelect())->get());
+        return collect($query->select($this->leaveSelect($processed))->get());
     }
 
-    private function permissionSelect(): array
+    private function permissionSelect(bool $processed): array
     {
-        $statusCase = $this->hrdStatusCase('pr', false);
+        $statusCase = $this->hrdStatusCase('pr', $processed);
 
         return [
             DB::raw("CONCAT('PR-', COALESCE(legacy_map.old_id, pr.id)) as id"),
             'pr.no_document',
             'd.nama_divisi',
             DB::raw($statusCase . ' as status'),
+            DB::raw('NULL as special_leave_name'),
             DB::raw("CASE pd.permission_kind
                 WHEN 'sick' THEN 'sakit'
                 WHEN 'late' THEN 'datang_terlambat'
@@ -112,6 +114,7 @@ class PortalHrdIzinDatatableQuery
             DB::raw(PortalHrApprovalStepSql::scalar('pr', 'atasan', 'rejected', 'acted_at') . ' as rejected_atasan_at'),
             DB::raw(PortalHrApprovalStepSql::scalar('pr', 'hrd', 'rejected', 'actor_name') . ' as rejected_hrd_by'),
             DB::raw(PortalHrApprovalStepSql::scalar('pr', 'hrd', 'rejected', 'acted_at') . ' as rejected_hrd_at'),
+            'u.nama_lengkap as nama_karyawan',
             'pr.created_by_name as nama_pengaju',
             'pd.attachment_path as filename',
             DB::raw('NULL as nama_delegasi'),
@@ -119,15 +122,16 @@ class PortalHrdIzinDatatableQuery
         ];
     }
 
-    private function leaveSelect(): array
+    private function leaveSelect(bool $processed): array
     {
-        $statusCase = $this->hrdStatusCase('lr', true);
+        $statusCase = $this->hrdStatusCase('lr', $processed);
 
         return [
             DB::raw("CONCAT('LR-', COALESCE(legacy_map.old_id, lr.id)) as id"),
             'lr.no_document',
             'd.nama_divisi',
             DB::raw($statusCase . ' as status'),
+            'slt.name as special_leave_name',
             DB::raw("CASE ld.leave_kind
                 WHEN 'special' THEN 'cuti_khusus'
                 WHEN 'unpaid' THEN 'unpaid_leave'
@@ -147,6 +151,7 @@ class PortalHrdIzinDatatableQuery
             DB::raw(PortalHrApprovalStepSql::scalar('lr', 'atasan', 'rejected', 'acted_at') . ' as rejected_atasan_at'),
             DB::raw(PortalHrApprovalStepSql::scalar('lr', 'hrd', 'rejected', 'actor_name') . ' as rejected_hrd_by'),
             DB::raw(PortalHrApprovalStepSql::scalar('lr', 'hrd', 'rejected', 'acted_at') . ' as rejected_hrd_at'),
+            'u.nama_lengkap as nama_karyawan',
             'lr.created_by_name as nama_pengaju',
             'ld.attachment_path as filename',
             DB::raw('NULL as nama_delegasi'),
@@ -154,9 +159,9 @@ class PortalHrdIzinDatatableQuery
         ];
     }
 
-    private function hrdStatusCase(string $alias, bool $isLeave): string
+    private function hrdStatusCase(string $alias, bool $processedTab): string
     {
-        if ($isLeave) {
+        if ($processedTab) {
             return 'CASE
                 WHEN ' . $alias . '.status = "Approved Atasan" THEN "APPROVED"
                 WHEN ' . $alias . '.status = "Approved HRD" THEN "APPROVED HRD"

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Greatday;
 
 use App\Models\Absensi;
 use App\Models\Greatday\AbsensiAndroid;
+use App\Support\Greatday\GreatdayAssetPaths;
 use App\Models\Greatday\LiburPerusahaan;
 use App\Models\MasterCabang;
 use App\Models\RfidCard;
@@ -132,8 +133,7 @@ class AttendanceController extends Controller
             if ($request->hasFile('selfie')) {
                 $selfieFile = $request->file('selfie');
                 $fileName = str_replace('.', '', (string) microtime(true)) . '.webp';
-                $relative = trim(config('greatday.foto_absen_relative', 'android-image/absensi'), '/\\');
-                $targetDir = public_path($relative);
+                $targetDir = GreatdayAssetPaths::absensiPublicDir();
                 if (!is_dir($targetDir)) {
                     mkdir($targetDir, 0777, true);
                 }
@@ -226,7 +226,7 @@ class AttendanceController extends Controller
                 ->where('tanggal', $currentDate)
                 ->get();
 
-            $absen_android = AbsensiAndroid::where('karyawan_id', $this->user_id)->where('tanggal', $currentDate)->get();
+            $absen_android = AbsensiAndroid::logsForKaryawanOnDate((int) $this->user_id, $currentDate);
             $data = $this->mergeAbsensiWithMobileLogs($data, $absen_android);
 
             $daftarShift = $this->daftarShift();
@@ -269,7 +269,7 @@ class AttendanceController extends Controller
                     ->where('karyawan_id', $this->user_id)
                     ->where('tanggal', $nextDay)
                     ->get();
-                $nextDayAndroid = AbsensiAndroid::where('karyawan_id', $this->user_id)->where('tanggal', $nextDay)->get();
+                $nextDayAndroid = AbsensiAndroid::logsForKaryawanOnDate((int) $this->user_id, $nextDay);
                 $nextDayAbsensi = $this->mergeAbsensiWithMobileLogs($nextDayAbsensi, $nextDayAndroid);
 
                 $checkoutTime = $nextDayAbsensi->where('jam', '<=', date('H:i:s', strtotime($outTimeStr . ' +5 hours')))->max('jam') ?? null;
@@ -287,10 +287,32 @@ class AttendanceController extends Controller
                 $imageCheckout = $classified['image_checkout'];
             }
 
+            $midHourStr = $this->resolveMidHourStr($inTimeStr, $outTimeStr, $isCrossDay);
+
+            $imageCheckin = $this->resolveSelfieFilename($imageCheckin, $checkinTime, $absen_android);
+            if (!$imageCheckin) {
+                $imageCheckin = $this->fallbackSelfieInWindow(
+                    $absen_android,
+                    $checkinTime,
+                    $midHourStr,
+                    'checkin'
+                );
+            }
+
+            $checkoutMobile = isset($nextDayAndroid) ? $nextDayAndroid : $absen_android;
+            $imageCheckout = $this->resolveSelfieFilename($imageCheckout, $checkoutTime, $checkoutMobile);
+            if (!$imageCheckout) {
+                $imageCheckout = $this->fallbackSelfieInWindow(
+                    $checkoutMobile,
+                    $checkoutTime,
+                    $midHourStr,
+                    'checkout'
+                );
+            }
+
             $checkinDiff = ($checkinTime && $inTimeStr) ? (strtotime($checkinTime) - strtotime($inTimeStr)) / 60 : null;
             $checkoutDiff = ($checkoutTime && $outTimeStr) ? (strtotime($checkoutTime) - strtotime($outTimeStr)) / 60 : null;
 
-            $midHourStr = $this->resolveMidHourStr($inTimeStr, $outTimeStr, $isCrossDay);
             $nowTimeStr = date('H:i:s');
             $suggestedAction = (strtotime($nowTimeStr) >= strtotime($midHourStr)) ? 'checkout' : 'checkin';
 
@@ -307,6 +329,8 @@ class AttendanceController extends Controller
                 'date' => $currentDate,
                 'image_checkin' => $imageCheckin,
                 'image_checkout' => $imageCheckout,
+                'image_checkin_url' => $this->absensiPublicUrl($imageCheckin),
+                'image_checkout_url' => $this->absensiPublicUrl($imageCheckout),
             ];
 
             return response()->json(['status' => 'success', 'data' => $attendanceData], 200);
@@ -555,20 +579,139 @@ class AttendanceController extends Controller
      */
     private function mergeAbsensiWithMobileLogs($absensiRows, $mobileRows)
     {
+        $mobileRows = collect($mobileRows);
+
         foreach ($absensiRows as $item) {
-            $item->selfie = optional($mobileRows->firstWhere('jam', $item->jam))->selfie;
+            $selfie = $this->selfieFromMobileLogs($mobileRows, $item->jam ?? null);
+            if ($selfie !== null) {
+                $item->selfie = $selfie;
+            }
         }
 
         if ($absensiRows->isEmpty() && $mobileRows->isNotEmpty()) {
             return $mobileRows->map(function ($row) {
                 return (object) [
-                    'jam' => $row->jam,
+                    'jam' => $this->normalizeJam($row->jam) ?? $row->jam,
                     'selfie' => $row->selfie,
                 ];
             });
         }
 
+        $existingJams = $absensiRows
+            ->map(fn ($item) => $this->normalizeJam($item->jam ?? null))
+            ->filter()
+            ->values()
+            ->all();
+
+        foreach ($mobileRows as $row) {
+            $jam = $this->normalizeJam($row->jam ?? null);
+            if ($jam === null || in_array($jam, $existingJams, true)) {
+                continue;
+            }
+            $absensiRows->push((object) [
+                'jam' => $jam,
+                'selfie' => $row->selfie,
+            ]);
+            $existingJams[] = $jam;
+        }
+
         return $absensiRows;
+    }
+
+    private function normalizeJam($jam): ?string
+    {
+        if ($jam === null || $jam === '') {
+            return null;
+        }
+
+        $ts = strtotime((string) $jam);
+
+        return $ts ? date('H:i:s', $ts) : null;
+    }
+
+    private function selfieFromMobileLogs($mobileRows, ?string $jam): ?string
+    {
+        $target = $this->normalizeJam($jam);
+        if ($target === null) {
+            return null;
+        }
+
+        foreach (collect($mobileRows) as $row) {
+            if ($this->normalizeJam($row->jam ?? null) === $target && !empty($row->selfie)) {
+                return (string) $row->selfie;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveSelfieFilename(?string $current, ?string $jam, $mobileRows): ?string
+    {
+        if ($current !== null && $current !== '') {
+            return basename($current);
+        }
+
+        $fromMobile = $this->selfieFromMobileLogs($mobileRows, $jam);
+
+        return $fromMobile !== null ? basename($fromMobile) : null;
+    }
+
+    private function absensiPublicUrl(?string $fileName): ?string
+    {
+        if ($fileName === null || $fileName === '') {
+            return null;
+        }
+
+        return GreatdayAssetPaths::absensiPublicUrl($fileName);
+    }
+
+    /**
+     * Tap mesin RFID bisa lebih awal dari selfie mobile — cari foto terdekat di window masuk/keluar.
+     *
+     * @param 'checkin'|'checkout' $window
+     */
+    private function fallbackSelfieInWindow($mobileRows, ?string $anchorTime, ?string $midHourStr, string $window): ?string
+    {
+        $midTs = $midHourStr ? strtotime($midHourStr) : null;
+        $anchorTs = $anchorTime ? strtotime($this->normalizeJam($anchorTime) ?? $anchorTime) : null;
+
+        $candidates = [];
+        foreach (collect($mobileRows) as $row) {
+            if (empty($row->selfie)) {
+                continue;
+            }
+            $jam = $this->normalizeJam($row->jam ?? null);
+            if ($jam === null) {
+                continue;
+            }
+            $ts = strtotime($jam);
+            if ($window === 'checkin') {
+                if ($midTs !== null && $ts >= $midTs) {
+                    continue;
+                }
+            } elseif ($midTs !== null && $ts < $midTs) {
+                continue;
+            }
+            $candidates[] = ['ts' => $ts, 'selfie' => (string) $row->selfie];
+        }
+
+        if ($candidates === []) {
+            return null;
+        }
+
+        if ($anchorTs !== null) {
+            usort($candidates, fn ($a, $b) => abs($a['ts'] - $anchorTs) <=> abs($b['ts'] - $anchorTs));
+
+            return basename($candidates[0]['selfie']);
+        }
+
+        if ($window === 'checkout') {
+            usort($candidates, fn ($a, $b) => $b['ts'] <=> $a['ts']);
+        } else {
+            usort($candidates, fn ($a, $b) => $a['ts'] <=> $b['ts']);
+        }
+
+        return basename($candidates[0]['selfie']);
     }
 
     private function daftarShift(): array

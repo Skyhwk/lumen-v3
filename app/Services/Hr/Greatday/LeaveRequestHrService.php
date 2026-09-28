@@ -15,9 +15,11 @@ use App\Services\Hr\AtasanStepService;
 use App\Services\Hr\HrApprovalChainService;
 use App\Services\Hr\GreatdayIndexScope;
 use App\Services\Hr\HrRequestResolver;
+use App\Services\Hr\HrFormAttachmentStorage;
 use App\Services\Hr\LegacyHrMirror;
 use App\Services\Hr\Presenters\LeaveRequestPresenter;
 use App\Services\Hr\WorkflowStatus;
+use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -80,7 +82,7 @@ class LeaveRequestHrService
             $request->id ? (int) $request->id : null,
             null,
             $request->special_leave_id ? (int) $request->special_leave_id : null,
-            $request->hasFile('attachment')
+            HrFormAttachmentStorage::hasUploadedImages($request)
         );
         if ($validationMessage !== null) {
             return response()->json(['message' => $validationMessage], 422);
@@ -100,17 +102,10 @@ class LeaveRequestHrService
 
         $status = WorkflowStatus::PENDING;
 
-        $attachmentPath = null;
-        if ($request->hasFile('attachment')) {
-            $file = $request->file('attachment');
-            $destinationPath = public_path('leave-requests');
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0777, true);
-            }
-            $fileName = str_replace('.', '', microtime(true)) . '.' . $file->getClientOriginalExtension();
-            $file->move($destinationPath, $fileName);
-            $attachmentPath = $fileName;
-        }
+        $attachmentPath = HrFormAttachmentStorage::storeImages(
+            HrFormAttachmentStorage::collectUploadedImages($request),
+            GreatdayAssetPaths::KEY_CUTI
+        );
 
         $header = HrRequest::create([
             'uuid' => (string) Str::uuid(),

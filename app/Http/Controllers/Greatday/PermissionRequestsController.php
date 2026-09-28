@@ -8,8 +8,12 @@ use App\Models\Hr\HrRequest;
 use App\Services\Greatday\AtasanApprovalScope;
 use App\Services\Greatday\GetAtasan;
 use App\Services\Greatday\FirebaseService;
+use App\Services\Hr\Greatday\FormSubmitterVoidService;
 use App\Services\Hr\Greatday\PermissionRequestHrService;
+use App\Services\Hr\HrFormAttachmentStorage;
 use App\Services\Hr\HrRequestResolver;
+use App\Support\Greatday\FormSubmissionDates;
+use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
 
 use App\Models\Greatday\{PermissionRequest};
@@ -49,10 +53,12 @@ class PermissionRequestsController extends Controller
                 $employee = MasterKaryawan::find($item->employee_id);
                 $item->employee_name = $employee->nama_lengkap;
                 $item->employee_position = $employee->jabatan;
-                $item->attachment = !$item->attachment ?: url('permission-requests/' . $item->attachment);
+                $attachments = HrFormAttachmentStorage::resolvePublicUrls($item->attachment, GreatdayAssetPaths::KEY_IZIN);
+                $item->attachments = $attachments;
+                $item->attachment = $attachments[0] ?? null;
 
                 return $item;
-            });;
+            });
 
         return response()->json([
             'data' => $permissionRequests,
@@ -68,27 +74,35 @@ class PermissionRequestsController extends Controller
 
         $employee = $this->karyawan;
 
+        $startDate = $request->start_date;
+        $endDate = $request->type === 'Event Leave' ? $startDate : ($request->end_date ?: $startDate);
+
+        $dateError = FormSubmissionDates::validateRangeNotBackdated($startDate, $endDate);
+        if ($dateError !== null) {
+            return response()->json(['message' => $dateError], 422);
+        }
+
         $permissionRequest = $request->id ? PermissionRequest::find($request->id) : new PermissionRequest();
 
         $permissionRequest->employee_id = $this->user_id;
         $permissionRequest->no_document = str_replace('.', '/', microtime(true));
         $permissionRequest->type = $request->type;
-        $permissionRequest->start_date = $request->start_date;
-        $permissionRequest->end_date = $request->end_date;
+        $permissionRequest->start_date = $startDate;
+        $permissionRequest->end_date = $endDate;
         $permissionRequest->start_time = $request->start_time;
         $permissionRequest->end_time = $request->end_time;
         $permissionRequest->description = $request->description;
 
-        if ($request->hasFile('attachment')) {
-            $file = $request->file('attachment');
-            $destinationPath = public_path('permission-requests');
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0777, true);
-            }
-            $fileName = str_replace('.', '', microtime(true)) . '.' . $file->getClientOriginalExtension();
-            $file->move($destinationPath, $fileName);
+        if (!$request->id && !HrFormAttachmentStorage::hasUploadedImages($request)) {
+            return response()->json(['message' => 'Lampiran wajib — ambil foto dari kamera.'], 422);
+        }
 
-            $permissionRequest->attachment = $fileName;
+        $storedAttachments = HrFormAttachmentStorage::storeImages(
+            HrFormAttachmentStorage::collectUploadedImages($request),
+            GreatdayAssetPaths::KEY_IZIN
+        );
+        if ($storedAttachments !== null) {
+            $permissionRequest->attachment = $storedAttachments;
         }
 
         if (!$request->id) {
@@ -214,5 +228,24 @@ class PermissionRequestsController extends Controller
         ]);
 
         return response()->json(['message' => 'The permission request has been rejected successfully'], 200);
+    }
+
+    public function void(Request $request)
+    {
+        try {
+            if ($this->usesHrTables()) {
+                $resolved = HrRequestResolver::findByApiId(HrRequest::TYPE_PERMISSION, (int) $request->id);
+                if (!$resolved) {
+                    return response()->json(['message' => 'Permission request not found'], 404);
+                }
+                app(FormSubmitterVoidService::class)->voidHrRequest($resolved, $this->karyawan);
+            } else {
+                app(FormSubmitterVoidService::class)->voidLegacyPermission((int) $request->id, $this->karyawan);
+            }
+
+            return response()->json(['message' => 'Pengajuan izin berhasil dibatalkan.'], 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 }

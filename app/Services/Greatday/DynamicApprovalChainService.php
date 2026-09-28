@@ -21,7 +21,7 @@ class DynamicApprovalChainService
      */
     public function orderedApproverIds(MasterKaryawan $submitter): array
     {
-        $submitterRank = $this->gradeRank($this->normalizeGrade($submitter->grade ?? ''));
+        $submitterRank = $this->submitterRankForChain($submitter);
         $chain = [];
         $visited = [];
         $frontier = $this->directAtasanIds($submitter);
@@ -47,7 +47,7 @@ class DynamicApprovalChainService
                     ->where('is_active', true)
                     ->first();
 
-                if (!$person || (int) $person->id === 1) {
+                if (!$person || (int) $person->id === 1 || (int) $person->id === (int) $submitter->id) {
                     continue;
                 }
 
@@ -147,5 +147,19 @@ class DynamicApprovalChainService
         }
 
         return 99;
+    }
+
+    /**
+     * Rank pembanding untuk "atasan di atas pengaju".
+     * Staff/non-SPV pakai 0 agar SPV (1) & Manager (2) ikut chain — bukan 99 yang membuat 1 > 99 selalu false.
+     */
+    private function submitterRankForChain(MasterKaryawan $submitter): int
+    {
+        $grade = $this->normalizeGrade($submitter->grade ?? '');
+        if ($this->isApproverGrade($grade)) {
+            return $this->gradeRank($grade);
+        }
+
+        return 0;
     }
 }

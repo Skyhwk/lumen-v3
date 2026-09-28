@@ -45,10 +45,6 @@ class LegacyHrMirror
 
     public function syncAtasanApproval(HrRequest $request): void
     {
-        if (!HrTableMode::dualWriteLegacy()) {
-            return;
-        }
-
         $legacyId = HrRequestResolver::legacyIdForHrRequest($request);
         $table = HrRequestResolver::legacyTableForType($request->request_type);
 
@@ -71,6 +67,57 @@ class LegacyHrMirror
             $payload['rejected_atasan_by'] = $request->updated_by_name;
             $payload['rejected_atasan_at'] = $request->updated_at;
             $payload['reject_atasan_reason'] = $step->reason ?? null;
+        }
+
+        DB::connection(config('greatday.legacy_apps_connection'))
+            ->table($table)
+            ->where('id', $legacyId)
+            ->update($payload);
+    }
+
+    public function syncVoid(HrRequest $request): void
+    {
+        $legacyId = HrRequestResolver::legacyIdForHrRequest($request);
+        $table = HrRequestResolver::legacyTableForType($request->request_type);
+
+        if (!$legacyId || !$table) {
+            return;
+        }
+
+        DB::connection(config('greatday.legacy_apps_connection'))
+            ->table($table)
+            ->where('id', $legacyId)
+            ->update([
+                'is_active' => $request->is_active ? 1 : 0,
+                'updated_by' => $request->updated_by_name,
+                'updated_at' => $request->updated_at,
+            ]);
+    }
+
+    public function syncPortalHrdDecision(HrRequest $request): void
+    {
+        $legacyId = HrRequestResolver::legacyIdForHrRequest($request);
+        $table = HrRequestResolver::legacyTableForType($request->request_type);
+
+        if (!$legacyId || !$table) {
+            return;
+        }
+
+        $payload = [
+            'status' => $request->status,
+            'updated_by' => $request->updated_by_name,
+            'updated_at' => $request->updated_at,
+        ];
+
+        if ($request->status === WorkflowStatus::APPROVED_HRD) {
+            $payload['approved_hrd_by'] = $request->updated_by_name;
+            $payload['approved_hrd_at'] = $request->updated_at;
+        } elseif ($request->status === WorkflowStatus::REJECTED_HRD) {
+            $request->load('approvalSteps');
+            $step = $request->approvalSteps->where('step', 'hrd')->sortByDesc('id')->first();
+            $payload['rejected_hrd_by'] = $request->updated_by_name;
+            $payload['rejected_hrd_at'] = $request->updated_at;
+            $payload['reject_hrd_reason'] = $step->reason ?? null;
         }
 
         DB::connection(config('greatday.legacy_apps_connection'))

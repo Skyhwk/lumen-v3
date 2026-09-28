@@ -24,6 +24,9 @@ class AtasanStepService
         $approverIds = app(DynamicApprovalChainService::class)->orderedApproverIds($submitter);
         $order = 0;
         foreach ($approverIds as $approverId) {
+            if ((int) $approverId === (int) $submitter->id) {
+                continue;
+            }
             $order++;
             HrApprovalStep::create([
                 'request_id' => $requestId,

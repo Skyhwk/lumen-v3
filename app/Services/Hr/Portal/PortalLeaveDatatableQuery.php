@@ -46,6 +46,95 @@ class PortalLeaveDatatableQuery
             ->count();
     }
 
+    /** Antrian HRD: hanya setelah seluruh rantai atasan selesai. */
+    public function hrdUnprocessed(int $year): Builder
+    {
+        return $this->hrdBaseQuery($year)
+            ->where('leave_requests.status', WorkflowStatus::APPROVED_ATASAN)
+            ->whereRaw(PortalHrApprovalStepSql::noPendingAtasanSteps('leave_requests'));
+    }
+
+    public function hrdProcessed(int $year): Builder
+    {
+        return $this->hrdBaseQuery($year)->whereIn('leave_requests.status', [
+            WorkflowStatus::APPROVED_HRD,
+            WorkflowStatus::REJECTED_ATASAN,
+            WorkflowStatus::REJECTED_HRD,
+        ]);
+    }
+
+    public function countHrdUnprocessed(int $year): int
+    {
+        return (int) $this->hrdUnprocessed($year)->select(DB::raw('1'))->count();
+    }
+
+    public function countHrdProcessed(int $year): int
+    {
+        return (int) $this->hrdProcessed($year)->select(DB::raw('1'))->count();
+    }
+
+    private function hrdBaseQuery(int $year): Builder
+    {
+        return DB::table('hr_request as leave_requests')
+            ->join('hr_leave_detail as lrd', 'lrd.request_id', '=', 'leave_requests.id')
+            ->leftJoin('hr_migration_map as legacy_map', function ($join) {
+                $join->on('legacy_map.new_id', '=', 'leave_requests.id')
+                    ->where('legacy_map.old_table', '=', 'leave_requests')
+                    ->where('legacy_map.new_table', '=', 'hr_request')
+                    ->where('legacy_map.old_connection', '=', 'intilab_apps');
+            })
+            ->leftJoin('master_karyawan as karyawan', 'leave_requests.karyawan_id', '=', 'karyawan.id')
+            ->leftJoin('master_divisi as d', 'karyawan.id_department', '=', 'd.id')
+            ->leftJoin('hr_special_leave_type as slt', 'lrd.special_leave_type_id', '=', 'slt.id')
+            ->where('leave_requests.request_type', HrRequest::TYPE_LEAVE)
+            ->where('leave_requests.is_active', true)
+            ->whereYear('lrd.start_date', $year)
+            ->where(function ($q) {
+                $q->where('karyawan.atasan_langsung', 'NOT LIKE', '%"1"%')
+                    ->orWhereNull('karyawan.atasan_langsung');
+            })
+            ->select(
+                DB::raw('COALESCE(legacy_map.old_id, leave_requests.id) as id'),
+                'leave_requests.no_document',
+                DB::raw("CASE lrd.leave_kind
+                    WHEN 'special' THEN 'Special Leave'
+                    WHEN 'unpaid' THEN 'Unpaid Leave'
+                    ELSE 'Annual Leave'
+                END as type"),
+                'lrd.special_leave_type_id as special_leave_id',
+                'slt.name as special_leave_name',
+                'lrd.start_date',
+                'lrd.end_date',
+                'lrd.start_date as tanggal',
+                'd.nama_divisi',
+                DB::raw('CASE
+                    WHEN leave_requests.status = "Approved Atasan" THEN "Approve Atasan"
+                    WHEN leave_requests.status = "Rejected Atasan" THEN "Rejected Atasan"
+                    WHEN leave_requests.status = "Approved HRD" THEN "Approved HRD"
+                    WHEN leave_requests.status = "Rejected HRD" THEN "Rejected HRD"
+                    ELSE "Pending"
+                END as status'),
+                'karyawan.id as employee_id',
+                'karyawan.nama_lengkap',
+                'karyawan.grade as jabatan',
+                DB::raw($this->stepScalar('atasan', 'approved', 'actor_name') . ' as approved_atasan_by'),
+                DB::raw($this->stepScalar('atasan', 'approved', 'acted_at') . ' as approved_atasan_at'),
+                DB::raw($this->stepScalar('atasan', 'rejected', 'actor_name') . ' as rejected_atasan_by'),
+                DB::raw($this->stepScalar('atasan', 'rejected', 'acted_at') . ' as rejected_atasan_at'),
+                DB::raw($this->stepScalar('atasan', 'rejected', 'reason') . ' as reject_atasan_reason'),
+                DB::raw($this->stepScalar('hrd', 'approved', 'actor_name') . ' as approved_hrd_by'),
+                DB::raw($this->stepScalar('hrd', 'approved', 'acted_at') . ' as approved_hrd_at'),
+                DB::raw($this->stepScalar('hrd', 'rejected', 'actor_name') . ' as rejected_hrd_by'),
+                DB::raw($this->stepScalar('hrd', 'rejected', 'acted_at') . ' as rejected_hrd_at'),
+                DB::raw($this->stepScalar('hrd', 'rejected', 'reason') . ' as reject_hrd_reason'),
+                'lrd.attachment_path as attachment',
+                'leave_requests.created_by_name as nama_pengaju',
+                'leave_requests.created_at as diajukan_pada',
+                'leave_requests.description as keterangan',
+                'leave_requests.status as raw_status'
+            );
+    }
+
     private function baseQuery(int $year, array $bawahanIds, array $bawahanNames): Builder
     {
         $query = DB::table('hr_request as leave_requests')

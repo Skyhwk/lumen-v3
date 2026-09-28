@@ -13,6 +13,7 @@ use App\Services\Greatday\GetBawahan;
 use App\Services\Greatday\FirebaseService;
 use App\Services\Hr\Greatday\OvertimeRequestHrService;
 use App\Services\Hr\HrRequestResolver;
+use App\Support\Greatday\FormSubmissionDates;
 use App\Support\Greatday\HrdPayroll;
 
 use App\Models\Greatday\{OvertimeRequest, OvertimeRequestMember};
@@ -108,6 +109,11 @@ class OvertimeRequestsController extends Controller
 
             if (!$request->id && !GreatdayOvertimeAccess::canCreate($employee)) {
                 return response()->json(['message' => GreatdayOvertimeAccess::denyCreateMessage()], 403);
+            }
+
+            $dateError = FormSubmissionDates::validateRangeNotBackdated($request->start_date, $request->end_date);
+            if ($dateError !== null) {
+                return response()->json(['message' => $dateError], 422);
             }
 
             $overtimeRequest = $request->id ? OvertimeRequest::find($request->id) : new OvertimeRequest();

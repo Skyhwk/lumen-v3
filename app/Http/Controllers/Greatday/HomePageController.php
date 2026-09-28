@@ -22,10 +22,9 @@ class HomePageController extends Controller
 
     public function getFotoAbsen($image)
     {
-        $relative = trim(config('greatday.foto_absen_relative', 'android-image/absensi'), '/\\');
-        $getFile = public_path($relative . DIRECTORY_SEPARATOR . $image);
+        $getFile = \App\Support\Greatday\GreatdayAssetPaths::resolveAbsensiFilePath($image);
 
-        if (!file_exists($getFile)) {
+        if ($getFile === null || !is_file($getFile)) {
             return response()->json(['message' => 'File tidak ditemukan'], 404);
         }
 
