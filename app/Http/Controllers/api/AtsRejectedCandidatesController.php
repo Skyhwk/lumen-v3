@@ -103,10 +103,29 @@ class AtsRejectedCandidatesController extends Controller
                     'reject_hrd' => $this->rejectedCandidatesQuery('reject_hrd')->count(),
                     'reject_user' => $this->rejectedCandidatesQuery('reject_user')->count(),
                     'assessment' => $this->rejectedCandidatesQuery('assessment')->count(),
+                    'voided' => $this->rejectedCandidatesQuery('voided')->count(),
                 ],
             ],
             'message' => 'Rejected candidate tab counts retrieved successfully',
         ], 200);
+    }
+
+    private function whereVoided($query): void
+    {
+        $query->where(function ($q) {
+            $q->whereRaw("LOWER(TRIM(COALESCE(status, ''))) = 'void'")
+                ->orWhereRaw("JSON_SEARCH(meta_history, 'one', 'hired_void', NULL, '$[*].status') IS NOT NULL");
+        });
+    }
+
+    private function whereNotVoided($query): void
+    {
+        $query->where(function ($q) {
+            $q->where(function ($sub) {
+                $sub->whereNull('status')
+                    ->orWhereRaw("LOWER(TRIM(status)) != 'void'");
+            })->whereRaw("JSON_SEARCH(meta_history, 'one', 'hired_void', NULL, '$[*].status') IS NULL");
+        });
     }
 
     private function rejectedCandidatesQuery(?string $mode = null)
@@ -115,8 +134,19 @@ class AtsRejectedCandidatesController extends Controller
             ->whereNotNull('personnel_request_id')
             ->where('personnel_request_id', '!=', '');
 
+        if ($mode === 'voided') {
+            return $query->where(function ($q) {
+                $this->whereVoided($q);
+            })
+                ->orderBy('is_rejected_kandidat_at', 'desc')
+                ->orderBy('id', 'desc');
+        }
+
         if ($mode === 'assessment') {
             return $query->where('is_rejected_kandidat', 1)
+                ->where(function ($q) {
+                    $this->whereNotVoided($q);
+                })
                 ->where(function ($q) {
                     $q->whereRaw("JSON_SEARCH(meta_history, 'one', 'rejected_system', NULL, '$[*].status') IS NOT NULL")
                         ->orWhereRaw(
@@ -145,6 +175,7 @@ class AtsRejectedCandidatesController extends Controller
         }
 
         $query->where('is_rejected_kandidat', 1);
+        $this->whereNotVoided($query);
         $this->applyRejectTab($query, $mode);
 
         return $query->orderBy('is_rejected_kandidat_at', 'desc')
