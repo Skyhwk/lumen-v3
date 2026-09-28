@@ -1641,27 +1641,46 @@ class AbsensiController extends Controller
 
     public function getMonthlyAttendance(int $karyawanId, string $month): array
     {
+        $rows = $this->getMonthlyAttendanceBulk([$karyawanId], $month);
+
+        return $rows;
+    }
+
+    /**
+     * Satu query shift/punch per bulan untuk banyak karyawan (untuk sync alpa / batch job).
+     *
+     * @param list<int> $karyawanIds
+     * @return list<array<string, mixed>>
+     */
+    public function getMonthlyAttendanceBulk(array $karyawanIds, string $month): array
+    {
+        $karyawanIds = array_values(array_unique(array_filter(array_map('intval', $karyawanIds), fn ($id) => $id > 0)));
+        if ($karyawanIds === []) {
+            return [];
+        }
+
         $periode = self::parseBulanAbsensi($month, null);
         if ($periode === null) {
             return [];
         }
 
-        $karyawan = MasterKaryawan::where('id', $karyawanId)->first();
-        if ($karyawan === null) {
+        $karyawans = MasterKaryawan::query()->whereIn('id', $karyawanIds)->get();
+        if ($karyawans->isEmpty()) {
             return [];
         }
 
         $monthNum = $periode['month'];
-        $year     = $periode['year'];
-        $lastDay  = cal_days_in_month(CAL_GREGORIAN, (int) $monthNum, (int) $year);
+        $year = $periode['year'];
+        $lastDay = cal_days_in_month(CAL_GREGORIAN, (int) $monthNum, (int) $year);
 
-        return self::buildMonthlyAbsensiData(
-            $karyawan->id,
-            $year,
-            $monthNum,
-            $lastDay,
-            $karyawan->nik_karyawan,
-            $karyawan->nama_lengkap
-        );
+        $rows = $this->buildMonthlyAbsensiDataForKaryawans($karyawans, $year, $monthNum, $lastDay);
+        $nikToId = $karyawans->pluck('id', 'nik_karyawan');
+
+        foreach ($rows as &$row) {
+            $row['karyawan_id'] = (int) ($nikToId[$row['nik'] ?? ''] ?? 0);
+        }
+        unset($row);
+
+        return $rows;
     }
 }

@@ -63,4 +63,9 @@ class Payroll extends Sector{
         )->withDefault();  // Menggunakan withDefault() agar jika tidak ada data, mengembalikan instance kosong dari MasterDivisi
     }
 
+    public function payrollHeader()
+    {
+        return $this->belongsTo(PayrollHeader::class, 'payroll_header_id', 'id');
+    }
+
 }

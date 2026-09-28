@@ -148,5 +148,7 @@ $router->group(['prefix' => 'api/public/recruitment', 'middleware' => ['cors']],
     $router->get('jobs/{no_request}', 'api\PublicRecruitmentJobController@show');
 });
 
+require __DIR__ . '/greatday.php';
+
 $router->post('/{any:.*}', ['uses' => 'R404Controller@r404']);
 $router->get('/{any:.*}', ['uses' => 'R404Controller@r404']);
