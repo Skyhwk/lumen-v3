@@ -110,6 +110,8 @@ class FdlLingkunganHidupController extends Controller
                         'Laju Ventilasi (8 Jam)' => 'auto_laju',
                         'Kelembaban 8J (LK)' => 'kelembapan',
                         'Suhu 8J (LK)' => 'suhu',
+                        'Suhu (24 Jam)' => 'suhu',
+                        'Kelembapan (24 Jam)' => 'kelembapan'
                     ];
 
                     $foundParams = array_intersect($parameter, array_keys($targetParams));
@@ -117,7 +119,6 @@ class FdlLingkunganHidupController extends Controller
                     // Ambil detail hanya sekali
                     $details = DetailLingkunganHidup::where('no_sampel', $data->no_sampel)
                         ->get();
-                    
 
                     if(!empty($foundParams)) {
                         // Loop setiap parameter
@@ -169,7 +170,7 @@ class FdlLingkunganHidupController extends Controller
                                 $dataUdara['satuan'] = '°C';
                             }
 
-                            if (Str::contains($lowerParam, 'kelembaban')) {
+                            if ($column === 'kelembapan' || Str::contains($lowerParam, 'kelembaban')) {
                                 $dataLingkungan['C4'] = $rataRata;
                                 $dataUdara['hasil5'] = $rataRata;
                                 $dataUdara['satuan'] = '%';
@@ -213,12 +214,12 @@ class FdlLingkunganHidupController extends Controller
                         'approved_at' => Carbon::now()
                     ]);
 
-                    app(NotificationFdlService::class)->sendApproveNotification(
-                        'Lingkungan Hidup',
-                        $data->no_sampel,
-                        $this->karyawan,
-                        $data->created_by
-                    );
+                    // app(NotificationFdlService::class)->sendApproveNotification(
+                    //     'Lingkungan Hidup',
+                    //     $data->no_sampel,
+                    //     $this->karyawan,
+                    //     $data->created_by
+                    // );
 
                     DB::commit();
 
