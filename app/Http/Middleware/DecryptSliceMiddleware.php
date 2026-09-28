@@ -65,8 +65,19 @@ class DecryptSliceMiddleware
             return '';
         }
 
-        // Beberapa stack Apache/proxy mengubah '+' menjadi spasi di header.
-        if (strpos($slice, ' ') !== false && strpos($slice, '+') === false) {
+        // Beberapa proxy menggabungkan header duplikat dengan koma — ambil segmen v1. pertama.
+        if (strpos($slice, ',') !== false && strpos($slice, 'v1.') === 0) {
+            foreach (explode(',', $slice) as $part) {
+                $part = trim($part);
+                if (strpos($part, 'v1.') === 0) {
+                    $slice = $part;
+                    break;
+                }
+            }
+        }
+
+        // Beberapa stack Apache/proxy mengubah '+' menjadi spasi di header (legacy base64).
+        if (strpos($slice, ' ') !== false && strpos($slice, '+') === false && strpos($slice, 'v1.') !== 0) {
             $slice = str_replace(' ', '+', $slice);
         }
 
