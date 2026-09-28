@@ -147,27 +147,52 @@ class FdlErgonomiKoreksiController extends Controller
 
         switch ($method) {
             case 1:
+                $sebelumRaw = $this->decodeKoreksiJson($request->input('sebelum_kerja'));
+                $setelahRaw = $this->decodeKoreksiJson($request->input('setelah_kerja'));
+                $pengukuranNbm = [
+                    'sebelum' => $this->prosesSkorNbmKoreksi(is_array($sebelumRaw) ? $sebelumRaw : []),
+                    'setelah' => $this->prosesSkorNbmKoreksi(is_array($setelahRaw) ? $setelahRaw : []),
+                ];
                 return array_merge([
-                    'pengukuran' => $this->normalizeJsonColumn($request->input('pengukuran')),
+                    'pengukuran' => json_encode($pengukuranNbm, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                     'sebelum_kerja' => $this->normalizeJsonColumn($request->input('sebelum_kerja')),
                     'setelah_kerja' => $this->normalizeJsonColumn($request->input('setelah_kerja')),
                 ], $meta);
             case 2:
-                $formatted = (new RebaFormatter())->formatRebaData($request->all());
+                $formatted = (new RebaFormatter())->formatRebaLegacyData($request->all());
                 return array_merge(['pengukuran' => json_encode($formatted, JSON_UNESCAPED_SLASHES)], $meta);
             case 3:
-                $formatted = (new RulaFormatter())->format($request->all());
+                $formatted = (new RulaFormatter())->formatLegacyData($request->all());
                 return array_merge(['pengukuran' => json_encode($formatted, JSON_UNESCAPED_SLASHES)], $meta);
             case 4:
-                $formatted = RosaFormatter::formatRosaData($request->all());
+                $formatted = RosaFormatter::formatRosaLegacyData($request->all());
                 return array_merge(['pengukuran' => json_encode($formatted, JSON_UNESCAPED_SLASHES)], $meta);
             case 5:
-                $formatted = RlwFormatter::format($request->all(), [
-                    'id_datalapangan' => $request->input('id_datalapangan'),
-                    'no_sampel' => $request->input('no_sampel'),
-                    'method' => $request->input('method'),
-                ]);
-                return array_merge(['pengukuran' => json_encode($formatted, JSON_UNESCAPED_SLASHES)], $meta);
+                $formatted = RlwFormatter::format($request->all(), []);
+                unset($formatted['id_datalapangan'], $formatted['no_sampel'], $formatted['method']);
+                $fields = array_merge([
+                    'pengukuran' => json_encode($formatted, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ], $meta);
+                if ($request->exists('berat_beban')) {
+                    $fields['berat_beban'] = $request->input('berat_beban');
+                }
+                $frek = $request->input('frek_jml_angkatan');
+                if ($frek === null || $frek === '') {
+                    $frek = $request->input('frekuensi_jumlah_angkatan');
+                }
+                if ($frek !== null && $frek !== '') {
+                    $fields['frekuensi_jumlah_angkatan'] = str_replace(',', '.', (string) $frek);
+                }
+                if ($request->filled('kopling_tangan')) {
+                    $fields['kopling_tangan'] = $request->input('kopling_tangan');
+                }
+                if ($request->exists('jarak_vertikal')) {
+                    $fields['jarak_vertikal'] = $request->input('jarak_vertikal');
+                }
+                if ($request->exists('durasi_jam_kerja')) {
+                    $fields['durasi_jam_kerja'] = $request->input('durasi_jam_kerja');
+                }
+                return $fields;
             case 7:
                 $payload = $request->except([
                     'id_lapangan_sumber',
@@ -186,8 +211,9 @@ class FdlErgonomiKoreksiController extends Controller
                     'aktivitas',
                     'aktivitas_ukur',
                 ]);
+                $payload = $this->finalizeGotrakKoreksiPayload($payload);
                 return array_merge([
-                    'pengukuran' => json_encode($payload, JSON_UNESCAPED_SLASHES),
+                    'pengukuran' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 ], $meta);
             case 8:
                 $payload = $request->except([
@@ -255,6 +281,142 @@ class FdlErgonomiKoreksiController extends Controller
             return $value;
         }
         return json_encode($value, JSON_UNESCAPED_SLASHES);
+    }
+
+    private function decodeKoreksiJson($value): ?array
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        if (is_array($value)) {
+            return $value;
+        }
+        $decoded = json_decode((string) $value, true);
+        return json_last_error() === JSON_ERROR_NONE ? $decoded : null;
+    }
+
+    /** Selaras FdlMethodNbmController::prosesSkor — input key bagian: "skor-deskripsi". */
+    private function prosesSkorNbmKoreksi(array $data): array
+    {
+        $bagianKiri = [
+            'bahu_kiri', 'leher_atas', 'pinggul', 'lengan_atas_kiri', 'siku_kiri', 'lengan_bawah_kiri',
+            'pergelangan_tangan_kiri', 'tangan_kiri', 'paha_kiri', 'lutut_kiri', 'betis_kiri',
+            'pergelangan_kaki_kiri', 'kaki_kiri',
+        ];
+        $bagianKanan = [
+            'bahu_kanan', 'tengkuk', 'punggung', 'pinggang', 'pantat', 'lengan_atas_kanan', 'siku_kanan',
+            'lengan_bawah_kanan', 'pergelangan_tangan_kanan', 'tangan_kanan', 'paha_kanan', 'lutut_kanan',
+            'betis_kanan', 'pergelangan_kaki_kanan', 'kaki_kanan',
+        ];
+
+        $skorKiri = 0;
+        $skorKanan = 0;
+        $result = [];
+
+        foreach ($data as $bagian => $nilai) {
+            if (!is_string($nilai) || strpos($nilai, '-') === false) {
+                continue;
+            }
+            [$skor, $keterangan] = explode('-', $nilai, 2);
+            $skor = (int) trim($skor);
+            $bagianKey = strtolower(str_replace(' ', '_', (string) $bagian));
+            $result['skor_' . $bagianKey] = $skor;
+
+            if (in_array($bagianKey, $bagianKiri, true)) {
+                $skorKiri += $skor;
+            } elseif (in_array($bagianKey, $bagianKanan, true)) {
+                $skorKanan += $skor;
+            }
+        }
+
+        $totalSkor = $skorKiri + $skorKanan;
+        if ($totalSkor <= 20) {
+            $tingkat = 0;
+            $kategori = 'Rendah';
+            $tindakan = 'Belum diperlukan adanya tindakan perbaikan';
+        } elseif ($totalSkor <= 41) {
+            $tingkat = 1;
+            $kategori = 'Sedang';
+            $tindakan = 'Mungkin diperlukan tindakan dikemudian hari';
+        } elseif ($totalSkor <= 62) {
+            $tingkat = 2;
+            $kategori = 'Tinggi';
+            $tindakan = 'Diperlukan tindakan segera';
+        } elseif ($totalSkor <= 84) {
+            $tingkat = 3;
+            $kategori = 'Sangat Tinggi';
+            $tindakan = 'Diperlukan tindakan menyeluruh sesegera mungkin';
+        } else {
+            $tingkat = null;
+            $kategori = 'Tidak Diketahui';
+            $tindakan = '-';
+        }
+
+        return array_merge($result, [
+            'skor_kiri' => $skorKiri,
+            'skor_kanan' => $skorKanan,
+            'total_skor' => $totalSkor,
+            'tingkat_risiko' => $tingkat,
+            'kategori_risiko' => $kategori,
+            'tindakan_perbaikan' => $tindakan,
+        ]);
+    }
+
+    /** Selaras FdlMethodGotrakController::store — tanpa Skor_Postur_Tubuh. */
+    private function finalizeGotrakKoreksiPayload(array $payload): array
+    {
+        unset($payload['Skor_Postur_Tubuh']);
+
+        $keluhan = $payload['Keluhan_Bagian_Tubuh'] ?? [];
+        if (is_array($keluhan)) {
+            foreach ($keluhan as $bagian => $entry) {
+                if ($bagian === 'cedera' || $entry === 'Tidak' || !is_array($entry)) {
+                    continue;
+                }
+                if (isset($entry['Seberapa_Parah'], $entry['Seberapa_Sering'])) {
+                    $keluhan[$bagian] = [
+                        'Seberapa_Parah' => $entry['Seberapa_Parah'],
+                        'Seberapa_Sering' => $entry['Seberapa_Sering'],
+                        'Poin' => $this->hitungRisikoKeluhanGotrak(
+                            (string) $entry['Seberapa_Parah'],
+                            (string) $entry['Seberapa_Sering']
+                        ),
+                    ];
+                }
+            }
+        }
+
+        return [
+            'Identitas_Umum' => $payload['Identitas_Umum'] ?? [],
+            'Keluhan_Bagian_Tubuh' => is_array($keluhan) ? $keluhan : [],
+        ];
+    }
+
+    private function hitungRisikoKeluhanGotrak(string $seberapaParah, string $seberapaSering): int
+    {
+        $nilaiParah = 0;
+        if ($seberapaParah === 'Tidak ada masalah') {
+            $nilaiParah = 1;
+        } elseif ($seberapaParah === 'Tidak nyaman') {
+            $nilaiParah = 2;
+        } elseif ($seberapaParah === 'Sakit') {
+            $nilaiParah = 3;
+        } elseif ($seberapaParah === 'Sakit parah') {
+            $nilaiParah = 4;
+        }
+
+        $nilaiSering = 0;
+        if ($seberapaSering === 'Tidak pernah') {
+            $nilaiSering = 1;
+        } elseif ($seberapaSering === 'Terkadang') {
+            $nilaiSering = 2;
+        } elseif ($seberapaSering === 'Sering') {
+            $nilaiSering = 3;
+        } elseif ($seberapaSering === 'Selalu') {
+            $nilaiSering = 4;
+        }
+
+        return $nilaiParah * $nilaiSering;
     }
 
     /**
