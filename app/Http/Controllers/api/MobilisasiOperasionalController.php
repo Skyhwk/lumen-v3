@@ -13,6 +13,7 @@ use Yajra\Datatables\Datatables;
 use Carbon\Carbon;
 class MobilisasiOperasionalController extends Controller
 {
+    // ini adalah function untuk mengambil data dari API
     public function index(Request $request)
     {
         $data = Jadwal::with([
@@ -40,8 +41,7 @@ class MobilisasiOperasionalController extends Controller
             'durasi',
             'id_cabang',
             'wilayah',
-            DB::raw('group_concat(sampler) as sampler'),
-            DB::raw('MAX(kendaraan) as kendaraan')
+            DB::raw('group_concat(sampler) as sampler')
         )
         ->groupBy(
             'parsial', 'no_quotation', 'periode', 'nama_perusahaan',
@@ -57,15 +57,14 @@ class MobilisasiOperasionalController extends Controller
                 ? $item->quotationKontrakH
                 : $item->quotationNonKontrak;
 
-            $item->pic = $quotation ? [
+            $pic = $quotation ? [
                 'nama_pic_sampling'   => $quotation->nama_pic_sampling,
                 'no_tlp_pic_sampling' => $quotation->no_tlp_pic_sampling,
             ] : null;
 
-            unset($item->quotationKontrakH, $item->quotationNonKontrak);
-
             $jadwalMobil = $item->jadwalMobil;
             $jadwalMobilPayload = $jadwalMobil ? [
+            $jadwalMobilData = $jadwalMobil ? [
                 'jam_berangkat'     => $jadwalMobil->jam_berangkat,
                 'tanggal_berangkat' => $jadwalMobil->tanggal_berangkat,
                 'keterangan'        => $jadwalMobil->keterangan,
@@ -74,6 +73,13 @@ class MobilisasiOperasionalController extends Controller
             unset($item->jadwalMobil);
 
             $arraySamplers = collect(explode(',', $item->sampler))
+                ->filter(fn ($sampler) => trim($sampler) !== '')
+                ->map(fn ($sampler) => trim($sampler))
+                ->when($item->driver !== null && $item->driver !== '', function ($collection) use ($item) {
+                    if (!$collection->contains($item->driver)) {
+                        $collection->push($item->driver);
+                    }
+            $arraySamplers = collect(explode(',', (string) $item->sampler))
                 ->filter(fn ($sampler) => trim($sampler) !== '')
                 ->map(fn ($sampler) => trim($sampler))
                 ->when($item->driver !== null && $item->driver !== '', function ($collection) use ($item) {
@@ -101,6 +107,26 @@ class MobilisasiOperasionalController extends Controller
                 'periode'         => $item->periode,
                 'pic'             => $item->pic,
                 'jadwal_mobil'    => $jadwalMobilPayload,
+                    return $collection;
+                })
+                ->map(function ($sampler) use ($item) {
+                    return ($sampler == $item->driver)
+                        ? $sampler . ' (Driver)'
+                        : $sampler;
+                })
+                ->values();
+
+            return [
+                'jadwal_mobil'    => $jadwalMobilData,
+                'no_quotation'    => $item->no_quotation,
+                'nama_perusahaan' => $item->nama_perusahaan,
+                'wilayah'         => $item->wilayah,
+                'sampler'         => $arraySamplers->implode(', '),
+                'jam_mulai'       => $item->jam_mulai,
+                'jam_selesai'     => $item->jam_selesai,
+                'durasi'          => $item->durasi,
+                'periode'         => $item->periode,
+                'pic'             => $pic,
             ];
         })
         ->values();

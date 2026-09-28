@@ -437,9 +437,6 @@ class JadwalServices
         if ($dataUpdate->batch_id == null) {
             throw new Exception('Batch Id is required', 401);
         }
-        if ($dataUpdate->kendaraan == null) {
-            throw new Exception('Kendaraan is required', 401);
-        }
         if ($dataUpdate->sampling == null) {
             throw new Exception('Sampling is required', 401);
         }
@@ -551,6 +548,7 @@ class JadwalServices
                 $wilayah = explode('-', $cek->wilayah)[1];
             }
 
+            $newJadwalIds = [];
             if ($lama == $baru) { //tidak ada perubhan jumlah sampler
                 $dbInsertLastId = null;
                 Jadwal::whereIn('id', $dataUpdate->batch_id)
@@ -596,6 +594,7 @@ class JadwalServices
                         'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($datajad);
+                    $newJadwalIds[] = $dbInsertLastId;
                     $noqt = $val->no_quotation;
                 }
                 // perindahan indukMainJadwal
@@ -651,6 +650,7 @@ class JadwalServices
                         'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($body);
+                    $newJadwalIds[] = $dbInsertLastId;
                 }
                 // perindahan indukMainJadwal
                 /* casenya:
@@ -772,7 +772,6 @@ class JadwalServices
             'durasi'          => 'Durasi',
             'status'          => 'Status',
             'batch_id'        => 'Batch Id',
-            'kendaraan'       => 'Kendaraan',
             'sampling'        => 'Sampling',
             'karyawan'        => 'Karyawan',
             'jadwal_id'       => 'Jadwal Id',
@@ -866,6 +865,7 @@ class JadwalServices
                 $wilayah = explode('-', $cek->wilayah)[1];
             }
 
+            $newJadwalIds = [];
             if ($lama == $baru) { // tidak ada perubahan jumlah sampler
                 foreach ($data as $key => $val) {
                     $sampler = explode(',', $dir[$i]);
@@ -899,6 +899,7 @@ class JadwalServices
                     $val->id_cabang = $dataUpdate->id_cabang;
                     $val->durasi_personal = $dataUpdate->durasi_personal[$key] ?? null;
                     $val->save();
+                    $newJadwalIds[] = $val->id;
 
                     $noqt = $val->no_quotation;
                 }
@@ -953,6 +954,7 @@ class JadwalServices
                         'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($body);
+                    $newJadwalIds[] = $dbInsertLastId;
                 }
                 // perindahan indukMainJadwal
                 /* casenya:
@@ -984,6 +986,22 @@ class JadwalServices
         } catch (Exception $ex) {
             DB::rollback();
             throw new Exception($ex->getMessage(), 401);
+        }
+    }
+
+    protected function syncMobilisasiOperasional(array $oldIds, array $newIds, $dataUpdate = null)
+    {
+        try {
+            $actor = !empty($dataUpdate->karyawan) ? $dataUpdate->karyawan : 'System';
+            $service = app(MobilisasiOperasionalService::class);
+            $service->remapAfterJadwalReplace(
+                $oldIds,
+                $newIds,
+                $actor,
+                'Update jadwal sampling plan'
+            );
+        } catch (\Throwable $e) {
+            Log::channel('sampling')->warning('Gagal sync MO setelah update jadwal: ' . $e->getMessage());
         }
     }
 
@@ -1233,12 +1251,11 @@ class JadwalServices
             $dataParsial->durasi == null ||
             $dataParsial->status == null ||
             $dataParsial->karyawan == null ||
-            $dataParsial->kendaraan == null ||
             $dataParsial->pendampingan_k3 == null ||
             $dataParsial->isokinetic == null 
             
         ) {
-            throw new Exception("id, id_sampling, totkateg, kategori, no_quotation, nama_perusahaan, wilayah, alamat, tanggal, note, durasi, status, urutan, karyawan, kendaraan is required", 401);
+            throw new Exception("id, id_sampling, totkateg, kategori, no_quotation, nama_perusahaan, wilayah, alamat, tanggal, note, durasi, status, urutan, karyawan is required", 401);
         }
 
         DB::beginTransaction();
@@ -1415,10 +1432,9 @@ class JadwalServices
             $dataParsial->status == null ||
             $dataParsial->karyawan == null ||
             $dataParsial->pendampingan_k3 == null ||
-            $dataParsial->isokinetic == null ||
-            $dataParsial->kendaraan == null
+            $dataParsial->isokinetic == null
         ) {
-            throw new Exception("id, id_sampling, totkateg, kategori, no_quotation, nama_perusahaan, wilayah, alamat, tanggal, durasi, status, karyawan, kendaraan is required", 401);
+            throw new Exception("id, id_sampling, totkateg, kategori, no_quotation, nama_perusahaan, wilayah, alamat, tanggal, durasi, status, karyawan is required", 401);
         }
 
         DB::beginTransaction();
