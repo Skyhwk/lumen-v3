@@ -880,22 +880,63 @@ class FollowUpController extends Controller
 
     public function saveKeteranganActivity(Request $request)
     {
+        $allowedLabels = [
+            'Perkenalan Awal & Identifikasi Peluang',
+            'Kirim Company Profile',
+            'Penawaran Masih Dalam Review Management',
+            'Penawaran Masih Proses Penyesuaian Kebutuhan (Revisi)',
+            'Negosiasi Harga',
+            'Follow Up PO atau Sign Quote',
+            'Arrange Schedule Pengujian',
+            'Follow Up Hasil Uji & Next Pengujian',
+            'Maintain Customer',
+        ];
+
         $dfus = DFUS::where('id', $request->id)->first();
         if (!$dfus) {
             return response()->json(['message' => 'Data DFUS tidak ditemukan.', 'success' => false], 404);
         }
 
-        $text = trim((string) $request->input('keterangan_activity', ''));
-        if ($text === '') {
+        $raw = trim((string) $request->input('keterangan_activity', ''));
+        if ($raw === '') {
             return response()->json(['message' => 'Keterangan activity wajib dipilih.', 'success' => false], 422);
         }
 
-        // Batasi panjang wajar (teks single-choice)
-        if (mb_strlen($text) > 500) {
-            return response()->json(['message' => 'Keterangan activity terlalu panjang.', 'success' => false], 422);
+        // Ambil label opsi saja (abaikan baris tahap / "> ")
+        // contoh masuk: "Tahap Closing...\n  > Arrange Schedule Pengujian"
+        // hasil simpan: "Arrange Schedule Pengujian"
+        $candidate = $raw;
+        if (preg_match('/^\s*>\s*(.+)$/m', $raw, $matches)) {
+            $candidate = trim($matches[1]);
+        } else {
+            $lines = preg_split('/\R+/', $raw) ?: [];
+            $last = trim((string) end($lines));
+            if ($last !== '') {
+                $candidate = preg_replace('/^>\s*/', '', $last);
+            }
         }
 
-        $dfus->keterangan_activity = $text;
+        $label = null;
+        foreach ($allowedLabels as $allowed) {
+            if (strcasecmp($candidate, $allowed) === 0 || stripos($candidate, $allowed) !== false) {
+                $label = $allowed;
+                break;
+            }
+            // FE kadang kirim full text — cocokkan label di dalamnya
+            if (stripos($raw, $allowed) !== false) {
+                $label = $allowed;
+                break;
+            }
+        }
+
+        if ($label === null) {
+            return response()->json([
+                'message' => 'Keterangan activity tidak valid.',
+                'success' => false,
+            ], 422);
+        }
+
+        $dfus->keterangan_activity = $label;
         $dfus->updated_by = $this->karyawan;
         $dfus->save();
 
