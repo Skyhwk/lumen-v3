@@ -207,6 +207,7 @@ class FdlErgonomiKoreksiController extends Controller
                     'aktivitas',
                     'aktivitas_ukur',
                 ]);
+                $payload = $this->finalizeMethod8KoreksiPayload($payload);
                 return array_merge(['pengukuran' => json_encode($payload, JSON_UNESCAPED_SLASHES)], $meta);
             default:
                 return [];
@@ -254,6 +255,159 @@ class FdlErgonomiKoreksiController extends Controller
             return $value;
         }
         return json_encode($value, JSON_UNESCAPED_SLASHES);
+    }
+
+    /**
+     * Portal kirim multipart/form-data → angka jadi string. Selaraskan dengan mobile store:
+     * hitung ulang skor & paksa integer untuk field poin.
+     */
+    private function finalizeMethod8KoreksiPayload(array $payload): array
+    {
+        $atas = $payload['Tubuh_Bagian_Atas'] ?? null;
+        $bawah = $payload['Tubuh_Bagian_Bawah'] ?? null;
+
+        $totalAtas = is_array($atas) ? $this->calculateTotalDurasiBahayaErgonomi($atas) : 0;
+        $totalBawah = 0;
+        if (is_array($bawah)) {
+            $totalBawah = $this->calculateTotalDurasiBahayaErgonomi($bawah);
+        }
+
+        $payload['Jumlah_Skor_Postur'] = (int) ($totalAtas + $totalBawah);
+
+        if (isset($payload['Manual_Handling']) && is_array($payload['Manual_Handling'])) {
+            $this->recalculateManualHandlingScores($payload['Manual_Handling']);
+        }
+
+        return $payload;
+    }
+
+    /** @see FdlMethodBahayaErgonomiController::calculateTotalDurasi */
+    private function calculateTotalDurasiBahayaErgonomi($data): int
+    {
+        $totalDurasi = 0;
+
+        if (!is_array($data)) {
+            return 0;
+        }
+
+        foreach ($data as $values) {
+            if (isset($values['Faktor Kontrol'])) {
+                if (stripos($values['Faktor Kontrol'], 'Tidak') !== false) {
+                    continue;
+                }
+                if (preg_match('/(\d+)/', $values['Faktor Kontrol'], $match)) {
+                    $totalDurasi += (int) $match[1];
+                }
+                continue;
+            }
+
+            if (!is_array($values)) {
+                continue;
+            }
+
+            foreach ($values as $details) {
+                if (!is_array($details)) {
+                    continue;
+                }
+
+                if (isset($details['Durasi Gerakan']) && $details['Durasi Gerakan'] !== 'Tidak') {
+                    $durasi = explode(';', (string) $details['Durasi Gerakan'])[0];
+                    if (is_numeric($durasi)) {
+                        $totalDurasi += (int) $durasi;
+                    }
+                }
+
+                $penambahanWaktuYa =
+                    (isset($details['Overtime Status']) && $details['Overtime Status'] === 'Ya')
+                    || (isset($details['Penambahan Waktu']) && $details['Penambahan Waktu'] === 'Ya');
+
+                if ($penambahanWaktuYa && isset($details['Overtime']) && $details['Overtime'] !== '') {
+                    $totalDurasi += (int) round((float) $details['Overtime']);
+                }
+            }
+        }
+
+        return $totalDurasi;
+    }
+
+    /** @see FdlMethodBahayaErgonomiController::store hitung manual handling */
+    private function recalculateManualHandlingScores(array &$manualHandling): void
+    {
+        if ($manualHandling === [] || $manualHandling === 'Tidak') {
+            return;
+        }
+
+        $totalSkor1 = 0;
+        if (isset($manualHandling['Posisi Angkat Beban'], $manualHandling['Estimasi Berat Benda'])) {
+            $totalSkor1 = $this->hitungRisikoBebanMethod8(
+                (string) $manualHandling['Posisi Angkat Beban'],
+                (string) $manualHandling['Estimasi Berat Benda']
+            );
+        }
+
+        $totalSkor2 = 0;
+        if (isset($manualHandling['Faktor Resiko']) && is_array($manualHandling['Faktor Resiko'])) {
+            foreach ($manualHandling['Faktor Resiko'] as $faktor => $nilai) {
+                if ($faktor === 'Total Poin 2') {
+                    continue;
+                }
+                if (is_array($nilai)) {
+                    foreach ($nilai as $subNilai) {
+                        if (is_string($subNilai) && $subNilai !== 'Tidak') {
+                            $skor = explode('-', $subNilai)[0];
+                            if (is_numeric($skor)) {
+                                $totalSkor2 += (int) $skor;
+                            }
+                        }
+                    }
+                } elseif (is_string($nilai) && $nilai !== 'Tidak') {
+                    $skor = explode('-', $nilai)[0];
+                    if (is_numeric($skor)) {
+                        $totalSkor2 += (int) $skor;
+                    }
+                }
+            }
+        }
+
+        $manualHandling['Total Poin 1'] = (int) $totalSkor1;
+        if (!isset($manualHandling['Faktor Resiko']) || !is_array($manualHandling['Faktor Resiko'])) {
+            $manualHandling['Faktor Resiko'] = [];
+        }
+        $manualHandling['Faktor Resiko']['Total Poin 2'] = (int) $totalSkor2;
+        $manualHandling['Total Poin Akhir'] = (int) ($totalSkor1 + $totalSkor2);
+    }
+
+    private function hitungRisikoBebanMethod8(string $posisi, string $berat): int
+    {
+        if ($posisi === 'Pengangkatan dengan jarak dekat') {
+            if ($berat === 'Berat benda >23Kg') {
+                return 5;
+            }
+            if ($berat === 'Berat benda Sekitar 7 - 23 Kg') {
+                return 3;
+            }
+            return 0;
+        }
+        if ($posisi === 'Pengangkatan dengan jarak sedang') {
+            if ($berat === 'Berat benda >16Kg') {
+                return 6;
+            }
+            if ($berat === 'Berat benda Sekitar 5 - 16 Kg') {
+                return 3;
+            }
+            return 0;
+        }
+        if ($posisi === 'Pengangkatan dengan jarak jauh') {
+            if ($berat === 'Berat benda >13Kg') {
+                return 6;
+            }
+            if ($berat === 'Berat benda Sekitar 4.5 - 13 Kg') {
+                return 3;
+            }
+            return 0;
+        }
+
+        return 0;
     }
 
     private function isKoreksiPersonilAllowed(): bool
