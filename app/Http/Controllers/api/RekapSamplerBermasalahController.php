@@ -13,8 +13,8 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Menu: Sampling → Rekap Sampler Bermasalah.
  *
- * Menampilkan riwayat penugasan sampler yang pernah di-unblock (kolom reopened_at terisi
- * di tabel sampler_tracking_troubles).
+ * Menampilkan penugasan sampler bermasalah: masih terkunci (blocked) dan yang pernah
+ * di-unblock (reopened_at terisi), selama activity belum clear atau ada riwayat unblock.
  *
  * ALUR DATA (urut eksekusi):
  * ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -23,11 +23,10 @@ use Illuminate\Support\Facades\Schema;
  * └───────────────────────────────────┬─────────────────────────────────────────┘
  *                                     ▼
  * ┌─────────────────────────────────────────────────────────────────────────────┐
- * │ 2. loadUnblockedTroubles()                                                   │
+ * │ 2. loadRekapTroubles()                                                       │
  * │    Sumber utama: sampler_tracking_troubles                                   │
- * │    Filter: reopened_at NOT NULL (pernah di-unblock).                          │
- * │    is_clear TIDAK difilter — activity selesai (is_clear=1) tetap tampil.     │
- * │    Tanpa filter tanggal — semua riwayat unblock ditampilkan.                 │
+ * │    Filter: tracking_session_id terisi AND (is_clear=0 OR reopened_at terisi). │
+ * │    Tanpa filter tanggal — blocked aktif + riwayat unblock ditampilkan.        │
  * └───────────────────────────────────┬─────────────────────────────────────────┘
  *                                     ▼
  * ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -85,6 +84,10 @@ class RekapSamplerBermasalahController extends SamplerTrackingController
     {
         $troubleObj = parent::troublePayload($trouble, $reopenedByMap);
         $troubleObj['lampiran'] = $this->resolveTroubleLampiran($trouble);
+        $troubleObj['blocked_at'] = $trouble->created_at ?? null;
+        $troubleObj['is_unblocked'] = !empty($trouble->reopened_at);
+        $troubleObj['activity_cleared'] = (bool) ($trouble->is_clear ?? false);
+        $troubleObj['cleared_at'] = $trouble->cleared_at ?? null;
 
         return $troubleObj;
     }
@@ -118,7 +121,7 @@ class RekapSamplerBermasalahController extends SamplerTrackingController
      */
     protected function buildRekapRowsFromTroubles()
     {
-        $troubles = $this->loadUnblockedTroubles();
+        $troubles = $this->loadRekapTroubles();
         if ($troubles->isEmpty()) {
             return collect();
         }
@@ -135,13 +138,17 @@ class RekapSamplerBermasalahController extends SamplerTrackingController
     }
 
     /**
-     * Semua riwayat unblock; tidak ada filter tanggal dari request.
+     * Kendala aktif (masih blocked) dan riwayat unblock; tidak ada filter tanggal dari request.
      */
-    protected function loadUnblockedTroubles()
+    protected function loadRekapTroubles()
     {
         return DB::table(SamplerTrackingTroubleService::TABLE)
-            ->whereNotNull('reopened_at')
-            ->orderBy('reopened_at', 'desc')
+            ->whereNotNull('tracking_session_id')
+            ->where(function ($query) {
+                $query->where('is_clear', 0)
+                    ->orWhereNotNull('reopened_at');
+            })
+            ->orderByRaw('COALESCE(reopened_at, created_at) DESC')
             ->get();
     }
 
@@ -391,12 +398,22 @@ class RekapSamplerBermasalahController extends SamplerTrackingController
                 return $this->mergeRekapRowGroup($group);
             })
             ->sortByDesc(function ($row) {
+                $recapSortStamp = function ($trouble) {
+                    if (!$trouble || !is_array($trouble)) {
+                        return '';
+                    }
+
+                    return $trouble['reopened_at']
+                        ?? $trouble['blocked_at']
+                        ?? $trouble['created_at']
+                        ?? '';
+                };
                 $troubles = collect($row['troubles'] ?? []);
                 if ($troubles->isNotEmpty()) {
-                    return $troubles->max('reopened_at') ?? '';
+                    return $troubles->map($recapSortStamp)->filter()->max() ?? '';
                 }
 
-                return $row['trouble']['reopened_at'] ?? '';
+                return $recapSortStamp($row['trouble'] ?? []);
             })
             ->values();
     }
@@ -411,6 +428,12 @@ class RekapSamplerBermasalahController extends SamplerTrackingController
             $durationPart = $this->trackingDurationMergePart($row);
             $sessionId = $row['tracking_session_id'] ?? ('t-' . ($row['trouble_id'] ?? 'x'));
             $row['row_id'] = 'rekap-group-' . $sessionId . '-' . $durationPart;
+            $primaryTrouble = $row['trouble'] ?? null;
+            $row['is_unblocked'] = !empty($primaryTrouble['is_unblocked']) || !empty($primaryTrouble['reopened_at']);
+            $row['status_label'] = $row['is_unblocked'] ? 'Sudah Di-unblock' : 'Terkunci';
+            $row['blocked_at'] = $primaryTrouble['blocked_at'] ?? $primaryTrouble['created_at'] ?? null;
+            $row['reopened_by_name'] = $primaryTrouble['reopened_by_name'] ?? null;
+            $row['reopened_at'] = $primaryTrouble['reopened_at'] ?? null;
 
             return $row;
         }
@@ -434,6 +457,14 @@ class RekapSamplerBermasalahController extends SamplerTrackingController
             return $row['trouble'] ?? null;
         })->filter()->values()->all();
 
+        $primaryTrouble = $troubles[0] ?? null;
+        $isUnblocked = false;
+        if (!empty($troubles)) {
+            $isUnblocked = collect($troubles)->every(function ($t) {
+                return !empty($t['is_unblocked']) || !empty($t['reopened_at']);
+            });
+        }
+
         $merged = $base;
         $merged['sampler_list'] = $samplerNames->all();
         $merged['samplers'] = $samplerNames->all();
@@ -442,6 +473,11 @@ class RekapSamplerBermasalahController extends SamplerTrackingController
         $merged['trouble_ids'] = $group->pluck('trouble_id')->filter()->unique()->values()->all();
         $merged['trouble'] = $troubles[0] ?? null;
         $merged['trouble_id'] = $merged['trouble_ids'][0] ?? ($merged['trouble_id'] ?? null);
+        $merged['is_unblocked'] = $isUnblocked;
+        $merged['status_label'] = $isUnblocked ? 'Sudah Di-unblock' : 'Terkunci';
+        $merged['blocked_at'] = $primaryTrouble['blocked_at'] ?? $primaryTrouble['created_at'] ?? null;
+        $merged['reopened_by_name'] = $primaryTrouble['reopened_by_name'] ?? null;
+        $merged['reopened_at'] = $primaryTrouble['reopened_at'] ?? null;
 
         $durationPart = $this->trackingDurationMergePart($merged);
         $sessionId = $merged['tracking_session_id'] ?? ('t-' . ($merged['trouble_id'] ?? 'x'));
