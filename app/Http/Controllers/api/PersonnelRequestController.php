@@ -563,6 +563,8 @@ class PersonnelRequestController extends Controller
                 'userInterview',
                 'candidateProfile',
             ])
+            ->where('is_active', 1)
+            ->where('is_rejected_kandidat', 0)
             ->whereIn('personnel_request_id', $ownedRequestIds->isEmpty() ? [-1] : $ownedRequestIds);
     }
 
