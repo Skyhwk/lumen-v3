@@ -41,7 +41,16 @@ class SamplerTrackingService
             }
             $jadwals = Jadwal::where('is_active', true)
                 ->whereDate('tanggal', $date)
-                ->lockForUpdate()->get();
+                ->lockForUpdate()
+                ->get()
+                ->filter(function ($row) use ($date) {
+                    if ($this->revisionQuotationPendingReOrder($row->no_quotation)) {
+                        return Carbon::parse($row->tanggal)->toDateString() === $date
+                            && $this->quotationHasActivePersiapanOnDate($row->no_quotation, $row->tanggal);
+                    }
+
+                    return $this->quotationHasActivePersiapanOnDate($row->no_quotation, $row->tanggal);
+                });
 
             return $this->syncJadwalRows($jadwals, $date, true);
         }, 5);
@@ -180,20 +189,104 @@ class SamplerTrackingService
         if (!$psh->no_quotation || !$psh->tanggal_sampling) {
             return collect();
         }
+        if ($psh->is_active === false || $psh->is_active === 0) {
+            return collect();
+        }
+        if ($this->revisionQuotationPendingReOrder($psh->no_quotation)) {
+            return $this->syncQuotationDocumentToLatestSchedule($psh->no_quotation);
+        }
 
-        // Only saving preparation may create sessions. Select its teams, then
-        // synchronize complete team membership rather than a sampler subset.
+        // Persiapan sampel is the first trigger for tracking sessions.
         return DB::transaction(function () use ($psh) {
             $samplers = $this->parseSamplerNames($psh->sampler_jadwal ?? null);
             $date = Carbon::parse($psh->tanggal_sampling)->toDateString();
-            $creationKeys = $this->snapshotSchedules($psh->no_quotation)
-                ->filter(function ($row) use ($date, $samplers) {
-                    return $row->tanggal === $date
-                        && (count($samplers) === 0 || in_array($row->sampler, $samplers, true));
-                })->map(function ($row) { return $this->makeTeamKey($row); })->unique()->all();
+            $creationKeys = $this->persiapanBackedCreationKeys($psh->no_quotation, $date, $samplers);
 
             return $this->syncQuotation($psh->no_quotation, $creationKeys);
         });
+    }
+
+    /** Whether this quotation has any active persiapan header (any sampling date). */
+    public function quotationHasActivePersiapan($quotation): bool
+    {
+        if (!$quotation) {
+            return false;
+        }
+
+        return PersiapanSampelHeader::where('is_active', true)
+            ->where('no_quotation', $quotation)
+            ->exists();
+    }
+
+    public function quotationIsRevisionDocument($quotation): bool
+    {
+        return (bool) preg_match('/R\d+$/', (string) $quotation);
+    }
+
+    public function quotationHasActiveOrder($quotation): bool
+    {
+        if (!$quotation) {
+            return false;
+        }
+
+        return OrderHeader::where('no_document', $quotation)
+            ->where('is_active', true)
+            ->whereNotNull('no_order')
+            ->where('no_order', '!=', '')
+            ->exists();
+    }
+
+    /**
+     * Revisi QT (…R1, R2, …) yang belum di-order ulang: jadwal/persiapan tidak
+     * boleh membuat atau mengubah sampler_tracking_sessions.
+     */
+    public function revisionQuotationPendingReOrder($quotation): bool
+    {
+        return $this->quotationIsRevisionDocument($quotation)
+            && !$this->quotationHasActiveOrder($quotation);
+    }
+
+    /** Persiapan must exist on the same calendar date as the jadwal / session. */
+    public function quotationHasActivePersiapanOnDate($quotation, $date): bool
+    {
+        if (!$quotation || !$date) {
+            return false;
+        }
+
+        $dateStr = Carbon::parse($date)->toDateString();
+
+        return PersiapanSampelHeader::where('is_active', true)
+            ->where('no_quotation', $quotation)
+            ->whereDate('tanggal_sampling', $dateStr)
+            ->exists();
+    }
+
+    /**
+     * Team keys that may receive a new session: jadwal on dates that already
+     * have active persiapan for this quotation.
+     */
+    protected function persiapanBackedCreationKeys($quotation, $focusDate = null, array $focusSamplers = [])
+    {
+        $focusDate = $focusDate ? Carbon::parse($focusDate)->toDateString() : null;
+
+        return $this->snapshotSchedules($quotation)
+            ->filter(function ($row) use ($quotation, $focusDate, $focusSamplers) {
+                $rowDate = Carbon::parse($row->tanggal)->toDateString();
+                if (!$this->quotationHasActivePersiapanOnDate($quotation, $rowDate)) {
+                    return false;
+                }
+                if ($focusDate && $rowDate === $focusDate && $focusSamplers !== []) {
+                    return in_array($row->sampler, $focusSamplers, true);
+                }
+
+                return true;
+            })
+            ->map(function ($row) {
+                return $this->makeTeamKey($row);
+            })
+            ->unique()
+            ->values()
+            ->all();
     }
 
     public function snapshotSchedules($quotation)
@@ -204,6 +297,13 @@ class SamplerTrackingService
 
     public function syncQuotation($quotation, array $creationKeys = [])
     {
+        if ($this->revisionQuotationPendingReOrder($quotation)) {
+            return $this->syncQuotationDocumentToLatestSchedule($quotation);
+        }
+        if (!$this->quotationHasActivePersiapan($quotation) && $creationKeys === []) {
+            return collect();
+        }
+
         return DB::transaction(function () use ($quotation, $creationKeys) {
             $revised = $this->reconcileQuotationRevision($quotation);
             $rows = $this->snapshotSchedules($quotation);
@@ -223,6 +323,43 @@ class SamplerTrackingService
             $this->reconcileRescheduledVisitEvidence($quotation);
             $this->reattachMisplacedEvidenceForQuotation($quotation);
             $this->pruneCrossTeamAutoEvents($quotation);
+
+            return $sessions;
+        });
+    }
+
+    /**
+     * Revisi QT belum di-order ulang: perbarui no_quotation (dan field jadwal) pada
+     * session yang sudah ada — no_order tetap dari order keluarga QT yang sama.
+     * Tidak membuat session baru.
+     */
+    public function syncQuotationDocumentToLatestSchedule($quotation)
+    {
+        if (!$quotation) {
+            return collect();
+        }
+
+        return DB::transaction(function () use ($quotation) {
+            $this->reconcileQuotationRevision($quotation);
+            $rows = $this->snapshotSchedules($quotation);
+            if ($rows->isEmpty()) {
+                return collect();
+            }
+
+            $sessions = collect();
+            foreach ($rows->pluck('tanggal')->unique() as $date) {
+                $dateStr = Carbon::parse($date)->toDateString();
+                $sessions = $sessions->merge($this->syncJadwalRows(
+                    $rows->filter(function ($row) use ($dateStr) {
+                        return Carbon::parse($row->tanggal)->toDateString() === $dateStr;
+                    }),
+                    $dateStr,
+                    true,
+                    $quotation,
+                    []
+                ));
+            }
+            $this->pruneEmptyDuplicateRevisionSessions($quotation);
 
             return $sessions;
         });
@@ -391,6 +528,10 @@ class SamplerTrackingService
     /** Call after the schedule transaction commits, using its pre-edit snapshot. */
     public function syncScheduleEdit($before, $quotation)
     {
+        if ($this->revisionQuotationPendingReOrder($quotation)) {
+            return $this->syncQuotationDocumentToLatestSchedule($quotation);
+        }
+
         $after = $this->snapshotSchedules($quotation);
         $affectedScopes = $this->changedScheduleScopes($before, $after);
         if (empty($affectedScopes)) {
@@ -426,7 +567,11 @@ class SamplerTrackingService
         });
         $this->rekeySessions($mapping);
 
-        $sessions = $this->syncQuotationDates($quotation, $after, $affectedScopes);
+        $editCreationKeys = array_values(array_intersect(
+            collect($affectedScopes)->flatten()->unique()->values()->all(),
+            $this->persiapanBackedCreationKeys($quotation)
+        ));
+        $sessions = $this->syncQuotationDates($quotation, $after, $affectedScopes, $editCreationKeys);
         foreach ($sessions as $session) {
             if ($editedKeys->contains($session->team_key) && $previousMembers->has($session->id)) {
                 $this->inheritCorrectedTeamEvents($session, $previousMembers->get($session->id));
@@ -613,6 +758,10 @@ class SamplerTrackingService
     /** New visits must not inherit events from cancelled visits with the same times. */
     public function syncScheduleCreation($before, $quotation)
     {
+        if ($this->revisionQuotationPendingReOrder($quotation)) {
+            return $this->syncQuotationDocumentToLatestSchedule($quotation);
+        }
+
         $after = $this->snapshotSchedules($quotation);
         $affectedScopes = $this->changedScheduleScopes($before, $after);
         if (empty($affectedScopes)) {
@@ -642,11 +791,12 @@ class SamplerTrackingService
             }
         }
 
+        // New sessions from jadwal booking are only created via persiapan (syncByPersiapanHeader).
         return $this->syncQuotationDates(
             $quotation,
             $after,
             $affectedScopes,
-            array_values(array_unique($creationKeys))
+            []
         );
     }
 
@@ -746,7 +896,8 @@ class SamplerTrackingService
                     $session = $keeper;
                 } else {
                     $session = $this->findSession($teamKey);
-                    if (!$session->exists) {
+                    $explicitNewTeam = in_array($teamKey, $creationKeys, true);
+                    if (!$session->exists && !$explicitNewTeam) {
                         $sameVisit = $this->findSameVisitSession($first, $quotation, $date, $teamKey, $jadwals);
                         if ($sameVisit) {
                             $session = $sameVisit;
@@ -758,8 +909,23 @@ class SamplerTrackingService
                         }
                     }
                 }
-                if (!$session->exists && !in_array($teamKey, $creationKeys, true)) {
+                $canMaterialize = in_array($teamKey, $creationKeys, true);
+                $visitQuotation = $quotation ?: $first->no_quotation;
+                $visitDate = Carbon::parse($first->tanggal)->toDateString();
+                if ($canMaterialize && !$this->quotationHasActivePersiapanOnDate($visitQuotation, $visitDate)) {
+                    $canMaterialize = false;
+                }
+                if ($canMaterialize && $this->revisionQuotationPendingReOrder($visitQuotation)) {
+                    $canMaterialize = false;
+                }
+                if (!$canMaterialize && (!$session->exists || !$session->is_active)) {
                     return;
+                }
+                if ($canMaterialize && $session->exists && !$session->is_active
+                    && SamplerTrackingEvent::where('sampler_tracking_session_id', $session->id)->exists()) {
+                    $this->archiveTrackingSession($session);
+                    $session = new SamplerTrackingSession();
+                    $session->team_key = $teamKey;
                 }
                 $orderHeader = OrderHeader::where('no_document', $first->no_quotation)
                     ->where('is_active', true)
@@ -1057,8 +1223,10 @@ class SamplerTrackingService
     }
 
     /**
-     * Kunjungan sama (order/tanggal/jam/klien) tapi team_key berubah — tanpa syarat event.
-     * Hanya dipakai bila satu tim per visit-key, atau lineage (SP/parsial/kendaraan/kategori) cocok.
+     * Kunjungan fisik sama (order + tanggal + jam + klien) tetapi identitas jadwal berubah
+     * (mis. id_sampling / parsial / kendaraan → team_key baru). Session lama dipakai lagi
+     * sehingga event & member tetap pada record yang sama — ini jalur migrasi activity
+     * saat SP berubah di tanggal yang sama, bukan pindah tanggal.
      */
     protected function findSameVisitSession($jadwalFirst, $quotation, $date, $targetTeamKey, $dayJadwals = null)
     {
@@ -1104,40 +1272,57 @@ class SamplerTrackingService
         return $session;
     }
 
-    /** Parsial/jadwal pindah tanggal: satu session aktif di tanggal lain dengan lineage sama. */
+    /**
+     * Relocate lintas tanggal sengaja tidak dipakai. Pindah tanggal = session lama
+     * nonaktif + session baru (lihat rescheduledJadwalIds / deactivateRescheduledSessions).
+     * Perubahan id_sampling di tanggal yang sama = findSameVisitSession + rekey / revisi QT.
+     */
     protected function findRelocatedVisitSession($jadwalFirst, $quotation, $date)
     {
-        if (!$quotation || !$jadwalFirst) {
-            return null;
+        return null;
+    }
+
+    /** Hapus session duplikat kosong setelah nomor QT revisi diselaraskan. */
+    protected function pruneEmptyDuplicateRevisionSessions($quotation): void
+    {
+        SamplerTrackingSession::where('is_active', true)
+            ->get()
+            ->filter(function ($session) use ($quotation) {
+                return $this->matchesQuotationFamily($session->no_quotation, $quotation);
+            })
+            ->groupBy(function ($session) {
+                return Carbon::parse($session->tanggal_sampling)->toDateString()
+                    . '|' . $this->rescheduleVisitKey($session);
+            })
+            ->each(function ($group) {
+                if ($group->count() <= 1) {
+                    return;
+                }
+                $keeper = $group->sortByDesc(function ($session) {
+                    return SamplerTrackingEvent::where('sampler_tracking_session_id', $session->id)->count();
+                })->sortBy('id')->first();
+                foreach ($group as $session) {
+                    if ((int) $session->id === (int) $keeper->id) {
+                        continue;
+                    }
+                    if (SamplerTrackingEvent::where('sampler_tracking_session_id', $session->id)->exists()) {
+                        continue;
+                    }
+                    $this->archiveTrackingSession($session);
+                }
+            });
+    }
+
+    protected function quotationHasActiveJadwalOnDate($quotation, $dateStr): bool
+    {
+        if (!$quotation || !$dateStr) {
+            return false;
         }
 
-        $dateStr = Carbon::parse($date)->toDateString();
-
-        $alreadyOnDate = SamplerTrackingSession::whereDate('tanggal_sampling', $dateStr)
+        return Jadwal::where('no_quotation', $quotation)
             ->where('is_active', true)
-            ->get()
-            ->filter(function ($session) use ($quotation, $jadwalFirst) {
-                return $this->matchesQuotationFamily($session->no_quotation, $quotation)
-                    && $this->sessionMatchesJadwalLineage($session, $jadwalFirst, true);
-            });
-
-        if ($alreadyOnDate->isNotEmpty()) {
-            return null;
-        }
-
-        $elsewhere = SamplerTrackingSession::where('is_active', true)
-            ->whereDate('tanggal_sampling', '!=', $dateStr)
-            ->get()
-            ->filter(function ($session) use ($quotation, $jadwalFirst) {
-                return $this->matchesQuotationFamily($session->no_quotation, $quotation)
-                    && $this->sessionMatchesJadwalLineage($session, $jadwalFirst, true);
-            });
-
-        if ($elsewhere->count() !== 1) {
-            return null;
-        }
-
-        return $elsewhere->first();
+            ->whereDate('tanggal', $dateStr)
+            ->exists();
     }
 
     protected function distinctJadwalTeamKeysForVisitKey($dayJadwals, $visitKey)
@@ -2774,9 +2959,22 @@ public function buildTrackingRows($sessions)
         }
 
         if (!array_key_exists($quotation, $this->orderNumbersByQuotation)) {
-            $this->orderNumbersByQuotation[$quotation] = OrderHeader::where('no_document', $quotation)
+            $order = OrderHeader::where('no_document', $quotation)
                 ->orderByDesc('is_active')
                 ->value('no_order');
+            if (!$order) {
+                $root = $this->quotationRoot($quotation);
+                $familyHeader = OrderHeader::where('is_active', true)
+                    ->whereNotNull('no_order')
+                    ->where('no_order', '!=', '')
+                    ->orderByDesc('id')
+                    ->get()
+                    ->first(function ($header) use ($root) {
+                        return $this->quotationRoot($header->no_document) === $root;
+                    });
+                $order = $familyHeader ? $familyHeader->no_order : null;
+            }
+            $this->orderNumbersByQuotation[$quotation] = $order;
         }
 
         return $this->orderNumbersByQuotation[$quotation];
