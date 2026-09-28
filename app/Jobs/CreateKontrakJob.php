@@ -36,6 +36,7 @@ class CreateKontrakJob extends Job
             foreach ($periodeItem->data_sampling as $sampling) {
                 // Buat key unik untuk mengelompokkan
                 $key = md5(json_encode([
+                    'is_promo'        => !empty($sampling->is_promo),
                     'kategori_1'      => $sampling->kategori_1,
                     'kategori_2'      => $sampling->kategori_2,
                     'parameter'       => $sampling->parameter,
@@ -49,7 +50,8 @@ class CreateKontrakJob extends Job
     
                 if (!isset($grouped[$key])) {
                     $grouped[$key] = (object)[
-                        'kategori_1'      => $sampling->kategori_1,
+                        'is_promo'        => !empty($sampling->is_promo),
+                    'kategori_1'      => $sampling->kategori_1,
                         'kategori_2'      => $sampling->kategori_2,
                         'penamaan_titik'  => [], // default kosong
                         'parameter'       => $sampling->parameter,
@@ -248,6 +250,7 @@ class CreateKontrakJob extends Job
 
             $dataH->data_pendukung_sampling = json_encode(array_values($data_pendukung_h), JSON_UNESCAPED_UNICODE);
 
+            $dataH->promo_id = $payload->_promo->id ?? null;
             $dataH->save();
             
             foreach ($data_pendukung as $x => $pengujian){
@@ -257,6 +260,7 @@ class CreateKontrakJob extends Job
                 $data_sampling = [];
                 $datas = [];
                 $harga_total = 0;
+                $promoFreeUsed = false;
                 $harga_air = 0;
                 $harga_udara = 0;
                 $harga_emisi = 0;
@@ -326,6 +330,9 @@ class CreateKontrakJob extends Job
                         }
                     }
 
+                    if ($payload->_promo ?? null) {
+                        [$harga_parameter, $volume_parameter] = \App\Services\QuotationPromo::parameterPrices($sampling, $payload->informasi_pelanggan->tgl_penawaran);
+                    }
                     $vol_db = array_sum($volume_parameter);
                     $har_db = array_sum($harga_parameter);
 
@@ -362,10 +369,13 @@ class CreateKontrakJob extends Job
                         }
                     }
 
+                    if ($payload->_promo ?? null) {
+                        [$promoUnit, $promoTotal] = \App\Services\QuotationPromo::rowPrice($payload->_promo, $sampling, $is_paket ? $hargaSatuan : $har_db, $harga_parameter, $promoFreeUsed, $is_paket ? $hargaPaket : ($har_db * $jumlah_titik));
+                    }
                     $pengujian->data_sampling[$i]->total_parameter = count($sampling->parameter);
                     $pengujian->data_sampling[$i]->regulasi = $regulasi;
-                    $pengujian->data_sampling[$i]->harga_satuan = $is_paket ? $hargaSatuan : $har_db;
-                    $pengujian->data_sampling[$i]->harga_total = $is_paket ? $hargaPaket : ($har_db * $jumlah_titik);
+                    $pengujian->data_sampling[$i]->harga_satuan = ($payload->_promo ?? null) ? $promoUnit : ($is_paket ? $hargaSatuan : $har_db);
+                    $pengujian->data_sampling[$i]->harga_total = ($payload->_promo ?? null) ? $promoTotal : ($is_paket ? $hargaPaket : ($har_db * $jumlah_titik));
                     $pengujian->data_sampling[$i]->volume = $vol_db;
 
                     if (isset($pengujian->data_sampling[$i]->biaya_preparasi)) {
@@ -375,25 +385,25 @@ class CreateKontrakJob extends Job
                     //bagian untuk di parsing keluar ke variable lain
                     switch ($id_kategori) {
                         case '1':
-                            $harga_air += $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            $harga_air += $pengujian->data_sampling[$i]->harga_total;
                             break;
                         case '4':
-                            $harga_udara += $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            $harga_udara += $pengujian->data_sampling[$i]->harga_total;
                             break;
                         case '5':
-                            $harga_emisi += $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            $harga_emisi += $pengujian->data_sampling[$i]->harga_total;
                             break;
                         case '6':
-                            $harga_padatan += $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            $harga_padatan += $pengujian->data_sampling[$i]->harga_total;
                             break;
                         case '7':
-                            $harga_swab_test += $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            $harga_swab_test += $pengujian->data_sampling[$i]->harga_total;
                             break;
                         case '8':
-                            $harga_tanah += $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            $harga_tanah += $pengujian->data_sampling[$i]->harga_total;
                             break;
                         case '9':
-                            $harga_pangan += $is_paket ? $hargaPaket : floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            $harga_pangan += $pengujian->data_sampling[$i]->harga_total;
                             break;
                     }
                 }
@@ -431,9 +441,22 @@ class CreateKontrakJob extends Job
                 $harga_preparasi = array_sum($array_harga_preparasi);
                 $dataD->total_biaya_preparasi = $harga_preparasi;
 
+                if ($payload->_promo ?? null) {
+                    $promoDpp = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan + $harga_preparasi;
+                    $promoOutside = 0;
+                    $promoDiscount = 0;
+                    $dataD->grand_total = $promoDpp;
+                    \App\Services\QuotationPromo::percentage($payload->_promo, $dataD, $promoDpp, $promoOutside, $promoDiscount, ['preparasi' => $harga_preparasi], null);
+                    $dataD->total_dpp = $promoDpp;
+                    $dataD->total_discount = $promoDiscount;
+                    $dataD->piutang = $promoDpp;
+                    $dataD->biaya_akhir = $promoDpp;
+                }
+                $dataD->promo_id = $payload->_promo->id ?? null;
                 $dataD->save();
             }
 
+            \App\Services\QuotationPromo::syncHeader($dataH);
             DB::commit();
 
             Log::channel('quotation')->info('CreateKontrakJob: ' . $no_document . ' success created');
