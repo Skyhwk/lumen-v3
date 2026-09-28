@@ -103,7 +103,7 @@ class AtasanStepService
                 app(HrApprovalChainService::class)->notifyCurrentApprovers(
                     $request->fresh(),
                     $submitter ?: $approver,
-                    '/forms'
+                    \App\Support\Greatday\NotificationCopy::pathForms('approval')
                 );
             }
         } else {

@@ -19,6 +19,7 @@ use App\Services\Hr\WorkflowStatus;
 use App\Support\Greatday\FormSubmissionDates;
 use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
+use App\Support\Greatday\NotificationCopy;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -101,7 +102,7 @@ class PermissionRequestHrService
             'attachment_path' => $attachmentPath,
         ]);
 
-        $header = $this->bootstrapAtasanChain($header, $employee, '/forms/permissionRequests');
+        $header = $this->bootstrapAtasanChain($header, $employee);
 
         app(LegacyHrMirror::class)->mirrorCreateFromHrRequest($header->fresh(['permissionDetail']));
 
@@ -124,11 +125,10 @@ class PermissionRequestHrService
 
         $row = $row->fresh();
         if ($row->status === WorkflowStatus::APPROVED_ATASAN) {
-            (new FirebaseService())->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
-                'title' => 'Permohonan Izin Diajukan!',
-                'body' => 'Terdapat Permohonan Izin yang diajukan oleh: ' . $row->created_by_name . ' menunggu persetujuan Anda',
-                'url' => '/forms/permissionRequests',
-            ]);
+            (new FirebaseService())->sendNotifications(
+                HrdPayroll::queueNotificationUserIds(),
+                NotificationCopy::forwardToHrd($row, NotificationCopy::pathForms('approval'))
+            );
         }
 
         return response()->json(['message' => 'The permission request has been approved successfully'], 200);
@@ -148,11 +148,10 @@ class PermissionRequestHrService
         app(ApprovalService::class)->rejectAtasan($row, $approver, $reason, ApprovalService::CHANNEL_GREATDAY);
         app(LegacyHrMirror::class)->syncAtasanApproval($row->fresh());
 
-        (new FirebaseService())->sendNotifications([$row->karyawan_id], [
-            'title' => 'Permohonan Izin Ditolak!',
-            'body' => 'Permohonan Izin telah ditolak Atasan oleh: ' . $approver->nama_lengkap . ' dengan alasan: ' . $reason,
-            'url' => '/forms/permissionRequests',
-        ]);
+        (new FirebaseService())->sendNotifications(
+            [$row->karyawan_id],
+            NotificationCopy::rejectedByAtasan($row, $approver->nama_lengkap, $reason, NotificationCopy::pathForms('submission'))
+        );
 
         return response()->json(['message' => 'The permission request has been rejected successfully'], 200);
     }

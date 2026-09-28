@@ -13,6 +13,7 @@ use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\HrFormAttachmentStorage;
 use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
+use App\Support\Greatday\NotificationCopy;
 use App\Models\Greatday\{LeaveRequest, SpecialLeaveType};
 use App\Models\{MasterKaryawan};
 use Illuminate\Http\Request;
@@ -170,11 +171,10 @@ class LeaveRequestsController extends Controller
 
             foreach ($getAtasan as $atasan) {
                 if ($atasan->grade === 'MANAGER') {
-                    $service->sendNotifications([$atasan->id], [
-                        'title' => 'Permohonan Cuti Diajukan!',
-                        'body'  => 'Terdapat Permohonan Cuti yang diajukan oleh: ' . $this->nama_lengkap . ' menunggu persetujuan Anda',
-                        'url'   => '/forms/leaveRequests',
-                    ]);
+                    $service->sendNotifications(
+                        [$atasan->id],
+                        NotificationCopy::legacyAtasanPending('Permohonan cuti', $this->nama_lengkap, NotificationCopy::pathForms('approval'))
+                    );
                 }
             }
         }
@@ -217,11 +217,10 @@ class LeaveRequestsController extends Controller
         $leaveRequest->save();
 
         $service = new FirebaseService();
-        $service->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
-            'title' => 'Permohonan Cuti Diajukan!',
-            'body'  => 'Terdapat Permohonan Cuti yang diajukan oleh: ' . $leaveRequest->created_by . ' menunggu persetujuan Anda',
-            'url'   => '/forms/leaveRequests',
-        ]);
+        $service->sendNotifications(
+            HrdPayroll::queueNotificationUserIds(),
+            NotificationCopy::legacyForwardToHrd('Permohonan cuti', $leaveRequest->created_by, NotificationCopy::pathForms('approval'))
+        );
 
         return response()->json(['message' => 'The leave request has been approved successfully'], 200);
     }
@@ -262,11 +261,15 @@ class LeaveRequestsController extends Controller
         $leaveRequest->save();
 
         $service = new FirebaseService();
-        $service->sendNotifications([$leaveRequest->employee_id], [
-            'title' => 'Permohonan Cuti Ditolak!',
-            'body'  => 'Permohonan Cuti telah ditolak Atasan oleh: ' . $this->nama_lengkap . ' dengan alasan: ' . $request->reject_reason,
-            'url'   => '/forms/leaveRequests',
-        ]);
+        $service->sendNotifications(
+            [$leaveRequest->employee_id],
+            NotificationCopy::legacyRejected(
+                'Permohonan cuti',
+                $this->nama_lengkap,
+                $request->reject_reason,
+                NotificationCopy::pathForms('submission')
+            )
+        );
 
         return response()->json(['message' => 'The leave request has been rejected successfully'], 200);
     }

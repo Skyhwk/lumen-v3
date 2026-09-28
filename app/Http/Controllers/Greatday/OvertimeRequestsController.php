@@ -15,6 +15,7 @@ use App\Services\Hr\Greatday\OvertimeRequestHrService;
 use App\Services\Hr\HrRequestResolver;
 use App\Support\Greatday\FormSubmissionDates;
 use App\Support\Greatday\HrdPayroll;
+use App\Support\Greatday\NotificationCopy;
 
 use App\Models\Greatday\{OvertimeRequest, OvertimeRequestMember};
 use App\Models\{MasterDivisi, MasterKaryawan};
@@ -116,6 +117,17 @@ class OvertimeRequestsController extends Controller
                 return response()->json(['message' => $dateError], 422);
             }
 
+            $employeeIds = collect($request->employees)
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn ($id) => $id > 0)
+                ->unique()
+                ->values()
+                ->all();
+
+            if ($employeeIds === []) {
+                return response()->json(['message' => 'Pilih minimal satu karyawan peserta lembur'], 422);
+            }
+
             $overtimeRequest = $request->id ? OvertimeRequest::find($request->id) : new OvertimeRequest();
 
             $overtimeRequest->start_date = $request->start_date;
@@ -152,13 +164,6 @@ class OvertimeRequestsController extends Controller
                 ]);
             }
 
-            $employeeIds = collect($request->employees)
-                ->map(fn ($id) => (int) $id)
-                ->push((int) $employee->id)
-                ->unique()
-                ->values()
-                ->all();
-
             foreach ($employeeIds as $employeeId) {
                 $member = OvertimeRequestMember::where([
                     'overtime_request_id' => $overtimeRequest->id,
@@ -188,11 +193,16 @@ class OvertimeRequestsController extends Controller
 
             $service = new FirebaseService();
 
-            $service->sendNotifications($employeeIds, [
-                'title' => 'Permohonan Lembur Diajukan!',
-                'body'  => 'Anda termasuk kedalam tim lembur yang diajukan oleh: ' . $overtimeRequest->created_by,
-                'url'   => '/forms/overtimeRequests',
-            ]);
+            foreach ($employeeIds as $memberId) {
+                $service->sendNotifications(
+                    [$memberId],
+                    NotificationCopy::legacyAtasanPending(
+                        'Penugasan lembur',
+                        $overtimeRequest->created_by,
+                        NotificationCopy::pathForms('submission')
+                    )
+                );
+            }
 
             if ($employee->grade !== 'MANAGER') {
                 $getAtasan = GetAtasan::where('id', $employee->id)->get();
@@ -201,11 +211,14 @@ class OvertimeRequestsController extends Controller
                     if ($atasan->grade === 'MANAGER') {
                         $department = MasterDivisi::find($overtimeRequest->department_id);
 
-                        $service->sendNotifications([$atasan->id], [
-                            'title' => 'Permohonan Lembur Diajukan!',
-                            'body'  => 'Permohonan Lembur dari divisi: ' . $department->nama_divisi . ' menunggu persetujuan Anda',
-                            'url'   => '/forms/overtimeRequests',
-                        ]);
+                        $service->sendNotifications(
+                            [$atasan->id],
+                            NotificationCopy::legacyAtasanPending(
+                                'Permohonan lembur (' . ($department->nama_divisi ?? '') . ')',
+                                $overtimeRequest->created_by,
+                                NotificationCopy::pathForms('approval')
+                            )
+                        );
                     }
                 }
             }
@@ -251,11 +264,14 @@ class OvertimeRequestsController extends Controller
         $overtimeRequest->save();
 
         $service = new FirebaseService();
-        $service->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
-            'title' => 'Permohonan Lembur Diajukan!',
-            'body'  => 'Permohonan Lembur dari divisi: ' . ($department->nama_divisi ?? '') . ' menunggu persetujuan Anda',
-            'url'   => '/forms/overtimeRequests',
-        ]);
+        $service->sendNotifications(
+            HrdPayroll::queueNotificationUserIds(),
+            NotificationCopy::legacyForwardToHrd(
+                'Permohonan lembur',
+                $overtimeRequest->created_by,
+                NotificationCopy::pathForms('approval')
+            )
+        );
 
         return response()->json(['message' => 'The overtime request has been approved successfully'], 200);
     }
@@ -300,11 +316,16 @@ class OvertimeRequestsController extends Controller
         $overtimeRequest->save();
 
         $service = new FirebaseService();
-        $service->sendNotifications($overtimeRequest->members->where('is_active', true)->pluck('employee_id')->toArray(), [
-            'title' => 'Permohonan Lembur Ditolak!',
-            'body'  => 'Permohonan Lembur telah ditolak Atasan oleh: ' . $this->nama_lengkap . ' dengan alasan: ' . $request->reject_reason,
-            'url'   => '/forms/overtimeRequests',
-        ]);
+        $memberIds = $overtimeRequest->members->where('is_active', true)->pluck('employee_id')->toArray();
+        $service->sendNotifications(
+            $memberIds,
+            NotificationCopy::legacyRejected(
+                'Permohonan lembur',
+                $this->nama_lengkap,
+                $request->reject_reason,
+                NotificationCopy::pathForms('submission')
+            )
+        );
 
         return response()->json(['message' => 'The overtime request has been rejected successfully'], 200);
     }

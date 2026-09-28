@@ -14,6 +14,7 @@ use App\Services\Hr\HrFormAttachmentStorage;
 use App\Services\Hr\HrRequestResolver;
 use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
+use App\Support\Greatday\NotificationCopy;
 use Illuminate\Http\Request;
 
 class AttendanceCorrectionsController extends Controller
@@ -104,11 +105,14 @@ class AttendanceCorrectionsController extends Controller
 
             foreach ($getAtasan as $atasan) {
                 if ($atasan->grade === 'MANAGER') {
-                    $service->sendNotifications([$atasan->id], [
-                        'title' => 'Permohonan Koreksi Kehadiran Diajukan!',
-                        'body'  => 'Terdapat Permohonan Koreksi Kehadiran yang diajukan oleh: ' . $attendanceCorrection->created_by . ' menunggu persetujuan Anda',
-                        'url'   => '/forms/attendanceCorrections',
-                    ]);
+                    $service->sendNotifications(
+                        [$atasan->id],
+                        NotificationCopy::legacyAtasanPending(
+                            'Koreksi kehadiran',
+                            $attendanceCorrection->created_by,
+                            NotificationCopy::pathForms('approval')
+                        )
+                    );
                 }
             }
         }
@@ -151,11 +155,14 @@ class AttendanceCorrectionsController extends Controller
         $attendanceCorrection->save();
 
         $service = new FirebaseService();
-        $service->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
-            'title' => 'Permohonan Koreksi Kehadiran Diajukan!',
-            'body'  => 'Terdapat Permohonan Koreksi Kehadiran yang diajukan oleh: ' . $attendanceCorrection->created_by . ' menunggu persetujuan Anda',
-            'url'   => '/forms/attendanceCorrections',
-        ]);
+        $service->sendNotifications(
+            HrdPayroll::queueNotificationUserIds(),
+            NotificationCopy::legacyForwardToHrd(
+                'Koreksi kehadiran',
+                $attendanceCorrection->created_by,
+                NotificationCopy::pathForms('approval')
+            )
+        );
 
         return response()->json(['message' => 'The attendance correction has been approved successfully'], 200);
     }
@@ -196,11 +203,15 @@ class AttendanceCorrectionsController extends Controller
         $attendanceCorrection->save();
 
         $service = new FirebaseService();
-        $service->sendNotifications([$attendanceCorrection->employee_id], [
-            'title' => 'Permohonan Koreksi Kehadiran Ditolak!',
-            'body'  => 'Permohonan Koreksi Kehadiran telah ditolak Atasan oleh: ' . $this->nama_lengkap . ' dengan alasan: ' . $request->reject_reason,
-            'url'   => '/forms/attendanceCorrections',
-        ]);
+        $service->sendNotifications(
+            [$attendanceCorrection->employee_id],
+            NotificationCopy::legacyRejected(
+                'Koreksi kehadiran',
+                $this->nama_lengkap,
+                $request->reject_reason,
+                NotificationCopy::pathForms('submission')
+            )
+        );
 
         return response()->json(['message' => 'The attendance correction has been rejected successfully'], 200);
     }

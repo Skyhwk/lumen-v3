@@ -9,6 +9,8 @@ use App\Models\Greatday\LiburPerusahaan;
 use App\Models\MasterCabang;
 use App\Models\RfidCard;
 use App\Models\ShiftKaryawan;
+use App\Services\Greatday\LeaveAlpaExcuseCalendar;
+use App\Services\Greatday\OfficeCalendarService;
 use Carbon\Carbon;
 use Exception;
 use GuzzleHttp\Client;
@@ -346,93 +348,47 @@ class AttendanceController extends Controller
         }
 
         try {
-            $startDate = date('Y-m-01', strtotime($request->year . '-' . $request->month . '-01'));
-            $endDate = date('Y-m-t', strtotime($startDate));
+            $year = (int) $request->year;
+            $month = (int) $request->month;
+            $ctx = $this->prepareAttendanceMonthContext($year, $month);
             $attendanceData = [];
 
-            $dates = new \DatePeriod(
-                new \DateTime($startDate),
-                new \DateInterval('P1D'),
-                (new \DateTime($endDate))->modify('+1 day')
-            );
-
-            $daftarShift = $this->daftarShift();
-
-            foreach ($dates as $date) {
-                $currentDate = $date->format('Y-m-d');
-                $dayName = $this->getDayName($currentDate);
-                $shift = ShiftKaryawan::on($this->produksi())
-                    ->where('karyawan_id', $this->user_id)
-                    ->where('tanggal', $currentDate)
-                    ->first();
-
-                $data = Absensi::on($this->produksi())
-                    ->where('karyawan_id', $this->user_id)
-                    ->where('tanggal', $currentDate)
-                    ->get();
-
-                $shiftName = $shift ? $shift->shift : 'SHREGULAR';
-                $inTimeStr = $shift->time_in ?? null;
-                $outTimeStr = $shift->time_out ?? null;
-
-                if (!$inTimeStr || !$outTimeStr) {
-                    $shiftDetails = collect($daftarShift)->firstWhere('text', $shiftName);
-                    if (!$shiftDetails) {
-                        $shiftDetails = ['value' => ['IN' => '08:00', 'OUT' => '17:00'], 'text' => $shiftName];
-                    }
-                    $inTimeStr = $inTimeStr ?: ($shiftDetails['value']['IN'] ?? '08:00');
-                    $outTimeStr = $outTimeStr ?: ($shiftDetails['value']['OUT'] ?? '17:00');
-                }
-
-                $isCrossDay = false;
-                if ($inTimeStr && $outTimeStr) {
-                    $isCrossDay = strtotime($outTimeStr) <= strtotime($inTimeStr);
-                }
-
-                $checkinTime = null;
-                $checkoutTime = null;
-
-                if ($shiftName === 'OFF') {
-                    $checkinTime = null;
-                    $checkoutTime = null;
-                } elseif ($isCrossDay) {
-                    $checkinThreshold = date('H:i:s', strtotime($inTimeStr . ' +4 hours'));
-                    $checkinTime = $data->where('jam', '<=', $checkinThreshold)->where('jam', '>=', date('H:i:s', strtotime($inTimeStr . ' -4 hours')))->min('jam')
-                        ?? $data->where('jam', '>=', date('H:i:s', strtotime($inTimeStr . ' -4 hours')))->min('jam')
-                        ?? null;
-
-                    $nextDay = date('Y-m-d', strtotime($currentDate . ' +1 day'));
-                    $nextDayAbsensi = Absensi::on($this->produksi())
-                        ->where('karyawan_id', $this->user_id)
-                        ->where('tanggal', $nextDay)
-                        ->get();
-                    $checkoutTime = $nextDayAbsensi->where('jam', '<=', date('H:i:s', strtotime($outTimeStr . ' +5 hours')))->max('jam') ?? null;
-                } else {
-                    $classified = $this->classifySameDayAbsensi(
-                        $data->sortBy('jam')->values(),
-                        $inTimeStr,
-                        $outTimeStr,
-                        $isCrossDay
-                    );
-                    $checkinTime = $classified['checkin_time'];
-                    $checkoutTime = $classified['checkout_time'];
-                }
-
-                $checkinDiff = ($checkinTime && $inTimeStr) ? (strtotime($checkinTime) - strtotime($inTimeStr)) / 60 : null;
-                $checkoutDiff = ($checkoutTime && $outTimeStr) ? (strtotime($checkoutTime) - strtotime($outTimeStr)) / 60 : null;
-
-                $attendanceData[] = [
-                    'shift' => $shiftName,
-                    'checkin_time' => $checkinTime,
-                    'checkout_time' => $checkoutTime,
-                    'checkin_diff' => $checkinDiff,
-                    'checkout_diff' => $checkoutDiff,
-                    'date' => $currentDate,
-                    'day_name' => $dayName,
-                ];
+            foreach ($this->iterateMonthDates($ctx['startDate'], $ctx['endDate']) as $currentDate) {
+                $attendanceData[] = $this->resolveAttendanceDayRow($currentDate, $ctx);
             }
 
             return response()->json(['status' => 'success', 'data' => $attendanceData], 200);
+        } catch (\Throwable $th) {
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Ringkasan absensi bermasalah bulan berjalan — payload kecil untuk home.
+     */
+    public function getAttendanceIssueSummary(Request $request)
+    {
+        if (!$this->karyawanOrFail()) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+        }
+
+        try {
+            $year = (int) $request->year;
+            $month = (int) $request->month;
+            if ($year < 2000 || $year > 2100 || $month < 1 || $month > 12) {
+                return response()->json(['status' => 'error', 'message' => 'Invalid period'], 422);
+            }
+
+            if ($this->isExemptFromAttendanceIssueSummary()) {
+                return response()->json([
+                    'status' => 'success',
+                    'data' => $this->emptyAttendanceIssueSummary($year, $month),
+                ], 200);
+            }
+
+            $summary = $this->summarizeAttendanceIssuesForMonth($year, $month);
+
+            return response()->json(['status' => 'success', 'data' => $summary], 200);
         } catch (\Throwable $th) {
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
@@ -481,6 +437,313 @@ class AttendanceController extends Controller
         ];
 
         return $days[date('l', strtotime($date))];
+    }
+
+    /** @return \Generator<int, string> */
+    private function iterateMonthDates(string $startDate, string $endDate): \Generator
+    {
+        $period = new \DatePeriod(
+            new \DateTime($startDate),
+            new \DateInterval('P1D'),
+            (new \DateTime($endDate))->modify('+1 day')
+        );
+
+        foreach ($period as $date) {
+            yield $date->format('Y-m-d');
+        }
+    }
+
+    /**
+     * @return array{
+     *   startDate: string,
+     *   endDate: string,
+     *   daftarShift: list<array<string, mixed>>,
+     *   shiftsByDate: \Illuminate\Support\Collection,
+     *   absensiByDate: \Illuminate\Support\Collection,
+     *   excuseCalendar: LeaveAlpaExcuseCalendar,
+     *   holidayDateSet: array<string, true>,
+     *   additionalWorkingSet: array<string, true>
+     * }
+     */
+    private function prepareAttendanceMonthContext(int $year, int $month): array
+    {
+        $startDate = date('Y-m-01', strtotime($year . '-' . $month . '-01'));
+        $endDate = date('Y-m-t', strtotime($startDate));
+        $absensiThrough = date('Y-m-d', strtotime($endDate . ' +1 day'));
+
+        $shiftsByDate = ShiftKaryawan::on($this->produksi())
+            ->where('karyawan_id', $this->user_id)
+            ->whereBetween('tanggal', [$startDate, $endDate])
+            ->get()
+            ->keyBy('tanggal');
+
+        $absensiByDate = Absensi::on($this->produksi())
+            ->where('karyawan_id', $this->user_id)
+            ->whereBetween('tanggal', [$startDate, $absensiThrough])
+            ->orderBy('tanggal')
+            ->orderBy('jam')
+            ->get()
+            ->groupBy('tanggal');
+
+        $excuseCalendar = LeaveAlpaExcuseCalendar::forEmployees(
+            [(int) $this->user_id],
+            Carbon::parse($startDate),
+            Carbon::parse($endDate)
+        );
+
+        $calendarPayload = app(OfficeCalendarService::class)->forYear($year);
+        $holidayDateSet = [];
+        foreach ($calendarPayload['calendar']['holiday_dates'] ?? [] as $holidayDate) {
+            if ($holidayDate >= $startDate && $holidayDate <= $endDate) {
+                $holidayDateSet[$holidayDate] = true;
+            }
+        }
+
+        return [
+            'startDate' => $startDate,
+            'endDate' => $endDate,
+            'daftarShift' => $this->daftarShift(),
+            'shiftsByDate' => $shiftsByDate,
+            'absensiByDate' => $absensiByDate,
+            'excuseCalendar' => $excuseCalendar,
+            'holidayDateSet' => $holidayDateSet,
+            'additionalWorkingSet' => array_fill_keys($calendarPayload['calendar']['additional_working_dates'] ?? [], true),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $ctx
+     * @return array<string, mixed>
+     */
+    private function resolveAttendanceDayRow(string $currentDate, array $ctx): array
+    {
+        $dayName = $this->getDayName($currentDate);
+        $shift = $ctx['shiftsByDate']->get($currentDate);
+        $data = collect($ctx['absensiByDate']->get($currentDate, []));
+
+        $shiftName = $shift ? $shift->shift : 'SHREGULAR';
+        $inTimeStr = $shift->time_in ?? null;
+        $outTimeStr = $shift->time_out ?? null;
+
+        if (!$inTimeStr || !$outTimeStr) {
+            $shiftDetails = collect($ctx['daftarShift'])->firstWhere('text', $shiftName);
+            if (!$shiftDetails) {
+                $shiftDetails = ['value' => ['IN' => '08:00', 'OUT' => '17:00'], 'text' => $shiftName];
+            }
+            $inTimeStr = $inTimeStr ?: ($shiftDetails['value']['IN'] ?? '08:00');
+            $outTimeStr = $outTimeStr ?: ($shiftDetails['value']['OUT'] ?? '17:00');
+        }
+
+        $isCrossDay = false;
+        if ($inTimeStr && $outTimeStr) {
+            $isCrossDay = strtotime($outTimeStr) <= strtotime($inTimeStr);
+        }
+
+        $checkinTime = null;
+        $checkoutTime = null;
+
+        if ($shiftName === 'OFF') {
+            $checkinTime = null;
+            $checkoutTime = null;
+        } elseif ($isCrossDay) {
+            $checkinThreshold = date('H:i:s', strtotime($inTimeStr . ' +4 hours'));
+            $checkinTime = $data->where('jam', '<=', $checkinThreshold)->where('jam', '>=', date('H:i:s', strtotime($inTimeStr . ' -4 hours')))->min('jam')
+                ?? $data->where('jam', '>=', date('H:i:s', strtotime($inTimeStr . ' -4 hours')))->min('jam')
+                ?? null;
+
+            $nextDay = date('Y-m-d', strtotime($currentDate . ' +1 day'));
+            $nextDayAbsensi = collect($ctx['absensiByDate']->get($nextDay, []));
+            $checkoutTime = $nextDayAbsensi->where('jam', '<=', date('H:i:s', strtotime($outTimeStr . ' +5 hours')))->max('jam') ?? null;
+        } else {
+            $classified = $this->classifySameDayAbsensi(
+                $data->sortBy('jam')->values(),
+                $inTimeStr,
+                $outTimeStr,
+                $isCrossDay
+            );
+            $checkinTime = $classified['checkin_time'];
+            $checkoutTime = $classified['checkout_time'];
+        }
+
+        $checkinDiff = ($checkinTime && $inTimeStr) ? (strtotime($checkinTime) - strtotime($inTimeStr)) / 60 : null;
+        $checkoutDiff = ($checkoutTime && $outTimeStr) ? (strtotime($checkoutTime) - strtotime($outTimeStr)) / 60 : null;
+
+        $dayKind = $this->resolveAttendanceDayKind(
+            $currentDate,
+            $dayName,
+            $shiftName,
+            $ctx['excuseCalendar'],
+            $ctx['holidayDateSet'],
+            $ctx['additionalWorkingSet']
+        );
+
+        $hasPunch = ($checkinTime !== null && $checkinTime !== '')
+            || ($checkoutTime !== null && $checkoutTime !== '');
+        $skipIssue = $this->shouldSkipAttendanceIssue($dayKind, $hasPunch);
+
+        return [
+            'shift' => $shiftName,
+            'checkin_time' => $checkinTime,
+            'checkout_time' => $checkoutTime,
+            'checkin_diff' => $checkinDiff,
+            'checkout_diff' => $checkoutDiff,
+            'date' => $currentDate,
+            'day_name' => $dayName,
+            'day_kind' => $dayKind,
+            'skip_issue' => $skipIssue,
+        ];
+    }
+
+    private function shouldSkipAttendanceIssue(string $dayKind, bool $hasPunch): bool
+    {
+        if ($dayKind === 'work') {
+            return false;
+        }
+
+        if ($hasPunch && in_array($dayKind, ['weekend', 'holiday'], true)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @return array{total: int, no_checkin: int, no_checkout: int, both: int, year: int, month: int}
+     */
+    private function isExemptFromAttendanceIssueSummary(): bool
+    {
+        $grade = strtoupper(trim(str_replace('_', ' ', (string) ($this->grade ?? ''))));
+        if ($grade === 'SPV') {
+            $grade = 'SUPERVISOR';
+        }
+
+        return in_array($grade, ['MANAGER', 'SENIOR MANAGER', 'DIRECTOR'], true);
+    }
+
+    /**
+     * @return array{total: int, no_checkin: int, no_checkout: int, both: int, year: int, month: int}
+     */
+    private function emptyAttendanceIssueSummary(int $year, int $month): array
+    {
+        return [
+            'total' => 0,
+            'no_checkin' => 0,
+            'no_checkout' => 0,
+            'both' => 0,
+            'year' => $year,
+            'month' => $month,
+        ];
+    }
+
+    private function summarizeAttendanceIssuesForMonth(int $year, int $month): array
+    {
+        $todayYmd = date('Y-m-d');
+        $ctx = $this->prepareAttendanceMonthContext($year, $month);
+
+        $summary = [
+            'total' => 0,
+            'no_checkin' => 0,
+            'no_checkout' => 0,
+            'both' => 0,
+            'year' => $year,
+            'month' => $month,
+        ];
+
+        foreach ($this->iterateMonthDates($ctx['startDate'], $ctx['endDate']) as $currentDate) {
+            $day = $this->resolveAttendanceDayRow($currentDate, $ctx);
+            $issueType = $this->resolveAttendanceIssueType(
+                $currentDate,
+                $todayYmd,
+                $day['checkin_time'],
+                $day['checkout_time'],
+                (bool) $day['skip_issue'],
+            );
+
+            if ($issueType === null) {
+                continue;
+            }
+
+            $summary['total']++;
+            $summary[$issueType]++;
+        }
+
+        return $summary;
+    }
+
+    private function resolveAttendanceIssueType(
+        string $ymd,
+        string $todayYmd,
+        ?string $checkinTime,
+        ?string $checkoutTime,
+        bool $skipIssue
+    ): ?string {
+        if ($skipIssue || $ymd > $todayYmd) {
+            return null;
+        }
+
+        $hasIn = $checkinTime !== null && $checkinTime !== '';
+        $hasOut = $checkoutTime !== null && $checkoutTime !== '';
+
+        if ($ymd === $todayYmd) {
+            if (!$hasIn && !$hasOut) {
+                return null;
+            }
+            if ($hasIn && !$hasOut) {
+                return null;
+            }
+        }
+
+        if (!$hasIn && !$hasOut) {
+            return 'both';
+        }
+        if (!$hasIn) {
+            return 'no_checkin';
+        }
+        if (!$hasOut) {
+            return 'no_checkout';
+        }
+
+        return null;
+    }
+
+    /**
+     * Jenis hari untuk tampilan UI & penghitungan masalah absensi.
+     *
+     * @param array<string, true> $holidayDateSet
+     * @param array<string, true> $additionalWorkingSet
+     * @return 'work'|'leave'|'off'|'libur_shift'|'weekend'|'holiday'
+     */
+    private function resolveAttendanceDayKind(
+        string $ymd,
+        string $dayName,
+        string $shiftName,
+        LeaveAlpaExcuseCalendar $excuseCalendar,
+        array $holidayDateSet,
+        array $additionalWorkingSet
+    ): string {
+        if ($excuseCalendar->isExcused((int) $this->user_id, $ymd)) {
+            return 'leave';
+        }
+
+        $shift = strtoupper(trim($shiftName));
+        if ($shift === 'OFF') {
+            return 'off';
+        }
+        if ($shift === 'LIBUR') {
+            return 'libur_shift';
+        }
+
+        $isAdditionalWorking = isset($additionalWorkingSet[$ymd]);
+        $isWeekend = in_array($dayName, ['Sabtu', 'Minggu'], true);
+        if ($isWeekend && !$isAdditionalWorking) {
+            return 'weekend';
+        }
+
+        if (isset($holidayDateSet[$ymd]) && !$isAdditionalWorking) {
+            return 'holiday';
+        }
+
+        return 'work';
     }
 
     private function calculateDistance(float $lat1, float $lon1, float $lat2, float $lon2): float

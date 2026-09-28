@@ -18,6 +18,7 @@ use App\Services\Hr\Presenters\AttendanceCorrectionPresenter;
 use App\Services\Hr\WorkflowStatus;
 use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
+use App\Support\Greatday\NotificationCopy;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -83,7 +84,7 @@ class AttendanceCorrectionHrService
             'attachment_path' => $attachmentPath,
         ]);
 
-        $header = $this->bootstrapAtasanChain($header, $employee, '/forms/attendanceCorrections');
+        $header = $this->bootstrapAtasanChain($header, $employee);
 
         app(LegacyHrMirror::class)->mirrorCreateFromHrRequest($header->fresh(['attendanceCorrectionDetail']));
 
@@ -107,11 +108,10 @@ class AttendanceCorrectionHrService
         $row = $row->fresh();
         if ($row->status === WorkflowStatus::APPROVED_ATASAN) {
             $service = new FirebaseService();
-            $service->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
-                'title' => 'Permohonan Koreksi Kehadiran Diajukan!',
-                'body'  => 'Terdapat Permohonan Koreksi Kehadiran yang diajukan oleh: ' . $row->created_by_name . ' menunggu persetujuan Anda',
-                'url'   => '/forms/attendanceCorrections',
-            ]);
+            $service->sendNotifications(
+                HrdPayroll::queueNotificationUserIds(),
+                NotificationCopy::forwardToHrd($row, NotificationCopy::pathForms('approval'))
+            );
         }
 
         return response()->json(['message' => 'The attendance correction has been approved successfully'], 200);
@@ -132,11 +132,10 @@ class AttendanceCorrectionHrService
         app(LegacyHrMirror::class)->syncAtasanApproval($row->fresh());
 
         $service = new FirebaseService();
-        $service->sendNotifications([$row->karyawan_id], [
-            'title' => 'Permohonan Koreksi Kehadiran Ditolak!',
-            'body'  => 'Permohonan Koreksi Kehadiran telah ditolak Atasan oleh: ' . $approver->nama_lengkap . ' dengan alasan: ' . $reason,
-            'url'   => '/forms/attendanceCorrections',
-        ]);
+        $service->sendNotifications(
+            [$row->karyawan_id],
+            NotificationCopy::rejectedByAtasan($row, $approver->nama_lengkap, $reason, NotificationCopy::pathForms('submission'))
+        );
 
         return response()->json(['message' => 'The attendance correction has been rejected successfully'], 200);
     }
@@ -148,11 +147,10 @@ class AttendanceCorrectionHrService
 
         foreach ($getAtasan as $atasan) {
             if ($atasan->grade === 'MANAGER') {
-                $service->sendNotifications([$atasan->id], [
-                    'title' => 'Permohonan Koreksi Kehadiran Diajukan!',
-                    'body'  => 'Terdapat Permohonan Koreksi Kehadiran yang diajukan oleh: ' . $actorName . ' menunggu persetujuan Anda',
-                    'url'   => '/forms/attendanceCorrections',
-                ]);
+                $service->sendNotifications(
+                    [$atasan->id],
+                    NotificationCopy::legacyAtasanPending('Koreksi kehadiran', $actorName, NotificationCopy::pathForms('approval'))
+                );
             }
         }
     }

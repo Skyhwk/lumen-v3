@@ -21,6 +21,7 @@ use App\Services\Hr\Presenters\LeaveRequestPresenter;
 use App\Services\Hr\WorkflowStatus;
 use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
+use App\Support\Greatday\NotificationCopy;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -135,7 +136,7 @@ class LeaveRequestHrService
             'attachment_path' => $attachmentPath,
         ]);
 
-        $header = $this->bootstrapAtasanChain($header, $employee, '/forms/leaveRequests');
+        $header = $this->bootstrapAtasanChain($header, $employee);
 
         app(LegacyHrMirror::class)->mirrorCreateFromHrRequest($header->fresh(['leaveDetail']));
 
@@ -159,11 +160,10 @@ class LeaveRequestHrService
         $leave = $leave->fresh();
         if ($leave->status === WorkflowStatus::APPROVED_ATASAN) {
             $service = new FirebaseService();
-            $service->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
-                'title' => 'Permohonan Cuti Diajukan!',
-                'body'  => 'Terdapat Permohonan Cuti yang diajukan oleh: ' . $leave->created_by_name . ' menunggu persetujuan Anda',
-                'url'   => '/forms/leaveRequests',
-            ]);
+            $service->sendNotifications(
+                HrdPayroll::queueNotificationUserIds(),
+                NotificationCopy::forwardToHrd($leave, NotificationCopy::pathForms('approval'))
+            );
         }
 
         return response()->json(['message' => 'The leave request has been approved successfully'], 200);
@@ -184,11 +184,10 @@ class LeaveRequestHrService
         app(LegacyHrMirror::class)->syncAtasanApproval($leave->fresh());
 
         $service = new FirebaseService();
-        $service->sendNotifications([$leave->karyawan_id], [
-            'title' => 'Permohonan Cuti Ditolak!',
-            'body'  => 'Permohonan Cuti telah ditolak Atasan oleh: ' . $approver->nama_lengkap . ' dengan alasan: ' . $reason,
-            'url'   => '/forms/leaveRequests',
-        ]);
+        $service->sendNotifications(
+            [$leave->karyawan_id],
+            NotificationCopy::rejectedByAtasan($leave, $approver->nama_lengkap, $reason, NotificationCopy::pathForms('submission'))
+        );
 
         return response()->json(['message' => 'The leave request has been rejected successfully'], 200);
     }
@@ -204,11 +203,10 @@ class LeaveRequestHrService
 
         foreach ($getAtasan as $atasan) {
             if ($atasan->grade === 'MANAGER') {
-                $service->sendNotifications([$atasan->id], [
-                    'title' => 'Permohonan Cuti Diajukan!',
-                    'body'  => 'Terdapat Permohonan Cuti yang diajukan oleh: ' . $actorName . ' menunggu persetujuan Anda',
-                    'url'   => '/forms/leaveRequests',
-                ]);
+                $service->sendNotifications(
+                    [$atasan->id],
+                    NotificationCopy::legacyAtasanPending('Permohonan cuti', $actorName, NotificationCopy::pathForms('approval'))
+                );
             }
         }
     }

@@ -10,6 +10,7 @@ use App\Services\Greatday\FirebaseService;
 use App\Services\Hr\HrFormAttachmentStorage;
 use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
+use App\Support\Greatday\NotificationCopy;
 
 use App\Models\Greatday\{OvertimeReimbursement};
 use App\Models\{MasterKaryawan};
@@ -108,11 +109,10 @@ class OvertimeReimbursementsController extends Controller
 
             foreach ($getAtasan as $atasan) {
                 if ($atasan->grade === 'MANAGER') {
-                    $service->sendNotifications([$atasan->id], [
-                        'title' => 'Penggantian Biaya Lembur Diajukan!',
-                        'body' => 'Penggantian biaya lembur telah diajukan oleh ' . $employee->nama_lengkap,
-                        'url' => '/forms/overtimeReimbursements',
-                    ]);
+                    $service->sendNotifications(
+                        [$atasan->id],
+                        NotificationCopy::reimbursementSubmitted($employee->nama_lengkap, NotificationCopy::pathForms('approval'))
+                    );
                 }
             }
         }
@@ -133,11 +133,14 @@ class OvertimeReimbursementsController extends Controller
             $overtimeReimbursement->approved_atasan_by = $this->nama_lengkap;
             $overtimeReimbursement->approved_atasan_at = date('Y-m-d H:i:s');
 
-            $service->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
-                'title' => 'Penggantian Biaya Lembur Diajukan!',
-                'body'  => 'Penggantian biaya lembur telah diajukan oleh: ' . $overtimeReimbursement->created_by . ' menunggu persetujuan Anda',
-                'url'   => '/forms/overtimeReimbursements',
-            ]);
+            $service->sendNotifications(
+                HrdPayroll::queueNotificationUserIds(),
+                NotificationCopy::legacyForwardToHrd(
+                    'Reimburse lembur',
+                    $overtimeReimbursement->created_by,
+                    NotificationCopy::pathForms('approval')
+                )
+            );
         } else if ($overtimeReimbursement->status === 'Approved Atasan') {
             $overtimeReimbursement->status = 'Approved HRD';
             $overtimeReimbursement->approved_hrd_by = $this->nama_lengkap;
@@ -145,21 +148,23 @@ class OvertimeReimbursementsController extends Controller
 
             $finance = MasterKaryawan::where('jabatan', 'Accounting & Expense Manager')->where('is_active', true)->first();
 
-            $service->sendNotifications([$finance->id], [
-                'title' => 'Penggantian Biaya Lembur Diajukan!',
-                'body'  => 'Penggantian biaya lembur telah diajukan oleh: ' . $overtimeReimbursement->created_by . ' menunggu persetujuan Anda',
-                'url'   => '/forms/overtimeReimbursements',
-            ]);
+            $service->sendNotifications(
+                [$finance->id],
+                NotificationCopy::legacyAtasanPending(
+                    'Reimburse lembur (Finance)',
+                    $overtimeReimbursement->created_by,
+                    NotificationCopy::pathForms('approval')
+                )
+            );
         } else {
             $overtimeReimbursement->status = 'Approved Finance';
             $overtimeReimbursement->approved_finance_by = $this->nama_lengkap;
             $overtimeReimbursement->approved_finance_at = date('Y-m-d H:i:s');
 
-            $service->sendNotifications([$overtimeReimbursement->employee_id], [
-                'title' => 'Penggantian Biaya Lembur Disetujui!',
-                'body'  => 'Penggantian biaya lembur Anda telah disetujui oleh: ' . $this->nama_lengkap,
-                'url'   => '/forms/overtimeReimbursements',
-            ]);
+            $service->sendNotifications(
+                [$overtimeReimbursement->employee_id],
+                NotificationCopy::reimbursementApproved(NotificationCopy::pathForms('submission'))
+            );
         }
         $overtimeReimbursement->save();
 
@@ -180,33 +185,30 @@ class OvertimeReimbursementsController extends Controller
             $overtimeReimbursement->rejected_atasan_at = date('Y-m-d H:i:s');
             $overtimeReimbursement->reject_atasan_reason = $request->reject_reason;
 
-            $service->sendNotifications([$overtimeReimbursement->employee_id], [
-                'title' => 'Penggantian Biaya Lembur Ditolak!',
-                'body'  => 'Penggantian biaya lembur Anda telah ditolak Atasan oleh: ' . $this->nama_lengkap . ' dengan alasan: ' . $request->reject_reason,
-                'url'   => '/forms/overtimeReimbursements',
-            ]);
+            $service->sendNotifications(
+                [$overtimeReimbursement->employee_id],
+                NotificationCopy::reimbursementRejected('atasan', $request->reject_reason, NotificationCopy::pathForms('submission'))
+            );
         } else if ($overtimeReimbursement->status === 'Approved Atasan') {
             $overtimeReimbursement->status = 'Rejected HRD';
             $overtimeReimbursement->rejected_hrd_by = $this->nama_lengkap;
             $overtimeReimbursement->rejected_hrd_at = date('Y-m-d H:i:s');
             $overtimeReimbursement->reject_hrd_reason = $request->reject_reason;
 
-            $service->sendNotifications([$overtimeReimbursement->employee_id], [
-                'title' => 'Penggantian Biaya Lembur Ditolak!',
-                'body'  => 'Penggantian biaya lembur Anda telah ditolak HRD oleh: ' . $this->nama_lengkap . ' dengan alasan: ' . $request->reject_reason,
-                'url'   => '/forms/overtimeReimbursements',
-            ]);
+            $service->sendNotifications(
+                [$overtimeReimbursement->employee_id],
+                NotificationCopy::reimbursementRejected('HRD', $request->reject_reason, NotificationCopy::pathForms('submission'))
+            );
         } else {
             $overtimeReimbursement->status = 'Rejected Finance';
             $overtimeReimbursement->rejected_finance_by = $this->nama_lengkap;
             $overtimeReimbursement->rejected_finance_at = date('Y-m-d H:i:s');
             $overtimeReimbursement->reject_finance_reason = $request->reject_reason;
 
-            $service->sendNotifications([$overtimeReimbursement->employee_id], [
-                'title' => 'Penggantian Biaya Lembur Ditolak!',
-                'body'  => 'Penggantian biaya lembur Anda telah ditolak Finance oleh: ' . $this->nama_lengkap . ' dengan alasan: ' . $request->reject_reason,
-                'url'   => '/forms/overtimeReimbursements',
-            ]);
+            $service->sendNotifications(
+                [$overtimeReimbursement->employee_id],
+                NotificationCopy::reimbursementRejected('Finance', $request->reject_reason, NotificationCopy::pathForms('submission'))
+            );
         }
 
         $overtimeReimbursement->save();

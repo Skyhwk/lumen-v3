@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Greatday;
 use Illuminate\Http\Request;
 
 use App\Services\Greatday\FirebaseService;
+use App\Support\Greatday\NotificationCopy;
 
 use App\Models\Greatday\{ConsultationRequest};
 use App\Models\{MasterKaryawan};
@@ -67,11 +68,10 @@ class ConsultationRequestsController extends Controller
 
         $hrd = MasterKaryawan::where('jabatan', 'HR Counselling & Development Supervisor')->where('is_active', true)->first();
 
-        $service->sendNotifications([$hrd->id], [
-            'title' => 'Permohonan Konsultasi Diajukan!',
-            'body'  => 'Terdapat Permohonan Konsultasi yang diajukan oleh: ' . $consultationRequest->created_by . ' menunggu persetujuan Anda',
-            'url'   => '/forms/consultationRequests',
-        ]);
+        $service->sendNotifications(
+            [$hrd->id],
+            NotificationCopy::consultationSubmitted($consultationRequest->created_by, NotificationCopy::pathForms('approval'))
+        );
 
         return response()->json(['message' => 'Your consultation request has been submitted successfully'], 201);
     }
@@ -88,11 +88,10 @@ class ConsultationRequestsController extends Controller
 
         $service = new FirebaseService();
 
-        $service->sendNotifications([$consultationRequest->employee_id], [
-            'title' => 'Permohonan Konsultasi Disetujui!',
-            'body'  => 'Permohonan Konsultasi Anda telah disetujui oleh: ' . $this->nama_lengkap,
-            'url'   => '/forms/consultationRequests',
-        ]);
+        $service->sendNotifications(
+            [$consultationRequest->employee_id],
+            NotificationCopy::consultationApproved(NotificationCopy::pathForms('submission'))
+        );
 
         return response()->json(['message' => "The consultation request has been approved successfully"], 200);
     }
@@ -110,11 +109,10 @@ class ConsultationRequestsController extends Controller
 
         $service = new FirebaseService();
 
-        $service->sendNotifications([$consultationRequest->employee_id], [
-            'title' => 'Permohonan Konsultasi Ditolak!',
-            'body'  => 'Permohonan Konsultasi Anda telah ditolak oleh: ' . $this->nama_lengkap . ' dengan alasan: ' . $request->reject_reason,
-            'url'   => '/forms/consultationRequests',
-        ]);
+        $service->sendNotifications(
+            [$consultationRequest->employee_id],
+            NotificationCopy::consultationRejected($request->reject_reason, NotificationCopy::pathForms('submission'))
+        );
 
         return response()->json(['message' => "The consultation request correction has been rejected successfully"], 200);
     }

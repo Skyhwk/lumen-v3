@@ -55,6 +55,8 @@ class FirebaseService
             'created_at' => Carbon::now(),
         ]);
 
+        GreatdayMqttPublisher::publishSync([(int) $user_id], $data);
+
         if (empty($token)) {
             return ['message' => 'Notification saved to database only'];
         }
@@ -133,6 +135,8 @@ class FirebaseService
             ];
         }
         GreatdayAppData::notificationQuery()->insert($rows);
+
+        GreatdayMqttPublisher::publishSync($userIds, $data);
 
         $targets = [];
         foreach ($userIds as $uid) {

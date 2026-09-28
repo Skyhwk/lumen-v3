@@ -20,6 +20,7 @@ use App\Services\Hr\Presenters\OvertimeRequestPresenter;
 use App\Services\Hr\WorkflowStatus;
 use App\Support\Greatday\FormSubmissionDates;
 use App\Support\Greatday\HrdPayroll;
+use App\Support\Greatday\NotificationCopy;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -54,6 +55,17 @@ class OvertimeRequestHrService
         $dateError = FormSubmissionDates::validateRangeNotBackdated($request->start_date, $request->end_date);
         if ($dateError !== null) {
             return response()->json(['message' => $dateError], 422);
+        }
+
+        $employeeIds = collect($request->employees)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($employeeIds === []) {
+            return response()->json(['message' => 'Pilih minimal satu karyawan peserta lembur'], 422);
         }
 
         DB::beginTransaction();
@@ -105,15 +117,8 @@ class OvertimeRequestHrService
             if ($existing) {
                 HrOvertimeParticipant::where('request_id', $header->id)->update(['is_active' => false]);
             } elseif ($isNew) {
-                $this->bootstrapAtasanChain($header, $employee, '/forms/overtimeRequests');
+                $this->bootstrapAtasanChain($header, $employee);
             }
-
-            $employeeIds = collect($request->employees)
-                ->map(fn ($id) => (int) $id)
-                ->push((int) $employee->id)
-                ->unique()
-                ->values()
-                ->all();
 
             foreach ($employeeIds as $employeeId) {
                 HrOvertimeParticipant::updateOrCreate(
@@ -125,11 +130,10 @@ class OvertimeRequestHrService
             DB::commit();
 
             $service = new FirebaseService();
-            $service->sendNotifications($employeeIds, [
-                'title' => 'Permohonan Lembur Diajukan!',
-                'body'  => 'Anda termasuk kedalam tim lembur yang diajukan oleh: ' . $header->created_by_name,
-                'url'   => '/forms/overtimeRequests',
-            ]);
+            $service->sendNotifications(
+                $employeeIds,
+                NotificationCopy::overtimeParticipantNotified($header, $header->created_by_name, NotificationCopy::pathForms('submission'))
+            );
 
             app(LegacyHrMirror::class)->mirrorCreateFromHrRequest(
                 $header->fresh(['overtimeDetail', 'overtimeParticipants'])
@@ -161,11 +165,10 @@ class OvertimeRequestHrService
         $row = $row->fresh();
         if ($row->status === WorkflowStatus::APPROVED_ATASAN) {
             $department = MasterDivisi::find($row->id_department);
-            (new FirebaseService())->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
-                'title' => 'Permohonan Lembur Diajukan!',
-                'body'  => 'Permohonan Lembur dari divisi: ' . ($department->nama_divisi ?? '') . ' menunggu persetujuan Anda',
-                'url'   => '/forms/overtimeRequests',
-            ]);
+            (new FirebaseService())->sendNotifications(
+                HrdPayroll::queueNotificationUserIds(),
+                NotificationCopy::forwardToHrd($row, NotificationCopy::pathForms('approval'), $department->nama_divisi ?? null)
+            );
         }
 
         return response()->json(['message' => 'The overtime request has been approved successfully'], 200);
@@ -188,11 +191,10 @@ class OvertimeRequestHrService
         app(LegacyHrMirror::class)->syncAtasanApproval($row->fresh());
 
         $ids = $row->overtimeParticipants->where('is_active', true)->pluck('karyawan_id')->toArray();
-        (new FirebaseService())->sendNotifications($ids, [
-            'title' => 'Permohonan Lembur Ditolak!',
-            'body'  => 'Permohonan Lembur telah ditolak Atasan oleh: ' . $approver->nama_lengkap . ' dengan alasan: ' . $reason,
-            'url'   => '/forms/overtimeRequests',
-        ]);
+        (new FirebaseService())->sendNotifications(
+            $ids,
+            NotificationCopy::rejectedByAtasan($row, $approver->nama_lengkap, $reason, NotificationCopy::pathForms('submission'))
+        );
 
         return response()->json(['message' => 'The overtime request has been rejected successfully'], 200);
     }

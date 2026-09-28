@@ -3,11 +3,40 @@
 namespace App\Http\Controllers\Greatday;
 
 use App\Support\Greatday\GreatdayAppData;
+use App\Support\Greatday\NotificationCopy;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class NotificationController extends Controller
 {
+    /**
+     * @param  object|array<string, mixed>  $notification
+     * @return array<string, mixed>
+     */
+    protected function mapNotificationForApi($notification): array
+    {
+        $row = is_object($notification) && method_exists($notification, 'toArray')
+            ? $notification->toArray()
+            : (array) $notification;
+
+        $extra = json_decode($row['extra_data'] ?? '{}', true);
+        if (!is_array($extra)) {
+            $extra = [];
+        }
+
+        $title = (string) ($row['title'] ?? '');
+        $body = (string) ($row['body'] ?? '');
+
+        foreach (['url', 'link'] as $key) {
+            if (!empty($extra[$key]) && is_string($extra[$key])) {
+                $extra[$key] = NotificationCopy::normalizeAppUrl($extra[$key], $title, $body);
+            }
+        }
+
+        $row['extra_data'] = $extra;
+
+        return $row;
+    }
     public function index(Request $request)
     {
         $employeeId = $this->user_id;
@@ -32,8 +61,13 @@ class NotificationController extends Controller
         $data = $query->orderBy('id', 'desc')
             ->paginate($perPage, ['*'], 'page', $page);
 
+        $items = collect($data->items())
+            ->map(fn ($item) => $this->mapNotificationForApi($item))
+            ->values()
+            ->all();
+
         return response()->json([
-            'data' => $data->items(),
+            'data' => $items,
             'pagination' => [
                 'current_page' => $data->currentPage(),
                 'last_page' => $data->lastPage(),
@@ -76,6 +110,8 @@ class NotificationController extends Controller
             ->limit(3)
             ->get();
 
-        return response()->json(['data' => $data], 200);
+        $items = $data->map(fn ($item) => $this->mapNotificationForApi($item))->values()->all();
+
+        return response()->json(['data' => $items], 200);
     }
 }

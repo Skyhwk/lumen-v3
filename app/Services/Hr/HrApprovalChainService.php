@@ -8,6 +8,7 @@ use App\Models\MasterKaryawan;
 use App\Services\Greatday\AtasanApprovalScope;
 use App\Services\Greatday\DynamicApprovalChainService;
 use App\Services\Greatday\FirebaseService;
+use App\Support\Greatday\NotificationCopy;
 
 class HrApprovalChainService
 {
@@ -60,11 +61,12 @@ class HrApprovalChainService
         }
 
         $service = new FirebaseService();
-        $service->sendNotifications([(int) $step->expected_karyawan_id], [
-            'title' => 'Pengajuan menunggu persetujuan',
-            'body' => 'Pengajuan dari ' . ($submitter->nama_lengkap ?? 'karyawan') . ' menunggu persetujuan Anda',
-            'url' => $urlPath,
-        ]);
+        $payload = NotificationCopy::atasanPending(
+            $request,
+            $submitter->nama_lengkap ?? $request->created_by_name ?? 'Karyawan',
+            $urlPath
+        );
+        $service->sendNotifications([(int) $step->expected_karyawan_id], $payload);
     }
 
     public function applyEmptyChainAutoAdvance(HrRequest $request): HrRequest

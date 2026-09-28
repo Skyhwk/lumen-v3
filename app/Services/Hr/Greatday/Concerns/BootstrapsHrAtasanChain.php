@@ -4,13 +4,15 @@ namespace App\Services\Hr\Greatday\Concerns;
 
 use App\Models\Hr\HrRequest;
 use App\Models\MasterKaryawan;
+use App\Services\Greatday\FirebaseService;
 use App\Services\Hr\AtasanStepService;
 use App\Services\Hr\HrApprovalChainService;
 use App\Services\Hr\WorkflowStatus;
+use App\Support\Greatday\NotificationCopy;
 
 trait BootstrapsHrAtasanChain
 {
-    protected function bootstrapAtasanChain(HrRequest $header, MasterKaryawan $employee, string $notifyUrl): HrRequest
+    protected function bootstrapAtasanChain(HrRequest $header, MasterKaryawan $employee): HrRequest
     {
         $hasChain = app(AtasanStepService::class)->seedChainForSubmitter($header->id, $employee);
         $header = $header->fresh();
@@ -20,8 +22,22 @@ trait BootstrapsHrAtasanChain
             $header->save();
         }
 
-        app(HrApprovalChainService::class)->notifyCurrentApprovers($header->fresh(), $employee, $notifyUrl);
+        $fresh = $header->fresh();
+        app(HrApprovalChainService::class)->notifyCurrentApprovers(
+            $fresh,
+            $employee,
+            NotificationCopy::pathForms('approval')
+        );
 
-        return $header->fresh();
+        (new FirebaseService())->sendNotifications(
+            [(int) $employee->id],
+            NotificationCopy::submissionAcknowledged(
+                $fresh,
+                NotificationCopy::pathForms('submission'),
+                $hasChain
+            )
+        );
+
+        return $fresh;
     }
 }

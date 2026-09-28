@@ -15,6 +15,7 @@ use App\Services\Hr\HrRequestResolver;
 use App\Support\Greatday\FormSubmissionDates;
 use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
+use App\Support\Greatday\NotificationCopy;
 
 use App\Models\Greatday\{PermissionRequest};
 use App\Models\{MasterKaryawan};
@@ -128,11 +129,10 @@ class PermissionRequestsController extends Controller
 
             foreach ($getAtasan as $atasan) {
                 if ($atasan->grade === 'MANAGER') {
-                    $service->sendNotifications([$atasan->id], [
-                        'title' => 'Permohonan Izin Diajukan!',
-                        'body' => 'Permohonan izin baru telah diajukan oleh ' . $employee->nama_lengkap . ' menunggu persetujuan Anda',
-                        'url' => '/forms/permissionRequests',
-                    ]);
+                    $service->sendNotifications(
+                        [$atasan->id],
+                        NotificationCopy::legacyAtasanPending('Permohonan izin', $employee->nama_lengkap, NotificationCopy::pathForms('approval'))
+                    );
                 }
             }
         }
@@ -176,11 +176,10 @@ class PermissionRequestsController extends Controller
         $permissionRequest->save();
 
         $service = new FirebaseService();
-        $service->sendNotifications(HrdPayroll::queueNotificationUserIds(), [
-            'title' => 'Permohonan Izin Diajukan!',
-            'body' => 'Terdapat Permohonan Izin yang diajukan oleh: ' . $permissionRequest->created_by . ' menunggu persetujuan Anda',
-            'url' => '/forms/permissionRequests',
-        ]);
+        $service->sendNotifications(
+            HrdPayroll::queueNotificationUserIds(),
+            NotificationCopy::legacyForwardToHrd('Permohonan izin', $permissionRequest->created_by, NotificationCopy::pathForms('approval'))
+        );
 
         return response()->json(['message' => 'The permission request has been approved successfully'], 200);
     }
@@ -221,11 +220,15 @@ class PermissionRequestsController extends Controller
         $permissionRequest->save();
 
         $service = new FirebaseService();
-        $service->sendNotifications([$permissionRequest->employee_id], [
-            'title' => 'Permohonan Izin Ditolak!',
-            'body' => 'Permohonan Izin telah ditolak Atasan oleh: ' . $this->nama_lengkap . ' dengan alasan: ' . $request->reject_reason,
-            'url' => '/forms/permissionRequests',
-        ]);
+        $service->sendNotifications(
+            [$permissionRequest->employee_id],
+            NotificationCopy::legacyRejected(
+                'Permohonan izin',
+                $this->nama_lengkap,
+                $request->reject_reason,
+                NotificationCopy::pathForms('submission')
+            )
+        );
 
         return response()->json(['message' => 'The permission request has been rejected successfully'], 200);
     }
