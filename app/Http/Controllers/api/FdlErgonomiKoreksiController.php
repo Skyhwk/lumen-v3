@@ -211,8 +211,9 @@ class FdlErgonomiKoreksiController extends Controller
                     'aktivitas',
                     'aktivitas_ukur',
                 ]);
+                $payload = $this->finalizeGotrakKoreksiPayload($payload);
                 return array_merge([
-                    'pengukuran' => json_encode($payload, JSON_UNESCAPED_SLASHES),
+                    'pengukuran' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 ], $meta);
             case 8:
                 $payload = $request->except([
@@ -359,6 +360,63 @@ class FdlErgonomiKoreksiController extends Controller
             'kategori_risiko' => $kategori,
             'tindakan_perbaikan' => $tindakan,
         ]);
+    }
+
+    /** Selaras FdlMethodGotrakController::store — tanpa Skor_Postur_Tubuh. */
+    private function finalizeGotrakKoreksiPayload(array $payload): array
+    {
+        unset($payload['Skor_Postur_Tubuh']);
+
+        $keluhan = $payload['Keluhan_Bagian_Tubuh'] ?? [];
+        if (is_array($keluhan)) {
+            foreach ($keluhan as $bagian => $entry) {
+                if ($bagian === 'cedera' || $entry === 'Tidak' || !is_array($entry)) {
+                    continue;
+                }
+                if (isset($entry['Seberapa_Parah'], $entry['Seberapa_Sering'])) {
+                    $keluhan[$bagian] = [
+                        'Seberapa_Parah' => $entry['Seberapa_Parah'],
+                        'Seberapa_Sering' => $entry['Seberapa_Sering'],
+                        'Poin' => $this->hitungRisikoKeluhanGotrak(
+                            (string) $entry['Seberapa_Parah'],
+                            (string) $entry['Seberapa_Sering']
+                        ),
+                    ];
+                }
+            }
+        }
+
+        return [
+            'Identitas_Umum' => $payload['Identitas_Umum'] ?? [],
+            'Keluhan_Bagian_Tubuh' => is_array($keluhan) ? $keluhan : [],
+        ];
+    }
+
+    private function hitungRisikoKeluhanGotrak(string $seberapaParah, string $seberapaSering): int
+    {
+        $nilaiParah = 0;
+        if ($seberapaParah === 'Tidak ada masalah') {
+            $nilaiParah = 1;
+        } elseif ($seberapaParah === 'Tidak nyaman') {
+            $nilaiParah = 2;
+        } elseif ($seberapaParah === 'Sakit') {
+            $nilaiParah = 3;
+        } elseif ($seberapaParah === 'Sakit parah') {
+            $nilaiParah = 4;
+        }
+
+        $nilaiSering = 0;
+        if ($seberapaSering === 'Tidak pernah') {
+            $nilaiSering = 1;
+        } elseif ($seberapaSering === 'Terkadang') {
+            $nilaiSering = 2;
+        } elseif ($seberapaSering === 'Sering') {
+            $nilaiSering = 3;
+        } elseif ($seberapaSering === 'Selalu') {
+            $nilaiSering = 4;
+        }
+
+        return $nilaiParah * $nilaiSering;
     }
 
     /**
