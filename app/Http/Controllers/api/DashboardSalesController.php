@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
-use App\Models\{DailyQsd, MasterTargetSales};
+use App\Models\{DailyQsd, DFUS, MasterTargetSales};
 
 class DashboardSalesController extends Controller
 {
@@ -37,11 +37,12 @@ class DashboardSalesController extends Controller
     public function index(Request $request)
     {
         
-        $karyawanId = $request->attributes->get('user')->karyawan->id;
+        $karyawan = $request->attributes->get('user')->karyawan;
+        $karyawanId = $karyawan->id;
 
         $date = Carbon::create($request->year, $request->month, 1);
         $currMonth = $date->month;
-        $prevMonth = $date->subMonth()->month;
+        $prevMonth = $date->copy()->subMonth()->month;
 
         $dailyQsd = DailyQsd::with('orderHeader.orderDetail')
             ->where('sales_id', $karyawanId)
@@ -135,6 +136,18 @@ class DashboardSalesController extends Controller
         $kontrakRevenue = $currQsd->filter(fn($qsd) => $qsd->kontrak == 'C')->sum('total_revenue');
         $nonKontrakRevenue = $currQsd->filter(fn($qsd) => $qsd->kontrak == 'N')->sum('total_revenue');
 
+        $currentCallMetrics = $this->getCallMetrics(
+            $karyawan->nama_lengkap,
+            $date->copy()->startOfMonth(),
+            $date->copy()->endOfMonth()
+        );
+        $previousDate = $date->copy()->subMonthNoOverflow();
+        $previousCallMetrics = $this->getCallMetrics(
+            $karyawan->nama_lengkap,
+            $previousDate->copy()->startOfMonth(),
+            $previousDate->copy()->endOfMonth()
+        );
+
         $yearlyRevenueTrend = collect(range(1, 12))
             ->map(fn($month) => [
                 'month' => Carbon::create($request->year, $month, 1)->translatedFormat('M'),
@@ -165,6 +178,17 @@ class DashboardSalesController extends Controller
                 'kontrak'                     => $kontrakRevenue,
                 'non_kontrak'                 => $nonKontrakRevenue,
 
+                'total_calls'                 => $currentCallMetrics['total_calls'],
+                'percentage_total_calls'      => $this->calculateGrowth($currentCallMetrics['total_calls'], $previousCallMetrics['total_calls']),
+                'pic_contacted'                => $currentCallMetrics['pic_contacted'],
+                'percentage_pic_contacted'     => $this->calculateGrowth($currentCallMetrics['pic_contacted'], $previousCallMetrics['pic_contacted']),
+                'unreachable'                  => $currentCallMetrics['unreachable'],
+                'percentage_unreachable'       => $this->calculateGrowth($currentCallMetrics['unreachable'], $previousCallMetrics['unreachable']),
+                'unqualified'                  => $currentCallMetrics['unqualified'],
+                'percentage_unqualified'       => $this->calculateGrowth($currentCallMetrics['unqualified'], $previousCallMetrics['unqualified']),
+                'success_rate'                 => $currentCallMetrics['success_rate'],
+                'success_rate_change'          => round($currentCallMetrics['success_rate'] - $previousCallMetrics['success_rate'], 1),
+
                 'revenue_trend'               => $yearlyRevenueTrend
             ],
         ], 200);
@@ -173,5 +197,30 @@ class DashboardSalesController extends Controller
     private function calculateGrowth($current, $previous)
     {
         return $previous > 0 ? round((($current - $previous) / $previous) * 100, 1) : 0;
+    }
+
+    private function getCallMetrics($salesName, Carbon $startDate, Carbon $endDate)
+    {
+        $statusCounts = DFUS::where('sales_penanggung_jawab', $salesName)
+            ->whereBetween('tanggal', [
+                $startDate->toDateString(),
+                $endDate->toDateString(),
+            ])
+            ->selectRaw("UPPER(TRIM(COALESCE(keterangan, ''))) as status, COUNT(*) as total")
+            ->groupByRaw("UPPER(TRIM(COALESCE(keterangan, '')))")
+            ->pluck('total', 'status');
+
+        $totalCalls = (int) $statusCounts->sum();
+        $picContacted = (int) $statusCounts->get('PIC', 0);
+        $unreachable = (int) $statusCounts->get('NA', 0) + (int) $statusCounts->get('D', 0);
+        $unqualified = (int) $statusCounts->get('NI', 0);
+
+        return [
+            'total_calls' => $totalCalls,
+            'pic_contacted' => $picContacted,
+            'unreachable' => $unreachable,
+            'unqualified' => $unqualified,
+            'success_rate' => $totalCalls > 0 ? round(($picContacted / $totalCalls) * 100, 1) : 0,
+        ];
     }
 }

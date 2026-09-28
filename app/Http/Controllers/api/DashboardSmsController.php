@@ -2,6 +2,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Models\DFUS;
 use App\Models\MasterKaryawan;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
@@ -925,6 +926,100 @@ class DashboardSmsController extends Controller
         unset($item);
 
         return $heading;
+    }
+
+    public function fetchCallPerformance(Request $request)
+    {
+        try {
+            $periodType = $request->period_type === 'yearly' ? 'yearly' : 'monthly';
+
+            if ($periodType === 'yearly') {
+                $year = max(2024, (int) ($request->year ?: Carbon::now()->year));
+                $startDate = Carbon::create($year, 1, 1)->startOfDay();
+                $endDate = $startDate->copy()->endOfYear();
+            } else {
+                $arr = explode(' ', (string) $request->periode);
+                $periode = count($arr) === 2 && isset($this->bulan[$arr[0]])
+                    ? $arr[1] . '-' . $this->bulan[$arr[0]]
+                    : Carbon::now()->format('Y-m');
+                $startDate = Carbon::createFromFormat('Y-m', $periode)->startOfMonth();
+                $endDate = $startDate->copy()->endOfMonth();
+            }
+
+            $referencePeriode = $startDate->format('Y-m');
+            $hierarchy = app(SalesTeamHierarchyService::class);
+
+            if ($request->mode === 'team' && $request->karyawan_id) {
+                $rootId = (int) str_replace('team_', '', $request->karyawan_id);
+                [$hierarchyRows] = $this->prepareHierarchyRows($referencePeriode, [$rootId]);
+            } elseif ($request->mode === 'single' && $request->karyawan_id) {
+                $karyawanId = (int) $request->karyawan_id;
+                $member = MasterKaryawan::find($karyawanId);
+                $isExecutive = in_array($karyawanId, $hierarchy->salesExecutiveIds(), true);
+                $isSalesStaff = $member && $hierarchy->isSalesStaff($member);
+
+                [$hierarchyRows] = ($isSalesStaff || $isExecutive)
+                    ? $this->prepareHierarchyRows($referencePeriode, null, [$karyawanId])
+                    : $this->prepareHierarchyRows($referencePeriode, [$karyawanId]);
+            } else {
+                [$hierarchyRows] = $this->prepareHierarchyRows($referencePeriode);
+            }
+
+            return response()->json([
+                'period_type' => $periodType,
+                'call_performance' => $this->buildCallPerformanceRowsForRange($startDate, $endDate, $hierarchyRows),
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan pada server',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    /** Metrik call per sales berdasarkan status akhir follow-up DFUS. */
+    private function buildCallPerformanceRowsForRange(Carbon $startDate, Carbon $endDate, array $hierarchyRows): array
+    {
+        $salesIds = array_values(array_unique(array_filter(array_map(
+            'intval',
+            array_column($hierarchyRows, 'karyawan_id')
+        ))));
+
+        if (empty($salesIds)) {
+            return [];
+        }
+
+        $sales = MasterKaryawan::whereIn('id', $salesIds)
+            ->pluck('nama_lengkap', 'id');
+        $salesNames = $sales->filter()->values()->all();
+
+        $statusRows = empty($salesNames)
+            ? collect()
+            : DFUS::whereIn('sales_penanggung_jawab', $salesNames)
+                ->whereBetween('tanggal', [$startDate->toDateString(), $endDate->toDateString()])
+                ->selectRaw("sales_penanggung_jawab, UPPER(TRIM(COALESCE(keterangan, ''))) as status, COUNT(*) as total")
+                ->groupBy('sales_penanggung_jawab')
+                ->groupByRaw("UPPER(TRIM(COALESCE(keterangan, '')))")
+                ->get();
+
+        $statusesBySales = $statusRows->groupBy('sales_penanggung_jawab');
+
+        return array_map(function (array $row) use ($sales, $statusesBySales) {
+            $salesId = (int) $row['karyawan_id'];
+            $name = $sales->get($salesId, $row['nama_lengkap'] ?? '');
+            $statusCounts = $statusesBySales->get($name, collect())->pluck('total', 'status');
+            $totalCalls = (int) $statusCounts->sum();
+            $picContacted = (int) ($statusCounts->get('PIC', 0));
+
+            return array_merge($row, [
+                'total_call' => $totalCalls,
+                'pic_contacted' => $picContacted,
+                'unreachable' => (int) ($statusCounts->get('NA', 0)) + (int) ($statusCounts->get('D', 0)),
+                'unqualified' => (int) ($statusCounts->get('NI', 0)),
+                'success_rate' => $totalCalls > 0 ? round(($picContacted / $totalCalls) * 100, 1) : 0,
+            ]);
+        }, $hierarchyRows);
     }
 
     private function karyawanIdsWithKpiActivity(string $periode): array
