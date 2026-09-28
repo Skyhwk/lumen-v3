@@ -868,7 +868,8 @@ class FollowUpController extends Controller
         };
 
         $data = $nonKontrak->map(fn($row) => $mapRow($row, 'non_kontrak'))
-            ->merge($kontrak->map(fn($row) => $mapRow($row, 'kontrak')))
+            ->toBase()
+            ->merge($kontrak->map(fn($row) => $mapRow($row, 'kontrak'))->toBase())
             ->sortByDesc('id_quotation')
             ->values()
             ->take($limit)
