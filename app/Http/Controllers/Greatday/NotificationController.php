@@ -10,6 +10,29 @@ use Illuminate\Support\Facades\DB;
 class NotificationController extends Controller
 {
     /**
+     * @param  mixed  $raw
+     * @return array<string, mixed>
+     */
+    protected function parseExtraData($raw): array
+    {
+        if (is_array($raw)) {
+            return $raw;
+        }
+
+        if (is_object($raw)) {
+            return (array) $raw;
+        }
+
+        if (!is_string($raw) || trim($raw) === '') {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
      * @param  object|array<string, mixed>  $notification
      * @return array<string, mixed>
      */
@@ -19,10 +42,7 @@ class NotificationController extends Controller
             ? $notification->toArray()
             : (array) $notification;
 
-        $extra = json_decode($row['extra_data'] ?? '{}', true);
-        if (!is_array($extra)) {
-            $extra = [];
-        }
+        $extra = $this->parseExtraData($row['extra_data'] ?? null);
 
         $title = (string) ($row['title'] ?? '');
         $body = (string) ($row['body'] ?? '');
