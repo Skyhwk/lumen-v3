@@ -159,7 +159,7 @@ class FdlErgonomiKoreksiController extends Controller
                 $formatted = (new RulaFormatter())->format($request->all());
                 return array_merge(['pengukuran' => json_encode($formatted, JSON_UNESCAPED_SLASHES)], $meta);
             case 4:
-                $formatted = RosaFormatter::formatRosaData($request->all());
+                $formatted = RosaFormatter::formatRosaLegacyData($request->all());
                 return array_merge(['pengukuran' => json_encode($formatted, JSON_UNESCAPED_SLASHES)], $meta);
             case 5:
                 $formatted = RlwFormatter::format($request->all(), [
