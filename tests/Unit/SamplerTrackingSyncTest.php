@@ -75,6 +75,16 @@ class SamplerTrackingSyncTest extends TestCase
             $table->string('alamat_sampling')->nullable();
             $table->boolean('is_active')->default(true);
         });
+        $schema->create('persiapan_sampel_header', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('no_quotation')->nullable();
+            $table->string('tanggal_sampling')->nullable();
+            $table->string('sampler_jadwal')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->boolean('is_emailed_bas')->default(false);
+            $table->text('detail_bas_documents')->nullable();
+            $table->timestamps();
+        });
         require_once __DIR__ . '/../../database/migrations/2026_06_29_100000_create_sampler_tracking_tables.php';
         (new \CreateSamplerTrackingTables())->up();
         require_once __DIR__ . '/../../database/migrations/2026_09_15_100000_create_sampler_tracking_troubles.php';
@@ -113,17 +123,9 @@ class SamplerTrackingSyncTest extends TestCase
         $session = $this->prepare('2026-09-17')->first();
         $member = $session->activeMembers()->firstOrFail();
         $connection = $this->db->getConnection('mysql');
-        $connection->getSchemaBuilder()->create('persiapan_sampel_header', function (Blueprint $table) {
-            $table->increments('id');
-            $table->string('no_quotation');
-            $table->string('tanggal_sampling');
-            $table->boolean('is_active')->default(true);
-            $table->boolean('is_emailed_bas')->default(false);
-            $table->text('detail_bas_documents')->nullable();
-        });
-        $connection->table('persiapan_sampel_header')->insert([
-            'no_quotation' => 'Q1', 'tanggal_sampling' => '2026-09-17',
-            'detail_bas_documents' => '[{"filename":"draft.pdf"}]', 'is_emailed_bas' => 0,
+        $connection->table('persiapan_sampel_header')->where('no_quotation', 'Q1')->update([
+            'detail_bas_documents' => '[{"filename":"draft.pdf"}]',
+            'is_emailed_bas' => 0,
         ]);
         $this->assertNotNull($this->service->checkoutBasWarning($member->id));
         $connection->table('persiapan_sampel_header')->update(['is_emailed_bas' => 1]);
@@ -136,15 +138,8 @@ class SamplerTrackingSyncTest extends TestCase
         $session = $this->prepare('2026-09-17')->first();
         $member = $session->activeMembers()->firstOrFail();
         $connection = $this->db->getConnection('mysql');
-        $connection->getSchemaBuilder()->create('persiapan_sampel_header', function (Blueprint $table) {
-            $table->increments('id');
-            $table->string('no_quotation');
-            $table->string('tanggal_sampling');
-            $table->boolean('is_active')->default(true);
-            $table->boolean('is_emailed_bas')->default(false);
-        });
-        $connection->table('persiapan_sampel_header')->insert([
-            'no_quotation' => 'Q1', 'tanggal_sampling' => '2026-09-17', 'is_emailed_bas' => 0,
+        $connection->table('persiapan_sampel_header')->where('no_quotation', 'Q1')->update([
+            'is_emailed_bas' => 0,
         ]);
 
         $this->service->storeEvent(['member_id' => $member->id, 'event_type' => 'departure']);
@@ -667,14 +662,6 @@ class SamplerTrackingSyncTest extends TestCase
 
     public function testCrossTeamMultidayCheckoutAndReturnUseOriginalDeparture(): void
     {
-        $connection = $this->db->getConnection('mysql');
-        $connection->getSchemaBuilder()->create('persiapan_sampel_header', function (Blueprint $table) {
-            $table->increments('id');
-            $table->string('no_quotation');
-            $table->date('tanggal_sampling');
-            $table->boolean('is_active')->default(true);
-            $table->boolean('is_emailed_bas')->default(true);
-        });
         foreach ([2, 3] as $duration) {
             $date = $duration === 2 ? '2026-09-21' : '2026-09-25';
             \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse($date . ' 08:00:00', 'Asia/Jakarta'));
@@ -684,11 +671,10 @@ class SamplerTrackingSyncTest extends TestCase
             foreach ([[10, 'A'], [30, 'Eko']] as [$id, $name]) {
                 $this->schedule(['tanggal' => $date, 'no_quotation' => 'Q2', 'jam_mulai' => '11:00:00', 'userid' => $id, 'sampler' => $name, 'durasi' => $duration]);
             }
-            $connection->table('persiapan_sampel_header')->insert([
-                ['no_quotation' => 'Q1', 'tanggal_sampling' => $date],
-                ['no_quotation' => 'Q2', 'tanggal_sampling' => $date],
-            ]);
             $this->prepare($date);
+            PersiapanSampelHeader::whereIn('no_quotation', ['Q1', 'Q2'])
+                ->where('tanggal_sampling', $date)
+                ->update(['is_emailed_bas' => 1]);
             $first = SamplerTrackingSession::where('tanggal_sampling', $date)->where('no_quotation', 'Q1')->firstOrFail();
             $second = SamplerTrackingSession::where('tanggal_sampling', $date)->where('no_quotation', 'Q2')->firstOrFail();
             $a = $first->activeMembers()->where('sampler_id', 10)->firstOrFail();
@@ -937,6 +923,9 @@ class SamplerTrackingSyncTest extends TestCase
             $eventIds = $member->events()->pluck('id')->all();
             // Simulate quotation job: the original schedule row is retained.
             Jadwal::where('id', $schedule->id)->update(['no_quotation' => $new, 'kategori' => '["Udara - 002","Kebisingan - 003"]', 'durasi' => 2]);
+            if ($mode !== 'old-header') {
+                PersiapanSampelHeader::where('no_quotation', $old)->update(['no_quotation' => $new]);
+            }
             if ($mode === 'manual') {
                 $this->service->sync('2026-09-17');
             } else {
@@ -1139,13 +1128,24 @@ class SamplerTrackingSyncTest extends TestCase
         return Jadwal::findOrFail($id);
     }
 
-    private function prepare($date)
+    private function prepare($date, $samplerJadwal = null)
     {
         $sessions = collect();
         foreach (Jadwal::where('is_active', true)->where('tanggal', $date)->pluck('no_quotation')->unique() as $quotation) {
-            $header = new PersiapanSampelHeader();
-            $header->no_quotation = $quotation;
-            $header->tanggal_sampling = $date;
+            $header = PersiapanSampelHeader::where('no_quotation', $quotation)
+                ->where('tanggal_sampling', $date)
+                ->where('is_active', true)
+                ->first();
+            if (!$header) {
+                $header = new PersiapanSampelHeader();
+                $header->no_quotation = $quotation;
+                $header->tanggal_sampling = $date;
+                $header->is_active = true;
+            }
+            if ($samplerJadwal !== null) {
+                $header->sampler_jadwal = $samplerJadwal;
+            }
+            $header->save();
             $sessions = $sessions->merge($this->service->syncByPersiapanHeader($header));
         }
         return $sessions;
@@ -1435,15 +1435,61 @@ class SamplerTrackingSyncTest extends TestCase
         $this->schedule(['userid' => 20, 'sampler' => 'Andik']);
         $this->schedule(['userid' => 30, 'sampler' => 'Other', 'jam_mulai' => '13:00:00']);
         $this->schedule(['tanggal' => '2026-09-18', 'sampler' => 'Asep']);
-        $header = new PersiapanSampelHeader();
-        $header->no_quotation = 'Q1';
-        $header->tanggal_sampling = '2026-09-17';
-        $header->sampler_jadwal = 'Asep';
-        $this->service->syncByPersiapanHeader($header);
+        $this->prepare('2026-09-17', 'Asep');
         $this->assertSame(1, SamplerTrackingSession::count());
         $this->assertSame(['Andik', 'Asep'], SamplerTrackingMember::orderBy('sampler_name')->pluck('sampler_name')->all());
         $this->service->sync('2026-09-18');
         $this->assertSame(1, SamplerTrackingSession::count());
+    }
+
+    public function testMultiDayParsialScheduleCreatesOneActiveSessionPerDate(): void
+    {
+        $parent = $this->schedule(['tanggal' => '2026-09-28', 'kategori' => '["Air - 001","Air - 002"]']);
+        $this->schedule([
+            'parsial' => $parent->id,
+            'tanggal' => '2026-09-29',
+            'kategori' => '["Air - 004","Air - 006"]',
+        ]);
+        $this->schedule([
+            'parsial' => $parent->id,
+            'tanggal' => '2026-09-30',
+            'kategori' => '["Air - 007","Air - 008"]',
+        ]);
+        $this->assertSame(0, SamplerTrackingSession::count());
+        $this->prepare('2026-09-28');
+        $this->prepare('2026-09-29');
+        $this->prepare('2026-09-30');
+        $this->assertSame(3, SamplerTrackingSession::where('is_active', true)->count());
+        $this->assertSame(
+            ['2026-09-28', '2026-09-29', '2026-09-30'],
+            SamplerTrackingSession::where('is_active', true)->orderBy('tanggal_sampling')->pluck('tanggal_sampling')->all()
+        );
+    }
+
+    public function testRevisedQuotationWithoutReOrderSyncsDocumentOnExistingSession(): void
+    {
+        $old = 'ISL/QT/26-IX/011551';
+        $new = 'ISL/QT/26-IX/011551R1';
+        $row = $this->schedule(['no_quotation' => $old, 'tanggal' => '2026-09-30', 'id_sampling' => 38103]);
+        $this->db->getConnection('mysql')->table('order_header')->insert([
+            'no_document' => $old,
+            'no_order' => 'ESTX012619',
+            'is_active' => 1,
+        ]);
+        $this->prepare('2026-09-30');
+        $keeper = SamplerTrackingSession::where('no_quotation', $old)->firstOrFail();
+        Jadwal::where('id', $row->id)->update([
+            'no_quotation' => $new,
+            'kategori' => '["Air Limbah Domestik - 007","Air Limbah Domestik - 008","Air Limbah Domestik - 009"]',
+        ]);
+        PersiapanSampelHeader::where('no_quotation', $old)->update(['no_quotation' => $new]);
+        $before = $this->service->snapshotSchedules($new);
+        $this->service->syncScheduleEdit($before, $new);
+        $keeper->refresh();
+        $this->assertSame($new, $keeper->no_quotation);
+        $this->assertSame('ESTX012619', $keeper->no_order);
+        $this->assertSame(1, SamplerTrackingSession::where('is_active', true)->count());
+        $this->assertSame(0, SamplerTrackingSession::where('is_active', true)->where('no_quotation', $old)->count());
     }
 
     public function testRepeatedSyncKeepsAttendanceAndDoesNotDuplicateSessionOrMembers(): void
