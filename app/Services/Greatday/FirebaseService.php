@@ -55,7 +55,7 @@ class FirebaseService
             'created_at' => Carbon::now(),
         ]);
 
-        GreatdayMqttPublisher::publishSync([(int) $user_id], $data);
+        self::publishMqttSafely([(int) $user_id], $data);
 
         if (empty($token)) {
             return ['message' => 'Notification saved to database only'];
@@ -136,7 +136,7 @@ class FirebaseService
         }
         GreatdayAppData::notificationQuery()->insert($rows);
 
-        GreatdayMqttPublisher::publishSync($userIds, $data);
+        self::publishMqttSafely($userIds, $data);
 
         $targets = [];
         foreach ($userIds as $uid) {
@@ -233,6 +233,21 @@ class FirebaseService
                 'unregistered_deleted' => $unregisteredDeleted,
             ],
         ];
+    }
+
+    /**
+     * MQTT hanya side-effect sync — tidak boleh gagalkan simpan pengajuan.
+     *
+     * @param  list<int|string>  $userIds
+     * @param  array<string, mixed>  $data
+     */
+    private static function publishMqttSafely(array $userIds, array $data): void
+    {
+        try {
+            GreatdayMqttPublisher::publishSync($userIds, $data);
+        } catch (\Throwable $e) {
+            Log::warning('Greatday MQTT: publish dilewati', ['message' => $e->getMessage()]);
+        }
     }
 
     private function stringifyData(array $data): array

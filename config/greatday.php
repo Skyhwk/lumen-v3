@@ -75,7 +75,7 @@ return [
     /** M6: stop sync hr_* → legacy apps (setara HR_DUAL_WRITE_LEGACY=false, eksplisit) */
     'freeze_legacy_hr_writes' => filter_var(env('HR_FREEZE_LEGACY_WRITES', false), FILTER_VALIDATE_BOOLEAN),
 
-    /** Super Apps: true = list cuti/izin/lembur + antrian HRD IzinController baca hr_* */
+    /** Super Apps: true = list cuti/izin/lembur + antrian HRD izin (permission saja) baca hr_* */
     'portal_read_hr_tables' => filter_var(env('HR_PORTAL_READ_HR_TABLES', false), FILTER_VALIDATE_BOOLEAN),
 
     /** Pengajuan cuti approved sebelum tanggal ini sudah termasuk opening_used_days (import Excel). */

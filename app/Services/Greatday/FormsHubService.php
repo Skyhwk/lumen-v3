@@ -56,6 +56,10 @@ class FormsHubService
             return $this->listApprovalTab($employee, $page, $perPage);
         }
 
+        if ($tab === 'approval_history') {
+            return $this->listApprovalHistoryTab($employee, $page, $perPage);
+        }
+
         if (!HrTableMode::usesLegacyHrTables()) {
             return $this->listTabFromHr($employee, $tab, $page, $perPage);
         }
@@ -85,7 +89,7 @@ class FormsHubService
             'jumlah_izin' => $this->countPersonalPermissionHr($employee, true),
             'counts' => [
                 'submission' => (clone $ownBase)->whereIn('status', WorkflowStatus::submitterInProgressStatuses())->count(),
-                'history' => (clone $this->formsHubHrQuery($employee, true, AtasanApprovalScope::isAtasanGrade($employee)))
+                'history' => (clone $this->formsHubHrQuery($employee, true))
                     ->whereNotIn('status', WorkflowStatus::submitterInProgressStatuses())
                     ->count(),
                 'approval' => app(FormsPendingApprovalsService::class)->pendingCount($employee),
@@ -123,9 +127,7 @@ class FormsHubService
     {
         $offset = ($page - 1) * $perPage;
 
-        $includeTeamHistory = $tab === 'history' && AtasanApprovalScope::isAtasanGrade($employee);
-
-        $query = $this->formsHubHrQuery($employee, true, $includeTeamHistory)
+        $query = $this->formsHubHrQuery($employee, true)
             ->with($this->hrRequestRelationNames())
             ->orderByDesc('id');
 
@@ -144,9 +146,7 @@ class FormsHubService
 
     private function listTabFromLegacy(MasterKaryawan $employee, string $tab, int $page, int $perPage): array
     {
-        $all = $tab === 'history' && AtasanApprovalScope::isAtasanGrade($employee)
-            ? $this->legacyTeamHistoryTabItems($employee)
-            : $this->legacyOwnTabItems($employee, $tab);
+        $all = $this->legacyOwnTabItems($employee, $tab);
 
         $offset = ($page - 1) * $perPage;
         $slice = array_slice($all, $offset, $perPage);
@@ -156,26 +156,18 @@ class FormsHubService
     }
 
     /**
+     * Pengajuan/riwayat milik user: baris dengan karyawan_id = pengaju (termasuk lembur yang dia buat).
+     * Anggota lembur saja tidak masuk — sudah diwakili kartu jumlah lembur.
+     *
      * @param bool $currentWorkYearOnly Filter tampilan/count periode kerja (tgl_mulai_kerja), data DB tetap utuh
-     * @param bool $includeTeamHistory Riwayat tim (GetBawahan) untuk atasan — selaras portal Request Lembur owner
      * @return \Illuminate\Database\Eloquent\Builder
      */
-    private function formsHubHrQuery(MasterKaryawan $employee, bool $currentWorkYearOnly = false, bool $includeTeamHistory = false)
+    private function formsHubHrQuery(MasterKaryawan $employee, bool $currentWorkYearOnly = false)
     {
         $query = HrRequest::query()
             ->where('is_active', true)
-            ->where(function ($q) use ($employee, $includeTeamHistory) {
-                $q->where(function ($own) use ($employee) {
-                    $own->where('karyawan_id', $employee->id)
-                        ->orWhere(function ($sub) use ($employee) {
-                            $sub->where('request_type', HrRequest::TYPE_OVERTIME)
-                                ->whereHas('overtimeParticipants', fn ($p) => $p->where('karyawan_id', $employee->id));
-                        });
-                });
-
-                if ($includeTeamHistory) {
-                    $this->applyTeamHistoryScope($q, $employee);
-                }
+            ->where(function ($q) use ($employee) {
+                $this->applyOwnFormsHubSubmissionScope($q, $employee);
             });
 
         if ($currentWorkYearOnly) {
@@ -189,37 +181,7 @@ class FormsHubService
     /** @return \Illuminate\Database\Eloquent\Builder */
     private function ownHrRequestsQuery(MasterKaryawan $employee, bool $currentWorkYearOnly = false)
     {
-        return $this->formsHubHrQuery($employee, $currentWorkYearOnly, false);
-    }
-
-    /** @param \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $query */
-    private function applyTeamHistoryScope($query, MasterKaryawan $employee): void
-    {
-        if (!AtasanApprovalScope::isAtasanGrade($employee)) {
-            return;
-        }
-
-        $subordinateIds = AtasanApprovalScope::subordinateKaryawanIds($employee);
-        $subordinateNames = AtasanApprovalScope::subordinateKaryawanNames($employee);
-
-        if (empty($subordinateIds) && empty($subordinateNames)) {
-            return;
-        }
-
-        $query->orWhere(function ($team) use ($subordinateIds, $subordinateNames) {
-            if (!empty($subordinateIds)) {
-                $team->where(function ($inner) use ($subordinateIds) {
-                    $inner->whereIn('karyawan_id', $subordinateIds)
-                        ->whereIn('request_type', [
-                            HrRequest::TYPE_LEAVE,
-                            HrRequest::TYPE_PERMISSION,
-                            HrRequest::TYPE_ATTENDANCE_CORRECTION,
-                        ]);
-                });
-            }
-
-            // Lembur tidak masuk riwayat tim: hanya pengaju/anggota aktif (lihat formsHubHrQuery bagian own).
-        });
+        return $this->formsHubHrQuery($employee, $currentWorkYearOnly);
     }
 
     private function hrRequestRelationNames(): array
@@ -285,7 +247,7 @@ class FormsHubService
             $items[] = $this->legacyItem('AttendanceCorrectionsController', 'Attendance Correction', $raw);
         }
 
-        $overtimes = $this->legacyOwnOvertimeBaseQuery($employee, true)
+        $overtimes = $this->legacySubmittedOvertimeBaseQuery($employee, true)
             ->with('members')
             ->latest()
             ->get()
@@ -293,6 +255,9 @@ class FormsHubService
             ->map(fn ($item) => $this->applyEffectiveLegacyStatus('overtime_requests', $item));
 
         foreach ($overtimes as $raw) {
+            if (!$this->legacyOvertimeIsSubmittedBy($raw, $employee)) {
+                continue;
+            }
             $items[] = $this->legacyItem('OvertimeRequestsController', 'Overtime Request', $this->enrichLegacyOvertime($raw));
         }
 
@@ -301,22 +266,67 @@ class FormsHubService
         return $items;
     }
 
-    /** Riwayat non-pending: pengajuan sendiri + seluruh pohon GetBawahan (portal owner processed). */
-    private function legacyTeamHistoryTabItems(MasterKaryawan $employee): array
+    private function listApprovalHistoryTab(MasterKaryawan $employee, int $page, int $perPage): array
     {
+        if (!HrTableMode::usesLegacyHrTables()) {
+            return $this->listApprovalHistoryFromHr($employee, $page, $perPage);
+        }
+
+        $all = $this->legacyTeamApprovalHistoryItems($employee);
+        $offset = ($page - 1) * $perPage;
+        $slice = array_slice($all, $offset, $perPage);
+        $hasMore = count($all) > $offset + $perPage;
+
+        return ['items' => $slice, 'has_more' => $hasMore];
+    }
+
+    private function listApprovalHistoryFromHr(MasterKaryawan $employee, int $page, int $perPage): array
+    {
+        $subordinateIds = AtasanApprovalScope::subordinateKaryawanIdsForTeamHistory($employee);
+        if ($subordinateIds === []) {
+            return ['items' => [], 'has_more' => false];
+        }
+
+        $offset = ($page - 1) * $perPage;
+        [$from, $to] = $this->leaveYearBounds($employee);
+
+        $query = HrRequest::query()
+            ->where('is_active', true)
+            ->whereIn('karyawan_id', $subordinateIds)
+            ->whereIn('request_type', [
+                HrRequest::TYPE_LEAVE,
+                HrRequest::TYPE_PERMISSION,
+                HrRequest::TYPE_ATTENDANCE_CORRECTION,
+            ])
+            ->whereNotIn('status', WorkflowStatus::submitterInProgressStatuses())
+            ->whereBetween('created_at', [$from, $to])
+            ->with($this->hrRequestRelationNames())
+            ->orderByDesc('id');
+
+        $rows = $query->skip($offset)->take($perPage + 1)->get();
+        $hasMore = $rows->count() > $perPage;
+        $items = $rows->take($perPage)->map(fn (HrRequest $row) => $this->mapHrRow($row, $employee))->values()->all();
+
+        return ['items' => $items, 'has_more' => $hasMore];
+    }
+
+    /** Riwayat persetujuan tim: cuti/izin/koreksi bawahan (selesai), tanpa pengajuan sendiri. */
+    private function legacyTeamApprovalHistoryItems(MasterKaryawan $employee): array
+    {
+        $subordinateIds = AtasanApprovalScope::subordinateKaryawanIdsForTeamHistory($employee);
+        if ($subordinateIds === []) {
+            return [];
+        }
+
         $items = [];
         [$periodFrom, $periodTo] = $this->leaveYearBounds($employee);
-        $employeeIds = array_values(array_unique(array_merge(
-            [(int) $employee->id],
-            AtasanApprovalScope::subordinateKaryawanIds($employee)
-        )));
 
         $applyHistory = fn ($query) => $query->whereNotIn('status', WorkflowStatus::submitterInProgressStatuses());
         $applyWorkYear = fn ($query) => $query->whereBetween('created_at', [$periodFrom, $periodTo]);
 
         $leaves = LeaveRequest::with('specialLeaveType')
             ->where('is_active', true)
-            ->whereIn('employee_id', $employeeIds)
+            ->whereIn('employee_id', $subordinateIds)
             ->where($applyHistory)
             ->where($applyWorkYear)
             ->latest()
@@ -328,7 +338,7 @@ class FormsHubService
         }
 
         $permissions = PermissionRequest::where('is_active', true)
-            ->whereIn('employee_id', $employeeIds)
+            ->whereIn('employee_id', $subordinateIds)
             ->where($applyHistory)
             ->where($applyWorkYear)
             ->latest()
@@ -340,7 +350,7 @@ class FormsHubService
         }
 
         $corrections = AttendanceCorrection::where('is_active', true)
-            ->whereIn('employee_id', $employeeIds)
+            ->whereIn('employee_id', $subordinateIds)
             ->where($applyHistory)
             ->where($applyWorkYear)
             ->latest()
@@ -349,17 +359,6 @@ class FormsHubService
 
         foreach ($corrections as $raw) {
             $items[] = $this->legacyItem('AttendanceCorrectionsController', 'Attendance Correction', $raw);
-        }
-
-        $overtimes = $this->legacyOwnOvertimeBaseQuery($employee, true)
-            ->where($applyHistory)
-            ->with('members')
-            ->latest()
-            ->get()
-            ->map(fn ($item) => $this->enrichLegacyOvertime($item));
-
-        foreach ($overtimes as $raw) {
-            $items[] = $this->legacyItem('OvertimeRequestsController', 'Overtime Request', $raw);
         }
 
         usort($items, fn ($a, $b) => ($b['id'] ?? 0) <=> ($a['id'] ?? 0));
@@ -372,33 +371,17 @@ class FormsHubService
         [$periodFrom, $periodTo] = $this->leaveYearBounds($employee);
         $inWorkYear = fn ($query) => $query->whereBetween('created_at', [$periodFrom, $periodTo]);
         $finished = fn ($query) => $query->whereNotIn('status', WorkflowStatus::submitterInProgressStatuses());
+        $employeeId = (int) $employee->id;
 
-        if (!AtasanApprovalScope::isAtasanGrade($employee)) {
-            $employeeId = (int) $employee->id;
-
-            return $inWorkYear(LeaveRequest::where('is_active', true)->where('employee_id', $employeeId)->where($finished))->count()
-                + $inWorkYear(PermissionRequest::where('is_active', true)->where('employee_id', $employeeId)->where($finished))->count()
-                + $inWorkYear(AttendanceCorrection::where('is_active', true)->where('employee_id', $employeeId)->where($finished))->count()
-                + $this->legacyOwnOvertimeCount($employee, 'history', true);
-        }
-
-        $employeeIds = array_values(array_unique(array_merge(
-            [(int) $employee->id],
-            AtasanApprovalScope::subordinateKaryawanIds($employee)
-        )));
-
-        $count = $inWorkYear(LeaveRequest::where('is_active', true)->whereIn('employee_id', $employeeIds)->where($finished))->count()
-            + $inWorkYear(PermissionRequest::where('is_active', true)->whereIn('employee_id', $employeeIds)->where($finished))->count()
-            + $inWorkYear(AttendanceCorrection::where('is_active', true)->whereIn('employee_id', $employeeIds)->where($finished))->count();
-
-        $count += $this->legacyOwnOvertimeCount($employee, 'history', true);
-
-        return $count;
+        return $inWorkYear(LeaveRequest::where('is_active', true)->where('employee_id', $employeeId)->where($finished))->count()
+            + $inWorkYear(PermissionRequest::where('is_active', true)->where('employee_id', $employeeId)->where($finished))->count()
+            + $inWorkYear(AttendanceCorrection::where('is_active', true)->where('employee_id', $employeeId)->where($finished))->count()
+            + $this->legacyOwnOvertimeCount($employee, 'history', true);
     }
 
     private function legacyOwnOvertimeCount(MasterKaryawan $employee, $statusMode, bool $currentWorkYearOnly = false): int
     {
-        $query = $this->legacyOwnOvertimeBaseQuery($employee, $currentWorkYearOnly);
+        $query = $this->legacySubmittedOvertimeBaseQuery($employee, $currentWorkYearOnly);
 
         if ($statusMode === 'submission') {
             $query->whereIn('status', WorkflowStatus::submitterInProgressStatuses());
@@ -451,7 +434,7 @@ class FormsHubService
                 $count++;
             }
         }
-        foreach ($this->legacyOwnOvertimeBaseQuery($employee, true)->get() as $row) {
+        foreach ($this->legacySubmittedOvertimeBaseQuery($employee, true)->get() as $row) {
             if ($this->legacyRowMatchesTab('overtime_requests', $row, true)) {
                 $count++;
             }
@@ -787,7 +770,79 @@ class FormsHubService
         return $count;
     }
 
-    /** @return \Illuminate\Database\Eloquent\Builder */
+    /**
+     * Tab pengajuan/riwayat: cuti/izin/koreksi = karyawan_id pengaju.
+     * Lembur = pembuat (created_by_*), bukan anggota saja — termasuk data migrasi yang karyawan_id-nya salah.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $query
+     */
+    private function applyOwnFormsHubSubmissionScope($query, MasterKaryawan $employee): void
+    {
+        $employeeId = (int) $employee->id;
+        $employeeName = trim((string) ($employee->nama_lengkap ?? ''));
+
+        $query->where(function ($q) use ($employeeId, $employeeName) {
+            $q->where(function ($standard) use ($employeeId) {
+                $standard->where('request_type', '!=', HrRequest::TYPE_OVERTIME)
+                    ->where('karyawan_id', $employeeId);
+            })->orWhere(function ($overtime) use ($employeeId, $employeeName) {
+                $overtime->where('request_type', HrRequest::TYPE_OVERTIME)
+                    ->where(function ($creator) use ($employeeId, $employeeName) {
+                        $creator->where('created_by_karyawan_id', $employeeId);
+
+                        if ($employeeName !== '') {
+                            $creator->orWhere('created_by_name', $employeeName);
+                        }
+
+                        $creator->orWhere(function ($trustedHeader) use ($employeeId, $employeeName) {
+                            $trustedHeader->where('karyawan_id', $employeeId)
+                                ->whereNull('created_by_karyawan_id')
+                                ->where(function ($name) use ($employeeName) {
+                                    $name->whereNull('created_by_name');
+                                    if ($employeeName !== '') {
+                                        $name->orWhere('created_by_name', $employeeName);
+                                    }
+                                });
+                        });
+                    });
+            });
+        });
+    }
+
+    private function legacyOvertimeIsSubmittedBy(OvertimeRequest $row, MasterKaryawan $employee): bool
+    {
+        $creatorName = trim((string) ($row->created_by ?? ''));
+        $employeeName = trim((string) ($employee->nama_lengkap ?? ''));
+
+        if ($employeeName === '' || $creatorName === '') {
+            return false;
+        }
+
+        return strcasecmp($creatorName, $employeeName) === 0;
+    }
+
+    /** Lembur yang user ajukan (pembuat), bukan hanya tercatat sebagai anggota. */
+    private function legacySubmittedOvertimeBaseQuery(MasterKaryawan $employee, bool $currentWorkYearOnly = false)
+    {
+        $employeeName = trim((string) ($employee->nama_lengkap ?? ''));
+
+        $query = OvertimeRequest::query()->where('is_active', true);
+
+        if ($employeeName !== '') {
+            $query->whereRaw('LOWER(TRIM(created_by)) = ?', [mb_strtolower($employeeName)]);
+        } else {
+            $query->whereRaw('1 = 0');
+        }
+
+        if ($currentWorkYearOnly) {
+            [$from, $to] = $this->leaveYearBounds($employee);
+            $query->whereBetween('created_at', [$from, $to]);
+        }
+
+        return $query;
+    }
+
+    /** @deprecated Hanya dipakai stat total internal; tab pakai legacySubmittedOvertimeBaseQuery */
     private function legacyOwnOvertimeBaseQuery(MasterKaryawan $employee, bool $currentWorkYearOnly = false)
     {
         $employeeId = (int) $employee->id;

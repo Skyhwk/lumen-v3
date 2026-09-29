@@ -23,20 +23,24 @@ trait BootstrapsHrAtasanChain
         }
 
         $fresh = $header->fresh();
-        app(HrApprovalChainService::class)->notifyCurrentApprovers(
-            $fresh,
-            $employee,
-            NotificationCopy::pathForms('approval')
-        );
-
-        (new FirebaseService())->sendNotifications(
-            [(int) $employee->id],
-            NotificationCopy::submissionAcknowledged(
+        try {
+            app(HrApprovalChainService::class)->notifyCurrentApprovers(
                 $fresh,
-                NotificationCopy::pathForms('submission'),
-                $hasChain
-            )
-        );
+                $employee,
+                NotificationCopy::pathForms('approval')
+            );
+
+            (new FirebaseService())->sendNotifications(
+                [(int) $employee->id],
+                NotificationCopy::submissionAcknowledged(
+                    $fresh,
+                    NotificationCopy::pathForms('submission'),
+                    $hasChain
+                )
+            );
+        } catch (\Throwable $e) {
+            // Notifikasi tidak boleh gagalkan simpan pengajuan HR.
+        }
 
         return $fresh;
     }

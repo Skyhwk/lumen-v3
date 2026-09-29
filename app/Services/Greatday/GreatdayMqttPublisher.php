@@ -3,6 +3,7 @@
 namespace App\Services\Greatday;
 
 use Bluerhinos\phpMQTT;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -51,18 +52,24 @@ class GreatdayMqttPublisher
             return;
         }
 
-        $url = $notificationData['url'] ?? '/forms';
-        $payload = json_encode([
-            'app' => 'greatday',
-            'scope' => self::scopeFromUrl($url),
-            'event' => $event,
-            'url' => $url,
-            'ts' => now()->toIso8601String(),
-        ], JSON_UNESCAPED_UNICODE);
-
-        $prefix = rtrim((string) env('GREATDAY_MQTT_TOPIC_PREFIX', '/greatday/sync'), '/');
-
         try {
+            $url = isset($notificationData['url']) ? (string) $notificationData['url'] : '/forms';
+            $payload = json_encode([
+                'app' => 'greatday',
+                'scope' => self::scopeFromUrl($url),
+                'event' => $event,
+                'url' => $url,
+                'ts' => Carbon::now()->format(\DateTime::ATOM),
+            ], JSON_UNESCAPED_UNICODE);
+
+            if ($payload === false) {
+                Log::warning('Greatday MQTT: payload JSON gagal');
+
+                return;
+            }
+
+            $prefix = rtrim((string) env('GREATDAY_MQTT_TOPIC_PREFIX', '/greatday/sync'), '/');
+
             $host = env('MQTT_HOST');
             $port = (int) env('MQTT_PORT', 1883);
             [$username, $password] = self::resolveCredentials();
