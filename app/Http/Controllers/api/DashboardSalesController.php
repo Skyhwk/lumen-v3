@@ -212,7 +212,7 @@ class DashboardSalesController extends Controller
 
         $totalCalls = (int) $statusCounts->sum();
         $picContacted = (int) $statusCounts->get('PIC', 0);
-        $unreachable = (int) $statusCounts->get('NA', 0) + (int) $statusCounts->get('D', 0);
+        $unreachable = (int) $statusCounts->get('NA', 0) + (int) $statusCounts->get('D', 0) + (int) $statusCounts->get('FO', 0);
         $unqualified = (int) $statusCounts->get('NI', 0);
 
         return [
