@@ -99,6 +99,8 @@ class LeaveRequestHrService
             $leaveKind = 'unpaid';
         } elseif ($request->type === 'Holiday Replacement Leave') {
             $leaveKind = 'phl';
+        } elseif ($request->type === 'Urgent Leave') {
+            $leaveKind = 'urgent';
         }
 
         $status = WorkflowStatus::PENDING;

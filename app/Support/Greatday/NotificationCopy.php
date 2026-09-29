@@ -397,6 +397,8 @@ class NotificationCopy
                 return 'Cuti tanpa gaji';
             case 'phl':
                 return 'Pengganti hari libur';
+            case 'urgent':
+                return 'Cuti mendesak';
             default:
                 return 'Cuti tahunan';
         }

@@ -90,6 +90,9 @@ return [
     'leave_phl_max_weekdays_per_window' => (int) env('GREATDAY_LEAVE_PHL_MAX_PER_WINDOW', 1),
     'leave_combined_max_weekdays_per_window' => (int) env('GREATDAY_LEAVE_COMBINED_MAX_PER_WINDOW', 4),
 
+    /** Cuti mendesak: tanggal mulai maks. H+N kalender dari hari pengajuan (1 = besok) */
+    'leave_urgent_max_start_days_ahead' => (int) env('GREATDAY_LEAVE_URGENT_MAX_START_DAYS_AHEAD', 1),
+
     /** Fase D — potong saldo per hari alpa (ledger) */
     'leave_alpa_days_delta' => (int) env('GREATDAY_LEAVE_ALPA_DAYS_DELTA', 1),
 

@@ -633,7 +633,7 @@ class FormsHubService
         $total = 0;
         foreach ($rows as $row) {
             $detail = $row->leaveDetail;
-            if (!$detail || ($detail->leave_kind ?? 'annual') !== 'annual') {
+            if (!$detail || !LeaveBalanceService::countsTowardAnnualBalance($detail->leave_kind ?? null)) {
                 continue;
             }
             $total += $this->countWeekdays($detail->start_date, $detail->end_date);
@@ -657,7 +657,7 @@ class FormsHubService
 
         $rows = LeaveRequest::where('employee_id', $employee->id)
             ->where('is_active', true)
-            ->where('type', 'Annual Leave')
+            ->whereIn('type', ['Annual Leave', 'Urgent Leave'])
             ->whereIn('status', [WorkflowStatus::APPROVED_ATASAN, WorkflowStatus::APPROVED_HRD])
             ->whereBetween('created_at', [$from, $to])
             ->get();

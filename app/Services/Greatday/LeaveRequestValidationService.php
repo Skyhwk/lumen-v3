@@ -18,6 +18,8 @@ class LeaveRequestValidationService
 
     public const TYPE_PHL = 'Holiday Replacement Leave';
 
+    public const TYPE_URGENT = 'Urgent Leave';
+
     /** @var LeaveBalanceService */
     private $leaveBalance;
 
@@ -99,6 +101,15 @@ class LeaveRequestValidationService
                 );
             case self::TYPE_UNPAID:
                 return $this->validateUnpaidLeave($employee, $startDate, $endDate, $excludeHrRequestId, $excludeLegacyId);
+            case self::TYPE_URGENT:
+                return $this->validateUrgentLeave(
+                    $employee,
+                    $startDate,
+                    $endDate,
+                    $hasAttachment,
+                    $excludeHrRequestId,
+                    $excludeLegacyId
+                );
             default:
                 return 'Jenis cuti tidak dikenali.';
         }
@@ -109,7 +120,7 @@ class LeaveRequestValidationService
      */
     private function validateLeavePayloadIntegrity(string $type, ?int $specialLeaveTypeId): ?string
     {
-        $allowed = [self::TYPE_ANNUAL, self::TYPE_SPECIAL, self::TYPE_UNPAID, self::TYPE_PHL];
+        $allowed = [self::TYPE_ANNUAL, self::TYPE_SPECIAL, self::TYPE_UNPAID, self::TYPE_PHL, self::TYPE_URGENT];
         if (!in_array($type, $allowed, true)) {
             return 'Jenis cuti tidak dikenali.';
         }
@@ -254,6 +265,59 @@ class LeaveRequestValidationService
         return null;
     }
 
+    private function validateUrgentLeave(
+        MasterKaryawan $employee,
+        string $startDate,
+        string $endDate,
+        bool $hasAttachment,
+        ?int $excludeHrRequestId,
+        ?int $excludeLegacyId
+    ): ?string {
+        if (!$this->leaveBalance->isEligibleForAnnualLeave($employee)) {
+            return 'Cuti mendesak hanya untuk karyawan kontrak/tetap yang berhak cuti tahunan.';
+        }
+
+        if (!$hasAttachment) {
+            return 'Cuti mendesak wajib melampirkan foto.';
+        }
+
+        $requestedDays = $this->leaveBalance->countWeekdaysBetween($startDate, $endDate);
+        if ($requestedDays <= 0) {
+            return 'Rentang tanggal tidak memuat hari kerja.';
+        }
+
+        $start = Carbon::parse($startDate)->startOfDay();
+        $today = Carbon::now()->startOfDay();
+        $maxAhead = max(0, (int) config('greatday.leave_urgent_max_start_days_ahead', 1));
+        $latestStart = $today->copy()->addDays($maxAhead);
+
+        if ($start->lt($today)) {
+            return 'Tanggal mulai cuti mendesak tidak boleh sebelum hari ini.';
+        }
+        if ($start->gt($latestStart)) {
+            return "Cuti mendesak hanya dapat dimulai hari ini atau paling lambat {$latestStart->format('d-m-Y')}.";
+        }
+
+        $holidayAdjacency = $this->validateNotAdjacentToCompanyHoliday($startDate, $endDate);
+        if ($holidayAdjacency !== null) {
+            return $holidayAdjacency;
+        }
+
+        $rollingError = $this->validateRolling30DayLimit(
+            $employee,
+            $startDate,
+            $endDate,
+            $excludeHrRequestId,
+            $excludeLegacyId,
+            self::TYPE_URGENT
+        );
+        if ($rollingError !== null) {
+            return $rollingError;
+        }
+
+        return null;
+    }
+
     private function validateUnpaidLeave(
         MasterKaryawan $employee,
         string $startDate,
@@ -346,7 +410,8 @@ class LeaveRequestValidationService
         $existingAnnual = $this->leaveBalance->annualLeaveWeekdayDates($employee, $excludeHrRequestId, $excludeLegacyId);
         $existingPhl = $this->leaveBalance->phlLeaveWeekdayDates($employee, $excludeHrRequestId, $excludeLegacyId);
 
-        $newAnnual = $forType === self::TYPE_ANNUAL
+        $countsAsAnnual = $forType === self::TYPE_ANNUAL || $forType === self::TYPE_URGENT;
+        $newAnnual = $countsAsAnnual
             ? $this->leaveBalance->expandWeekdayDates($startDate, $endDate)
             : [];
         $newPhl = $forType === self::TYPE_PHL
@@ -366,8 +431,8 @@ class LeaveRequestValidationService
             $phlCount = $this->countDatesInWindow($phlDates, $windowStart, $windowEnd);
             $combined = $annualCount + $phlCount;
 
-            if ($forType === self::TYPE_ANNUAL && $annualCount > $maxAnnual) {
-                return "Maksimal {$maxAnnual} hari kerja cuti tahunan dalam {$windowDays} hari kalender (terlampaui per {$anchor->format('d-m-Y')}).";
+            if ($countsAsAnnual && $annualCount > $maxAnnual) {
+                return "Maksimal {$maxAnnual} hari kerja cuti tahunan/mendesak dalam {$windowDays} hari kalender (terlampaui per {$anchor->format('d-m-Y')}).";
             }
             if ($forType === self::TYPE_PHL && $phlCount > $maxPhl) {
                 return "Maksimal {$maxPhl} hari kerja pengganti hari libur dalam {$windowDays} hari kalender (terlampaui per {$anchor->format('d-m-Y')}).";

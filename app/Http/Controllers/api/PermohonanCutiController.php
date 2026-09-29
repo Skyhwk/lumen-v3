@@ -441,6 +441,9 @@ class PermohonanCutiController extends Controller
                     if (stripos('cuti khusus', $keyword) !== false || stripos('special leave', $keyword) !== false) {
                         $sub->orWhere('leave_requests.type', 'Special Leave');
                     }
+                    if (stripos('cuti mendesak', $keyword) !== false || stripos('urgent leave', $keyword) !== false) {
+                        $sub->orWhere('leave_requests.type', 'Urgent Leave');
+                    }
                 });
             })
             ->filterColumn('nama_divisi', function ($query, $keyword) {
@@ -746,6 +749,9 @@ class PermohonanCutiController extends Controller
             if ($type === 'Annual Leave' || $type === 'annual') {
                 $type = 'Annual Leave';
                 $specialLeaveId = null;
+            } elseif ($type === 'Urgent Leave' || $type === 'urgent') {
+                $type = 'Urgent Leave';
+                $specialLeaveId = null;
             } elseif (is_string($type) && strpos($type, 'special_') === 0) {
                 $specialLeaveId = (int) substr($type, 8);
                 $type = 'Special Leave';
@@ -879,6 +885,9 @@ class PermohonanCutiController extends Controller
             if ($type === 'Annual Leave' || $type === 'annual') {
                 $type = 'Annual Leave';
                 $specialLeaveId = null;
+            } elseif ($type === 'Urgent Leave' || $type === 'urgent') {
+                $type = 'Urgent Leave';
+                $specialLeaveId = null;
             } elseif (is_string($type) && strpos($type, 'special_') === 0) {
                 $specialLeaveId = (int) substr($type, 8);
                 $type = 'Special Leave';
@@ -893,6 +902,29 @@ class PermohonanCutiController extends Controller
 
             $attachment = $leave->attachment;
             $file = $request->file('lampiran') ?: ($request->file('attachment') ?: $request->file('file'));
+
+            $employee = MasterKaryawan::find($this->user_id);
+            if ($employee) {
+                $hasAttachment = HrFormAttachmentStorage::hasUploadedImages($request)
+                    || ($type === 'Urgent Leave' && !empty($attachment));
+                $validationMessage = app(LeaveRequestValidationService::class)->validateForStore(
+                    $employee,
+                    (string) $type,
+                    $startDate,
+                    $endDate,
+                    null,
+                    (int) $leave->id,
+                    $specialLeaveId ? (int) $specialLeaveId : null,
+                    $hasAttachment
+                );
+                if ($validationMessage !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $validationMessage,
+                    ], 422);
+                }
+            }
+
             if ($file) {
                 $fileName = time() . '_' . str_replace(' ', '_', $file->getClientOriginalName());
                 $dest = base_path('public/uploads/documents');
