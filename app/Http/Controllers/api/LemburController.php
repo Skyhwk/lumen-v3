@@ -38,6 +38,8 @@ class LemburController extends Controller
             return Datatables::of($data)->make(true);
         }
 
+        $this->ensureOvertimeGroupConcatLimit();
+
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
@@ -56,7 +58,7 @@ class LemburController extends Controller
                         ELSE "Pending" 
                     END as status'),
 
-                DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
+                DB::raw($this->overtimeKaryawanGroupConcatSql()),
                 DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
                 'overtime_requests.approved_hrd_by',
@@ -87,10 +89,7 @@ class LemburController extends Controller
             ->whereNull('overtime_requests.rejected_hrd_by')
             ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
-            ->transform(function ($item) {
-                $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
-                return $item;
-            });
+            ->transform(fn ($item) => $this->mapOvertimeRowKaryawan($item));
         return Datatables::of($data)->make(true);
     }
 
@@ -101,6 +100,8 @@ class LemburController extends Controller
 
             return Datatables::of($data)->make(true);
         }
+
+        $this->ensureOvertimeGroupConcatLimit();
 
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
@@ -120,7 +121,7 @@ class LemburController extends Controller
                                 ELSE "Pending" 
                             END as status'),
 
-                DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
+                DB::raw($this->overtimeKaryawanGroupConcatSql()),
                 DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
                 'overtime_requests.approved_hrd_by',
@@ -152,10 +153,7 @@ class LemburController extends Controller
             ->whereNull('overtime_requests.rejected_finance_by')
             ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
-            ->transform(function ($item) {
-                $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
-                return $item;
-            });
+            ->transform(fn ($item) => $this->mapOvertimeRowKaryawan($item));
 
         return Datatables::of($data)->make(true);
     }
@@ -167,6 +165,8 @@ class LemburController extends Controller
 
             return Datatables::of($data)->make(true);
         }
+
+        $this->ensureOvertimeGroupConcatLimit();
 
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
@@ -186,7 +186,7 @@ class LemburController extends Controller
                                 ELSE "Pending" 
                             END as status'),
 
-                DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
+                DB::raw($this->overtimeKaryawanGroupConcatSql()),
                 DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
                 'overtime_requests.approved_hrd_by',
@@ -217,10 +217,7 @@ class LemburController extends Controller
             ->whereNull('overtime_requests.rejected_finance_by')
             ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
-            ->transform(function ($item) {
-                $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
-                return $item;
-            });
+            ->transform(fn ($item) => $this->mapOvertimeRowKaryawan($item));
 
 
         return Datatables::of($data)->make(true);
@@ -234,6 +231,8 @@ class LemburController extends Controller
 
             return Datatables::of($data)->make(true);
         }
+
+        $this->ensureOvertimeGroupConcatLimit();
 
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
@@ -253,7 +252,7 @@ class LemburController extends Controller
                                 ELSE "Pending" 
                             END as status'),
 
-                DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
+                DB::raw($this->overtimeKaryawanGroupConcatSql()),
                 DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
                 'overtime_requests.approved_hrd_by',
@@ -284,10 +283,7 @@ class LemburController extends Controller
             ->whereNull('overtime_requests.rejected_finance_by')
             ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
-            ->transform(function ($item) {
-                $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
-                return $item;
-            });
+            ->transform(fn ($item) => $this->mapOvertimeRowKaryawan($item));
 
         return Datatables::of($data)->make(true);
     }
@@ -305,6 +301,8 @@ class LemburController extends Controller
                 })
                 ->make(true);
         }
+
+        $this->ensureOvertimeGroupConcatLimit();
 
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
@@ -324,7 +322,7 @@ class LemburController extends Controller
                                 ELSE "Pending" 
                             END as status'),
 
-                DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
+                DB::raw($this->overtimeKaryawanGroupConcatSql()),
                 DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
                 'overtime_requests.approved_hrd_by',
@@ -356,10 +354,7 @@ class LemburController extends Controller
             ->whereIn('overtime_requests.created_by', $bawahan)
             ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
-            ->transform(function ($item) {
-                $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
-                return $item;
-            });
+            ->transform(fn ($item) => $this->mapOvertimeRowKaryawan($item));
 
         return Datatables::of($data)
             ->addColumn('can_approve', function ($row) {
@@ -382,6 +377,8 @@ class LemburController extends Controller
                 ->make(true);
         }
 
+        $this->ensureOvertimeGroupConcatLimit();
+
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
@@ -400,7 +397,7 @@ class LemburController extends Controller
                                 ELSE "Pending" 
                             END as status'),
 
-                DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
+                DB::raw($this->overtimeKaryawanGroupConcatSql()),
                 DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
                 'overtime_requests.approved_hrd_by',
@@ -434,10 +431,7 @@ class LemburController extends Controller
             ->whereIn('overtime_requests.created_by', $bawahan)
             ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
-            ->transform(function ($item) {
-                $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
-                return $item;
-            });
+            ->transform(fn ($item) => $this->mapOvertimeRowKaryawan($item));
 
         return Datatables::of($data)
             ->addColumn('can_approve', function ($row) {
@@ -1085,5 +1079,47 @@ class LemburController extends Controller
                 'message' => $e->getMessage(),
             ]);
         }
+    }
+
+    private function ensureOvertimeGroupConcatLimit(): void
+    {
+        DB::connection('intilab_apps')->statement('SET SESSION group_concat_max_len = 65535');
+    }
+
+    private function overtimeKaryawanGroupConcatSql(): string
+    {
+        return "GROUP_CONCAT(DISTINCT JSON_OBJECT(
+            'id', COALESCE(u.id, fd.employee_id),
+            'nama', COALESCE(u.nama_lengkap, '-'),
+            'jabatan', COALESCE(u.grade, '-')
+        ) ORDER BY COALESCE(u.nama_lengkap, '') SEPARATOR '|') as karyawan";
+    }
+
+    private function mapOvertimeRowKaryawan($item)
+    {
+        $item->karyawan = $this->decodeOvertimeKaryawanPipe($item->karyawan ?? null);
+
+        return $item;
+    }
+
+    private function decodeOvertimeKaryawanPipe(?string $raw): array
+    {
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+
+        $karyawan = [];
+        foreach (explode('|', $raw) as $chunk) {
+            if ($chunk === '') {
+                continue;
+            }
+            $decoded = json_decode($chunk);
+            if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
+                continue;
+            }
+            $karyawan[] = $decoded;
+        }
+
+        return $karyawan;
     }
 }
