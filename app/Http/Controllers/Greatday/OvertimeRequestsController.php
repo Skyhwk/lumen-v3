@@ -191,36 +191,40 @@ class OvertimeRequestsController extends Controller
 
             DB::commit();
 
-            $service = new FirebaseService();
+            try {
+                $service = new FirebaseService();
 
-            foreach ($employeeIds as $memberId) {
-                $service->sendNotifications(
-                    [$memberId],
-                    NotificationCopy::legacyAtasanPending(
-                        'Penugasan lembur',
-                        $overtimeRequest->created_by,
-                        NotificationCopy::pathForms('submission')
-                    )
-                );
-            }
+                foreach ($employeeIds as $memberId) {
+                    $service->sendNotifications(
+                        [$memberId],
+                        NotificationCopy::legacyAtasanPending(
+                            'Penugasan lembur',
+                            $overtimeRequest->created_by,
+                            NotificationCopy::pathForms('submission')
+                        )
+                    );
+                }
 
-            if ($employee->grade !== 'MANAGER') {
-                $getAtasan = GetAtasan::where('id', $employee->id)->get();
+                if ($employee->grade !== 'MANAGER') {
+                    $getAtasan = GetAtasan::where('id', $employee->id)->get();
 
-                foreach ($getAtasan as $atasan) {
-                    if ($atasan->grade === 'MANAGER') {
-                        $department = MasterDivisi::find($overtimeRequest->department_id);
+                    foreach ($getAtasan as $atasan) {
+                        if ($atasan->grade === 'MANAGER') {
+                            $department = MasterDivisi::find($overtimeRequest->department_id);
 
-                        $service->sendNotifications(
-                            [$atasan->id],
-                            NotificationCopy::legacyAtasanPending(
-                                'Permohonan lembur (' . ($department->nama_divisi ?? '') . ')',
-                                $overtimeRequest->created_by,
-                                NotificationCopy::pathForms('approval')
-                            )
-                        );
+                            $service->sendNotifications(
+                                [$atasan->id],
+                                NotificationCopy::legacyAtasanPending(
+                                    'Permohonan lembur (' . ($department->nama_divisi ?? '') . ')',
+                                    $overtimeRequest->created_by,
+                                    NotificationCopy::pathForms('approval')
+                                )
+                            );
+                        }
                     }
                 }
+            } catch (\Throwable $notifyError) {
+                // Pengajuan sudah tersimpan; notifikasi/FCM tidak membatalkan respons sukses.
             }
 
             return response()->json(['message' => 'Your permission request has been submitted successfully'], 201);
