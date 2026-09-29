@@ -122,62 +122,14 @@ class UpdateAbsensiController extends Controller
     // Tested - Clear
     public function generateJadwal(Request $request)
     {
-        // dd($request->all());
         DB::beginTransaction();
         try {
             if ($request->absensi) {
-                foreach ($request->absensi as $key => $value) {
-                    $dataAbsen = json_decode(json_encode($value));
-                    $masukJam = $this->normalizeJamForDb($dataAbsen->masuk ?? '');
-                    $keluarJam = $this->normalizeJamForDb($dataAbsen->keluar ?? '');
-
-                    if ($masukJam !== '') {
-                        if ($dataAbsen->id_masuk != '') {
-                            Absensi::where('id', '!=', $dataAbsen->id_masuk)
-                                ->where('karyawan_id', $dataAbsen->id)
-                                ->where('tanggal', $dataAbsen->tgl_masuk)
-                                ->where('status', 'Masuk')->delete();
-
-                            Absensi::where('id', $dataAbsen->id_masuk)->update([
-                                'kode_kartu' => NULL,
-                                'jam' => $masukJam,
-                            ]);
-                        } else {
-                            Absensi::insert([
-                                'karyawan_id' => $dataAbsen->id,
-                                'tanggal' => $dataAbsen->tgl,
-                                'hari' => self::hari($dataAbsen->tgl),
-                                'jam' => $masukJam,
-                                'status' => 'Masuk',
-                            ]);
-                        }
-                    }
-                    if ($keluarJam !== '') {
-                        if ($dataAbsen->id_keluar != '') {
-                            Absensi::where('id', '!=', $dataAbsen->id_keluar)
-                                ->where('karyawan_id', $dataAbsen->id)
-                                ->where('tanggal', $dataAbsen->tgl_keluar)
-                                ->where('status', 'Keluar')->delete();
-
-                            Absensi::where('id', $dataAbsen->id_keluar)->update([
-                                'kode_kartu' => NULL,
-                                'jam' => $keluarJam,
-                            ]);
-                        } else {
-                            $tanggal = $dataAbsen->tgl;
-                            if ($dataAbsen->shift == 'SHSECURITY2' || $dataAbsen->shift == '24jam') {
-                                $tanggal = DATE('Y-m-d', strtotime($dataAbsen->tgl . '+1day'));
-                            }
-                            Absensi::insert([
-                                'karyawan_id' => $dataAbsen->id,
-                                'tanggal' => $tanggal,
-                                'hari' => self::hari($tanggal),
-                                'jam' => $keluarJam,
-                                'status' => 'Keluar',
-                            ]);
-                        }
-                    }
-                }
+                $this->applyAbsensiGenerateItems(
+                    $request->absensi,
+                    (int) $request->id_karyawan,
+                    (string) $request->bulan
+                );
             }
             $bulan = explode("-", $request->bulan);
             $cek = RekapMasukKerja::where('karyawan_id', $request->id_karyawan)
@@ -224,12 +176,17 @@ class UpdateAbsensiController extends Controller
             // $decoded = json_decode($datas, true);
             // dd(json_decode($request->data, true));
             // dd($data->keluar);
-            foreach($request->data as $data) {
-                if($data['keluar'] != '' && $data['masuk'] != ''){
-                    if (in_array($data['shift'], ['SHOB', 'SHOB2', 'SHSECURITY', 'SHSECURITY2', '24jam'])) {
-                        array_push($masuk_kerja, $data['tanggal']);
-                    }else if ($data['shift'] != 'off') {
-                        array_push($masuk_kerja, $data['tanggal']);
+            foreach ($request->data as $data) {
+                $row = is_array($data) ? $data : (array) $data;
+                $masuk = $row['masuk'] ?? '';
+                $keluar = $row['keluar'] ?? '';
+                $shift = $row['shift'] ?? '';
+                $tanggal = $row['tanggal'] ?? '';
+                if ($keluar !== '' && $masuk !== '') {
+                    if (in_array($shift, ['SHOB', 'SHOB2', 'SHSECURITY', 'SHSECURITY2', '24jam'], true)) {
+                        $masuk_kerja[] = $tanggal;
+                    } elseif ($shift != 'off') {
+                        $masuk_kerja[] = $tanggal;
                     }
                 }
             }
@@ -614,6 +571,111 @@ class UpdateAbsensiController extends Controller
         );
 
         return $kerja->h . 'h ' . $kerja->i . 'm';
+    }
+
+    private function castAbsensiItem($value): object
+    {
+        if (is_object($value)) {
+            return $value;
+        }
+
+        if (is_array($value)) {
+            return (object) $value;
+        }
+
+        return (object) json_decode(json_encode($value), true);
+    }
+
+    /**
+     * Persist perubahan absensi generate: batch hapus duplikat, update, bulk insert.
+     */
+    private function applyAbsensiGenerateItems($absensiItems, int $karyawanId, string $bulanYm): void
+    {
+        $items = [];
+        foreach ($absensiItems as $value) {
+            $items[] = $this->castAbsensiItem($value);
+        }
+
+        if ($items === []) {
+            return;
+        }
+
+        $start = $bulanYm . '-01';
+        $end = date('Y-m-t', strtotime($start));
+        $existing = Absensi::where('karyawan_id', $karyawanId)
+            ->whereBetween('tanggal', [$start, date('Y-m-d', strtotime($end . ' +1 day'))])
+            ->get(['id', 'tanggal', 'status']);
+
+        $insertRows = [];
+        $updates = [];
+        $keepBySlot = [];
+
+        foreach ($items as $dataAbsen) {
+            $kid = (int) ($dataAbsen->id ?? $karyawanId);
+            $masukJam = $this->normalizeJamForDb($dataAbsen->masuk ?? '');
+            $keluarJam = $this->normalizeJamForDb($dataAbsen->keluar ?? '');
+
+            if ($masukJam !== '') {
+                if (!empty($dataAbsen->id_masuk)) {
+                    $idMasuk = (int) $dataAbsen->id_masuk;
+                    $updates[$idMasuk] = $masukJam;
+                    $keepBySlot['Masuk|' . $dataAbsen->tgl_masuk] = $idMasuk;
+                } else {
+                    $insertRows[] = [
+                        'karyawan_id' => $kid,
+                        'tanggal' => $dataAbsen->tgl,
+                        'hari' => self::hari($dataAbsen->tgl),
+                        'jam' => $masukJam,
+                        'status' => 'Masuk',
+                    ];
+                }
+            }
+
+            if ($keluarJam !== '') {
+                if (!empty($dataAbsen->id_keluar)) {
+                    $idKeluar = (int) $dataAbsen->id_keluar;
+                    $updates[$idKeluar] = $keluarJam;
+                    $keepBySlot['Keluar|' . $dataAbsen->tgl_keluar] = $idKeluar;
+                } else {
+                    $tanggal = $dataAbsen->tgl;
+                    if ($dataAbsen->shift == 'SHSECURITY2' || $dataAbsen->shift == '24jam') {
+                        $tanggal = date('Y-m-d', strtotime($dataAbsen->tgl . ' +1 day'));
+                    }
+                    $insertRows[] = [
+                        'karyawan_id' => $kid,
+                        'tanggal' => $tanggal,
+                        'hari' => self::hari($tanggal),
+                        'jam' => $keluarJam,
+                        'status' => 'Keluar',
+                    ];
+                }
+            }
+        }
+
+        $deleteIds = [];
+        foreach ($existing as $row) {
+            $key = $row->status . '|' . $row->tanggal;
+            if (isset($keepBySlot[$key]) && (int) $row->id !== $keepBySlot[$key]) {
+                $deleteIds[] = $row->id;
+            }
+        }
+
+        if ($deleteIds !== []) {
+            Absensi::whereIn('id', array_values(array_unique($deleteIds)))->delete();
+        }
+
+        foreach ($updates as $id => $jam) {
+            Absensi::where('id', $id)->update([
+                'kode_kartu' => null,
+                'jam' => $jam,
+            ]);
+        }
+
+        foreach (array_chunk($insertRows, 100) as $chunk) {
+            if ($chunk !== []) {
+                Absensi::insert($chunk);
+            }
+        }
     }
 
     /** Tampilan UI: HH:mm (tanpa detik). */
