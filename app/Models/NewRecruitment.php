@@ -85,12 +85,6 @@ class NewRecruitment extends Model
             ->latest('id');
     }
 
-    public function requesterSalaryApprovals()
-    {
-        return $this->hasMany(AtsRequesterSalaryApproval::class, 'new_recruitment_id')
-            ->orderByDesc('id');
-    }
-
     public function decisionSalaries()
     {
         return $this->hasMany(DecisionSalary::class, 'new_recruitment_id')

@@ -19,9 +19,9 @@ class SallaryOffer extends Model
         'requester_salary_decided_at'  => 'datetime',
     ];
 
-    public function requesterSalaryApprovals()
+    public function decisionSalaries()
     {
-        return $this->hasMany(AtsRequesterSalaryApproval::class, 'sallary_offer_id');
+        return $this->hasMany(DecisionSalary::class, 'sallary_offer_id');
     }
 
     public function scopeActive($query)
