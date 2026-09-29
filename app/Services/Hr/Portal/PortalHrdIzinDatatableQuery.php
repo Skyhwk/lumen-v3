@@ -11,18 +11,12 @@ class PortalHrdIzinDatatableQuery
 {
     public function unprocessed(int $periode): Collection
     {
-        $permissions = $this->permissionRows($periode, false);
-        $leaves = $this->leaveRows($periode, false);
-
-        return $permissions->merge($leaves);
+        return $this->permissionRows($periode, false);
     }
 
     public function processed(int $periode): Collection
     {
-        $permissions = $this->permissionRows($periode, true);
-        $leaves = $this->leaveRows($periode, true);
-
-        return $permissions->merge($leaves);
+        return $this->permissionRows($periode, true);
     }
 
     private function permissionRows(int $periode, bool $processed): Collection
@@ -53,37 +47,6 @@ class PortalHrdIzinDatatableQuery
         }
 
         return collect($query->select($this->permissionSelect($processed))->get());
-    }
-
-    private function leaveRows(int $periode, bool $processed): Collection
-    {
-        $query = DB::table('hr_request as lr')
-            ->join('hr_leave_detail as ld', 'ld.request_id', '=', 'lr.id')
-            ->leftJoin('hr_migration_map as legacy_map', function ($join) {
-                $join->on('legacy_map.new_id', '=', 'lr.id')
-                    ->where('legacy_map.old_table', '=', 'leave_requests')
-                    ->where('legacy_map.new_table', '=', 'hr_request')
-                    ->where('legacy_map.old_connection', '=', 'intilab_apps');
-            })
-            ->leftJoin('master_karyawan as u', 'lr.karyawan_id', '=', 'u.id')
-            ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
-            ->leftJoin('hr_special_leave_type as slt', 'ld.special_leave_type_id', '=', 'slt.id')
-            ->where('lr.request_type', HrRequest::TYPE_LEAVE)
-            ->where('lr.is_active', true)
-            ->whereYear('lr.created_at', $periode ?: date('Y'))
-            ->where(function ($q) {
-                $q->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
-                    ->orWhereNull('u.atasan_langsung');
-            })
-            ->whereRaw(PortalHrApprovalStepSql::noPendingAtasanSteps('lr'));
-
-        if ($processed) {
-            $query->where('lr.status', WorkflowStatus::APPROVED_HRD);
-        } else {
-            $query->where('lr.status', WorkflowStatus::APPROVED_ATASAN);
-        }
-
-        return collect($query->select($this->leaveSelect($processed))->get());
     }
 
     private function permissionSelect(bool $processed): array
@@ -119,43 +82,6 @@ class PortalHrdIzinDatatableQuery
             'pd.attachment_path as filename',
             DB::raw('NULL as nama_delegasi'),
             'pr.created_at as diajukan_pada',
-        ];
-    }
-
-    private function leaveSelect(bool $processed): array
-    {
-        $statusCase = $this->hrdStatusCase('lr', $processed);
-
-        return [
-            DB::raw("CONCAT('LR-', COALESCE(legacy_map.old_id, lr.id)) as id"),
-            'lr.no_document',
-            'd.nama_divisi',
-            DB::raw($statusCase . ' as status'),
-            'slt.name as special_leave_name',
-            DB::raw("CASE ld.leave_kind
-                WHEN 'special' THEN 'cuti_khusus'
-                WHEN 'unpaid' THEN 'unpaid_leave'
-                WHEN 'phl' THEN 'pengganti_hari_libur'
-                ELSE 'cuti'
-            END as type_document"),
-            'ld.start_date as tanggal_mulai',
-            'ld.end_date as tanggal_selesai',
-            DB::raw('NULL as jam_mulai'),
-            DB::raw('NULL as jam_selesai'),
-            'lr.description as keterangan',
-            DB::raw(PortalHrApprovalStepSql::scalar('lr', 'atasan', 'approved', 'actor_name') . ' as approved_atasan_by'),
-            DB::raw(PortalHrApprovalStepSql::scalar('lr', 'atasan', 'approved', 'acted_at') . ' as approved_atasan_at'),
-            DB::raw(PortalHrApprovalStepSql::scalar('lr', 'hrd', 'approved', 'actor_name') . ' as approved_hrd_by'),
-            DB::raw(PortalHrApprovalStepSql::scalar('lr', 'hrd', 'approved', 'acted_at') . ' as approved_hrd_at'),
-            DB::raw(PortalHrApprovalStepSql::scalar('lr', 'atasan', 'rejected', 'actor_name') . ' as rejected_atasan_by'),
-            DB::raw(PortalHrApprovalStepSql::scalar('lr', 'atasan', 'rejected', 'acted_at') . ' as rejected_atasan_at'),
-            DB::raw(PortalHrApprovalStepSql::scalar('lr', 'hrd', 'rejected', 'actor_name') . ' as rejected_hrd_by'),
-            DB::raw(PortalHrApprovalStepSql::scalar('lr', 'hrd', 'rejected', 'acted_at') . ' as rejected_hrd_at'),
-            'u.nama_lengkap as nama_karyawan',
-            'lr.created_by_name as nama_pengaju',
-            'ld.attachment_path as filename',
-            DB::raw('NULL as nama_delegasi'),
-            'lr.created_at as diajukan_pada',
         ];
     }
 
