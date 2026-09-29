@@ -931,11 +931,14 @@ class DashboardSmsController extends Controller
     public function fetchCallPerformance(Request $request)
     {
         try {
-            $periodType = in_array($request->period_type, ['yearly', 'range'], true)
+            $periodType = in_array($request->period_type, ['daily', 'yearly', 'range'], true)
                 ? $request->period_type
                 : 'monthly';
 
-            if ($periodType === 'yearly') {
+            if ($periodType === 'daily') {
+                $startDate = Carbon::parse($request->date ?: $request->start_date ?: Carbon::now())->startOfDay();
+                $endDate = $startDate->copy()->endOfDay();
+            } elseif ($periodType === 'yearly') {
                 $year = max(2024, (int) ($request->year ?: Carbon::now()->year));
                 $startDate = Carbon::create($year, 1, 1)->startOfDay();
                 $endDate = $startDate->copy()->endOfYear();
@@ -992,7 +995,10 @@ class DashboardSmsController extends Controller
     public function fetchQuotationAnalytics(Request $request)
     {
         try {
-            if ($request->period_type === 'yearly') {
+            if ($request->period_type === 'daily') {
+                $startDate = Carbon::parse($request->date ?: $request->start_date ?: Carbon::now())->startOfDay();
+                $endDate = $startDate->copy()->endOfDay();
+            } elseif ($request->period_type === 'yearly') {
                 $startDate = Carbon::create((int) ($request->year ?: Carbon::now()->year), 1, 1)->startOfDay();
                 $endDate = $startDate->copy()->endOfYear();
             } elseif ($request->period_type === 'range') {
@@ -1010,7 +1016,7 @@ class DashboardSmsController extends Controller
                 ->flatMap(function ($model) use ($salesIds, $startDate, $endDate) {
                     return $model::query()
                         ->where('is_active', 1)
-                        ->whereBetween('tanggal_penawaran', [$startDate->toDateString(), $endDate->toDateString()])
+                        ->whereBetween('created_at', [$startDate, $endDate])
                         ->when($salesIds !== null, fn($query) => $query->whereIn('sales_id', $salesIds))
                         ->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'kode_promo', 'promo_id', 'total_discount_promo', 'biaya_akhir', 'tanggal_penawaran']);
                 })
