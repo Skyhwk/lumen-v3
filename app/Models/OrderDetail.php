@@ -882,4 +882,11 @@ class OrderDetail extends Sector
         }
         return $this->wsValueSwab()->exists();
     }
+
+    public function lhpManual()
+    {
+        return $this->belongsTo(LhpManual::class, 'cfr', 'no_lhp')
+            ->where('is_active', true)
+            ->whereNull('deleted_at');
+    }
 }
