@@ -165,12 +165,11 @@ class FormsHubService
         $query = HrRequest::query()
             ->where('is_active', true)
             ->where(function ($q) use ($employee, $includeTeamHistory) {
+                // Tab pengajuan/riwayat: milik sendiri (karyawan_id) atau yang user ajukan (created_by_karyawan_id).
+                // Anggota lembur saja tidak masuk — sudah diwakili kartu jumlah_lembur.
                 $q->where(function ($own) use ($employee) {
                     $own->where('karyawan_id', $employee->id)
-                        ->orWhere(function ($sub) use ($employee) {
-                            $sub->where('request_type', HrRequest::TYPE_OVERTIME)
-                                ->whereHas('overtimeParticipants', fn ($p) => $p->where('karyawan_id', $employee->id));
-                        });
+                        ->orWhere('created_by_karyawan_id', $employee->id);
                 });
 
                 if ($includeTeamHistory) {
@@ -790,17 +789,9 @@ class FormsHubService
     /** @return \Illuminate\Database\Eloquent\Builder */
     private function legacyOwnOvertimeBaseQuery(MasterKaryawan $employee, bool $currentWorkYearOnly = false)
     {
-        $employeeId = (int) $employee->id;
-        $memberOvertimeIds = OvertimeRequestMember::query()
-            ->where('employee_id', $employeeId)
-            ->pluck('overtime_request_id');
-
         $query = OvertimeRequest::query()
             ->where('is_active', true)
-            ->where(function ($q) use ($employee, $memberOvertimeIds) {
-                $q->where('created_by', $employee->nama_lengkap)
-                    ->orWhereIn('id', $memberOvertimeIds);
-            });
+            ->where('created_by', $employee->nama_lengkap);
 
         if ($currentWorkYearOnly) {
             [$from, $to] = $this->leaveYearBounds($employee);
