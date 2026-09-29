@@ -59,6 +59,46 @@ final class AtasanApprovalScope
 
     public static function isAtasanGrade(MasterKaryawan $employee): bool
     {
-        return in_array($employee->grade ?? '', ['MANAGER', 'SUPERVISOR', 'SENIOR MANAGER'], true);
+        return in_array(self::normalizeGrade($employee->grade ?? ''), ['MANAGER', 'SUPERVISOR', 'SENIOR MANAGER'], true);
+    }
+
+    /** History Persetujuan (Lainnya) — SPV/Manager/Senior Manager/Director. */
+    public static function canAccessApprovalHistory(MasterKaryawan $employee): bool
+    {
+        return in_array(self::normalizeGrade($employee->grade ?? ''), [
+            'SUPERVISOR',
+            'MANAGER',
+            'SENIOR MANAGER',
+            'DIRECTOR',
+        ], true);
+    }
+
+    /** Pohon bawahan untuk riwayat persetujuan tim (termasuk grade Director). */
+    public static function subordinateKaryawanIdsForTeamHistory(MasterKaryawan $approver): array
+    {
+        if (!self::canAccessApprovalHistory($approver)) {
+            return [];
+        }
+
+        $approverId = (int) $approver->id;
+
+        return GetBawahan::where('id', $approverId)
+            ->get()
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id !== $approverId)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private static function normalizeGrade(string $grade): string
+    {
+        $g = strtoupper(trim(str_replace('_', ' ', $grade)));
+        if ($g === 'SPV') {
+            return 'SUPERVISOR';
+        }
+
+        return $g;
     }
 }

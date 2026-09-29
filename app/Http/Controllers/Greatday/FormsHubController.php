@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Greatday;
 
+use App\Services\Greatday\AtasanApprovalScope;
 use App\Services\Greatday\FormsHubService;
 use Illuminate\Http\Request;
 
@@ -44,8 +45,12 @@ class FormsHubController extends Controller
             }
 
             $tab = (string) $request->input('tab', '');
-            if (!in_array($tab, ['submission', 'approval', 'history'], true)) {
+            if (!in_array($tab, ['submission', 'approval', 'history', 'approval_history'], true)) {
                 return response()->json(['message' => 'Invalid tab'], 422);
+            }
+
+            if ($tab === 'approval_history' && !AtasanApprovalScope::canAccessApprovalHistory($employee)) {
+                return response()->json(['message' => 'Forbidden'], 403);
             }
 
             $page = max(1, (int) $request->input('page', 1));

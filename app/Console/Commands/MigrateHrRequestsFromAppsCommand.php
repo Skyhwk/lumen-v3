@@ -289,6 +289,14 @@ class MigrateHrRequestsFromAppsCommand extends Command
 
     private function guessOvertimeSubmitterKaryawanId($row): int
     {
+        $creatorName = trim((string) ($row->created_by ?? ''));
+        if ($creatorName !== '') {
+            $byName = MasterKaryawan::where('nama_lengkap', $creatorName)->value('id');
+            if ($byName) {
+                return (int) $byName;
+            }
+        }
+
         $member = OvertimeRequestMember::on(config('greatday.legacy_apps_connection'))
             ->where('overtime_request_id', $row->id)
             ->where('is_active', true)
