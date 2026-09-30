@@ -191,6 +191,7 @@ class FdlKebisinganController extends Controller
                 }
             }
 
+
             $dataHeader = KebisinganHeader::where('no_sampel', $no_sample)
                 ->where('id_parameter', $param->id)
                 ->where('is_active', true)
@@ -199,6 +200,7 @@ class FdlKebisinganController extends Controller
             if (!$dataHeader) {
                 $dataHeader = new KebisinganHeader();
                 $dataHeader->created_by = $this->karyawan;
+                $dataHeader->created_at = Carbon::now();
             }
 
             $dataHeader->no_sampel        = $no_sample;
@@ -213,6 +215,7 @@ class FdlKebisinganController extends Controller
             $dataHeader->leq_ls           = $calculate['leqLS'] ?? null;
             $dataHeader->leq_lm           = $calculate['leqLM'] ?? null;
             $dataHeader->leq              = $calculate['jumlah_leq'] ?? null;
+
             $dataHeader->is_approved      = true;
             $dataHeader->is_active        = true;
             $dataHeader->approved_by      = $this->karyawan;
