@@ -328,9 +328,9 @@ class RequestSamplingPlanController extends Controller
             }
         } catch (\Throwable $e) {
             $logData = [
-                'message' => $ex->getMessage(),
-                'line' => $ex->getLine(),
-                'status'  => $ex->getCode(),
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'status'  => $e->getCode(),
                 'status'  => '401',
             ];
             Log::channel('sampling')->error("=== rejectJadwal ===", $logData);
