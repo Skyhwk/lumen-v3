@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
-use App\Models\{DailyQsd, DFUS, MasterTargetSales};
+use App\Models\{DailyQsd, DFUS, MasterTargetSales, QuotationKontrakH, QuotationNonKontrak};
 
 class DashboardSalesController extends Controller
 {
@@ -189,7 +189,8 @@ class DashboardSalesController extends Controller
                 'success_rate'                 => $currentCallMetrics['success_rate'],
                 'success_rate_change'          => round($currentCallMetrics['success_rate'] - $previousCallMetrics['success_rate'], 1),
 
-                'revenue_trend'               => $yearlyRevenueTrend
+                'revenue_trend'               => $yearlyRevenueTrend,
+                'quotation_analytics'         => $this->getQuotationAnalytics($karyawanId, $date),
             ],
         ], 200);
     }
@@ -197,6 +198,62 @@ class DashboardSalesController extends Controller
     private function calculateGrowth($current, $previous)
     {
         return $previous > 0 ? round((($current - $previous) / $previous) * 100, 1) : 0;
+    }
+
+    private function getQuotationAnalytics(int $salesId, Carbon $date): array
+    {
+        $quotes = collect([QuotationNonKontrak::class, QuotationKontrakH::class])
+            ->flatMap(function ($model) use ($salesId, $date) {
+                return $model::query()
+                    ->where('is_active', 1)
+                    ->where('sales_id', $salesId)
+                    ->whereBetween('created_at', [$date->copy()->startOfMonth(), $date->copy()->endOfMonth()])
+                    ->get(['no_document', 'pelanggan_ID', 'flag_status', 'kode_promo', 'total_discount_promo', 'biaya_akhir', 'tanggal_penawaran']);
+            })
+            ->map(function ($quote) {
+                $flag = strtolower(trim((string) $quote->flag_status));
+
+                return [
+                    'pelanggan_id' => $quote->pelanggan_ID,
+                    'category' => $flag === 'ordered' ? 'ordered' : ($flag === 'void' ? 'void' : 'pending'),
+                    'amount' => (float) ($quote->biaya_akhir ?? 0),
+                    'has_promo' => filled($quote->kode_promo) || (float) ($quote->total_discount_promo ?? 0) > 0,
+                    'is_revisi' => (bool) preg_match('/R\d+$/i', (string) $quote->no_document),
+                    'tanggal_penawaran' => $quote->tanggal_penawaran,
+                ];
+            })
+            ->values();
+
+        $customerIds = $quotes->pluck('pelanggan_id')->filter()->unique()->values();
+        $firstOrders = $customerIds->isEmpty() ? collect() : \DB::table('order_header')
+            ->where('is_active', 1)
+            ->whereIn('id_pelanggan', $customerIds)
+            ->selectRaw('id_pelanggan, MIN(tanggal_order) as first_order_date')
+            ->groupBy('id_pelanggan')
+            ->pluck('first_order_date', 'id_pelanggan');
+
+        $quotes = $quotes->map(function (array $quote) use ($firstOrders) {
+            $firstOrder = $firstOrders->get($quote['pelanggan_id']);
+            $quote['customer_type'] = $firstOrder && Carbon::parse($firstOrder)->lt(Carbon::parse($quote['tanggal_penawaran']))
+                ? 'repeat'
+                : 'new';
+            return $quote;
+        });
+
+        $summarize = fn($items) => ['qty' => $items->count(), 'amount' => (float) $items->sum('amount')];
+        $breakdown = function ($items) use ($summarize) {
+            return [
+                'total' => $summarize($items),
+                'customer' => ['new' => $summarize($items->where('customer_type', 'new')), 'repeat' => $summarize($items->where('customer_type', 'repeat'))],
+                'promo' => ['with' => $summarize($items->where('has_promo', true)), 'without' => $summarize($items->where('has_promo', false))],
+                'revision' => ['with' => $summarize($items->where('is_revisi', true)), 'without' => $summarize($items->where('is_revisi', false))],
+            ];
+        };
+
+        return [
+            'pending' => $breakdown($quotes->where('category', 'pending')),
+            'ordered' => $breakdown($quotes->where('category', 'ordered')),
+        ];
     }
 
     private function getCallMetrics($salesName, Carbon $startDate, Carbon $endDate)
