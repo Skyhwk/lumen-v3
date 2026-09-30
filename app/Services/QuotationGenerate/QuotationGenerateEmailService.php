@@ -4,7 +4,6 @@ namespace App\Services\QuotationGenerate;
 
 use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
-use App\Services\GetAtasan;
 use App\Services\SendEmail;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\View;
@@ -34,7 +33,6 @@ class QuotationGenerateEmailService
 
         $recipients = $this->resolveRecipients($quotation);
         $to = $recipients['to'];
-        $cc = [];
         $bcc = $recipients['bcc'];
 
         $portalLink = $this->linkService->portalLink($quotation);
@@ -45,7 +43,7 @@ class QuotationGenerateEmailService
         $sent = SendEmail::where('to', $to)
             ->where('subject', $subject)
             ->where('body', $body)
-            // ->where('cc', $cc)
+            ->where('cc', [])
             ->where('bcc', $bcc)
             ->where('attachments', $attachments)
             ->where('karyawan', $emailedBy)
@@ -60,7 +58,7 @@ class QuotationGenerateEmailService
     }
 
     /**
-     * @return array{to: string, cc: array<int, string>, bcc: array<int, string>}
+     * @return array{to: string, bcc: array<int, string>}
      */
     private function resolveRecipients(QuotationNonKontrak $quotation): array
     {
@@ -72,7 +70,6 @@ class QuotationGenerateEmailService
 
             return [
                 'to' => $testTo,
-                'cc' => [],
                 'bcc' => [],
             ];
         }
@@ -84,7 +81,6 @@ class QuotationGenerateEmailService
 
         return [
             'to' => $to,
-            'cc' => $this->buildCcList($quotation),
             'bcc' => $this->buildBccList($quotation, $to),
         ];
     }
@@ -124,40 +120,6 @@ class QuotationGenerateEmailService
             'officialEmail' => $officialEmail,
             'signatureHtml' => $signatureHtml,
         ])->render());
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    private function buildCcList(QuotationNonKontrak $quotation): array
-    {
-        $cc = (array) config('quotation_auto.generate.default_email_cc', ['sales@intilab.com']);
-
-        if (!empty($quotation->email_cc)) {
-            $decoded = json_decode($quotation->email_cc, true);
-            if (is_array($decoded)) {
-                $cc = array_merge($cc, $decoded);
-            }
-        }
-
-        if (
-            !empty($quotation->email_pic_sampling)
-            && $quotation->email_pic_sampling !== $quotation->email_pic_order
-            && filter_var($quotation->email_pic_sampling, FILTER_VALIDATE_EMAIL)
-        ) {
-            $cc[] = $quotation->email_pic_sampling;
-        }
-
-        if (!empty($quotation->sales_id)) {
-            $atasan = GetAtasan::where('id', $quotation->sales_id)->get()->pluck('email')->toArray();
-            $cc = array_merge($cc, $atasan);
-        }
-
-        $cc = array_values(array_unique(array_filter($cc, function ($email) {
-            return is_string($email) && filter_var($email, FILTER_VALIDATE_EMAIL);
-        })));
-
-        return $cc;
     }
 
     /**

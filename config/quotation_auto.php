@@ -20,11 +20,10 @@ return [
         'approved_by' => env('QUOTATION_GENERATE_APPROVED_BY', 'Lani Febriana Safitri'),
         // Penanda di request_quotation baru hasil auto-generate (discovery mengabaikan QT dengan kode_promo terisi).
         'kode_promo_marker' => env('QUOTATION_GENERATE_KODE_PROMO', 'AUTO'),
-        'default_email_cc' => [],
         'default_email_bcc' => ['sales@intilab.com'],
         // Email — nyalakan dengan QUOTATION_GENERATE_SEND_EMAIL=true
         'send_email' => filter_var(env('QUOTATION_GENERATE_SEND_EMAIL', false), FILTER_VALIDATE_BOOLEAN),
-        // Mode uji: To dipaksa ke email_test_to, CC/BCC kosong. Produksi: false → To dari email_pic_order.
+        // Mode uji: To dipaksa ke email_test_to, BCC kosong (auto-generate tidak memakai CC). Produksi: To dari email_pic_order.
         'email_test_mode' => filter_var(env('QUOTATION_GENERATE_EMAIL_TEST_MODE', false), FILTER_VALIDATE_BOOLEAN),
         'email_test_to' => env('QUOTATION_GENERATE_EMAIL_TEST_TO', ''),
         // Nama & jabatan di blok signature (hardcode — selaras template email penawaran).
