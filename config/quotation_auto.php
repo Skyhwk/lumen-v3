@@ -9,6 +9,7 @@ return [
     ],
     'generate' => [
         'default_batch_size' => (int) env('QUOTATION_GENERATE_BATCH_SIZE', 100),
+        'create_item_pause_seconds' => (int) env('QUOTATION_CREATE_ITEM_PAUSE_SECONDS', 1),
         // quotation:dispatch — kelompok log per chunk; jeda antar setiap QT (detik).
         'dispatch_chunk_size' => (int) env('QUOTATION_DISPATCH_CHUNK_SIZE', 100),
         'dispatch_item_pause_seconds' => (int) env('QUOTATION_DISPATCH_ITEM_PAUSE_SECONDS', 5),
