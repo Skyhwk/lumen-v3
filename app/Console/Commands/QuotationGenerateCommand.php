@@ -19,7 +19,7 @@ class QuotationGenerateCommand extends Command
                             {--dry-run : Hanya simulasi, tanpa copy/generate/email}
                             {--customer= : Proses satu id_pelanggan saja}';
 
-    protected $description = 'Auto quotation end-to-end (quotation:create + quotation:dispatch dalam satu perintah)';
+    protected $description = 'Auto quotation end-to-end (quotation:create + quotationdispatch dalam satu perintah)';
 
     public function handle(): int
     {
@@ -44,7 +44,7 @@ class QuotationGenerateCommand extends Command
         $sendEmail = (bool) config('quotation_auto.generate.send_email');
         $emailTestMode = (bool) config('quotation_auto.generate.email_test_mode');
         $this->info('Quotation generate (create + dispatch)' . ($dryRun ? ' (DRY RUN)' : ''));
-        $this->line('Tip: pisah step → quotation:create lalu quotation:dispatch');
+        $this->line('Tip: pisah step → quotation:create lalu quotationdispatch');
         $this->line('Send email         : ' . ($sendEmail ? 'ON' : 'OFF (remark — verifikasi copy/PDF dulu)'));
         if ($sendEmail && $emailTestMode) {
             $this->line('Email test mode    : ON → To ' . config('quotation_auto.generate.email_test_to') . ', CC/BCC kosong');

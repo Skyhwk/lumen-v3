@@ -41,7 +41,7 @@ class QuotationCreateCommand extends Command
         $this->line('Quotation since: ' . $quotationSince->toDateTimeString());
         $this->line('Order since: ' . $orderSince->toDateTimeString());
         $this->line('Jeda per copy      : ' . $itemPauseSeconds . ' detik' . ($dryRun ? ' (dry-run: tanpa jeda)' : ''));
-        $this->line('Langkah berikutnya setelah selesai: php artisan quotation:dispatch');
+        $this->line('Langkah berikutnya setelah selesai: php artisan quotationdispatch');
         $this->newLine();
 
         $eligible = $collector->collect($discovery, $quotationSince, $orderSince, $limit, $customerFilter);

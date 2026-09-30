@@ -9,7 +9,7 @@ use Illuminate\Support\Collection;
 
 class QuotationDispatchCommand extends Command
 {
-    protected $signature = 'quotation:dispatch
+    protected $signature = 'quotationdispatch
                             {--limit= : Max penawaran pending to process}
                             {--batch= : Chunk size (default config: 100)}
                             {--item-pause= : Jeda antar setiap QT detik (default config: 5)}
