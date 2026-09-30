@@ -182,4 +182,9 @@ class MasterKaryawan extends Sector implements AuthenticatableContract
     {
         return $this->hasOne(RekeningKaryawan::class, 'id_karyawan', 'id')->where('is_active', true);
     }
+
+    public function feeKaryawan()
+    {
+        return $this->hasOne(FeeKaryawan::class, 'id_karyawan', 'id')->where('is_active', true);
+    }
 }

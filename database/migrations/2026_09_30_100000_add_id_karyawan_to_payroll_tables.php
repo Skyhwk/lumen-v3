@@ -21,6 +21,7 @@ return new class extends Migration
         'pencadangan_upah' => 'idx_pencadangan_upah_id_karyawan',
         'kasbon' => 'idx_kasbon_id_karyawan',
         'denda_karyawan' => 'idx_denda_karyawan_id_karyawan',
+        'fee_karyawan' => 'idx_fee_karyawan_id_karyawan',
     ];
 
     public function up(): void
