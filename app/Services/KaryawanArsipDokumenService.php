@@ -158,6 +158,52 @@ class KaryawanArsipDokumenService
         return $row;
     }
 
+    public function storeBase64Document($karyawanId, $data, $originalName, $jenisDokumen, $createdBy = null, $catatan = null)
+    {
+        if (!Schema::hasTable('karyawan_dokumen_arsip')) {
+            throw new \RuntimeException('Tabel arsip dokumen karyawan belum tersedia.');
+        }
+        if (!preg_match('/^data:([\w.+-]+\/[\w.+-]+);base64,(.+)$/', (string) $data, $matches)) {
+            throw new \RuntimeException('Format dokumen tidak valid.');
+        }
+
+        $binary = base64_decode($matches[2], true);
+        if ($binary === false || strlen($binary) > 5 * 1024 * 1024) {
+            throw new \RuntimeException('Ukuran dokumen maksimal 5 MB.');
+        }
+
+        $extension = strtolower(pathinfo((string) $originalName, PATHINFO_EXTENSION));
+        if (!in_array($extension, ['pdf', 'jpg', 'jpeg', 'png'], true)) {
+            throw new \RuntimeException('Dokumen hanya menerima PDF, JPG, atau PNG.');
+        }
+
+        $safeType = preg_replace('/[^a-z0-9]+/i', '-', strtolower($jenisDokumen ?: 'dokumen'));
+        $fileName = 'upload-' . $karyawanId . '-' . trim($safeType, '-') . '-' . time() . '-' . substr(md5($originalName . microtime(true)), 0, 6) . '.' . $extension;
+        $directory = $this->ensureArchiveDirectory($karyawanId);
+        $absolutePath = $directory . DIRECTORY_SEPARATOR . $fileName;
+        if (file_put_contents($absolutePath, $binary) === false) {
+            throw new \RuntimeException('Dokumen gagal disimpan.');
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $id = DB::table('karyawan_dokumen_arsip')->insertGetId([
+            'karyawan_id' => $karyawanId,
+            'jenis_dokumen' => strtoupper(trim($jenisDokumen)),
+            'nama_file' => $originalName,
+            'path_file' => $this->archiveRelativePath($karyawanId, $fileName),
+            'mime_type' => $matches[1],
+            'ukuran_file' => strlen($binary),
+            'sumber' => 'assessment_internal',
+            'catatan' => $catatan,
+            'is_active' => 1,
+            'created_by' => $createdBy,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        return DB::table('karyawan_dokumen_arsip')->where('id', $id)->first();
+    }
+
     public function deleteDocument($id, $karyawanId = null)
     {
         if (!Schema::hasTable('karyawan_dokumen_arsip')) {

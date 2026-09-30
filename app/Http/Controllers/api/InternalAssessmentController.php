@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Services\SendEmail;
+use App\Services\KaryawanArsipDokumenService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -294,6 +295,12 @@ class InternalAssessmentController extends Controller
             return response()->json(['message' => 'Nomor telepon dan alamat wajib diisi.'], 422);
         }
 
+        try {
+            $documents = $this->normalizeProfileDocuments($request->input('documents', []));
+        } catch (\RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
         $educations = collect($request->input('pendidikan', []))->map(function ($item) {
             return [
                 'jenjang' => trim((string) ($item['jenjang'] ?? '')),
@@ -360,7 +367,7 @@ class InternalAssessmentController extends Controller
         }
 
         $medical = (array) $request->input('medical', []);
-        DB::transaction(function () use ($employee, $attempt, $allowed, $educations, $skills, $experiences, $emergencyContacts, $medical) {
+        DB::transaction(function () use ($employee, $attempt, $allowed, $educations, $skills, $experiences, $emergencyContacts, $medical, $documents) {
             $now = Carbon::now();
             DB::table('master_karyawan')->where('id', $employee->id)->update($allowed);
             $replace = function ($table, array $rows) use ($employee, $now) {
@@ -403,6 +410,17 @@ class InternalAssessmentController extends Controller
                     'karyawan_id' => $employee->id, 'is_active' => 1, 'created_at' => $now, 'created_by' => $employee->nama_lengkap,
                 ]));
             }
+            $archiveService = new KaryawanArsipDokumenService();
+            foreach ($documents as $document) {
+                $archiveService->storeBase64Document(
+                    $employee->id,
+                    $document['data'],
+                    $document['nama_file'],
+                    $document['jenis_dokumen'],
+                    $employee->nama_lengkap,
+                    'Kelengkapan profil assessment internal'
+                );
+            }
             DB::table('assessment_internal_attempts')->where('id', $attempt->id)->update([
                 'profile_completed_at' => Carbon::now(),
                 'last_activity_at' => Carbon::now(),
@@ -411,6 +429,29 @@ class InternalAssessmentController extends Controller
         });
 
         return response()->json($this->statePayload($attempt->id));
+    }
+
+    private function normalizeProfileDocuments($documents): array
+    {
+        $allowedTypes = [
+            'KTP', 'KARTU KELUARGA', 'IJAZAH / SKL', 'TRANSKRIP NILAI',
+            'SIM', 'NPWP', 'BPJS KESEHATAN', 'BPJS KETENAGAKERJAAN',
+        ];
+
+        return collect((array) $documents)->map(function ($document) use ($allowedTypes) {
+            $type = strtoupper(trim((string) ($document['jenis_dokumen'] ?? '')));
+            if (!in_array($type, $allowedTypes, true)) {
+                throw new \RuntimeException('Jenis dokumen tidak valid.');
+            }
+
+            return [
+                'jenis_dokumen' => $type,
+                'nama_file' => trim((string) ($document['nama_file'] ?? '')),
+                'data' => (string) ($document['data'] ?? ''),
+            ];
+        })->filter(function ($document) {
+            return $document['jenis_dokumen'] !== '' && $document['nama_file'] !== '' && $document['data'] !== '';
+        })->values()->all();
     }
 
     public function complete(Request $request)
@@ -1356,6 +1397,7 @@ class InternalAssessmentController extends Controller
                 'jenis_dokumen' => $row->jenis_dokumen,
                 'nama_file' => $row->nama_file,
                 'path_file' => $row->path_file,
+                'url' => url($row->path_file),
                 'mime_type' => $row->mime_type,
             ];
         })->all() : [];
