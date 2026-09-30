@@ -74,10 +74,11 @@ WHERE r.rn = 1
       WHERE oh.id_pelanggan = r.customer_id
         AND oh.is_active = 1
   )
+{$this->newAutoDuplicateGuardSql()}
 ORDER BY r.quotation_created_at DESC, r.customer_id
 {$limitSql}
 SQL,
-            [$since->toDateTimeString()]
+            $this->newEligibleBindings($since)
         );
 
         return collect($rows);
@@ -114,10 +115,11 @@ INNER JOIN master_pelanggan mp
     AND mp.is_active = 1
 WHERE r.rn = 1
   AND (rq.kode_promo IS NULL OR TRIM(rq.kode_promo) = '')
+{$this->existingAutoDuplicateGuardSql()}
 ORDER BY r.order_created_at DESC, r.customer_id
 {$limitSql}
 SQL,
-            [$since->toDateTimeString()]
+            $this->existingEligibleBindings($since)
         );
 
         return collect($rows);
@@ -141,8 +143,9 @@ WHERE r.rn = 1
       WHERE oh.id_pelanggan = r.customer_id
         AND oh.is_active = 1
   )
+{$this->newAutoDuplicateGuardSql()}
 SQL,
-            [$since->toDateTimeString()]
+            $this->newEligibleBindings($since)
         )->aggregate;
     }
 
@@ -163,8 +166,9 @@ INNER JOIN master_pelanggan mp
     AND mp.is_active = 1
 WHERE r.rn = 1
   AND (rq.kode_promo IS NULL OR TRIM(rq.kode_promo) = '')
+{$this->existingAutoDuplicateGuardSql()}
 SQL,
-            [$since->toDateTimeString()]
+            $this->existingEligibleBindings($since)
         )->aggregate;
     }
 
@@ -183,8 +187,9 @@ SQL,
                AND NOT EXISTS (
                    SELECT 1 FROM order_header oh
                    WHERE oh.id_pelanggan = r.customer_id AND oh.is_active = 1
-               )",
-            [$since->toDateTimeString()]
+               )
+               {$this->newAutoDuplicateGuardSql()}",
+            $this->newEligibleBindings($since)
         );
     }
 
@@ -201,9 +206,82 @@ SQL,
                AND (rq.konsultan IS NULL OR rq.konsultan = '')
              INNER JOIN master_pelanggan mp ON mp.id_pelanggan = r.customer_id AND mp.is_active = 1
              WHERE r.rn = 1
-               AND (rq.kode_promo IS NULL OR TRIM(rq.kode_promo) = '')",
-            [$since->toDateTimeString()]
+               AND (rq.kode_promo IS NULL OR TRIM(rq.kode_promo) = '')
+               {$this->existingAutoDuplicateGuardSql()}",
+            $this->existingEligibleBindings($since)
         );
+    }
+
+    /**
+     * NEW: QT referensi bukan hasil copy pipeline; belum ada QT AUTO sejak QT terbaru ini.
+     */
+    private function newAutoDuplicateGuardSql(): string
+    {
+        return <<<'SQL'
+
+  AND NOT EXISTS (
+      SELECT 1
+      FROM request_quotation rq_src
+      WHERE rq_src.id = r.quotation_id
+        AND rq_src.created_by = ?
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM request_quotation rq_auto
+      WHERE rq_auto.pelanggan_ID = r.customer_id
+        AND rq_auto.is_active = 1
+        AND rq_auto.kode_promo = ?
+        AND rq_auto.created_by = ?
+        AND rq_auto.created_at >= r.quotation_created_at
+  )
+SQL;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function newEligibleBindings(Carbon $since): array
+    {
+        $createdBy = (string) config('quotation_auto.generate.created_by', 'Quotation Auto Generate');
+        $marker = (string) config('quotation_auto.generate.kode_promo_marker', 'AUTO');
+
+        return [
+            $since->toDateTimeString(),
+            $createdBy,
+            $marker,
+            $createdBy,
+        ];
+    }
+
+    /**
+     * EXISTING: sudah pernah auto-generate untuk siklus order terbaru (QT AUTO sejak order_created_at).
+     */
+    private function existingAutoDuplicateGuardSql(): string
+    {
+        return <<<'SQL'
+
+  AND NOT EXISTS (
+      SELECT 1
+      FROM request_quotation rq_auto
+      WHERE rq_auto.pelanggan_ID = r.customer_id
+        AND rq_auto.is_active = 1
+        AND rq_auto.kode_promo = ?
+        AND rq_auto.created_by = ?
+        AND rq_auto.created_at >= r.order_created_at
+  )
+SQL;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function existingEligibleBindings(Carbon $since): array
+    {
+        return [
+            $since->toDateTimeString(),
+            (string) config('quotation_auto.generate.kode_promo_marker', 'AUTO'),
+            (string) config('quotation_auto.generate.created_by', 'Quotation Auto Generate'),
+        ];
     }
 
     private function quotationRankedSubquerySql(): string

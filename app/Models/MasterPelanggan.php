@@ -78,22 +78,6 @@ class MasterPelanggan extends Sector
         return $this->hasOne(OrderHeader::class, 'id_pelanggan', 'id_pelanggan')->where('is_active', true)->orderByDesc('tanggal_order');
     }
 
-    /**
-     * Order aktif terakhir dalam jendela bulan (default: quotation_auto.discovery.order_months).
-     * Urutan selaras quotation:discover — created_at desc, lalu id desc.
-     * Beda dengan latestOrder() yang memakai tanggal_order tanpa batas waktu.
-     */
-    public function latestOrderSixMonths()
-    {
-        $months = (int) config('quotation_auto.discovery.order_months', 6);
-
-        return $this->hasOne(OrderHeader::class, 'id_pelanggan', 'id_pelanggan')
-            ->where('is_active', 1)
-            ->where('created_at', '>=', Carbon::now()->subMonths($months))
-            ->orderByDesc('created_at')
-            ->orderByDesc('id');
-    }
-
     public function latestKontrakQuotation()
     {
         return $this->hasOne(QuotationKontrakH::class, 'pelanggan_ID', 'id_pelanggan')->where('is_active', true)->orderByDesc('id');

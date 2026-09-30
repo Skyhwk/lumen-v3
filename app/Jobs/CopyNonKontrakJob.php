@@ -73,7 +73,9 @@ class CopyNonKontrakJob extends Job
             $newQuery->updated_by = null;
             $newQuery->updated_at = null;
             $newQuery->data_lama = null;
+            $newQuery->jadwalfile = null;
             $newQuery->keterangan_reject = null;
+            $newQuery->keterangan = null;
             $newQuery->is_approved = 0;
             $newQuery->approved_by = null;
             $newQuery->approved_at = null;

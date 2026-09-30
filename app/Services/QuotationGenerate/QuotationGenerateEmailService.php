@@ -85,7 +85,7 @@ class QuotationGenerateEmailService
         return [
             'to' => $to,
             'cc' => $this->buildCcList($quotation),
-            'bcc' => [],
+            'bcc' => $this->buildBccList($quotation, $to),
         ];
     }
 
@@ -158,6 +158,32 @@ class QuotationGenerateEmailService
         })));
 
         return $cc;
+    }
+
+    /**
+     * BCC: sales@intilab.com + email sales pemilik quotation (sales_id).
+     *
+     * @return array<int, string>
+     */
+    private function buildBccList(QuotationNonKontrak $quotation, string $to): array
+    {
+        $bcc = (array) config('quotation_auto.generate.default_email_bcc', ['sales@intilab.com']);
+
+        $quotation->loadMissing(['sales']);
+        if ($quotation->sales !== null && !empty($quotation->sales->email)) {
+            $bcc[] = trim((string) $quotation->sales->email);
+        }
+
+        $toLower = strtolower($to);
+        $bcc = array_values(array_unique(array_filter($bcc, function ($email) use ($toLower) {
+            if (!is_string($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return false;
+            }
+
+            return strtolower(trim($email)) !== $toLower;
+        })));
+
+        return $bcc;
     }
 
     /**
