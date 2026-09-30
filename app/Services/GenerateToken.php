@@ -64,9 +64,8 @@ class GenerateToken
 
             return (object)['id' => $generateLink->id, 'expired' => $expired];
         } catch (\Throwable $th) {
-            //throw $th;
             DB::rollback();
-            dd($th);
+            throw $th;
         }
     }
 

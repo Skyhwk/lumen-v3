@@ -221,6 +221,13 @@ return [
             'days' => 90,
         ],
 
+        'qt_exist_reactivation' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/qt_exist_reactivation/qt_exist_reactivation.log'),
+            'level' => 'info',
+            'days' => 90,
+        ],
+
         'summary_qsd' => [
             'driver' => 'daily',
             'path' => storage_path('logs/summary_qsd/summary_qsd.log'),

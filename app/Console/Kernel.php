@@ -41,6 +41,7 @@ class Kernel extends ConsoleKernel
         Commands\MonitorQsdForecast::class,
         Commands\UpdateJatuhTempo::class,
         Commands\UpdateOrderDetailKonsultan::class,
+        Commands\QtExistReactivateCommand::class,
         Commands\SyncLimsData::class,
         Commands\SyncSpecificLimsData::class,
         Commands\TruncateLimsTesting::class,

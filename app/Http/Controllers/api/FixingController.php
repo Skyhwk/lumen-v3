@@ -57,6 +57,7 @@ use App\Models\NewRecruitment;
 
 use App\Services\GenerateFeeSampling;
 use App\Services\FdlBasTimingExportService;
+use App\Services\QtExistReactivationService;
 use App\Services\RenderInvoice;
 use App\Services\RenderInvoiceTitik;
 use App\Services\RenderJadwalKontrakCopy;
@@ -3112,6 +3113,59 @@ class FixingController extends Controller
 
         } catch (\Throwable $e) {
             DB::rollBack();
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Preview calon QT exist reactivation (order non-kontrak 6 bulan).
+     */
+    public function previewQtExistReactivation(Request $request)
+    {
+        try {
+            $limit = $request->filled('limit') ? (int) $request->input('limit') : null;
+            if ($limit !== null && $limit <= 0) {
+                $limit = null;
+            }
+
+            $result = (new QtExistReactivationService())->preview($limit);
+
+            return response()->json([
+                'message' => 'Preview berhasil',
+                'cutoff' => $result['cutoff'],
+                'total_candidates' => $result['total_candidates'],
+                'data' => $result['data'],
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Eksekusi duplikat QT non-kontrak → draft + approved (modul QT Approved).
+     */
+    public function executeQtExistReactivation(Request $request)
+    {
+        try {
+            $limit = $request->filled('limit') ? (int) $request->input('limit') : null;
+            if ($limit !== null && $limit <= 0) {
+                $limit = null;
+            }
+
+            $actor = $this->karyawan ?: 'SYSTEM';
+            $result = (new QtExistReactivationService())->execute($actor, $limit);
+
+            return response()->json([
+                'message' => 'Eksekusi selesai. Berhasil: ' . $result['processed']
+                    . ', gagal: ' . $result['failed_count']
+                    . ', skip: ' . $result['skipped_count'],
+                'data' => $result,
+            ]);
+        } catch (\Throwable $e) {
             return response()->json([
                 'message' => $e->getMessage(),
             ], 500);
