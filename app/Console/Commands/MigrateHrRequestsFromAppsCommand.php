@@ -321,6 +321,9 @@ class MigrateHrRequestsFromAppsCommand extends Command
         if ($type === 'Holiday Replacement Leave') {
             return 'phl';
         }
+        if ($type === 'Urgent Leave') {
+            return 'urgent';
+        }
 
         return 'annual';
     }

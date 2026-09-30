@@ -68,6 +68,8 @@ class PortalOvertimeDatatableQuery
 
     private function fetchGrouped(int $periode, callable $scope): Collection
     {
+        DB::statement('SET SESSION group_concat_max_len = 65535');
+
         $query = DB::table('hr_request as overtime_requests')
             ->join('hr_overtime_detail as od', 'od.request_id', '=', 'overtime_requests.id')
             ->leftJoin('hr_migration_map as legacy_map', function ($join) {
@@ -102,7 +104,11 @@ class PortalOvertimeDatatableQuery
                     WHEN overtime_requests.status = "Rejected Finance" THEN "Rejected Finance" 
                     ELSE "Pending" 
                 END as status'),
-                DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
+                DB::raw("GROUP_CONCAT(DISTINCT JSON_OBJECT(
+                    'id', COALESCE(u.id, fd.karyawan_id),
+                    'nama', COALESCE(u.nama_lengkap, '-'),
+                    'jabatan', COALESCE(u.grade, '-')
+                ) ORDER BY COALESCE(u.nama_lengkap, '') SEPARATOR '|') as karyawan"),
                 DB::raw('COUNT(DISTINCT fd.karyawan_id) as total_karyawan'),
                 DB::raw(PortalHrApprovalStepSql::scalar('overtime_requests', 'hrd', 'approved', 'actor_name') . ' as approved_hrd_by'),
                 DB::raw(PortalHrApprovalStepSql::scalar('overtime_requests', 'hrd', 'approved', 'acted_at') . ' as approved_hrd_at'),
@@ -135,13 +141,30 @@ class PortalOvertimeDatatableQuery
             ->get();
 
         return $rows->map(function ($item) {
-            if (!empty($item->karyawan)) {
-                $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
-            } else {
-                $item->karyawan = [];
-            }
+            $item->karyawan = $this->decodeKaryawanPipe($item->karyawan ?? null);
 
             return $item;
         });
+    }
+
+    private function decodeKaryawanPipe(?string $raw): array
+    {
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+
+        $karyawan = [];
+        foreach (explode('|', $raw) as $chunk) {
+            if ($chunk === '') {
+                continue;
+            }
+            $decoded = json_decode($chunk);
+            if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
+                continue;
+            }
+            $karyawan[] = $decoded;
+        }
+
+        return $karyawan;
     }
 }

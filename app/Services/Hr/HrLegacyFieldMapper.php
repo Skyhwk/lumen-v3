@@ -17,6 +17,9 @@ final class HrLegacyFieldMapper
         if ($kind === 'phl') {
             return 'Holiday Replacement Leave';
         }
+        if ($kind === 'urgent') {
+            return 'Urgent Leave';
+        }
 
         return 'Annual Leave';
     }
@@ -31,6 +34,9 @@ final class HrLegacyFieldMapper
         }
         if ($type === 'Holiday Replacement Leave') {
             return 'phl';
+        }
+        if ($type === 'Urgent Leave') {
+            return 'urgent';
         }
 
         return 'annual';

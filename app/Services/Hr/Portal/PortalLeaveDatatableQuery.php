@@ -99,6 +99,8 @@ class PortalLeaveDatatableQuery
                 DB::raw("CASE lrd.leave_kind
                     WHEN 'special' THEN 'Special Leave'
                     WHEN 'unpaid' THEN 'Unpaid Leave'
+                    WHEN 'phl' THEN 'Holiday Replacement Leave'
+                    WHEN 'urgent' THEN 'Urgent Leave'
                     ELSE 'Annual Leave'
                 END as type"),
                 'lrd.special_leave_type_id as special_leave_id',
@@ -157,6 +159,8 @@ class PortalLeaveDatatableQuery
                 DB::raw("CASE lrd.leave_kind
                     WHEN 'special' THEN 'Special Leave'
                     WHEN 'unpaid' THEN 'Unpaid Leave'
+                    WHEN 'phl' THEN 'Holiday Replacement Leave'
+                    WHEN 'urgent' THEN 'Urgent Leave'
                     ELSE 'Annual Leave'
                 END as type"),
                 'lrd.special_leave_type_id as special_leave_id',
@@ -226,6 +230,9 @@ class PortalLeaveDatatableQuery
                     }
                     if (stripos('cuti khusus', $keyword) !== false || stripos('special leave', $keyword) !== false) {
                         $sub->orWhere('lrd.leave_kind', 'special');
+                    }
+                    if (stripos('cuti mendesak', $keyword) !== false || stripos('urgent leave', $keyword) !== false) {
+                        $sub->orWhere('lrd.leave_kind', 'urgent');
                     }
                 });
             })

@@ -27,6 +27,14 @@ class LeaveBalanceService
         'khusus',
     ];
 
+    /** Cuti yang memotong kuota/saldo cuti tahunan setelah disetujui HRD */
+    public static function countsTowardAnnualBalance(?string $leaveKind): bool
+    {
+        $kind = $leaveKind ?? 'annual';
+
+        return $kind === 'annual' || $kind === 'urgent';
+    }
+
     public function leaveYearBounds(MasterKaryawan $employee, ?Carbon $asOf = null): array
     {
         $join = $this->joinDate($employee) ?? ($asOf ?? Carbon::now())->copy()->startOfYear();
@@ -474,6 +482,9 @@ class LeaveBalanceService
         if ($type === 'Holiday Replacement Leave') {
             return 'phl';
         }
+        if ($type === 'Urgent Leave') {
+            return 'urgent';
+        }
 
         return 'annual';
     }
@@ -620,6 +631,9 @@ class LeaveBalanceService
         if ($leaveKind === 'phl') {
             return 'Holiday Replacement Leave';
         }
+        if ($leaveKind === 'urgent') {
+            return 'Urgent Leave';
+        }
 
         return 'Annual Leave';
     }
@@ -719,7 +733,7 @@ class LeaveBalanceService
         $total = 0;
         foreach ($rows as $row) {
             $detail = $row->leaveDetail;
-            if (!$detail || ($detail->leave_kind ?? 'annual') !== 'annual') {
+            if (!$detail || !self::countsTowardAnnualBalance($detail->leave_kind ?? null)) {
                 continue;
             }
             $total += $this->countWeekdays(
@@ -735,7 +749,7 @@ class LeaveBalanceService
     {
         $rows = LeaveRequest::where('employee_id', $employee->id)
             ->where('is_active', true)
-            ->where('type', 'Annual Leave')
+            ->whereIn('type', ['Annual Leave', 'Urgent Leave'])
             ->whereBetween('created_at', [$periodStart, $periodEnd])
             ->where('created_at', '>=', $cutover)
             ->get();
@@ -794,7 +808,7 @@ class LeaveBalanceService
         if (HrTableMode::usesLegacyHrTables()) {
             $query = LeaveRequest::where('employee_id', $employee->id)
                 ->where('is_active', true)
-                ->where('type', 'Annual Leave')
+                ->whereIn('type', ['Annual Leave', 'Urgent Leave'])
                 ->whereBetween('created_at', [$periodStart, $periodEnd]);
 
             if ($excludeLegacyId !== null) {
@@ -834,7 +848,7 @@ class LeaveBalanceService
         $out = [];
         foreach ($rows as $row) {
             $detail = $row->leaveDetail;
-            if (!$detail || ($detail->leave_kind ?? 'annual') !== 'annual') {
+            if (!$detail || !self::countsTowardAnnualBalance($detail->leave_kind ?? null)) {
                 continue;
             }
             $out[] = [
@@ -861,7 +875,7 @@ class LeaveBalanceService
         if (HrTableMode::usesLegacyHrTables()) {
             $models = LeaveRequest::where('employee_id', $employee->id)
                 ->where('is_active', true)
-                ->where('type', 'Annual Leave')
+                ->whereIn('type', ['Annual Leave', 'Urgent Leave'])
                 ->whereBetween('created_at', [$periodStart, $periodEnd])
                 ->where('created_at', '>=', $cutover)
                 ->orderByDesc('id')
@@ -879,7 +893,7 @@ class LeaveBalanceService
                     'start_date' => $row->start_date,
                     'end_date' => $row->end_date,
                     'status' => $status,
-                    'title' => 'Cuti tahunan',
+                    'title' => $row->type === 'Urgent Leave' ? 'Cuti mendesak' : 'Cuti tahunan',
                 ];
             }
 
@@ -899,7 +913,7 @@ class LeaveBalanceService
         $out = [];
         foreach ($rows as $row) {
             $detail = $row->leaveDetail;
-            if (!$detail || ($detail->leave_kind ?? 'annual') !== 'annual') {
+            if (!$detail || !self::countsTowardAnnualBalance($detail->leave_kind ?? null)) {
                 continue;
             }
             $out[] = [
@@ -908,7 +922,7 @@ class LeaveBalanceService
                 'start_date' => $this->formatDateYmd($detail->start_date),
                 'end_date' => $this->formatDateYmd($detail->end_date),
                 'status' => $row->status,
-                'title' => 'Cuti tahunan',
+                'title' => ($detail->leave_kind ?? '') === 'urgent' ? 'Cuti mendesak' : 'Cuti tahunan',
             ];
         }
 

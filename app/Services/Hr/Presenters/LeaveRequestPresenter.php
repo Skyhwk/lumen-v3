@@ -23,6 +23,8 @@ class LeaveRequestPresenter
                 $type = 'Unpaid Leave';
             } elseif ($detail->leave_kind === 'phl') {
                 $type = 'Holiday Replacement Leave';
+            } elseif ($detail->leave_kind === 'urgent') {
+                $type = 'Urgent Leave';
             }
         }
 

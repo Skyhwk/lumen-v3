@@ -232,6 +232,9 @@ final class HrAttendanceDayExcuseLabels
         if ($kind === 'unpaid') {
             return 'Cuti Tidak Dibayar';
         }
+        if ($kind === 'urgent') {
+            return 'Cuti Mendesak';
+        }
 
         return 'Cuti';
     }
@@ -244,6 +247,9 @@ final class HrAttendanceDayExcuseLabels
         }
         if ($type === 'Unpaid Leave') {
             return 'Cuti Tidak Dibayar';
+        }
+        if ($type === 'Urgent Leave') {
+            return 'Cuti Mendesak';
         }
 
         return 'Cuti';
