@@ -39,6 +39,14 @@ class InternalAssessmentController extends Controller
             return response()->json(['message' => 'Email tidak terdaftar sebagai karyawan.'], 422);
         }
 
+        $requiredGrade = trim((string) ($assessment->grade ?? ''));
+        $employeeGrade = trim((string) ($employee->grade ?? ''));
+        if ($requiredGrade !== '' && strcasecmp($requiredGrade, $employeeGrade) !== 0) {
+            return response()->json([
+                'message' => 'Link assessment ini khusus untuk grade ' . $requiredGrade . '. Grade Anda: ' . ($employeeGrade !== '' ? $employeeGrade : '-'),
+            ], 403);
+        }
+
         $result = DB::transaction(function () use ($assessment, $employee, $email) {
             DB::table('assessment_internal')->where('id', $assessment->id)->lockForUpdate()->first();
             $attempt = DB::table('assessment_internal_attempts')
