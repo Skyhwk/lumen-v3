@@ -39,6 +39,14 @@ class InternalAssessmentController extends Controller
             return response()->json(['message' => 'Email tidak terdaftar sebagai karyawan.'], 422);
         }
 
+        $requiredGrade = trim((string) ($assessment->grade ?? ''));
+        $employeeGrade = trim((string) ($employee->grade ?? ''));
+        if ($requiredGrade !== '' && strcasecmp($requiredGrade, $employeeGrade) !== 0) {
+            return response()->json([
+                'message' => 'Link assessment ini khusus untuk grade ' . $requiredGrade . '. Grade Anda: ' . ($employeeGrade !== '' ? $employeeGrade : '-'),
+            ], 403);
+        }
+
         $result = DB::transaction(function () use ($assessment, $employee, $email) {
             DB::table('assessment_internal')->where('id', $assessment->id)->lockForUpdate()->first();
             $attempt = DB::table('assessment_internal_attempts')
@@ -479,17 +487,10 @@ class InternalAssessmentController extends Controller
             ->where('assessment_internal_attempt_id', $attemptId)
             ->max('session_order');
 
-        foreach (array_values($definitions) as $definition) {
-            $definition = is_array($definition) ? $definition : ['id' => $definition];
-            $categoryId = $definition['question_category_id'] ?? $definition['category_id'] ?? $definition['id'] ?? null;
-            if (!$categoryId) {
-                continue;
-            }
-
-            $category = DB::table('question_categories')->where('id', $categoryId)->first();
-            if (!$category) {
-                continue;
-            }
+        foreach ($this->orderedInternalSessionDefinitions($definitions) as $item) {
+            $definition = $item['definition'];
+            $category = $item['category'];
+            $categoryId = $category->id;
 
             $targets = $this->evaluationTargetsForCategory($category->name, $employee);
             if (empty($targets)) {
@@ -558,6 +559,53 @@ class InternalAssessmentController extends Controller
                 DB::table('assessment_internal_sessions')->insert($sessionData);
             }
         }
+    }
+
+    /**
+     * Session internal selalu dibentuk per blok agar alurnya mudah dipahami:
+     * DISC/PAPI lebih dahulu, lalu kategori HR lainnya dan kategori default.
+     * Urutan dalam dua blok terakhir diacak hanya ketika session baru dibuat.
+     */
+    private function orderedInternalSessionDefinitions(array $definitions): array
+    {
+        $items = collect(array_values($definitions))->map(function ($definition) {
+            $definition = is_array($definition) ? $definition : ['id' => $definition];
+            $categoryId = $definition['question_category_id'] ?? $definition['category_id'] ?? $definition['id'] ?? null;
+            if (!$categoryId) {
+                return null;
+            }
+
+            $category = DB::table('question_categories')->where('id', $categoryId)->first();
+            if (!$category) {
+                return null;
+            }
+
+            return [
+                'definition' => $definition,
+                'category' => $category,
+            ];
+        })->filter()->values();
+
+        $mandatoryNames = ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK'];
+        $mandatory = $items->filter(function ($item) use ($mandatoryNames) {
+            return in_array(strtoupper(trim((string) $item['category']->name)), $mandatoryNames, true);
+        })->sortBy(function ($item) {
+            return strtoupper(trim((string) $item['category']->name)) === 'DISC' ? 1 : 2;
+        })->values();
+
+        $default = $items->reject(function ($item) use ($mandatoryNames) {
+            return in_array(strtoupper(trim((string) $item['category']->name)), $mandatoryNames, true);
+        })->filter(function ($item) {
+            return strtolower(trim((string) ($item['category']->category_scope ?? 'hr'))) === 'default';
+        })->shuffle()->values();
+
+        $hr = $items->reject(function ($item) use ($mandatoryNames) {
+            return in_array(strtoupper(trim((string) $item['category']->name)), $mandatoryNames, true);
+        })->reject(function ($item) {
+            return strtolower(trim((string) ($item['category']->category_scope ?? 'hr'))) === 'default';
+        })->shuffle()->values();
+
+        return $mandatory->concat($hr)->concat($default)->values()->all();
     }
 
     private function evaluationTargetsForCategory($categoryName, $employee)
@@ -655,7 +703,9 @@ class InternalAssessmentController extends Controller
 
             if ($question->question_type === 'scale') {
                 $scale = DB::table('scale_types')->where('id', $question->scale_type_id)->first();
-                $options = $scale ? ScaleScoringService::buildScaleOptions($scale) : [];
+                // Untuk assessment internal, urutan label mengikuti konfigurasi scale.
+                // Nilai numeriknya tetap dipakai saat scoring, tanpa mengubah urutan yang dilihat peserta.
+                $options = $scale ? ScaleScoringService::buildScaleOptions($scale, true) : [];
                 $options = collect($options)->map(function ($option) {
                     if (trim((string) ($option['label'] ?? '')) !== '') {
                         $option['text'] = $option['label'];
@@ -763,6 +813,13 @@ class InternalAssessmentController extends Controller
         $assessment = DB::table('assessment_internal')->where('id', $attempt->assessment_internal_id)->first();
         $requiresProfile = $assessment && (bool) ($assessment->is_completed_profile ?? false);
         $sessionOrderOffset = $requiresProfile ? 1 : 0;
+        $defaultCategoryIds = DB::table('question_categories')
+            ->whereIn('id', $sessions->pluck('question_category_id')->filter()->unique()->values()->all())
+            ->where('category_scope', 'default')
+            ->pluck('id')
+            ->map(function ($id) {
+                return (int) $id;
+            })->all();
 
         $sessionNavigation = [];
         $sessionGroupById = [];
@@ -880,6 +937,10 @@ class InternalAssessmentController extends Controller
             return $this->statePayload($attemptId);
         }
 
+        if (in_array((int) $session->question_category_id, $defaultCategoryIds, true)) {
+            $next['options'] = $this->defaultScaleDisplayOrder($next['options'] ?? []);
+        }
+
         unset($next['answer_key'], $next['answer_map']);
         foreach ($next['options'] as &$option) {
             unset($option['is_correct']);
@@ -903,6 +964,37 @@ class InternalAssessmentController extends Controller
             'question' => $next,
             'proctoring' => $this->proctoringPayload($attemptId),
         ];
+    }
+
+    /**
+     * Nilai opsi scale legacy dapat dibalik untuk scoring, tetapi urutan label
+     * yang dilihat peserta harus konsisten agar tidak membingungkan antar soal.
+     */
+    private function defaultScaleDisplayOrder(array $options): array
+    {
+        $rankByLabel = [
+            'SANGAT SETUJU' => 1,
+            'SANGAT BAIK' => 1,
+            'SETUJU' => 2,
+            'BAIK' => 2,
+            'CUKUP' => 3,
+            'STANDAR / NORMAL BIASA' => 3,
+            'NORMAL' => 3,
+            'KURANG' => 4,
+            'KURANG SETUJU' => 4,
+            'TIDAK SETUJU' => 4,
+            'BURUK' => 4,
+            'SANGAT TIDAK SETUJU' => 5,
+            'SANGAT KURANG SETUJU' => 5,
+            'SANGAT BURUK' => 5,
+            'TIDAK MENGETAHUI' => 6,
+        ];
+
+        return collect($options)->values()->sortBy(function ($option, $index) use ($rankByLabel) {
+            $label = strtoupper(trim((string) ($option['label'] ?? $option['text'] ?? '')));
+
+            return (($rankByLabel[$label] ?? 99) * 1000) + $index;
+        })->values()->all();
     }
 
     private function sessionDisplayName($session)
