@@ -80,7 +80,7 @@ class ScaleScoringService
         ];
     }
 
-    public static function buildScaleOptions($scale): array
+    public static function buildScaleOptions($scale, bool $preserveConfiguredOrder = false): array
     {
         $options = collect(json_decode($scale->options ?? '[]', true) ?: [])
             ->map(function ($option, $optionKey) {
@@ -99,12 +99,13 @@ class ScaleScoringService
                     'is_correct' => false,
                 ];
             })
-            ->filter()
-            ->sortByDesc('value')
-            ->values()
-            ->all();
+            ->filter();
 
-        return $options;
+        if (!$preserveConfiguredOrder) {
+            $options = $options->sortByDesc('value');
+        }
+
+        return $options->values()->all();
     }
 
     public static function resolveBounds(array $question): array
