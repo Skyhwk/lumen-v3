@@ -248,13 +248,13 @@ class FdlKebisinganController extends Controller
             ]);
 
             // ==== Kirim Notifikasi ====
-            // app(NotificationFdlService::class)
-            //     ->sendApproveNotification(
-            //         "Kebisingan pada Shift ({$dataLapangan->jenis_durasi_sampling})",
-            //         $dataLapangan->no_sampel,
-            //         $this->karyawan,
-            //         $dataLapangan->created_by
-            //     );
+            app(NotificationFdlService::class)
+                ->sendApproveNotification(
+                    "Kebisingan pada Shift ({$dataLapangan->jenis_durasi_sampling})",
+                    $dataLapangan->no_sampel,
+                    $this->karyawan,
+                    $dataLapangan->created_by
+                );
 
             DB::commit();
 
