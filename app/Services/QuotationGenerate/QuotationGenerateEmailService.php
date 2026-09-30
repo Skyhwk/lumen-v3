@@ -34,7 +34,7 @@ class QuotationGenerateEmailService
 
         $recipients = $this->resolveRecipients($quotation);
         $to = $recipients['to'];
-        $cc = $recipients['cc'];
+        $cc = [];
         $bcc = $recipients['bcc'];
 
         $portalLink = $this->linkService->portalLink($quotation);
@@ -45,7 +45,7 @@ class QuotationGenerateEmailService
         $sent = SendEmail::where('to', $to)
             ->where('subject', $subject)
             ->where('body', $body)
-            ->where('cc', $cc)
+            // ->where('cc', $cc)
             ->where('bcc', $bcc)
             ->where('attachments', $attachments)
             ->where('karyawan', $emailedBy)
