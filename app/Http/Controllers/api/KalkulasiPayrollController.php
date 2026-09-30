@@ -189,7 +189,7 @@ class KalkulasiPayrollController extends Controller
                 ->where('bonus_karyawan.is_active', true);
             })
             ->leftJoin('rekening_karyawan', function($join) use ($request){
-                $join->on('master_karyawan.nik_karyawan', '=', 'rekening_karyawan.nik_karyawan')
+                $join->on('master_karyawan.id', '=', 'rekening_karyawan.id_karyawan')
                 ->where('rekening_karyawan.is_active', true);
             })
             ->leftJoin('bpjs_tk', function($join) use ($request){
