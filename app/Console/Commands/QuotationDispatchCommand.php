@@ -43,7 +43,7 @@ class QuotationDispatchCommand extends Command
         $this->info('Quotation dispatch (step 2 — PDF + link + email)' . ($dryRun ? ' (DRY RUN)' : ''));
         $this->line('Send email         : ' . ($sendEmail ? 'ON' : 'OFF'));
         if ($sendEmail && $emailTestMode) {
-            $this->line('Email test mode    : ON → To ' . config('quotation_auto.generate.email_test_to') . ', CC/BCC kosong');
+            $this->line('Email test mode    : ON → To ' . config('quotation_auto.generate.email_test_to') . ', BCC kosong (tanpa CC)');
         }
         $this->line('Chunk size         : ' . $batchSize . ' QT (kelompok log)');
         $this->line('Jeda per QT        : ' . $itemPauseSeconds . ' detik');

@@ -47,7 +47,7 @@ class QuotationGenerateCommand extends Command
         $this->line('Tip: pisah step → quotation:create lalu quotationdispatch');
         $this->line('Send email         : ' . ($sendEmail ? 'ON' : 'OFF (remark — verifikasi copy/PDF dulu)'));
         if ($sendEmail && $emailTestMode) {
-            $this->line('Email test mode    : ON → To ' . config('quotation_auto.generate.email_test_to') . ', CC/BCC kosong');
+            $this->line('Email test mode    : ON → To ' . config('quotation_auto.generate.email_test_to') . ', BCC kosong (tanpa CC)');
         }
         $this->line('Quotation since: ' . $quotationSince->toDateTimeString());
         $this->line('Order since: ' . $orderSince->toDateTimeString());
