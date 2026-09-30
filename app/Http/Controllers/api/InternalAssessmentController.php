@@ -486,6 +486,7 @@ class InternalAssessmentController extends Controller
         $nextSessionOrder = (int) DB::table('assessment_internal_sessions')
             ->where('assessment_internal_attempt_id', $attemptId)
             ->max('session_order');
+        $questionPayloadCache = [];
 
         foreach ($this->orderedInternalSessionDefinitions($definitions) as $item) {
             $definition = $item['definition'];
@@ -534,7 +535,13 @@ class InternalAssessmentController extends Controller
                     continue;
                 }
 
-                $questions = $this->sessionQuestions($category, $questionCount);
+                $questionCacheKey = $categoryId . ':' . $questionCount;
+                if (!array_key_exists($questionCacheKey, $questionPayloadCache)) {
+                    // Set pertanyaan yang sama dipakai untuk semua target pada satu kategori.
+                    // Ini menjaga form evaluasi konsisten sekaligus mencegah query berulang per bawahan.
+                    $questionPayloadCache[$questionCacheKey] = $this->sessionQuestions($category, $questionCount);
+                }
+                $questions = $questionPayloadCache[$questionCacheKey];
                 if (!$questions) {
                     continue;
                 }
@@ -677,11 +684,24 @@ class InternalAssessmentController extends Controller
             $query->limit($questionCount);
         }
 
-        return $query->inRandomOrder()->get()->values()->map(function ($question, $questionIndex) {
-            $options = DB::table('question_options')
-                ->where('question_id', $question->id)
-                ->orderBy('option_order')
-                ->get()
+        $questions = $query->inRandomOrder()->get()->values();
+        if ($questions->isEmpty()) {
+            return [];
+        }
+
+        $optionsByQuestion = DB::table('question_options')
+            ->whereIn('question_id', $questions->pluck('id')->all())
+            ->orderBy('question_id')
+            ->orderBy('option_order')
+            ->get()
+            ->groupBy('question_id');
+        $scaleTypes = DB::table('scale_types')
+            ->whereIn('id', $questions->pluck('scale_type_id')->filter()->unique()->values()->all())
+            ->get()
+            ->keyBy('id');
+
+        return $questions->map(function ($question, $questionIndex) use ($optionsByQuestion, $scaleTypes) {
+            $options = collect($optionsByQuestion->get($question->id, []))
                 ->map(function ($option) {
                     return [
                         'id' => (string) $option->id,
@@ -702,7 +722,7 @@ class InternalAssessmentController extends Controller
             }
 
             if ($question->question_type === 'scale') {
-                $scale = DB::table('scale_types')->where('id', $question->scale_type_id)->first();
+                $scale = $scaleTypes->get($question->scale_type_id);
                 // Untuk assessment internal, urutan label mengikuti konfigurasi scale.
                 // Nilai numeriknya tetap dipakai saat scoring, tanpa mengubah urutan yang dilihat peserta.
                 $options = $scale ? ScaleScoringService::buildScaleOptions($scale, true) : [];
