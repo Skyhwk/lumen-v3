@@ -361,14 +361,6 @@ class ReactivateNeverOrderedQuotationService
 
         $subject = $this->buildQtApprovedSubject($quotation);
         $body = $this->buildQtApprovedEmailBody($quotation, $portalLink);
-        if (!$allowPicEmail && $picEmail !== '' && strcasecmp($to, $picEmail) !== 0) {
-            $body = '<p style="color:#b45309;font-weight:700;">[SAFE MODE] Email asli PIC: '
-                . htmlspecialchars($picEmail, ENT_QUOTES, 'UTF-8')
-                . ' — dikirim ke override: '
-                . htmlspecialchars($to, ENT_QUOTES, 'UTF-8')
-                . '</p>' . $body;
-            $subject = '[SAFE] ' . $subject;
-        }
 
         DB::beginTransaction();
         try {
