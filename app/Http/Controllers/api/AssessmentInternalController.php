@@ -5,6 +5,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use App\Models\AssessmentInternal;
+use App\Models\MasterKaryawan;
 use App\Models\QuestionCategory;
 use App\Services\InternalAssessmentExcelExportService;
 
@@ -158,6 +159,33 @@ class AssessmentInternalController extends Controller
         }
     }
 
+    public function getGrades(Request $request)
+    {
+        try {
+            $grades = MasterKaryawan::query()
+                ->where('is_active', 1)
+                ->whereNotNull('grade')
+                ->whereRaw("TRIM(grade) <> ''")
+                ->selectRaw('TRIM(grade) as grade')
+                ->distinct()
+                ->orderBy('grade')
+                ->pluck('grade')
+                ->map(function ($grade) {
+                    $grade = trim((string) $grade);
+
+                    return [
+                        'value' => $grade,
+                        'text' => $grade,
+                    ];
+                })
+                ->values();
+
+            return response()->json(['data' => $grades], 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal memuat daftar grade: ' . $e->getMessage()], 500);
+        }
+    }
+
     public function publish(Request $request)
     {
         try {
@@ -194,6 +222,19 @@ class AssessmentInternalController extends Controller
                 return response()->json(['message' => 'Minimal pilih 1 kategori soal!'], 400);
             }
 
+            $grade = trim((string) $request->input('grade'));
+            if ($grade === '') {
+                return response()->json(['message' => 'Grade peserta wajib dipilih!'], 422);
+            }
+
+            $gradeExists = MasterKaryawan::query()
+                ->where('is_active', 1)
+                ->whereRaw('TRIM(grade) = ?', [$grade])
+                ->exists();
+            if (!$gradeExists) {
+                return response()->json(['message' => 'Grade yang dipilih tidak ditemukan pada master karyawan aktif.'], 422);
+            }
+
             $assessment = AssessmentInternal::find($request->id);
             if (!$assessment) {
                 return response()->json(['message' => 'Data not found'], 404);
@@ -201,6 +242,7 @@ class AssessmentInternalController extends Controller
 
             // 1. Simpan Kategori Soal & Pengaturan Profil
             $assessment->category_question = $normalizedCategories;
+            $assessment->grade = $grade;
             if ($request->has('is_completed_profile')) {
                 $assessment->is_completed_profile = filter_var($request->is_completed_profile, FILTER_VALIDATE_BOOLEAN);
             }
