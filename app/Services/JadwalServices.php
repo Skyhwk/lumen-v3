@@ -18,6 +18,7 @@ use Carbon\Carbon;
 use Exception;
 use App\Services\SendEmail;
 use App\Jobs\SendNotifPerubahanJadwalJob;
+use App\Jobs\SyncSamplerTrackingScheduleJob;
 
 
 class JadwalServices
@@ -53,6 +54,25 @@ class JadwalServices
     public function __call($method, $arguments)
     {
         throw new Exception("Method $method does not exist on JadwalServices. Arguments: " . implode(", ", $arguments) . "\n", 404);
+    }
+
+    /**
+     * Queue the scoped reconciliation only after the schedule transaction has
+     * committed. The job never performs the old full-date sync.
+     */
+    private function syncSamplerTrackingChange($before, $quotation, $isCreation = false): void
+    {
+        if (!app(SamplerTrackingService::class)->quotationHasActivePersiapan($quotation)) {
+            return;
+        }
+
+        dispatch(new SyncSamplerTrackingScheduleJob(
+            $quotation,
+            collect($before)->map(function ($row) {
+                return $row->getAttributes();
+            })->values()->all(),
+            $isCreation
+        ));
     }
 
     public static function __callStatic($method, $arguments)
@@ -477,6 +497,8 @@ class JadwalServices
         $baru = COUNT($dir);
         DB::beginTransaction();
         try {
+            $tracking = app(SamplerTrackingService::class);
+            $trackingBefore = $tracking->snapshotSchedules($dataUpdate->no_quotation);
             $jadw = Jadwal::where('id', $dataUpdate->jadwal_id)->whereNull('parsial')->where('is_active', true)->first();
             $jadw2 = Jadwal::where('parsial', $dataUpdate->jadwal_id)->where('id', '!=', $dataUpdate->jadwal_id)->where('is_active', true)->get();
             if (!$jadw2->isEmpty()) {
@@ -717,90 +739,16 @@ class JadwalServices
                 self::syncTanggalSamplingOrderDetail($dataUpdate->no_quotation, $dataUpdate->kategori, $dataUpdate->tanggal);
             }
 
-            // LOGIC UPDATE PSHEADER
             try {
-                // 1. Validasi awal (Fail fast)
-                if (empty($dataUpdate->kategori)) return; // Atau throw error jika wajib
-
-                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)
-                    ->where('is_active', true)
-                    ->first();
-
-                if ($orderh) {
-                    // 2. Bentuk array no_sampel (Data Preparation)
-                    $array_no_samples = [];
-                    foreach ($dataUpdate->kategori as $kategori) {
-                        $parts = explode(" - ", $kategori);
-                        if (isset($parts[1])) {
-                            $array_no_samples[] = $orderh->no_order . '/' . $parts[1];
-                        }
-                    }
-
-                    // 3. Query PersiapanSampelHeader (Clean Query)
-                    $psh = PersiapanSampelHeader::where('is_active', 1)
-                        ->where(function ($query) use ($array_no_samples) {
-                            foreach ($array_no_samples as $sampel) {
-                                $query->orWhere('no_sampel', 'like', '%"' . $sampel . '"%');
-                            }
-                        })
-                        ->where('tanggal_sampling', $dataUpdate->tanggal_lama)
-                        ->whereNotNull('no_sampel')
-                        ->first();
-
-                    // 4. Proses Update jika PSH ditemukan
-                    if ($psh) {
-                        // A. Proses Sampler Baru (Dilakukan sekali saja)
-                        $newSamplers = array_map(function ($s) {
-                            return explode(',', $s)[1] ?? $s; // Ambil nama, handle jika format salah
-                        }, $dataUpdate->sampler);
-                        
-                        $newSamplerString = implode(',', $newSamplers);
-                        // B. Logika Kondisional (Hanya update tanggal jika dokumen BELUM ada)
-                        if (is_null($psh->detail_bas_documents)) {
-                            $psh->tanggal_sampling = $dataUpdate->tanggal;
-                        } 
-                        // Else: Jika sudah ada dokumen, tanggal dibiarkan (tetap tanggal lama)
-                        $dataParsing =[
-                            "nosampelOld" => json_decode($psh->no_sampel),
-                            "nosampelNew" => $array_no_samples,
-                            "samplerOld" => $psh->sampler_jadwal,
-                            "samplerNew" => $newSamplerString
-                        ];
-                        $dirtyPersiapanBoolean = $this->checkIsIdentical($dataParsing);
-                        if($dirtyPersiapanBoolean){
-                            if($psh->tanggal_sampling != $dataUpdate->tanggal){
-                                $psh->is_active =false;
-                                PersiapanSampelDetail::where('id_persiapan_sampel_header',$psh->id)
-                                ->update(["is_active" => false,"updated_by"=> $dataUpdate->karyawan . "(sampling)"]);
-                            }
-                        }
-                        // D. Set Data yang SELALU diupdate (Apapun kondisinya)
-                        $psh->no_sampel = json_encode($array_no_samples,JSON_UNESCAPED_SLASHES);
-                        $psh->sampler_jadwal = $newSamplerString;
-                        // E. Eksekusi Simpan
-                        Log::channel('sampling')->info('Debug Dirty Check', [
-                            'no_quotation' => $dataUpdate->no_quotation,
-                            'no_sampel_old' => $psh->getOriginal('no_sampel'),
-                            'no_sampel_new' => $psh->no_sampel,
-                            'sampler_old' => $psh->getOriginal('sampler_jadwal'),
-                            'sampler_new' => $psh->sampler_jadwal,
-                            'tanggal_old' => $psh->getOriginal('tanggal_sampling'),
-                            'tanggal_new' => $psh->tanggal_sampling,
-                            'dirty_fields' => $psh->getDirty(), // ← Ini yang penting!
-                        ]);
-                        if ($psh->isDirty(['no_sampel', 'sampler_jadwal', 'tanggal_sampling'])) {
-                            $psh->updated_by = $dataUpdate->karyawan . "(sampling)";
-                            $psh->save();
-                        }
-                    }
-                }
+                $this->updatePersiapanHeaderFromSchedule($dataUpdate);
             } catch (\Throwable $th) {
-                // Tangkap error dengan detail yang cukup
-                DB::rollBack();
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
 
+            // Reconcile existing activity after all schedule branches and PSHEADER,
+            // without changing the legacy selection/count used by lama == baru.
             DB::commit();
+            $this->syncSamplerTrackingChange($trackingBefore, $dataUpdate->no_quotation);
             return true;
         } catch (Exception $ex) {
             DB::rollBack();
@@ -860,6 +808,8 @@ class JadwalServices
         $baru = COUNT($dir);
         DB::beginTransaction();
         try {
+            $tracking = app(SamplerTrackingService::class);
+            $trackingBefore = $tracking->snapshotSchedules($dataUpdate->no_quotation);
             try {
                 $jadw = Jadwal::where('id', $dataUpdate->jadwal_id)->whereNull('parsial')->where('is_active', true)->first();
                 $jadw2 = Jadwal::where('parsial', $dataUpdate->jadwal_id)->where('id', '!=', $dataUpdate->jadwal_id)->where('is_active', true)->get();
@@ -1021,93 +971,15 @@ class JadwalServices
                 }
             }
 
-            // LOGIC UPDATE PSHEADER
             try {
-                // 1. Validasi awal (Fail fast)
-                if (empty($dataUpdate->kategori)) return; // Atau throw error jika wajib
-
-                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)
-                    ->where('is_active', true)
-                    ->first();
-
-                if ($orderh) {
-                    // 2. Bentuk array no_sampel (Data Preparation)
-                    $array_no_samples = [];
-                    foreach ($dataUpdate->kategori as $kategori) {
-                        $parts = explode(" - ", $kategori);
-                        if (isset($parts[1])) {
-                            $array_no_samples[] = $orderh->no_order . '/' . $parts[1];
-                        }
-                    }
-
-                    // 3. Query PersiapanSampelHeader (Clean Query)
-                    $psh = PersiapanSampelHeader::where('is_active', 1)
-                        ->where(function ($query) use ($array_no_samples) {
-                            foreach ($array_no_samples as $sampel) {
-                                $query->orWhere('no_sampel', 'like', '%"' . $sampel . '"%');
-                            }
-                        })
-                        ->where('tanggal_sampling', $dataUpdate->tanggal_lama)
-                        ->whereNotNull('no_sampel')
-                        ->first();
-
-                    // 4. Proses Update jika PSH ditemukan
-                    if ($psh) {
-                        // A. Proses Sampler Baru (Dilakukan sekali saja)
-                        $newSamplers = array_map(function ($s) {
-                            return explode(',', $s)[1] ?? $s; // Ambil nama, handle jika format salah
-                        }, $dataUpdate->sampler);
-                        
-                        $newSamplerString = implode(',', $newSamplers);
-
-                        // B. Set Data yang SELALU diupdate (Apapun kondisinya)
-                        $psh->no_sampel = json_encode($array_no_samples,JSON_UNESCAPED_SLASHES);
-                        $psh->sampler_jadwal = $newSamplerString;
-                        
-                        // C. Logika Kondisional (Hanya update tanggal jika dokumen BELUM ada)
-                        // Jika detail_bas_documents KOSONG (null), berarti belum dikunci/tanda tangan -> Update Tanggal
-                        if (is_null($psh->detail_bas_documents)) {
-                            $psh->tanggal_sampling = $dataUpdate->tanggal;
-                        } 
-
-                        // D logika jika jadwal berubah total tanggal tanpa ada pengurangan no sampel dan sampler
-                        $dataParsing =[
-                            "nosampelOld" => json_decode($psh->no_sampel),
-                            "nosampelNew" => $array_no_samples,
-                            "samplerOld" => $psh->sampler_jadwal,
-                            "samplerNew" => $newSamplers
-                        ];
-                        $dirtyPersiapanBoolean = $this->checkIsIdentical($dataParsing);
-                        if($dirtyPersiapanBoolean){
-                            if($psh->tanggal_sampling != $dataUpdate->tanggal){
-                                $psh->is_active =false;
-                                PersiapanSampelDetail::where('id_persiapan_sampel_header',$psh->id)
-                                ->update(["is_active" => false,"updated_by"=> $dataUpdate->karyawan . "(sampling)"]);
-                            }
-                        }
-                        // E. Eksekusi Simpan
-                        Log::channel('sampling')->info('Debug Dirty Check', [
-                            'no_quotation' => $dataUpdate->no_quotation,
-                            'no_sampel_old' => $psh->getOriginal('no_sampel'),
-                            'no_sampel_new' => $psh->no_sampel,
-                            'sampler_old' => $psh->getOriginal('sampler_jadwal'),
-                            'sampler_new' => $psh->sampler_jadwal,
-                            'tanggal_old' => $psh->getOriginal('tanggal_sampling'),
-                            'tanggal_new' => $psh->tanggal_sampling,
-                            'dirty_fields' => $psh->getDirty(), // ← Ini yang penting!
-                        ]);
-                        if ($psh->isDirty(['no_sampel', 'sampler_jadwal', 'tanggal_sampling'])) {
-                            $psh->updated_by = $dataUpdate->karyawan . "(sampling)";
-                            $psh->save();
-                        }
-                    }
-                }
+                $this->updatePersiapanHeaderFromSchedule($dataUpdate);
             } catch (\Throwable $th) {
-                // Tangkap error dengan detail yang cukup
-                DB::rollBack();
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
+            // Run for both lama == baru and changed team size, even when PSHEADER
+            // itself has no dirty fields. Do not create a new tracking session here.
             DB::commit();
+            $this->syncSamplerTrackingChange($trackingBefore, $dataUpdate->no_quotation);
             return true;
         } catch (Exception $ex) {
             DB::rollback();
@@ -1155,10 +1027,11 @@ class JadwalServices
         if ($dataAdd->alamat == null) {
             throw new Exception("Alamat is required when add jadwal", 401);
         }
-        
 
         DB::beginTransaction();
         try {
+            $tracking = app(SamplerTrackingService::class);
+            $trackingBefore = $tracking->snapshotSchedules($dataAdd->no_quotation);
             /* 
              *step non aktif jadwal sebelumnya jika ada
              *berlaku jika no dokumen sampling plan sudah naik menjadi R
@@ -1194,6 +1067,9 @@ class JadwalServices
                         $updateQuery->where('no_quotation', $dataAdd->no_quotation);
                     }
 
+                    // $trackingDates = $trackingDates->merge(
+                    //     (clone $updateQuery)->where('is_active', true)->pluck('tanggal')
+                    // );
                     $updateQuery->update(['is_active' => false]);
                 }
             }
@@ -1333,6 +1209,7 @@ class JadwalServices
             $salesAtasan = GetAtasan::where('id', $sales)->get()->pluck('id');
             $message = "Jadwal No Quotation $dataAdd->no_quotation Sudah Melakukan Jadwal Parsial Di Tanggal " . implode(', ', $dataAdd->tanggal);
             DB::commit();
+            $this->syncSamplerTrackingChange($trackingBefore, $dataAdd->no_quotation, true);
             return true;
         } catch (Exception $ex) {
             DB::rollback();
@@ -1366,6 +1243,8 @@ class JadwalServices
 
         DB::beginTransaction();
         try {
+            $tracking = app(SamplerTrackingService::class);
+            $trackingBefore = $tracking->snapshotSchedules($dataParsial->no_quotation);
             $jadw = Jadwal::where('id', $dataParsial->id)->whereNull('parsial')->where('is_active', true)->first();
             $jadw2 = Jadwal::where('parsial', $dataParsial->id)->where('id', '!=', $dataParsial->id)->where('is_active', true)->get();
             $jadw4 = Jadwal::where('parsial', $dataParsial->id)->where('is_active', true)->get();
@@ -1511,6 +1390,7 @@ class JadwalServices
             $message = "Jadwal No Quotation $dataParsial->no_quotation Sudah dilakukan Jadwal Parsial Di Tanggal $dataParsial->tanggal";
             Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
             DB::commit();
+            $this->syncSamplerTrackingChange($trackingBefore, $dataParsial->no_quotation, true);
             return true;
         } catch (Exception $e) {
             DB::rollBack();
@@ -1543,6 +1423,8 @@ class JadwalServices
 
         DB::beginTransaction();
         try {
+            $tracking = app(SamplerTrackingService::class);
+            $trackingBefore = $tracking->snapshotSchedules($dataParsial->no_quotation);
             $jadw = Jadwal::where('id', $dataParsial->id)->whereNull('parsial')->where('is_active', true)->first();
             $jadw2 = Jadwal::where('parsial', $dataParsial->id)->where('id', '!=', $dataParsial->id)->where('is_active', true)->get();
             $jadw4 = Jadwal::where('parsial', $dataParsial->id)->where('is_active', true)->get();
@@ -1671,6 +1553,7 @@ class JadwalServices
             $message = "Jadwal No Quotation $dataParsial->no_quotation Sudah dilakukan Jadwal Parsial Di Tanggal $dataParsial->tanggal";
             Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
             DB::commit();
+            $this->syncSamplerTrackingChange($trackingBefore, $dataParsial->no_quotation, true);
             return true;
         } catch (Exception $e) {
             DB::rollBack();
@@ -1680,24 +1563,175 @@ class JadwalServices
 
     private function checkIsIdentical(array $dataParse) : bool
     {
-        
-        $oldArray = $dataParse['nosampelOld'] ?? [];
-        $newArray = $dataParse['nosampelNew'] ?? [];
-        
-        $oldSampler = $dataParse['samplerOld'] ?? '';
-        $newSampler = $dataParse['samplerNew'] ?? '';
+        $oldArray = $this->normalizeTokenList($dataParse['nosampelOld'] ?? []);
+        $newArray = $this->normalizeTokenList($dataParse['nosampelNew'] ?? []);
+        $oldSampler = $this->normalizeTokenList($dataParse['samplerOld'] ?? []);
+        $newSampler = $this->normalizeTokenList($dataParse['samplerNew'] ?? []);
 
-        // --- TAMBAHAN UNTUK SKENARIO 4 ---
-        // Sort array agar urutan A-Z, sehingga ["B", "A"] menjadi ["A", "B"]
-        sort($oldArray);
-        sort($newArray);
-        // ----------------------------------
+        return $oldArray === $newArray && $oldSampler === $newSampler;
+    }
 
-        // Sekarang bandingkan
-        $isArrayIdentical = ($oldArray === $newArray);
-        $isSamplerIdentical = ($oldSampler === $newSampler);
+    private function updatePersiapanHeaderFromSchedule($dataUpdate): void
+    {
+        if (empty($dataUpdate->kategori)) {
+            throw new Exception('Kategori is required', 422);
+        }
 
-        return $isArrayIdentical && $isSamplerIdentical;
+        $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)
+            ->where('is_active', true)
+            ->first();
+        if (!$orderh) {
+            return;
+        }
+
+        $arrayNoSamples = [];
+        foreach ($dataUpdate->kategori as $kategori) {
+            $parts = explode(' - ', $kategori);
+            if (isset($parts[1]) && trim($parts[1]) !== '') {
+                $arrayNoSamples[] = $orderh->no_order . '/' . trim($parts[1]);
+            }
+        }
+        if (!$arrayNoSamples) {
+            return;
+        }
+
+        $bySample = PersiapanSampelHeader::where('is_active', 1)
+            ->where(function ($query) use ($arrayNoSamples) {
+                foreach ($arrayNoSamples as $sampel) {
+                    $query->orWhere('no_sampel', 'like', '%"' . $sampel . '"%');
+                }
+            })
+            ->where('tanggal_sampling', $dataUpdate->tanggal_lama)
+            ->whereNotNull('no_sampel')
+            ->orderBy('id')
+            ->get();
+        if ($bySample->isEmpty()) {
+            return;
+        }
+
+        $byQuotation = PersiapanSampelHeader::where('is_active', 1)
+            ->where('tanggal_sampling', $dataUpdate->tanggal_lama)
+            ->where('no_quotation', $dataUpdate->no_quotation)
+            ->orderBy('id')
+            ->get();
+        $headers = $bySample->merge($byQuotation)->unique('id')->sortBy('id')->values();
+        $sampleIds = $bySample->pluck('id')->map(function ($id) {
+            return (int) $id;
+        })->all();
+
+        $actor = $dataUpdate->karyawan . '(sampling)';
+        $groups = $headers->groupBy(function ($header) {
+            return $this->persiapanIdentityKey($header);
+        });
+        $keepers = [];
+        $removeIds = [];
+        foreach ($groups as $key => $group) {
+            $touchesSchedule = $group->contains(function ($header) use ($sampleIds) {
+                return in_array((int) $header->id, $sampleIds, true);
+            });
+            if (!$touchesSchedule) {
+                continue;
+            }
+            $keeper = $group->first(function ($header) {
+                return !is_null($header->detail_bas_documents);
+            }) ?: $group->sortByDesc('id')->first();
+            $keepers[$key] = $keeper;
+            foreach ($group as $header) {
+                if ((int) $header->id !== (int) $keeper->id) {
+                    $removeIds[] = $header->id;
+                }
+            }
+        }
+        if ($removeIds) {
+            PersiapanSampelHeader::whereIn('id', $removeIds)->update([
+                'is_active' => 0,
+                'updated_by' => $actor,
+            ]);
+            PersiapanSampelDetail::whereIn('id_persiapan_sampel_header', $removeIds)->update([
+                'is_active' => 0,
+                'updated_by' => $actor,
+            ]);
+        }
+
+        $targetKey = $this->persiapanIdentityKey($bySample->first());
+        $psh = PersiapanSampelHeader::find($keepers[$targetKey]->id);
+        if (!$psh || !$psh->is_active) {
+            return;
+        }
+
+        $newSamplers = [];
+        foreach ((array) $dataUpdate->sampler as $sampler) {
+            $name = trim(explode(',', (string) $sampler)[1] ?? (string) $sampler);
+            if ($name !== '') {
+                $newSamplers[] = $name;
+            }
+        }
+        $newSamplerString = implode(',', $newSamplers);
+        $originalSamples = json_decode($psh->no_sampel, true) ?: [];
+        $originalSampler = $psh->sampler_jadwal;
+        $sameIdentity = $this->checkIsIdentical([
+            'nosampelOld' => $originalSamples,
+            'nosampelNew' => $arrayNoSamples,
+            'samplerOld' => $originalSampler,
+            'samplerNew' => $newSamplerString,
+        ]);
+
+        if (is_null($psh->detail_bas_documents)) {
+            $psh->tanggal_sampling = $dataUpdate->tanggal;
+        }
+        if ($sameIdentity && $psh->tanggal_sampling != $dataUpdate->tanggal) {
+            $psh->is_active = false;
+            PersiapanSampelDetail::where('id_persiapan_sampel_header', $psh->id)
+                ->update(['is_active' => false, 'updated_by' => $actor]);
+        }
+        if (!$sameIdentity) {
+            $samplesSame = $this->normalizeTokenList($originalSamples) === $this->normalizeTokenList($arrayNoSamples);
+            $samplersSame = $this->normalizeTokenList($originalSampler) === $this->normalizeTokenList($newSamplerString);
+            if (!$samplesSame) {
+                $psh->no_sampel = json_encode(array_values($arrayNoSamples), JSON_UNESCAPED_SLASHES);
+            }
+            if (!$samplersSame) {
+                $psh->sampler_jadwal = $newSamplerString;
+            }
+        }
+
+        Log::channel('sampling')->info('Debug Dirty Check', [
+            'no_quotation' => $dataUpdate->no_quotation,
+            'no_sampel_old' => $psh->getOriginal('no_sampel'),
+            'no_sampel_new' => $psh->no_sampel,
+            'sampler_old' => $psh->getOriginal('sampler_jadwal'),
+            'sampler_new' => $psh->sampler_jadwal,
+            'tanggal_old' => $psh->getOriginal('tanggal_sampling'),
+            'tanggal_new' => $psh->tanggal_sampling,
+            'dirty_fields' => $psh->getDirty(),
+        ]);
+        if ($psh->isDirty(['no_sampel', 'sampler_jadwal', 'tanggal_sampling', 'is_active'])) {
+            $psh->updated_by = $actor;
+            $psh->save();
+        }
+    }
+
+    private function persiapanIdentityKey($header): string
+    {
+        return json_encode($this->normalizeTokenList($header->sampler_jadwal))
+            . '|' . trim((string) $header->periode);
+    }
+
+    private function normalizeTokenList($value): array
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : explode(',', $value);
+        }
+        $names = array_map(function ($name) {
+            return strtolower(trim(preg_replace('/\s+/', ' ', (string) $name)));
+        }, is_array($value) ? $value : []);
+        $names = array_values(array_filter($names, function ($name) {
+            return $name !== '';
+        }));
+        sort($names);
+
+        return $names;
     }
 
     private static function emailNotifPerubahanJadwal($noQuotation, $before, $after)

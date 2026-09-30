@@ -131,8 +131,29 @@ class RecruitmentStatusService
         return $reason !== '' ? $reason : null;
     }
 
+    public static function isKeptCandidate($recruitment): bool
+    {
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        if ($status !== 'management_decision') {
+            return false;
+        }
+
+        $isKeep = is_object($recruitment)
+            ? (int) ($recruitment->is_keep ?? 0)
+            : (int) ($recruitment['is_keep'] ?? 0);
+
+        return $isKeep === 1;
+    }
+
     public static function isAwaitingIbuDirekturApproval($recruitment): bool
     {
+        if (self::isKeptCandidate($recruitment)) {
+            return false;
+        }
+
         if (self::isAwaitingCandidateOfferingResubmit($recruitment)) {
             return false;
         }
@@ -1159,10 +1180,41 @@ class RecruitmentStatusService
         return false;
     }
 
+    public static function hasReturnedFromUserInterviewInHistory($recruitment): bool
+    {
+        foreach (self::parseMetaHistory($recruitment) as $entry) {
+            if (strtolower((string) ($entry['status'] ?? '')) === 'returned_to_hrd_from_user_interview') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function isReturnedFromUserInterview($recruitment): bool
+    {
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        if ($status !== 'interview_hrd') {
+            return false;
+        }
+
+        return self::hasReturnedFromUserInterviewInHistory($recruitment);
+    }
+
     public static function shouldSkipProfileCompletionOnHrdPass($recruitment): bool
     {
-        return self::hasCompletedProfile($recruitment)
-            && self::hasDirectorManagementRejectionInHistory($recruitment);
+        if (!self::hasCompletedProfile($recruitment)) {
+            return false;
+        }
+
+        if (self::hasReturnedFromUserInterviewInHistory($recruitment)) {
+            return true;
+        }
+
+        return self::hasDirectorManagementRejectionInHistory($recruitment);
     }
 
     public function update($recruitmentId, $status, $at = null, $historyStatus = null, array $extraData = [])
@@ -1180,8 +1232,8 @@ class RecruitmentStatusService
 
         if (($last['status'] ?? null) !== $historyStatus) {
             $history[] = array_merge([
-                'status' => $historyStatus,
                 'at'     => Carbon::parse($at)->toDateTimeString(),
+                'status' => $historyStatus,
             ], $extraData);
         }
 
@@ -1350,6 +1402,9 @@ class RecruitmentStatusService
             : ($recruitment['status'] ?? ''))));
 
         switch ($stageTab) {
+            case 'keep':
+                return self::isKeptCandidate($recruitment);
+
             case 'waiting_approval':
                 return self::isAwaitingIbuDirekturApproval($recruitment);
 
@@ -1359,7 +1414,8 @@ class RecruitmentStatusService
             case 'management_decision':
                 return $status === 'management_decision'
                     && !self::isAwaitingIbuDirekturApproval($recruitment)
-                    && !self::isAwaitingDirectorSalaryApproval($recruitment);
+                    && !self::isAwaitingDirectorSalaryApproval($recruitment)
+                    && !self::isKeptCandidate($recruitment);
 
             case 'salary_offer':
                 return in_array($status, ['internal_sallary_offer', 'salary_offer'], true)

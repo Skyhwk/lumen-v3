@@ -2,9 +2,18 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\PermissionRequest;
+use App\Models\Hr\HrRequest;
 use App\Models\LeaveRequest;
+use App\Models\MasterKaryawan;
+use App\Models\PermissionRequest;
 use App\Http\Controllers\Controller;
+use App\Services\Hr\ApprovalService;
+use App\Services\Hr\HrRequestResolver;
+use App\Services\Hr\HrTableMode;
+use App\Services\Hr\LegacyHrMirror;
+use App\Services\Hr\Portal\PortalHrdIzinDatatableQuery;
+use App\Services\Hr\PortalHrSync;
+use App\Services\Hr\WorkflowStatus;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,26 +23,33 @@ class IzinController extends Controller
 {
     public function indexUnprocessed(Request $request)
     {
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalHrdIzinDatatableQuery::class)->unprocessed((int) $request->periode);
+
+            return Datatables::of($data)->make(true);
+        }
+
         $permissions = PermissionRequest::query()->toBase()
             ->from('intilab_apps.permission_requests as pr')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
+            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.id')
+            ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
             ->select(
                 DB::raw("CONCAT('PR-', pr.id) as id"),
                 'pr.no_document',
                 'd.nama_divisi',
-                DB::raw('CASE 
-            WHEN pr.status = "Approved Atasan" THEN "APPROVED ATASAN" 
-            WHEN pr.status = "Approved HRD" THEN "APPROVED HRD" 
-            WHEN pr.status = "Rejected Atasan" THEN "REJECTED ATASAN" 
-            WHEN pr.status = "Rejected HRD" THEN "REJECTED HRD" 
-            ELSE "WAITING" 
+                DB::raw('NULL as special_leave_name'),
+                DB::raw('CASE
+            WHEN pr.status = "Approved Atasan" THEN "APPROVED ATASAN"
+            WHEN pr.status = "Approved HRD" THEN "APPROVED HRD"
+            WHEN pr.status = "Rejected Atasan" THEN "REJECTED ATASAN"
+            WHEN pr.status = "Rejected HRD" THEN "REJECTED HRD"
+            ELSE "WAITING"
         END as status'),
-                DB::raw('CASE 
-            WHEN pr.type = "Event Leave" THEN "kegiatan" 
-            WHEN pr.type = "Sick Leave" THEN "sakit" 
-            WHEN pr.type = "Late Arrival" THEN "datang_terlambat" 
-            ELSE pr.type 
+                DB::raw('CASE
+            WHEN pr.type = "Event Leave" THEN "kegiatan"
+            WHEN pr.type = "Sick Leave" THEN "sakit"
+            WHEN pr.type = "Late Arrival" THEN "datang_terlambat"
+            ELSE pr.type
         END as type_document'),
                 'pr.start_date as tanggal_mulai',
                 'pr.end_date as tanggal_selesai',
@@ -48,6 +64,7 @@ class IzinController extends Controller
                 'pr.rejected_atasan_at',
                 'pr.rejected_hrd_by',
                 'pr.rejected_hrd_at',
+                'u.nama_lengkap as nama_karyawan',
                 'pr.created_by as nama_pengaju',
                 'pr.attachment as filename',
                 DB::raw('NULL as nama_delegasi'),
@@ -64,83 +81,40 @@ class IzinController extends Controller
             ->whereNotNull('pr.approved_atasan_at')
             ->whereYear('pr.created_at', $request->periode);
 
-        $leaves = LeaveRequest::query()->toBase()
-            ->from('intilab_apps.leave_requests as lr')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
-            ->select(
-                DB::raw("CONCAT('LR-', lr.id) as id"),
-                'lr.no_document',
-                'd.nama_divisi',
-                DB::raw('CASE 
-            WHEN lr.status = "Approved Atasan" THEN "APPROVED ATASAN" 
-            WHEN lr.status = "Approved HRD" THEN "APPROVED HRD" 
-            WHEN lr.status = "Rejected Atasan" THEN "REJECTED ATASAN" 
-            WHEN lr.status = "Rejected HRD" THEN "REJECTED HRD" 
-            ELSE "WAITING" 
-        END as status'),
-                DB::raw('CASE 
-            WHEN lr.type = "Annual Leave" THEN "cuti" 
-            WHEN lr.type = "Special Leave" THEN "cuti_khusus" 
-            WHEN lr.type = "Unpaid Leave" THEN "unpaid_leave" 
-            ELSE lr.type 
-        END as type_document'),
-                'lr.start_date as tanggal_mulai',
-                'lr.end_date as tanggal_selesai',
-                DB::raw('NULL as jam_mulai'),
-                DB::raw('NULL as jam_selesai'),
-                'lr.description as keterangan',
-                'lr.approved_atasan_by',
-                'lr.approved_atasan_at',
-                'lr.approved_hrd_by',
-                'lr.approved_hrd_at',
-                'lr.rejected_atasan_by',
-                'lr.rejected_atasan_at',
-                'lr.rejected_hrd_by',
-                'lr.rejected_hrd_at',
-                'lr.created_by as nama_pengaju',
-                'lr.attachment as filename',
-                DB::raw('NULL as nama_delegasi'),
-                'lr.created_at as diajukan_pada'
-            )
-            ->whereNull('lr.rejected_atasan_by')
-            ->whereNull('lr.rejected_hrd_by')
-            ->where('lr.status', 'Approved Atasan')
-            ->where(function ($query) {
-                 $query->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
-                       ->orWhereNull('u.atasan_langsung');
-            })
-            ->whereNotNull('lr.approved_atasan_by')
-            ->whereNotNull('lr.approved_atasan_at')
-            ->whereYear('lr.created_at', $request->periode);
-
-        $data = $permissions->unionAll($leaves)->get();
+        $data = $permissions->get();
 
         return Datatables::of($data)->make(true);
     }
 
     public function indexProcessed(Request $request)
     {
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalHrdIzinDatatableQuery::class)->processed((int) $request->periode);
+
+            return Datatables::of($data)->make(true);
+        }
+
          $permissions = PermissionRequest::query()->toBase()
             ->from('intilab_apps.permission_requests as pr')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'pr.employee_id', '=', 'u.user_id')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
+            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.id')
+            ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
             ->select(
                 DB::raw("CONCAT('PR-', pr.id) as id"),
                 'pr.no_document',
                 'd.nama_divisi',
-                DB::raw('CASE 
-            WHEN pr.status = "Approved Atasan" THEN "APPROVED" 
-            WHEN pr.status = "Approved HRD" THEN "APPROVED HRD" 
-            WHEN pr.status = "Rejected Atasan" THEN "REJECTED" 
-            WHEN pr.status = "Rejected HRD" THEN "REJECTED HRD" 
-            ELSE "WAITING" 
+                DB::raw('NULL as special_leave_name'),
+                DB::raw('CASE
+            WHEN pr.status = "Approved Atasan" THEN "APPROVED"
+            WHEN pr.status = "Approved HRD" THEN "APPROVED HRD"
+            WHEN pr.status = "Rejected Atasan" THEN "REJECTED"
+            WHEN pr.status = "Rejected HRD" THEN "REJECTED HRD"
+            ELSE "WAITING"
         END as status'),
-                DB::raw('CASE 
-            WHEN pr.type = "Event Leave" THEN "kegiatan" 
-            WHEN pr.type = "Sick Leave" THEN "sakit" 
-            WHEN pr.type = "Late Arrival" THEN "datang_terlambat" 
-            ELSE pr.type 
+                DB::raw('CASE
+            WHEN pr.type = "Event Leave" THEN "kegiatan"
+            WHEN pr.type = "Sick Leave" THEN "sakit"
+            WHEN pr.type = "Late Arrival" THEN "datang_terlambat"
+            ELSE pr.type
         END as type_document'),
                 'pr.start_date as tanggal_mulai',
                 'pr.end_date as tanggal_selesai',
@@ -155,6 +129,7 @@ class IzinController extends Controller
                 'pr.rejected_atasan_at',
                 'pr.rejected_hrd_by',
                 'pr.rejected_hrd_at',
+                'u.nama_lengkap as nama_karyawan',
                 'pr.created_by as nama_pengaju',
                 'pr.attachment as filename',
                 DB::raw('NULL as nama_delegasi'),
@@ -167,63 +142,74 @@ class IzinController extends Controller
             ->whereYear('pr.created_at', $request->periode)
             ->whereNotNull('pr.approved_atasan_by');
 
-        $leaves = LeaveRequest::query()->toBase()
-            ->from('intilab_apps.leave_requests as lr')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'lr.employee_id', '=', 'u.user_id')
-            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
-            ->select(
-                DB::raw("CONCAT('LR-', lr.id) as id"),
-                'lr.no_document',
-                'd.nama_divisi',
-                DB::raw('CASE 
-            WHEN lr.status = "Approved Atasan" THEN "APPROVED" 
-            WHEN lr.status = "Approved HRD" THEN "APPROVED HRD" 
-            WHEN lr.status = "Rejected Atasan" THEN "REJECTED" 
-            WHEN lr.status = "Rejected HRD" THEN "REJECTED HRD" 
-            ELSE "WAITING" 
-        END as status'),
-                DB::raw('CASE 
-            WHEN lr.type = "Annual Leave" THEN "cuti" 
-            WHEN lr.type = "Special Leave" THEN "cuti_khusus" 
-            WHEN lr.type = "Unpaid Leave" THEN "unpaid_leave" 
-            ELSE lr.type 
-        END as type_document'),
-                'lr.start_date as tanggal_mulai',
-                'lr.end_date as tanggal_selesai',
-                DB::raw('NULL as jam_mulai'),
-                DB::raw('NULL as jam_selesai'),
-                'lr.description as keterangan',
-                'lr.approved_atasan_by',
-                'lr.approved_atasan_at',
-                'lr.approved_hrd_by',
-                'lr.approved_hrd_at',
-                'lr.rejected_atasan_by',
-                'lr.rejected_atasan_at',
-                'lr.rejected_hrd_by',
-                'lr.rejected_hrd_at',
-                'lr.created_by as nama_pengaju',
-                'lr.attachment as filename',
-                DB::raw('NULL as nama_delegasi'),
-                'lr.created_at as diajukan_pada'
-            )
-            ->whereNotNull('lr.approved_hrd_by')
-            ->whereNotNull('lr.approved_hrd_at')
-            ->whereNull('lr.rejected_atasan_by')
-            ->whereNull('lr.rejected_hrd_by')
-            ->whereYear('lr.created_at', $request->periode)
-            ->whereNotNull('lr.approved_atasan_by');
-
-        $data = $permissions->unionAll($leaves)->get();
+        $data = $permissions->get();
 
         return Datatables::of($data)->make(true);
+    }
+
+    public function tabCounts(Request $request)
+    {
+        $periode = (int) ($request->periode ?? date('Y'));
+
+        if (HrTableMode::portalReadsHrTables()) {
+            $query = app(PortalHrdIzinDatatableQuery::class);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'on_progress' => $query->unprocessed($periode)->count(),
+                    'processed' => $query->processed($periode)->count(),
+                ],
+            ]);
+        }
+
+        $onProgressPermissions = PermissionRequest::query()->toBase()
+            ->from('intilab_apps.permission_requests as pr')
+            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.id')
+            ->whereNull('pr.rejected_atasan_by')
+            ->whereNull('pr.rejected_hrd_by')
+            ->where('pr.status', 'Approved Atasan')
+            ->where(function ($query) {
+                $query->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
+                    ->orWhereNull('u.atasan_langsung');
+            })
+            ->whereNotNull('pr.approved_atasan_by')
+            ->whereNotNull('pr.approved_atasan_at')
+            ->whereYear('pr.created_at', $periode)
+            ->count();
+
+        $processedPermissions = PermissionRequest::query()->toBase()
+            ->from('intilab_apps.permission_requests as pr')
+            ->whereNotNull('pr.approved_hrd_by')
+            ->whereNotNull('pr.approved_hrd_at')
+            ->whereNull('pr.rejected_atasan_by')
+            ->whereNull('pr.rejected_hrd_by')
+            ->whereYear('pr.created_at', $periode)
+            ->whereNotNull('pr.approved_atasan_by')
+            ->count();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'on_progress' => $onProgressPermissions,
+                'processed' => $processedPermissions,
+            ],
+        ]);
     }
 
     public function approveIzin(Request $request)
     {
         DB::beginTransaction();
         try {
-            $idStr = $request->id;
-            
+            $idStr = (string) $request->id;
+
+            $response = $this->approveIzinOnHrTables($idStr);
+            if ($response !== null) {
+                DB::commit();
+
+                return $response;
+            }
+
             if (strpos($idStr, 'PR-') === 0) {
                 $id = substr($idStr, 3);
                 $model = PermissionRequest::find($id);
@@ -251,6 +237,14 @@ class IzinController extends Controller
                 'updated_by' => $this->karyawan,
                 'updated_at' => Carbon::now()->format('Y-m-d H:i:s')
             ]);
+
+            $sync = app(PortalHrSync::class);
+            if (strpos($idStr, 'PR-') === 0) {
+                $sync->syncPermissionFromLegacy((int) $id);
+            } else {
+                $sync->syncLeaveFromLegacy((int) $id);
+            }
+
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -271,8 +265,15 @@ class IzinController extends Controller
     {
         DB::beginTransaction();
         try {
-            $idStr = $request->id;
-            
+            $idStr = (string) $request->id;
+
+            $response = $this->rejectIzinOnHrTables($idStr, $request->keterangan);
+            if ($response !== null) {
+                DB::commit();
+
+                return $response;
+            }
+
             if (strpos($idStr, 'PR-') === 0) {
                 $id = substr($idStr, 3);
                 $model = PermissionRequest::find($id);
@@ -302,6 +303,13 @@ class IzinController extends Controller
                 'updated_at' => Carbon::now()->format('Y-m-d H:i:s')
             ]);
 
+            $sync = app(PortalHrSync::class);
+            if (strpos($idStr, 'PR-') === 0) {
+                $sync->syncPermissionFromLegacy((int) $id);
+            } else {
+                $sync->syncLeaveFromLegacy((int) $id);
+            }
+
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -316,5 +324,129 @@ class IzinController extends Controller
                 'error' => 'Error: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * @return \Illuminate\Http\JsonResponse|null null = fallback ke legacy apps
+     */
+    private function approveIzinOnHrTables(string $idStr)
+    {
+        $resolved = $this->resolveHrRequestFromCompositeId($idStr);
+        if ($resolved === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Format ID tidak valid',
+            ], 400);
+        }
+
+        [$requestType, $apiId] = $resolved;
+        $hrRequest = HrRequestResolver::findByPortalSliceId($requestType, $apiId);
+        if (!$hrRequest) {
+            return HrTableMode::portalReadsHrTables()
+                ? response()->json([
+                    'success' => false,
+                    'message' => 'Data pengajuan tidak ditemukan di HR (ID: ' . $idStr . ')',
+                ], 404)
+                : null;
+        }
+
+        if ($hrRequest->status !== WorkflowStatus::APPROVED_ATASAN) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Menunggu persetujuan atasan (rantai manager) terlebih dahulu',
+            ], 422);
+        }
+
+        $approver = MasterKaryawan::find($this->user_id);
+        if (!$approver) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data karyawan HRD tidak ditemukan',
+            ], 403);
+        }
+
+        app(ApprovalService::class)->approveHrd($hrRequest, $approver, $this->karyawan);
+        $hrRequest = $hrRequest->fresh();
+        app(LegacyHrMirror::class)->syncPortalHrdDecision($hrRequest);
+
+        $legacyId = HrRequestResolver::legacyIdForHrRequest($hrRequest);
+        if ($legacyId) {
+            if ($requestType === HrRequest::TYPE_PERMISSION) {
+                app(PortalHrSync::class)->syncPermissionFromLegacy($legacyId);
+            } else {
+                app(PortalHrSync::class)->syncLeaveFromLegacy($legacyId);
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Form berhasil disetujui',
+        ], 200);
+    }
+
+    /**
+     * @return \Illuminate\Http\JsonResponse|null null = fallback ke legacy apps
+     */
+    private function rejectIzinOnHrTables(string $idStr, ?string $reason)
+    {
+        $resolved = $this->resolveHrRequestFromCompositeId($idStr);
+        if ($resolved === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Format ID tidak valid',
+            ], 400);
+        }
+
+        [$requestType, $apiId] = $resolved;
+        $hrRequest = HrRequestResolver::findByPortalSliceId($requestType, $apiId);
+        if (!$hrRequest) {
+            return HrTableMode::portalReadsHrTables()
+                ? response()->json([
+                    'success' => false,
+                    'message' => 'Data pengajuan tidak ditemukan di HR (ID: ' . $idStr . ')',
+                ], 404)
+                : null;
+        }
+
+        $approver = MasterKaryawan::find($this->user_id);
+        if (!$approver) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data karyawan HRD tidak ditemukan',
+            ], 403);
+        }
+
+        app(ApprovalService::class)->rejectHrd($hrRequest, $approver, $reason, $this->karyawan);
+        $hrRequest = $hrRequest->fresh();
+        app(LegacyHrMirror::class)->syncPortalHrdDecision($hrRequest);
+
+        $legacyId = HrRequestResolver::legacyIdForHrRequest($hrRequest);
+        if ($legacyId) {
+            if ($requestType === HrRequest::TYPE_PERMISSION) {
+                app(PortalHrSync::class)->syncPermissionFromLegacy($legacyId);
+            } else {
+                app(PortalHrSync::class)->syncLeaveFromLegacy($legacyId);
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Form berhasil ditolak',
+        ], 200);
+    }
+
+    /**
+     * @return array{0: string, 1: int}|null [request_type, api_id]
+     */
+    private function resolveHrRequestFromCompositeId(string $idStr): ?array
+    {
+        if (strpos($idStr, 'PR-') === 0) {
+            return [HrRequest::TYPE_PERMISSION, (int) substr($idStr, 3)];
+        }
+        if (strpos($idStr, 'LR-') === 0) {
+            return [HrRequest::TYPE_LEAVE, (int) substr($idStr, 3)];
+        }
+
+        return null;
     }
 }

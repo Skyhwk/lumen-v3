@@ -11,6 +11,7 @@ use App\Models\MasterKaryawan;
 use App\Models\ShiftKaryawan;
 use App\Models\RekapLiburKalender;
 use App\Http\Controllers\Controller;
+use App\Services\Hr\HrAttendanceDayExcuseLabels;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -144,13 +145,19 @@ class AbsensiController extends Controller
             $cekKaryawan = $cekKaryawan->get();
 
             if (!$cekKaryawan->isEmpty()) {
+                $tanggalKey = date('Y-m-d', strtotime($tanggal));
+                $labelMap = HrAttendanceDayExcuseLabels::mapForKaryawans(
+                    $cekKaryawan->pluck('id')->all(),
+                    $tanggalKey,
+                    $tanggalKey
+                );
 
                 foreach ($cekKaryawan as $key => $value) {
                     $cekShift = ShiftKaryawan::where('tanggal', $tanggal)->where('karyawan_id', $value->id)->first();
 
                     if ($cekShift != null) {
                         $init = self::compareshift($value->id, $tanggal, $cekShift->shift, $cekShift->time_in, $cekShift->time_out, $value->nik_karyawan, $value->nama_lengkap);
-                        $data[] = $init;
+                        $data[] = HrAttendanceDayExcuseLabels::attach($init, (int) $value->id, $labelMap);
                     } else {
                         $gen = Absensi::select(
                             'absensi.tanggal', // Assuming tanggal is from Absensi
@@ -182,7 +189,7 @@ class AbsensiController extends Controller
                                 $total_jam_kerja = $kerja->h . 'h ' . $kerja->i . 'm'; // Calculate working hours
                             }
 
-                            $data[] = $this->applyCalendarLiburShift([
+                            $data[] = HrAttendanceDayExcuseLabels::attach($this->applyCalendarLiburShift([
                                 'nama' => $gen->nik_karyawan . ' - ' . $gen->nama_lengkap,
                                 'tanggal' => $gen->tanggal,
                                 'hari' => self::hari($gen->tanggal),
@@ -191,9 +198,9 @@ class AbsensiController extends Controller
                                 'selisih' => $masuk,
                                 'jam_kerja' => $total_jam_kerja,
                                 'shift' => 'SHREGULAR'
-                            ]);
+                            ]), (int) $value->id, $labelMap);
                         } else {
-                            $data[] = $this->applyCalendarLiburShift([
+                            $data[] = HrAttendanceDayExcuseLabels::attach($this->applyCalendarLiburShift([
                                 'nama' => $value->nik_karyawan . ' - ' . $value->nama_lengkap,
                                 'tanggal' => $tanggal,
                                 'hari' => self::hari($tanggal),
@@ -202,7 +209,7 @@ class AbsensiController extends Controller
                                 'selisih' => '',
                                 'jam_kerja' => '',
                                 'shift' => ''
-                            ]);
+                            ]), (int) $value->id, $labelMap);
                         }
                     }
                 }
@@ -1035,12 +1042,14 @@ class AbsensiController extends Controller
         $shiftIndex = self::fetchMonthlyShiftIndex($karyawanIds, $dates['startDate'], $dates['endDate']);
         $punchIndex = self::fetchMonthlyPunchIndex($karyawanIds, $dates['startDate'], $dates['nextDate']);
         $workingDayIndex = $this->fetchWorkingDayIndex($year);
+        $labelMap = HrAttendanceDayExcuseLabels::mapForKaryawans($karyawanIds, $dates['startDate'], $dates['endDate']);
 
         $data = [];
         foreach ($karyawans as $karyawan) {
             for ($a = 1; $a <= $lastDay; $a++) {
                 $tanggal = $year . '-' . $dates['monthPadded'] . '-' . sprintf('%02d', $a);
-                $data[] = self::resolveMonthlyDayRow($karyawan, $tanggal, $shiftIndex, $punchIndex, $workingDayIndex);
+                $row = self::resolveMonthlyDayRow($karyawan, $tanggal, $shiftIndex, $punchIndex, $workingDayIndex);
+                $data[] = HrAttendanceDayExcuseLabels::attach($row, (int) $karyawan->id, $labelMap);
             }
         }
 
@@ -1074,12 +1083,16 @@ class AbsensiController extends Controller
         $sheet->mergeCells('H1:J1');
         $sheet->getStyle('H:J')->getAlignment()->setHorizontal('center');
         $sheet->getColumnDimension('J')->setWidth(18);
+        $sheet->mergeCells('K1:K2');
+        $sheet->getStyle('K1:K2')->getAlignment()->setVertical('center');
+        $sheet->getStyle('K1:K2')->getAlignment()->setHorizontal('center');
+        $sheet->getColumnDimension('K')->setWidth(28);
 
-        $sheet->getStyle('A1:J1')
+        $sheet->getStyle('A1:K1')
             ->getBorders()
             ->getAllBorders()
             ->setBorderStyle(Border::BORDER_THIN);
-        $sheet->getStyle('A2:J2')
+        $sheet->getStyle('A2:K2')
             ->getBorders()
             ->getAllBorders()
             ->setBorderStyle(Border::BORDER_THIN);
@@ -1096,6 +1109,7 @@ class AbsensiController extends Controller
         $sheet->setCellValue('H2', ' + / -');
         $sheet->setCellValue('I2', 'Jam Kerja');
         $sheet->setCellValue('J2', 'Shift');
+        $sheet->setCellValue('K1', 'Cuti / Izin');
     }
 
     private function writeAbsensiExportRows($sheet, $data)
@@ -1113,11 +1127,12 @@ class AbsensiController extends Controller
             $sheet->setCellValue('H' . $u, $row['selisih']);
             $sheet->setCellValue('I' . $u, $row['jam_kerja']);
             $sheet->setCellValue('J' . $u, $row['shift']);
+            $sheet->setCellValue('K' . $u, $row['keterangan'] ?? '');
             $u++;
         }
 
         if ($u > 3) {
-            $sheet->getStyle('A3:J' . ($u - 1))
+            $sheet->getStyle('A3:K' . ($u - 1))
                 ->getBorders()
                 ->getAllBorders()
                 ->setBorderStyle(Border::BORDER_THIN);
@@ -1641,27 +1656,46 @@ class AbsensiController extends Controller
 
     public function getMonthlyAttendance(int $karyawanId, string $month): array
     {
+        $rows = $this->getMonthlyAttendanceBulk([$karyawanId], $month);
+
+        return $rows;
+    }
+
+    /**
+     * Satu query shift/punch per bulan untuk banyak karyawan (untuk sync alpa / batch job).
+     *
+     * @param list<int> $karyawanIds
+     * @return list<array<string, mixed>>
+     */
+    public function getMonthlyAttendanceBulk(array $karyawanIds, string $month): array
+    {
+        $karyawanIds = array_values(array_unique(array_filter(array_map('intval', $karyawanIds), fn ($id) => $id > 0)));
+        if ($karyawanIds === []) {
+            return [];
+        }
+
         $periode = self::parseBulanAbsensi($month, null);
         if ($periode === null) {
             return [];
         }
 
-        $karyawan = MasterKaryawan::where('id', $karyawanId)->first();
-        if ($karyawan === null) {
+        $karyawans = MasterKaryawan::query()->whereIn('id', $karyawanIds)->get();
+        if ($karyawans->isEmpty()) {
             return [];
         }
 
         $monthNum = $periode['month'];
-        $year     = $periode['year'];
-        $lastDay  = cal_days_in_month(CAL_GREGORIAN, (int) $monthNum, (int) $year);
+        $year = $periode['year'];
+        $lastDay = cal_days_in_month(CAL_GREGORIAN, (int) $monthNum, (int) $year);
 
-        return self::buildMonthlyAbsensiData(
-            $karyawan->id,
-            $year,
-            $monthNum,
-            $lastDay,
-            $karyawan->nik_karyawan,
-            $karyawan->nama_lengkap
-        );
+        $rows = $this->buildMonthlyAbsensiDataForKaryawans($karyawans, $year, $monthNum, $lastDay);
+        $nikToId = $karyawans->pluck('id', 'nik_karyawan');
+
+        foreach ($rows as &$row) {
+            $row['karyawan_id'] = (int) ($nikToId[$row['nik'] ?? ''] ?? 0);
+        }
+        unset($row);
+
+        return $rows;
     }
 }

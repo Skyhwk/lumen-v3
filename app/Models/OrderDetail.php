@@ -65,7 +65,7 @@ class OrderDetail extends Sector
 
     public function dataLapanganEmisiKendaraan()
     {
-        return $this->belongsTo(DataLapanganEmisiKendaraan::class, 'no_sampel', 'no_sampel')->with('emisiOrder');
+        return $this->belongsTo(DataLapanganEmisiKendaraan::class, 'no_sampel', 'no_sampel')->where('is_active', true)->with('emisiOrder');
     }
 
     public function dataLapanganEmisiCerobong()

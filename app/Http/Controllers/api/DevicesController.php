@@ -57,6 +57,78 @@ class DevicesController extends Controller
         return false;
     }
 
+    private function validateDevicePassword(Request $request)
+    {
+        if ($request->confirm_password !== '78baLitni89') {
+            return response()->json(['message' => 'Password tidak valid'], 403);
+        }
+
+        return null;
+    }
+
+    private function sendDeviceCommand($kodeDevice, $topic, $data = '')
+    {
+        $payload = json_encode((object) [
+            'topic' => $topic,
+            'device' => $kodeDevice,
+            'data' => $data,
+        ]);
+
+        $mqtt = $this->send_mqtt($payload);
+        $mqttIot = $this->send_mqtt_iot($payload);
+
+        return $mqtt || $mqttIot;
+    }
+
+    private function findOnlineDevice(Request $request)
+    {
+        $device = Devices::where('id', $request->id)->first();
+
+        if (!$device) {
+            return [null, response()->json(['message' => 'Device tidak ditemukan'], 404)];
+        }
+
+        if ($device->status_device !== 'online') {
+            return [null, response()->json(['message' => 'Device offline!'], 400)];
+        }
+
+        return [$device, null];
+    }
+
+    public function reboot(Request $request)
+    {
+        [$device, $errorResponse] = $this->findOnlineDevice($request);
+
+        if ($errorResponse) {
+            return $errorResponse;
+        }
+
+        if (!$this->sendDeviceCommand($device->kode_device, 'reboot')) {
+            return response()->json(['message' => 'Gagal mengirim perintah reboot'], 500);
+        }
+
+        return response()->json(['message' => 'Perintah reboot berhasil dikirim'], 200);
+    }
+
+    public function reset(Request $request)
+    {
+        if ($errorResponse = $this->validateDevicePassword($request)) {
+            return $errorResponse;
+        }
+
+        [$device, $errorResponse] = $this->findOnlineDevice($request);
+
+        if ($errorResponse) {
+            return $errorResponse;
+        }
+
+        if (!$this->sendDeviceCommand($device->kode_device, 'reset')) {
+            return response()->json(['message' => 'Gagal mengirim perintah reset'], 500);
+        }
+
+        return response()->json(['message' => 'Perintah reset berhasil dikirim'], 200);
+    }
+
     public function save(Request $request)
     {
         $oldDevice = null;

@@ -43,6 +43,7 @@ class DashboardAbsensiKaryawanService
         })->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values();
 
         $clusters = $this->buildClusters($employees);
+        $rankings = $this->buildRankings($employees);
 
         return [
             'success' => true,
@@ -60,6 +61,8 @@ class DashboardAbsensiKaryawanService
                     'cluster_count' => count($clusters),
                 ],
                 'clusters' => $clusters,
+                'highlights' => array_map(fn ($rows) => $rows->first(), $rankings),
+                'rankings' => array_map(fn ($rows) => $rows->pluck('id')->all(), $rankings),
                 'employees' => $employees->values()->all(),
             ],
         ];
@@ -130,6 +133,8 @@ class DashboardAbsensiKaryawanService
         $outDeltas = [];
         $shiftNames = [];
         $shiftStats = [];
+        $attendanceDays = 0;
+        $partialDays = 0;
         $cursor = $range['start']->copy();
 
         while ($cursor->lte($range['end'])) {
@@ -180,6 +185,11 @@ class DashboardAbsensiKaryawanService
                 $timeOut
             );
 
+            if ($masuk !== null || $keluar !== null) {
+                $attendanceDays++;
+                if ($masuk === null || $keluar === null) $partialDays++;
+            }
+
             if ($masuk !== null) {
                 $inSeconds[] = $masuk;
                 $scheduleIn = $this->toSeconds($timeIn) ?? $this->toSeconds('08:00:00');
@@ -202,6 +212,9 @@ class DashboardAbsensiKaryawanService
         $avgInDelta = $this->averageSeconds($inDeltas);
         $avgOutDelta = $this->averageSeconds($outDeltas);
         $rule = $this->resolveShiftRule($shiftStats);
+        $onTime = array_values(array_filter($inDeltas, fn ($delta) => $delta <= 0));
+        $late = array_values(array_filter($inDeltas, fn ($delta) => $delta > 0));
+        $afterSchedule = array_values(array_filter($outDeltas, fn ($delta) => $delta > 0));
 
         return array_merge($this->presentEmployee($employee), [
             'cluster' => $rule['key'],
@@ -217,7 +230,17 @@ class DashboardAbsensiKaryawanService
             'avg_out_delta' => $avgOutDelta,
             'in_delta_label' => $this->formatDelta($avgInDelta, 'lebih awal dari jam masuk', 'lebih telat dari jam masuk'),
             'out_delta_label' => $this->formatDelta($avgOutDelta, 'lebih cepat dari jam pulang', 'lebih lama dari jam pulang'),
-            'attendance_days' => max(count($inSeconds), count($outSeconds)),
+            'attendance_days' => $attendanceDays,
+            'partial_days' => $partialDays,
+            'on_time_days' => count($onTime),
+            'late_in_days' => count($late),
+            'late_out_days' => count($afterSchedule),
+            'on_time_rate' => count($inDeltas) ? round(count($onTime) * 100 / count($inDeltas), 2) : null,
+            'late_in_rate' => count($inDeltas) ? round(count($late) * 100 / count($inDeltas), 2) : null,
+            'late_out_rate' => count($outDeltas) ? round(count($afterSchedule) * 100 / count($outDeltas), 2) : null,
+            'on_time_avg_seconds' => $onTime ? abs($this->averageSeconds($onTime)) : null,
+            'late_in_avg_seconds' => $this->averageSeconds($late),
+            'late_out_avg_seconds' => $this->averageSeconds($afterSchedule),
             'in_days' => count($inSeconds),
             'out_days' => count($outSeconds),
             'shifts' => array_values(array_unique($shiftNames)),
@@ -366,6 +389,25 @@ class DashboardAbsensiKaryawanService
         return $clusters;
     }
 
+    /** Rank all shifts together using daily schedule-relative observations. */
+    private function buildRankings(Collection $employees): array
+    {
+        $rankings = [];
+        foreach (['on_time' => 'in_days', 'late_in' => 'in_days', 'late_out' => 'out_days'] as $metric => $denominator) {
+            $rankings[$metric] = $employees
+                ->filter(fn ($row) => $row[$denominator] > 0 && $row[$metric . '_days'] > 0)
+                ->sort(function ($left, $right) use ($metric, $denominator) {
+                    // Compare exact fractions, not rounded display percentages.
+                    return ($right[$metric . '_days'] * $left[$denominator] <=> $left[$metric . '_days'] * $right[$denominator])
+                        ?: ($right[$metric . '_days'] <=> $left[$metric . '_days'])
+                        ?: ($right[$metric . '_avg_seconds'] <=> $left[$metric . '_avg_seconds'])
+                        ?: strcasecmp($left['name'], $right['name'])
+                        ?: ($left['id'] <=> $right['id']);
+                })->values();
+        }
+        return $rankings;
+    }
+
     private function formatDelta(?int $seconds, string $earlyPhrase, string $latePhrase): ?string
     {
         if ($seconds === null) {
@@ -401,7 +443,7 @@ class DashboardAbsensiKaryawanService
             || ($timeInSeconds !== null && $timeOutSeconds !== null && $timeOutSeconds <= $timeInSeconds);
 
         if ($shiftName === 'SHSECURITY2') {
-            $in = $todaySeconds->filter(fn ($value) => $value > $this->toSeconds('14:00:00'))->max();
+            $in = $todaySeconds->filter(fn ($value) => $value > $this->toSeconds('14:00:00'))->min();
             $out = $nextSeconds->first(fn ($value) => $value < $this->toSeconds('14:00:00'));
             return [$in ?: null, $out !== null ? $out + 86400 : null];
         }
@@ -493,6 +535,8 @@ class DashboardAbsensiKaryawanService
                 ],
                 'summary' => ['total' => 0, 'with_attendance' => 0, 'cluster_count' => 0],
                 'clusters' => [],
+                'highlights' => ['on_time' => null, 'late_in' => null, 'late_out' => null],
+                'rankings' => ['on_time' => [], 'late_in' => [], 'late_out' => []],
                 'employees' => [],
             ],
         ];

@@ -37,6 +37,9 @@ class FdlPartikulatIsokinetikMethod2Controller extends Controller
 {
     public function getSurvei(Request $request)
     {
+        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+             return $response;
+        }
         $data = DataLapanganIsokinetikSurveiLapangan::where('no_survei', $request->no_survei)->first();
         $check = DataLapanganIsokinetikPenentuanKecepatanLinier::where('no_survei', $request->no_survei)->first();
 

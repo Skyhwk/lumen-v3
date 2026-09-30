@@ -6,6 +6,12 @@ require_once __DIR__ . '/../vendor/autoload.php';
 ))->bootstrap();
 
 date_default_timezone_set('Asia/Jakarta');
+
+if (filter_var(env('APP_DEBUG', false), FILTER_VALIDATE_BOOLEAN)) {
+    ini_set('display_errors', '1');
+    ini_set('display_startup_errors', '1');
+    error_reporting(E_ALL);
+}
 /*
 |--------------------------------------------------------------------------
 | Create The Application
@@ -88,6 +94,7 @@ $app->routeMiddleware([
     'director.auth.token' => App\Http\Middleware\directorApp\ApiTokenAuth::class,
     'control.access.auth' => App\Http\Middleware\controlAccess\ApiTokenAuth::class,
     'rate.limit.user' => App\Http\Middleware\UserRateLimitMiddleware::class,
+    'greatday.auth' => App\Http\Middleware\GreatdayCheckToken::class,
 ]);
 
 /*

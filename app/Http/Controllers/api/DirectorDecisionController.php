@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
+use App\Services\RecruitmentDecisionActionEmailService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -106,6 +107,7 @@ class DirectorDecisionController extends Controller
                     $now,
                     'management_decision_kept'
                 );
+                app(RecruitmentDecisionActionEmailService::class)->notifyFinalDecision($recruitment, 'keep');
 
                 $result = $this->result($recruitment, 'kept', $now->toDateTimeString(), false);
                 $result['requested_decision'] = 'keep';
@@ -133,6 +135,7 @@ class DirectorDecisionController extends Controller
                 $historyStatus,
                 $decision === 'reject' ? ['reject_reason' => $rejectReason] : []
             );
+            app(RecruitmentDecisionActionEmailService::class)->notifyFinalDecision($recruitment, $decision);
 
             if ($decision === 'reject') {
                 app(AtsNotificationService::class)->notifyHrdTeam(

@@ -95,14 +95,163 @@ class AtsRejectedCandidatesController extends Controller
         return $pos ?: '-';
     }
 
-    public function index(Request $request)
+    public function counts()
+    {
+        return response()->json([
+            'data' => [
+                'counts' => [
+                    'reject_hrd' => $this->rejectedCandidatesQuery('reject_hrd')->count(),
+                    'reject_user' => $this->rejectedCandidatesQuery('reject_user')->count(),
+                    'assessment' => $this->rejectedCandidatesQuery('assessment')->count(),
+                    'voided' => $this->rejectedCandidatesQuery('voided')->count(),
+                ],
+            ],
+            'message' => 'Rejected candidate tab counts retrieved successfully',
+        ], 200);
+    }
+
+    private function whereVoided($query): void
+    {
+        $query->where(function ($q) {
+            $q->whereRaw("LOWER(TRIM(COALESCE(status, ''))) = 'void'")
+                ->orWhereRaw("JSON_SEARCH(meta_history, 'one', 'hired_void', NULL, '$[*].status') IS NOT NULL");
+        });
+    }
+
+    private function whereNotVoided($query): void
+    {
+        $query->where(function ($q) {
+            $q->where(function ($sub) {
+                $sub->whereNull('status')
+                    ->orWhereRaw("LOWER(TRIM(status)) != 'void'");
+            })->whereRaw("JSON_SEARCH(meta_history, 'one', 'hired_void', NULL, '$[*].status') IS NULL");
+        });
+    }
+
+    private function rejectedCandidatesQuery(?string $mode = null)
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
-            ->where('is_rejected_kandidat', 1)
             ->whereNotNull('personnel_request_id')
-            ->where('personnel_request_id', '!=', '')
-            ->orderBy('is_rejected_kandidat_at', 'desc')
+            ->where('personnel_request_id', '!=', '');
+
+        if ($mode === 'voided') {
+            return $query->where(function ($q) {
+                $this->whereVoided($q);
+            })
+                ->orderBy('is_rejected_kandidat_at', 'desc')
+                ->orderBy('id', 'desc');
+        }
+
+        if ($mode === 'assessment') {
+            return $query->where('is_rejected_kandidat', 1)
+                ->where(function ($q) {
+                    $this->whereNotVoided($q);
+                })
+                ->where(function ($q) {
+                    $q->whereRaw("JSON_SEARCH(meta_history, 'one', 'rejected_system', NULL, '$[*].status') IS NOT NULL")
+                        ->orWhereRaw(
+                            "CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(meta_history, 'one', 'rejected', NULL, '$[*].status')), '[', -1), ']', 1) AS SIGNED) > 0
+                            AND JSON_UNQUOTE(JSON_EXTRACT(
+                                meta_history,
+                                CONCAT(
+                                    '$[',
+                                    CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(meta_history, 'one', 'rejected', NULL, '$[*].status')), '[', -1), ']', 1) AS SIGNED) - 1,
+                                    '].status'
+                                )
+                            )) = 'assessment'"
+                        );
+                })
+                ->where(function ($q) {
+                    $q->where(function ($sub) {
+                        $sub->whereNotNull('is_rejected_kandidat_by')
+                            ->where('is_rejected_kandidat_by', '!=', '');
+                    })->orWhere(function ($sub) {
+                        $sub->whereNotNull('rejected_by')
+                            ->where('rejected_by', '!=', '');
+                    });
+                })
+                ->orderBy('is_rejected_kandidat_at', 'desc')
+                ->orderBy('id', 'desc');
+        }
+
+        $query->where('is_rejected_kandidat', 1);
+        $this->whereNotVoided($query);
+        $this->applyRejectTab($query, $mode);
+
+        return $query->orderBy('is_rejected_kandidat_at', 'desc')
             ->orderBy('id', 'desc');
+    }
+
+    private function applyRejectTab($query, ?string $mode): void
+    {
+        if (!in_array($mode, ['reject_hrd', 'reject_user', 'assessment'], true)) {
+            return;
+        }
+
+        if ($mode === 'reject_user') {
+            $this->whereUserRejected($query);
+            return;
+        }
+
+        $this->whereNotUserRejected($query);
+
+        if ($mode === 'reject_hrd') {
+            $query->where(function ($q) {
+                $q->whereHas('hrdInterview', function ($sub) {
+                    $sub->whereIn('status_result', ['failed', 'gagal']);
+                })->orWhere('meta_history', 'like', '%hrd_final_decision_rejected%')
+                    ->orWhereRaw(
+                        "CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(meta_history, 'one', 'rejected', NULL, '$[*].status')), '[', -1), ']', 1) AS SIGNED) > 0
+                        AND JSON_UNQUOTE(JSON_EXTRACT(
+                            meta_history,
+                            CONCAT(
+                                '$[',
+                                CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(meta_history, 'one', 'rejected', NULL, '$[*].status')), '[', -1), ']', 1) AS SIGNED) - 1,
+                                '].status'
+                            )
+                        )) = 'screening'"
+                    );
+            });
+        }
+    }
+
+    private function whereAssessmentOverdue($query): void
+    {
+        $deadline = Carbon::now('Asia/Jakarta')->subDays(6)->format('Y-m-d H:i:s');
+
+        $query->where('status', 'assessment')
+            ->where('is_active', 1)
+            ->whereRaw(
+                "JSON_UNQUOTE(JSON_EXTRACT(meta_history, REPLACE(JSON_UNQUOTE(JSON_SEARCH(meta_history, 'one', 'assessment', NULL, '$[*].status')), '.status', '.at'))) <= ?",
+                [$deadline]
+            );
+    }
+
+    private function whereUserRejected($query): void
+    {
+        $query->where(function ($q) {
+            $q->where(function ($sub) {
+                $sub->whereNotNull('reject_interview_user_at')
+                    ->where('reject_interview_user_at', '!=', '');
+            })->orWhereHas('userInterview', function ($sub) {
+                $sub->whereIn('status_result', ['gagal', 'failed']);
+            });
+        });
+    }
+
+    private function whereNotUserRejected($query): void
+    {
+        $query->where(function ($q) {
+            $q->whereNull('reject_interview_user_at')
+                ->orWhere('reject_interview_user_at', '');
+        })->whereDoesntHave('userInterview', function ($sub) {
+            $sub->whereIn('status_result', ['gagal', 'failed']);
+        });
+    }
+
+    public function index(Request $request)
+    {
+        $query = $this->rejectedCandidatesQuery($request->input('mode'));
 
         $datatable = DataTables::of($query)
             ->addColumn('no_request', function ($row) {

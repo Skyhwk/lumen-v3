@@ -196,6 +196,316 @@ class RosaFormatter
     }
 
     /**
+     * Format pengukuran ROSA selaras mobile / apps-fdl (skor string "poin-keterangan", tanpa penyesuaian terpisah).
+     */
+    public static function formatRosaLegacyData(array $data): array
+    {
+        $idx = static function (string $key, int $default = 0) use ($data): int {
+            return isset($data[$key]) ? (int) $data[$key] : $default;
+        };
+
+        $durasiStrings = [
+            0 => '-1-<30 menit atau < 1 jam',
+            1 => '0-1 jam - 4 jam',
+            2 => '1->4 jam',
+        ];
+        $durasi = static function (string $key) use ($data, $durasiStrings, $idx): string {
+            $i = $idx($key, 1);
+            return $durasiStrings[$i] ?? $durasiStrings[1];
+        };
+
+        $pick = static function (array $options, int $index): string {
+            return $options[$index] ?? $options[0];
+        };
+
+        $tinggiKursiOpts = [
+            '1-Lutut membentuk 90ᵒ',
+            '2-Kursi terlalu rendah, Lutut membentuk sudut < 90ᵒ',
+            '2-Kursi terlalu tinggi, Lutut membentuk sudut > 90ᵒ',
+            '3-Kaki tidak menapak ke lantai',
+        ];
+        $lebarOpts = [
+            '1-Jarak antara lutut dan ujung kursi sekitar 7,62 cm',
+            '2-Dudukan kursi terlalu panjang ke depan',
+            '2-Dudukan kursi terlalu sempit',
+        ];
+        $lenganOpts = [
+            '1-Siku tersangga dengan baik, rileks, dan sejajar dengan bahu',
+            '2-Siku terlalu tinggi, bahu terangkat/terlalu turun atau tidak adanya penyangga lengan',
+        ];
+        $punggungOpts = [
+            '1-Sandaran punggung menyangga keseluruhan punggung dan tulang belakang dengan baik, sandaran punggung berkisar antara 95ᵒ dan 110ᵒ',
+            '2-Tidak terdapat sandaran tulang belakang, atau sandaran hanya menyangga sebagian punggung',
+            '2-Sandaran terlalu ke belakang(>110°) atau terlalu ke depan (<95°)',
+            '2-Tidak ada sandaran punggung sama sekali',
+        ];
+        $monitorOpts = [
+            '1-Jarak antara pekerja dengan monitor sepanjang lengan (40 – 75 cm), eye level',
+            '2-Monitor terlalu rendah, membentuk sudut < 30ᵒ',
+            '3-Monitor terlalu tinggi membentuk sudut >30ᵒ (Leher terpaksa melihat ke atas)',
+        ];
+        $teleponOpts = [
+            '1-Menelepon dengan menggunakan headset atau dengan satu tangan',
+            '2-Jarak telepon dengan pekerja terlalu jauh (> 30 cm)',
+        ];
+        $mouseOpts = [
+            '1-Mouse sejajar bahu',
+            '2-Letak mouse agak jauh',
+        ];
+        $keyboardOpts = [
+            '1-Pergelangan lurus, bahu rileks',
+            '2-Pergelangan terangkat <15ᵒ dan sudut keyboard terlalu miring',
+        ];
+
+        $sectionA = [
+            'tinggi_kursi' => static::legacyWithTambahan(
+                ['skor' => $pick($tinggiKursiOpts, $idx('skor_tinggi_kursi'))],
+                $data,
+                [
+                    ['tambah_kursi_sempit', '1-Tempat duduk sempit dan tidak leluasa, sehingga memaksa kaki untuk menekuk'],
+                    ['tambah_kursi_tidak_bisa_atur', '1-Kursi tidak dapat diatur untuk menyesuaikan tinggi kaki'],
+                ]
+            ),
+            'lebar_dudukan' => static::legacyWithTambahan(
+                ['skor' => $pick($lebarOpts, $idx('skor_lebar_dudukan'))],
+                $data,
+                [
+                    ['tambah_dudukan_tidak_bisa_atur', '1-Kursi tidak dapat di-adjust (diatur) untuk menyesuaikan dudukan kursi'],
+                ]
+            ),
+            'sandaran_lengan' => static::legacyWithTambahan(
+                ['skor' => $pick($lenganOpts, $idx('skor_sandaran_lengan'))],
+                $data,
+                [
+                    ['tambah_lengan_keras', '1-Penyangga terlalu keras atau mudah rusak'],
+                    ['tambah_lengan_lebar', '1-Penyangga lengan terlalu lebar'],
+                    ['tambah_lengan_tidak_bisa_atur', '1-Sandaran tangan tidak dapat di-adjust (diatur) untuk menyesuaikan tinggi kaki'],
+                ]
+            ),
+            'sandaran_punggung' => static::legacyWithTambahan(
+                ['skor' => $pick($punggungOpts, $idx('skor_sandaran_punggung'))],
+                $data,
+                [
+                    ['tambah_punggung_meja_tinggi', '1-Permukaan meja terlalu tinggi (bahu terangkat)'],
+                    ['tambah_punggung_tidak_bisa_atur', '1-Sandaran punggung tidak dapat diatur'],
+                ]
+            ),
+            'durasi_kerja_bagian_kursi' => $durasi('skor_durasi_kerja_kursi'),
+        ];
+
+        $sectionB = [
+            'monitor' => static::legacyWithTambahan(
+                ['skor' => $pick($monitorOpts, $idx('skor_monitor'))],
+                $data,
+                [
+                    ['tambah_monitor_leher_putar', '1-Leher berputar lebih dari 30ᵒ'],
+                    ['tambah_monitor_no_holder', '1-Tidak memiliki dokumen holder'],
+                    ['tambah_monitor_pantulan', '1-Terdapat pantulan cahaya ke layar monitor'],
+                    ['tambah_monitor_terlalu_jauh', '1-Monitor terlalu Jauh'],
+                ]
+            ),
+            'telepon' => static::legacyWithTambahan(
+                ['skor' => $pick($teleponOpts, $idx('skor_telepon'))],
+                $data,
+                [
+                    ['tambah_telepon_penopang_leher', '2-Menelepon dengan penopang leher dan bahu'],
+                    ['tambah_telepon_tangan_tidak_bebas', '1-Tangan tidak bebas menggenggam telepon'],
+                ]
+            ),
+            'durasi_kerja_monitor' => $durasi('skor_durasi_kerja_monitor'),
+            'durasi_kerja_telepon' => $durasi('skor_durasi_kerja_telepon'),
+        ];
+
+        $sectionC = [
+            'mouse' => static::legacyWithTambahan(
+                ['skor' => $pick($mouseOpts, $idx('skor_mouse'))],
+                $data,
+                [
+                    ['tambah_mouse_menekuk', '1-Genggaman mouse menekuk'],
+                    ['tambah_mouse_ada_palmrest', '1-Terdapat palmrest (sandaran) mouse'],
+                    ['tambah_mouse_beda_permukaan', '2-Letak mouse dengan keyboard tidak dalam satu permukaan'],
+                ]
+            ),
+            'keyboard' => static::legacyWithTambahan(
+                ['skor' => $pick($keyboardOpts, $idx('skor_keyboard'))],
+                $data,
+                [
+                    ['tambah_keyboard_deviasi', '1-Tangan berdeviasi (miring)'],
+                    ['tambah_keyboard_terlalu_tinggi', '1-Keyboard terlalu tinggi, bahu terangkat'],
+                    ['tambah_keyboard_diatas_kepala', '1-Posisi Keyboard di atas melebihi kepala (terlalu tinggi)'],
+                    ['tambah_keyboard_tidak_bisa_atur', '1-Posisi Keyboard tidak dapat diatur'],
+                ]
+            ),
+            'durasi_kerja_mouse' => $durasi('skor_durasi_kerja_mouse'),
+            'durasi_kerja_keyboard' => $durasi('skor_durasi_kerja_keyboard'),
+        ];
+
+        return static::computeLegacyRosaSummary($sectionA, $sectionB, $sectionC);
+    }
+
+    /** @param array<int, array{0: string, 1: string}> $tambahanDefs [flagKey, legacy string] */
+    private static function legacyWithTambahan(array $node, array $data, array $tambahanDefs): array
+    {
+        $n = 0;
+        foreach ($tambahanDefs as [$flagKey, $legacyStr]) {
+            if ((int) ($data[$flagKey] ?? 0) !== 1) {
+                continue;
+            }
+            $n++;
+            $node[$n === 1 ? 'tambahan' : 'tambahan_' . $n] = $legacyStr;
+        }
+        return $node;
+    }
+
+    private static function extractLegacyScore($value): int
+    {
+        if (is_string($value) && preg_match('/^(-?\d+)-/', $value, $matches)) {
+            return (int) $matches[1];
+        }
+        return (int) $value;
+    }
+
+    private static function sumLegacySectionScores(array $sections): array
+    {
+        $hasil = [];
+        foreach ($sections as $sectionKey => $bagian) {
+            foreach ($bagian as $key => $item) {
+                $hasil[$sectionKey][$key] = 0;
+                if (is_array($item)) {
+                    foreach ($item as $subKey => $val) {
+                        $hasil[$sectionKey][$key] += static::extractLegacyScore($val);
+                    }
+                } else {
+                    $hasil[$sectionKey][$key] += static::extractLegacyScore($item);
+                }
+            }
+        }
+        return $hasil;
+    }
+
+    private static function computeLegacyRosaSummary(array $sectionA, array $sectionB, array $sectionC): array
+    {
+        $tableSectionA = [
+            2 => [2 => 2, 3 => 2, 4 => 3, 5 => 4, 6 => 5, 7 => 6, 8 => 7, 9 => 8],
+            3 => [2 => 2, 3 => 2, 4 => 3, 5 => 4, 6 => 5, 7 => 6, 8 => 7, 9 => 8],
+            4 => [2 => 3, 3 => 3, 4 => 3, 5 => 4, 6 => 5, 7 => 6, 8 => 7, 9 => 8],
+            5 => [2 => 4, 3 => 4, 4 => 4, 5 => 4, 6 => 5, 7 => 6, 8 => 7, 9 => 8],
+            6 => [2 => 5, 3 => 5, 4 => 5, 5 => 5, 6 => 6, 7 => 7, 8 => 8, 9 => 9],
+            7 => [2 => 6, 3 => 6, 4 => 6, 5 => 7, 6 => 8, 7 => 8, 8 => 8, 9 => 9],
+            8 => [2 => 7, 3 => 7, 4 => 7, 5 => 8, 6 => 8, 7 => 9, 8 => 9, 9 => 9],
+        ];
+        $tableSectionB = [
+            0 => [0 => 1, 1 => 1, 2 => 1, 3 => 2, 4 => 3, 5 => 4, 6 => 5, 7 => 6],
+            1 => [0 => 1, 1 => 1, 2 => 2, 3 => 2, 4 => 3, 5 => 4, 6 => 5, 7 => 6],
+            2 => [0 => 1, 1 => 2, 2 => 2, 3 => 3, 4 => 3, 5 => 4, 6 => 6, 7 => 7],
+            3 => [0 => 2, 1 => 2, 2 => 3, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 8],
+            4 => [0 => 3, 1 => 3, 2 => 4, 3 => 4, 4 => 5, 5 => 6, 6 => 7, 7 => 8],
+            5 => [0 => 4, 1 => 4, 2 => 5, 3 => 5, 4 => 6, 5 => 7, 6 => 8, 7 => 9],
+            6 => [0 => 5, 1 => 5, 2 => 6, 3 => 7, 4 => 8, 5 => 8, 6 => 9, 7 => 9],
+        ];
+        $tableSectionC = [
+            0 => [0 => 1, 1 => 1, 2 => 1, 3 => 2, 4 => 3, 5 => 4, 6 => 5, 7 => 6],
+            1 => [0 => 1, 1 => 1, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 7],
+            2 => [0 => 1, 1 => 2, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 7],
+            3 => [0 => 2, 1 => 3, 2 => 3, 3 => 3, 4 => 5, 5 => 6, 6 => 7, 7 => 8],
+            4 => [0 => 3, 1 => 4, 2 => 4, 3 => 5, 4 => 5, 5 => 6, 6 => 7, 7 => 8],
+            5 => [0 => 4, 1 => 5, 2 => 5, 3 => 6, 4 => 6, 5 => 7, 6 => 8, 7 => 9],
+            6 => [0 => 5, 1 => 6, 2 => 6, 3 => 7, 4 => 7, 5 => 8, 6 => 8, 7 => 9],
+            7 => [0 => 6, 1 => 7, 2 => 7, 3 => 8, 4 => 8, 5 => 9, 6 => 9, 7 => 9],
+        ];
+        $tableSectionD = [
+            1 => [1 => 1, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 7, 8 => 8, 9 => 9],
+            2 => [1 => 2, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 7, 8 => 8, 9 => 9],
+            3 => [1 => 3, 2 => 3, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 7, 8 => 8, 9 => 9],
+            4 => [1 => 4, 2 => 4, 3 => 4, 4 => 4, 5 => 5, 6 => 6, 7 => 7, 8 => 8, 9 => 9],
+            5 => [1 => 5, 2 => 5, 3 => 5, 4 => 5, 5 => 5, 6 => 6, 7 => 7, 8 => 8, 9 => 9],
+            6 => [1 => 6, 2 => 6, 3 => 6, 4 => 6, 5 => 6, 6 => 6, 7 => 7, 8 => 8, 9 => 9],
+            7 => [1 => 7, 2 => 7, 3 => 7, 4 => 7, 5 => 7, 6 => 7, 7 => 7, 8 => 8, 9 => 9],
+            8 => [1 => 8, 2 => 8, 3 => 8, 4 => 8, 5 => 8, 6 => 8, 7 => 8, 8 => 8, 9 => 9],
+            9 => [1 => 9, 2 => 9, 3 => 9, 4 => 9, 5 => 9, 6 => 9, 7 => 9, 8 => 9, 9 => 9],
+        ];
+        $skorRosa = [
+            1 => [1 => 1, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 7, 8 => 8, 9 => 9, 10 => 10],
+            2 => [1 => 2, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 7, 8 => 8, 9 => 9, 10 => 10],
+            3 => [1 => 3, 2 => 3, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 7, 8 => 8, 9 => 9, 10 => 10],
+            4 => [1 => 4, 2 => 4, 3 => 4, 4 => 4, 5 => 5, 6 => 6, 7 => 7, 8 => 8, 9 => 9, 10 => 10],
+            5 => [1 => 5, 2 => 5, 3 => 5, 4 => 5, 5 => 5, 6 => 6, 7 => 7, 8 => 8, 9 => 9, 10 => 10],
+            6 => [1 => 6, 2 => 6, 3 => 6, 4 => 6, 5 => 6, 6 => 6, 7 => 7, 8 => 8, 9 => 9, 10 => 10],
+            7 => [1 => 7, 2 => 7, 3 => 7, 4 => 7, 5 => 7, 6 => 7, 7 => 7, 8 => 8, 9 => 9, 10 => 10],
+            8 => [1 => 8, 2 => 8, 3 => 8, 4 => 8, 5 => 8, 6 => 8, 7 => 8, 8 => 8, 9 => 9, 10 => 10],
+            9 => [1 => 9, 2 => 9, 3 => 9, 4 => 9, 5 => 9, 6 => 9, 7 => 9, 8 => 9, 9 => 9, 10 => 10],
+            10 => [1 => 10, 2 => 10, 3 => 10, 4 => 10, 5 => 10, 6 => 10, 7 => 10, 8 => 10, 9 => 10, 10 => 10],
+        ];
+
+        $parsed = static::sumLegacySectionScores([
+            'section_A' => $sectionA,
+            'section_B' => $sectionB,
+            'section_C' => $sectionC,
+        ]);
+
+        $tinggi_kursi = $parsed['section_A']['tinggi_kursi'] ?? 0;
+        $lebar_dudukan = $parsed['section_A']['lebar_dudukan'] ?? 0;
+        $durasi_kursi = $parsed['section_A']['durasi_kerja_bagian_kursi'] ?? 0;
+        $sandaran_lengan = $parsed['section_A']['sandaran_lengan'] ?? 0;
+        $sandaran_punggung = $parsed['section_A']['sandaran_punggung'] ?? 0;
+
+        $armRestAndBackSupport = $sandaran_lengan + $sandaran_punggung;
+        $seatPanHeightOrdDepth = $tinggi_kursi + $lebar_dudukan;
+        $nilai_section_A = $tableSectionA[$seatPanHeightOrdDepth][$armRestAndBackSupport] ?? 0;
+        $totalSkorA = $nilai_section_A + $durasi_kursi;
+
+        $monitor = $parsed['section_B']['monitor'] ?? 0;
+        $durasi_monitor = $parsed['section_B']['durasi_kerja_monitor'] ?? 0;
+        $telepon = $parsed['section_B']['telepon'] ?? 0;
+        $durasi_telepon = $parsed['section_B']['durasi_kerja_telepon'] ?? 0;
+        $totalMonitor = $monitor + $durasi_monitor;
+        $totalTelepon = $telepon + $durasi_telepon;
+        $totalSkorB = $tableSectionB[$totalTelepon][$totalMonitor] ?? 0;
+
+        $keyboard = $parsed['section_C']['keyboard'] ?? 0;
+        $mouse = $parsed['section_C']['mouse'] ?? 0;
+        $durasi_keyboard = $parsed['section_C']['durasi_kerja_keyboard'] ?? 0;
+        $durasi_mouse = $parsed['section_C']['durasi_kerja_mouse'] ?? 0;
+        $totalKeyboard = $keyboard + $durasi_keyboard;
+        $totalMouse = $mouse + $durasi_mouse;
+        $totalSkorC = $tableSectionC[$totalMouse][$totalKeyboard] ?? 0;
+
+        $totalSkorD = $tableSectionD[$totalSkorB][$totalSkorC] ?? 0;
+        $finalRosa = $skorRosa[$totalSkorA][$totalSkorD] ?? 0;
+
+        return [
+            'section_A' => $sectionA,
+            'section_B' => $sectionB,
+            'section_C' => $sectionC,
+            'skor_mouse' => $mouse,
+            'skor_monitor' => $monitor,
+            'skor_telepon' => $telepon,
+            'nilai_table_a' => $nilai_section_A,
+            'skor_keyboard' => $keyboard,
+            'final_skor_rosa' => $finalRosa,
+            'total_section_a' => $totalSkorA,
+            'total_section_b' => $totalSkorB,
+            'total_section_c' => $totalSkorC,
+            'total_section_d' => $totalSkorD,
+            'skor_lebar_kursi' => $lebar_dudukan,
+            'total_skor_mouse' => $totalMouse,
+            'skor_tinggi_kursi' => $tinggi_kursi,
+            'total_skor_monitor' => $totalMonitor,
+            'total_skor_telepon' => $totalTelepon,
+            'total_skor_keyboard' => $totalKeyboard,
+            'skor_sandaran_lengan' => $sandaran_lengan,
+            'skor_sandaran_punggung' => $sandaran_punggung,
+            'skor_durasi_kerja_mouse' => $durasi_mouse,
+            'skor_durasi_kerja_monitor' => $durasi_monitor,
+            'skor_durasi_kerja_telepon' => $durasi_telepon,
+            'skor_durasi_kerja_keyboard' => $durasi_keyboard,
+            'skor_durasi_kerja_bagian_kursi' => $durasi_kursi,
+            'skor_total_sandaran_lengan_dan_punggung' => $armRestAndBackSupport,
+            'skor_total_tinggi_kursi_dan_lebar_dudukan' => $seatPanHeightOrdDepth,
+        ];
+    }
+
+    /**
      * Map lebar dudukan (contoh mapping sesuai data yang Anda berikan).
      *
      * @param mixed $value

@@ -41,6 +41,86 @@ trait BuildsCandidateAssessmentPreview
         }));
     }
 
+    protected function resolveEvaluationTargetName($session): string
+    {
+        $name = trim((string) ($session->evaluation_target_name ?? ''));
+        if ($name !== '') {
+            return $name;
+        }
+
+        $targetId = $session->evaluation_target_karyawan_id ?? null;
+        if ($targetId === null || $targetId === '') {
+            return '';
+        }
+
+        $resolved = DB::table('master_karyawan')
+            ->where('id', $targetId)
+            ->value('nama_lengkap');
+
+        return trim((string) ($resolved ?? ''));
+    }
+
+    protected function evaluationTargetItemLabel($session): string
+    {
+        $categoryName = strtoupper(trim((string) ($session->category_name ?? '')));
+        if ($categoryName === 'EMPLOYEE EVALUATION') {
+            return 'Karyawan dinilai';
+        }
+        if ($categoryName === 'SATISFACTION OF LEADER') {
+            return 'Atasan dinilai';
+        }
+        if ($categoryName === 'MANAGEMENT EVALUATION') {
+            return 'Management dinilai';
+        }
+
+        return 'Target evaluasi';
+    }
+
+    protected function internalSessionDisplayName($session): string
+    {
+        $categoryName = trim((string) ($session->category_name ?? ''));
+        $targetName = $this->resolveEvaluationTargetName($session);
+
+        return $targetName !== ''
+            ? $categoryName . ' - ' . $targetName
+            : $categoryName;
+    }
+
+    protected function internalSessionUsesProgressMetric($session): bool
+    {
+        $categoryName = strtoupper(trim((string) ($session->category_name ?? '')));
+        if ($categoryName === 'DISC') {
+            return true;
+        }
+
+        return in_array($categoryName, ['KOSTICK PAPI', 'PAPI KOSTICK'], true);
+    }
+
+    protected function extractInternalSessionScorePreview($session): ?array
+    {
+        if (empty($session->result_json)) {
+            return null;
+        }
+
+        $result = json_decode($session->result_json, true) ?: [];
+        $engine = strtolower(trim((string) ($result['engine'] ?? '')));
+        if ($engine === 'disc' || $engine === 'papi_kostick') {
+            return null;
+        }
+
+        if (!array_key_exists('score', $result)) {
+            return null;
+        }
+
+        $score = round((float) $result['score'], 2);
+
+        return [
+            'score' => $score,
+            'score_text' => number_format($score, $score == (int) $score ? 0 : 2) . '/100',
+            'percent' => (int) min(100, max(0, round($score))),
+        ];
+    }
+
     protected function isHiddenAssessmentSession($session): bool
     {
         $name = strtolower(trim((string) ($session->category_name ?? $session->name ?? '')));
@@ -307,10 +387,20 @@ trait BuildsCandidateAssessmentPreview
 
         $isPersonalityEngine = $engine === 'disc' || $engine === 'papi_kostick';
 
+        $targetName = $this->resolveEvaluationTargetName($session);
+        if ($targetName !== '') {
+            array_unshift($items, [
+                'label' => $this->evaluationTargetItemLabel($session),
+                'value' => $targetName,
+            ]);
+        }
+
         return [
             'engine' => $engine,
             'summary_text' => $summaryText,
             'items' => $items,
+            'target_name' => $targetName !== '' ? $targetName : null,
+            'session_display_name' => $this->internalSessionDisplayName($session),
             'scored_at' => $result['scored_at'] ?? $session->completed_at,
             'disc_detail' => $engine === 'disc' ? $this->buildDiscDetail($result) : null,
             'papi_detail' => $engine === 'papi_kostick' ? $this->buildPapiDetail($result) : null,
@@ -644,6 +734,7 @@ trait BuildsCandidateAssessmentPreview
 
         return [
             'id' => $user->id,
+            'new_recruitment_id' => $user->new_recruitment_id ?? $candidate->id ?? null,
             'tgl_interview' => $user->tgl_interview,
             'jenis_interview' => $user->jenis_interview,
             'link_gmeet' => $user->link_gmeet,
@@ -715,6 +806,7 @@ trait BuildsCandidateAssessmentPreview
             'applied_at' => $candidate->created_at,
             'updated_at' => $candidate->updated_at,
             'meta_history' => $this->decodeMetaHistory($candidate->meta_history),
+            'bypass' => $this->decodeCandidateBypass($candidate->bypass ?? null),
             'assessment' => $this->buildAssessmentProgress($candidate->id),
             'hrd_interview' => $this->formatHrdInterviewSummary($candidate),
             'user_interview' => $this->formatUserInterviewSummary($candidate),
@@ -727,6 +819,15 @@ trait BuildsCandidateAssessmentPreview
             'has_completed_profile' => $this->candidateHasCompletedProfile($candidate->id),
             'attachments' => $this->formatCandidateAttachments($candidate->id),
         ];
+    }
+
+    protected function decodeCandidateBypass($bypass): array
+    {
+        if (is_array($bypass)) {
+            return $bypass;
+        }
+
+        return json_decode((string) $bypass, true) ?: [];
     }
 
     protected function candidateHasCompletedProfile($candidateId): bool

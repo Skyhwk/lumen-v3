@@ -60,6 +60,21 @@ class FdlEmisiCerobongController extends Controller
             ->filterColumn('no_sampel_lama', function ($query, $keyword) {
                 $query->where('no_sampel_lama', 'like', '%' . $keyword . '%');
             })
+            ->filterColumn('is_approve', function ($query, $keyword) {
+                $keyword = strtolower(trim($keyword));
+                if ($keyword === '') {
+                    return;
+                }
+                if (in_array($keyword, ['approved', 'approve', '1'], true) || str_starts_with($keyword, 'approv')) {
+                    $query->where('is_approve', 1);
+                    return;
+                }
+                if (in_array($keyword, ['belum', 'belum approved', '0'], true)) {
+                    $query->where('is_approve', 0);
+                    return;
+                }
+                $query->where('is_approve', 'like', '%' . $keyword . '%');
+            })
             ->filterColumn('metode', function ($query, $keyword) {
                 $query->where('metode', 'like', '%' . $keyword . '%');
             })

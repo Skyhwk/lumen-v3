@@ -35,6 +35,9 @@ class FdlIklimDinginController extends Controller
 {
     public function getSampel(Request $request)
     {
+        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+            return $response;
+        }
         if (isset($request->no_sampel) && $request->no_sampel != null) {
             $parameter = ParameterFdl::select('parameters')->where('nama_fdl', 'iklim_dingin')->where('is_active', 1)->first();
             $listParameter = json_decode($parameter->parameters, true);

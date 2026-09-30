@@ -2,134 +2,157 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\Lemburan;
-use App\Models\{FormHeader, FormDetail};
-use App\Models\Rfid;
-use App\Models\MasterDivisi;
-use App\Models\MasterJabatan;
-use App\Models\MasterKaryawan;
-use App\Models\Konsul;
-use App\Models\KonsulRoom;
 use App\Http\Controllers\Controller;
+use App\Models\IntilabInternal\ConsultationRequest;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Style\Border;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Yajra\Datatables\Datatables;
-
-
 
 class KonsultasiController extends Controller
 {
     public function index(Request $request)
     {
         try {
-            $data = Konsul::on('android_intilab')
-                ->with(['konsulRoom', 'user.department'])
-                ->whereIn('status', [0, 1])->get();
+            $query = $this->baseQuery((int) $request->periode, $request->scope)
+                ->whereIn('cr.status', ['Pending', 'Approved']);
 
-            return Datatables::of($data)->make(true);
-        } catch (Exception $ex) {
+            return Datatables::of($this->decorate($query->get()))->make(true);
+        } catch (\Exception $ex) {
             return response()->json([
-                "message" => $ex->getMessage(),
-                "line" => $ex->getLine()
+                'message' => $ex->getMessage(),
+                'line' => $ex->getLine(),
             ], 402);
+        }
+    }
+
+    public function tabCounts(Request $request)
+    {
+        $periode = (int) ($request->periode ?: date('Y'));
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'on_progress' => $this->baseQuery($periode, $request->scope)->where('cr.status', 'Pending')->count(),
+                'processed' => $this->baseQuery($periode, $request->scope)->whereIn('cr.status', ['Approved', 'Rejected'])->count(),
+            ],
+        ]);
+    }
+
+    public function indexUnprocessed(Request $request)
+    {
+        try {
+            $query = $this->baseQuery((int) $request->periode, $request->scope)
+                ->where('cr.status', 'Pending');
+
+            return Datatables::of($this->decorate($query->get()))->make(true);
+        } catch (\Exception $ex) {
+            return response()->json([
+                'message' => $ex->getMessage(),
+                'line' => $ex->getLine(),
+            ], 500);
+        }
+    }
+
+    public function indexProcessed(Request $request)
+    {
+        try {
+            $query = $this->baseQuery((int) $request->periode, $request->scope)
+                ->whereIn('cr.status', ['Approved', 'Rejected']);
+
+            return Datatables::of($this->decorate($query->get()))->make(true);
+        } catch (\Exception $ex) {
+            return response()->json([
+                'message' => $ex->getMessage(),
+                'line' => $ex->getLine(),
+            ], 500);
+        }
+    }
+
+    public function create(Request $request)
+    {
+        try {
+            if (!$this->user_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data karyawan tidak ditemukan',
+                ], 404);
+            }
+
+            $type = $this->normalizeType($request->type);
+            $tanggal = trim((string) $request->tanggal);
+            $waktu = trim((string) $request->waktu);
+            $deskripsi = trim((string) ($request->deskripsi ?: $request->description ?: $request->keterangan));
+
+            if ($type === '' || $tanggal === '' || $waktu === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Tipe, tanggal, dan waktu wajib diisi',
+                ], 422);
+            }
+
+            $now = Carbon::now()->format('Y-m-d H:i:s');
+            ConsultationRequest::on('intilab_apps')->create([
+                'employee_id' => $this->user_id,
+                'date' => $tanggal,
+                'time' => $waktu,
+                'type' => $type,
+                'description' => $deskripsi,
+                'status' => 'Pending',
+                'is_active' => 1,
+                'created_by' => $this->karyawan,
+                'created_at' => $now,
+                'updated_by' => $this->karyawan,
+                'updated_at' => $now,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Permintaan konsultasi berhasil diajukan',
+            ], 200);
+        } catch (\Exception $ex) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengajukan konsultasi: ' . $ex->getMessage(),
+            ], 500);
         }
     }
 
     public function approve(Request $request)
     {
         try {
-            $data = Konsul::on('android_intilab')
-                ->where('id', $request->consulId)
+            $data = ConsultationRequest::on('intilab_apps')
+                ->where('id', $this->resolveId($request))
+                ->where('is_active', 1)
                 ->first();
 
-            if ($data !== null) {
-                if ($data->status == 0) {
-                    $data->update(["status" => 1]);
-                    KonsulRoom::on('android_intilab')->create([
-                        'consule_id' => $data->id,
-                        'hrd_id' => $this->userid,
-                        'user_id' => $data->user_id
-                    ]);
-                    /* next step notif */
-                    // if ($data->type == 'online') {
-                    //     // notif to mobile
-                    //     $response = Http::post('https://apps.intilab.com/v4/public/api/notif', [
-                    //         'user_id' => $data->user_id,
-                    //         'title' => 'Konsultasi di prosess',
-                    //         'body' => 'Silahkan Menunggu Kabar Selanjutnya dari HRD, Pastikan Cek Email Terimakasih',
-                    //     ]);
-                    //     // notif dan email
-                    // } else {
-                    //     // notif
-                    //     // notif to mobile
-                    //     $response = Http::post('https://apps.intilab.com/v4/public/api/notif', [
-                    //         'user_id' => $data->user_id,
-                    //         'title' => 'Konsultasi di prosess',
-                    //         'body' => 'Silahkan Menunggu Kabar Selanjutnya dari HRD, Pastikan Cek Email Terimakasih',
-                    //     ]);
-                    // }
-                    return response()->json(["message" => "Ruangan Konsul Sudah Siap"], 200);
-                } else {
-                    return response()->json(["message" => "Konsultasi sudah disetujui sebelumnya"], 400);
-                }
-            }
-        } catch (Exception $e) {
-            return response()->json([
-                "success" => false,
-                "message" => "Error: " . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function room(Request $request)
-    {
-        try {
-            $modelRoom = KonsulRoom::on('android_intilab')
-                ->with('konsul')
-                ->where('consule_id', $request->consulId)
-                ->first();
-
-            if ($modelRoom === null) {
+            if ($data === null) {
                 return response()->json([
-                    "success" => false,
-                    "message" => "Room tidak ditemukan, periksa kembali data user"
+                    'success' => false,
+                    'message' => 'Data konsultasi tidak ditemukan',
                 ], 404);
             }
 
-            try {
-                $modelRoom->update([
-                    'keluhan' => $request->paramBody['keluhan'],
-                    'solusi' => $request->paramBody['solusi'],
-                    'resume' => $request->paramBody['kesimpulan'],
-                    'status' => true
-                ]);
-
-                // notif to mobile
-                // $response = Http::post('https://apps.intilab.com/v4/public/api/notif', [
-                //     'user_id' => $modelRoom->konsul->user_id,
-                //     'title' => 'Konsultasi Room',
-                //     'body' => 'Sesi Konsultasi Selesai, Terimakasih Sudah Menggunakan Layanan Kami',
-                // ]);
+            if ($data->status !== 'Pending') {
                 return response()->json([
-                    "success" => true,
-                    "message" => "Room diskusi berhasil disimpan"
-                ], 200);
-
-            } catch (Exception $e) {
-                return response()->json([
-                    "success" => false,
-                    "message" => "Gagal menyimpan data: " . $e->getMessage()
-                ], 500);
+                    'success' => false,
+                    'message' => 'Konsultasi sudah diproses sebelumnya',
+                ], 400);
             }
-        } catch (Exception $ex) {
+
+            $now = Carbon::now()->format('Y-m-d H:i:s');
+            $data->update([
+                'status' => 'Approved',
+                'approved_by' => $this->karyawan,
+                'approved_at' => $now,
+                'updated_by' => $this->karyawan,
+                'updated_at' => $now,
+            ]);
+
+            return response()->json(['message' => 'Permintaan konsultasi disetujui'], 200);
+        } catch (\Exception $e) {
             return response()->json([
-                "message" => $ex->getMessage(),
-                "line" => $ex->getLine(),
-                "file" => $ex->getFile()
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -137,30 +160,129 @@ class KonsultasiController extends Controller
     public function void(Request $request)
     {
         try {
-            $data = Konsul::on('android_intilab')
-                ->where('id', $request->consulId)
+            $data = ConsultationRequest::on('intilab_apps')
+                ->where('id', $this->resolveId($request))
+                ->where('is_active', 1)
                 ->first();
 
-            $data->update([
-                'status' => 2,
-                'ket_reject' => $request->paramBody
-            ]);
-            // notif to mobile
-            // $response = Http::post('https://apps.intilab.com/v4/public/api/notif', [
-            //     'user_id' => $data->user_id,
-            //     'title' => 'Konsultasi Room',
-            //     'body' => $request->paramBody,
-            // ]);
-            return response()->json([
-                "success" => true,
-                "message" => "Data berhasil direject"
-            ], 200);
+            if ($data === null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data konsultasi tidak ditemukan',
+                ], 404);
+            }
 
-        } catch (Exception $e) {
+            $reason = $request->paramBody ?? $request->keterangan ?? $request->reject_reason;
+            $now = Carbon::now()->format('Y-m-d H:i:s');
+            $data->update([
+                'status' => 'Rejected',
+                'rejected_by' => $this->karyawan,
+                'rejected_at' => $now,
+                'reject_reason' => $reason,
+                'updated_by' => $this->karyawan,
+                'updated_at' => $now,
+            ]);
+
             return response()->json([
-                "success" => false,
-                "message" => "Gagal reject data: " . $e->getMessage()
+                'success' => true,
+                'message' => 'Data berhasil direject',
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal reject data: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function resolveId(Request $request)
+    {
+        return $request->id ?: $request->consulId;
+    }
+
+    private function baseQuery($periode, $scope = null)
+    {
+        $query = ConsultationRequest::on('intilab_apps')
+            ->from('intilab_apps.consultation_requests as cr')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'cr.employee_id', '=', 'u.id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'u.id_department', '=', 'd.id')
+            ->where('cr.is_active', 1)
+            ->select(
+                'cr.id',
+                'cr.employee_id',
+                'cr.date as tanggal',
+                'cr.time as waktu',
+                'cr.type',
+                'cr.description as deskripsi',
+                'cr.status',
+                'cr.approved_by',
+                'cr.approved_at',
+                'cr.rejected_by',
+                'cr.rejected_at',
+                'cr.reject_reason',
+                'cr.created_by',
+                'cr.created_at',
+                'u.nama_lengkap as karyawan',
+                'd.nama_divisi as department'
+            );
+
+        $periode = (int) $periode;
+        if ($periode >= 2000) {
+            $query->whereYear('cr.date', $periode);
+        }
+
+        if ($scope !== 'hrd' && $this->grade === 'STAFF' && $this->user_id) {
+            $query->where('cr.employee_id', $this->user_id);
+        }
+
+        return $query;
+    }
+
+    private function decorate($items)
+    {
+        return $items->map(function ($item) {
+            $item->nama_pengaju = $item->karyawan ?: $item->created_by ?: '-';
+            $item->karyawan = $item->nama_pengaju;
+            $item->nama_divisi = $item->department ?: '-';
+            $item->department = $item->nama_divisi;
+            $item->status_label = $this->statusLabel($item->status);
+            $item->type_label = $this->typeLabel($item->type);
+            $item->deskripsi = $item->deskripsi ?: '-';
+            $item->approved_by = $item->status === 'Approved' ? ($item->approved_by ?: '-') : '-';
+            $item->rejected_by = $item->status === 'Rejected' ? ($item->rejected_by ?: '-') : '-';
+            $item->reject_reason = $item->status === 'Rejected' ? ($item->reject_reason ?: '-') : '-';
+            $item->can_approve = $item->status === 'Pending';
+
+            return $item;
+        });
+    }
+
+    private function normalizeType($type)
+    {
+        $value = strtolower(trim((string) $type));
+        if ($value === 'online') {
+            return 'Online';
+        }
+        if ($value === 'offline') {
+            return 'Offline';
+        }
+
+        return trim((string) $type);
+    }
+
+    private function statusLabel($status)
+    {
+        $map = [
+            'Pending' => 'Menunggu Persetujuan',
+            'Approved' => 'Disetujui',
+            'Rejected' => 'Ditolak',
+        ];
+
+        return $map[$status] ?? ($status ?: '-');
+    }
+
+    private function typeLabel($type)
+    {
+        return $this->normalizeType($type) ?: '-';
     }
 }

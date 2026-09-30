@@ -157,7 +157,7 @@ class WsFinalUdaraLingkunganKerjaDetailService
 
         $lingkungan = LingkunganHeader::query()
             ->where('no_sampel', $noSampel)->where('is_approved', 1)->where('status', 0)
-            ->select(array_merge(self::HEADER_SELECT, ['is_approved']))
+            ->select(array_merge(self::HEADER_SELECT, ['is_approved', 'note']))
             ->addSelect(DB::raw("'lingkungan' as data_type"))
             ->get();
 

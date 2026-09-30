@@ -13,6 +13,8 @@ class Kernel extends ConsoleKernel
      * @var array
      */
     protected $commands = [
+        Commands\SyncSamplerTracking::class,
+        Commands\CollectSamplerTrackingTroubles::class,
         Commands\CleanOldRequestLogs::class,
         Commands\ScheduleEverySecond::class,
         Commands\CacheCommand::class,
@@ -53,6 +55,9 @@ class Kernel extends ConsoleKernel
         Commands\SendKeptManagementDecisionReminders::class,
         Commands\SendCandidateActionReminders::class,
         Commands\SendPendingAssessmentInvitations::class,
+        Commands\RejectOverdueAssessment::class,
+        Commands\RollbackOverdueAssessment::class,
+        Commands\ApplyScheduledEmployeeAdjustments::class,
         Commands\CustomerServiceAutoCloseCommand::class,
         Commands\CustomerServiceAutoArchiveCommand::class,
         Commands\ReactivateNeverOrderedQuotationCommand::class,
@@ -64,8 +69,15 @@ class Kernel extends ConsoleKernel
 
     protected function schedule(Schedule $schedule)
     {
+        // $schedule->command('sampler-tracking:collect-troubles --sync-today')
+        //     ->dailyAt('00:00')->timezone('Asia/Jakarta')->withoutOverlapping(60);
         // $schedule->command('recruitment:send-pending-assessment-invitations')
         //     ->everyFiveMinutes()
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping();
+        // Belum diaktifkan. Nyalakan hanya setelah command assessmentrejection dicek manual.
+        // $schedule->command('assessmentrejection')
+        //     ->dailyAt('17:00')
         //     ->timezone('Asia/Jakarta')
         //     ->withoutOverlapping();
         // Manual dulu per kategori. Nanti aktifkan jika sudah siap otomatis jam 11 malam:
@@ -73,6 +85,10 @@ class Kernel extends ConsoleKernel
         //     ->dailyAt('23:00')
         //     ->timezone('Asia/Jakarta')
         //     ->withoutOverlapping();
+        $schedule->command('employee-adjustment:apply-scheduled')
+            ->dailyAt('07:00')
+            ->timezone('Asia/Jakarta')
+            ->withoutOverlapping(30);
     }
 
     protected function commands()

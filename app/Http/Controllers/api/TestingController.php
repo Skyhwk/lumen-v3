@@ -7106,6 +7106,76 @@ class TestingController extends Controller
     }
 
     /**
+     * Tes kirim WhatsApp. Body diambil dari wa_message_templates + variant aktif.
+     * Nomor HRD dipilih SendWhatsapp dari wa_sender_numbers.
+     *
+     * Body:
+     * - numbers (wajib): array nomor tujuan
+     * - code (wajib): wa_message_templates.code
+     * - variables (opsional): objek pengganti {{nama}}, {{posisi}}, dan seterusnya
+     */
+    public function testWhatsapp(Request $request)
+    {
+        $numbers = $request->input('numbers', []);
+        if (is_string($numbers)) {
+            $decodedNumbers = json_decode($numbers, true);
+            $numbers = is_array($decodedNumbers) ? $decodedNumbers : [];
+        }
+        if (!is_array($numbers)) {
+            $numbers = [];
+        }
+        $numbers = array_values(array_filter(array_map(function ($number) {
+            return trim((string) $number);
+        }, $numbers), function ($number) {
+            return $number !== '';
+        }));
+
+        $code = trim((string) $request->input('code', ''));
+        $variables = $request->input('variables', []);
+        if (is_string($variables)) {
+            $decoded = json_decode($variables, true);
+            $variables = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($variables)) {
+            $variables = [];
+        }
+
+        if ($numbers === [] || $code === '') {
+            return response()->json([
+                'status' => false,
+                'message' => 'numbers (array) dan code wajib diisi',
+            ], 422);
+        }
+
+        $message = \App\Services\WaMessageTemplateService::render($code, $variables);
+        if ($message === null || trim($message) === '') {
+            return response()->json([
+                'status' => false,
+                'message' => 'Template tidak ditemukan, nonaktif, atau tidak punya variant aktif',
+            ], 422);
+        }
+
+        $results = [];
+        foreach ($numbers as $number) {
+            $sent = (new \App\Services\SendWhatsapp($number, $message))->send();
+            $results[] = [
+                'number' => $number,
+                'status' => (bool) $sent,
+            ];
+        }
+
+        $allSent = !in_array(false, array_column($results, 'status'), true);
+
+        return response()->json([
+            'status' => $allSent,
+            'message' => $allSent ? 'WhatsApp terkirim' : 'Ada nomor tujuan yang gagal terkirim',
+            'code' => $code,
+            'body' => $message,
+            'results' => $results,
+        ], $allSent ? 200 : 422);
+    }
+
+    /**
      * Tes payload log_bas tanpa kirim email.
      *
      * Body:

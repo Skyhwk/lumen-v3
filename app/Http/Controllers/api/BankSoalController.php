@@ -29,7 +29,7 @@ class BankSoalController extends Controller
         $scope = $this->scope($request);
 
         $questions = Question::with(['options', 'scaleType', 'categoryMaster'])
-            ->where('question_scope', $scope)
+            ->whereIn('question_scope', [$scope, 'default'])
             ->where('is_active', 1)
             ->when($scope === 'manager', function ($query) use ($request) {
                 if ($request->filled('question_category_id')) {
@@ -49,7 +49,7 @@ class BankSoalController extends Controller
         $query = QuestionCategory::withCount(['questions as current_question_count' => fn ($q) => $q->where('question_scope', 'hr')->where('is_active', 1)->where('status', '!=', 'retired')])
             ->where('is_active', true)
             ->where(function ($builder) {
-                $builder->where('category_scope', 'hr')->orWhereNull('category_scope');
+                $builder->whereIn('category_scope', ['hr', 'default'])->orWhereNull('category_scope');
             });
 
         return response()->json([

@@ -39,6 +39,14 @@ class InternalAssessmentController extends Controller
             return response()->json(['message' => 'Email tidak terdaftar sebagai karyawan.'], 422);
         }
 
+        $requiredGrade = trim((string) ($assessment->grade ?? ''));
+        $employeeGrade = trim((string) ($employee->grade ?? ''));
+        if ($requiredGrade !== '' && strcasecmp($requiredGrade, $employeeGrade) !== 0) {
+            return response()->json([
+                'message' => 'Link assessment ini khusus untuk grade ' . $requiredGrade . '. Grade Anda: ' . ($employeeGrade !== '' ? $employeeGrade : '-'),
+            ], 403);
+        }
+
         $result = DB::transaction(function () use ($assessment, $employee, $email) {
             DB::table('assessment_internal')->where('id', $assessment->id)->lockForUpdate()->first();
             $attempt = DB::table('assessment_internal_attempts')
@@ -298,6 +306,27 @@ class InternalAssessmentController extends Controller
         })->filter(function ($item) {
             return $item['jenjang'] !== '' || $item['institusi'] !== '' || $item['jurusan'] !== '';
         })->values()->all();
+        $experiences = collect($request->input('pengalaman_kerja', []))->map(function ($item) {
+            return [
+                'nama_perusahaan' => trim((string) ($item['nama_perusahaan'] ?? '')),
+                'lokasi_perusahaan' => trim((string) ($item['lokasi_perusahaan'] ?? '')),
+                'posisi_kerja' => trim((string) ($item['posisi_kerja'] ?? '')),
+                'tgl_mulai_kerja' => trim((string) ($item['tgl_mulai_kerja'] ?? '')) ?: null,
+                'tgl_berakhir_kerja' => trim((string) ($item['tgl_berakhir_kerja'] ?? '')) ?: null,
+                'alasan_keluar' => trim((string) ($item['alasan_keluar'] ?? '')),
+            ];
+        })->filter(function ($item) {
+            return $item['nama_perusahaan'] !== '' || $item['posisi_kerja'] !== '';
+        })->values()->all();
+        $emergencyContacts = collect($request->input('kontak_darurat', []))->map(function ($item) {
+            return [
+                'nama_kontak' => trim((string) ($item['nama_kontak'] ?? '')),
+                'hubungan' => trim((string) ($item['hubungan'] ?? '')),
+                'nomor_kontak' => trim((string) ($item['nomor_kontak'] ?? '')),
+            ];
+        })->filter(function ($item) {
+            return $item['nama_kontak'] !== '' || $item['nomor_kontak'] !== '';
+        })->values()->all();
         $skills = collect($request->input('skill', []))->map(function ($item) {
             return [
                 'keahlian' => trim((string) ($item['keahlian'] ?? '')),
@@ -322,6 +351,7 @@ class InternalAssessmentController extends Controller
             'kode_pos' => trim((string) $request->kode_pos) ?: null,
             'pendidikan' => json_encode($educations),
             'skill' => json_encode($skills),
+            'pengalaman_kerja' => json_encode($experiences),
             'updated_by' => $employee->nama_lengkap,
             'updated_at' => Carbon::now(),
         ];
@@ -329,8 +359,50 @@ class InternalAssessmentController extends Controller
             $allowed['nik_kk'] = trim((string) $request->nik_kk) ?: null;
         }
 
-        DB::transaction(function () use ($employee, $attempt, $allowed) {
+        $medical = (array) $request->input('medical', []);
+        DB::transaction(function () use ($employee, $attempt, $allowed, $educations, $skills, $experiences, $emergencyContacts, $medical) {
+            $now = Carbon::now();
             DB::table('master_karyawan')->where('id', $employee->id)->update($allowed);
+            $replace = function ($table, array $rows) use ($employee, $now) {
+                if (!Schema::hasTable($table)) return;
+                $columns = Schema::getColumnListing($table);
+                $deactivate = [];
+                if (in_array('is_active', $columns, true)) $deactivate['is_active'] = 0;
+                if (in_array('updated_at', $columns, true)) $deactivate['updated_at'] = $now;
+                if ($deactivate) DB::table($table)->where('karyawan_id', $employee->id)->update($deactivate);
+                foreach ($rows as $row) {
+                    $values = array_merge($row, [
+                        'karyawan_id' => $employee->id,
+                        'is_active' => 1,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+                    DB::table($table)->insert(array_intersect_key($values, array_flip($columns)));
+                }
+            };
+            $replace('pendidikan_karyawan', $educations);
+            $replace('keahlian_karyawan', $skills);
+            $replace('pengalaman_kerja_karyawan', $experiences);
+            $replace('kontak_darurat_karyawan', $emergencyContacts);
+            if (Schema::hasTable('rekam_medis_karyawan')) {
+                $medicalValues = [
+                    'tinggi_badan' => $medical['tinggi_badan'] ?? null,
+                    'berat_badan' => $medical['berat_badan'] ?? null,
+                    'keterangan_mata' => $medical['keterangan_mata'] ?? null,
+                    'rate_mata' => $medical['rate_mata'] ?? null,
+                    'golongan_darah' => $medical['golongan_darah'] ?? null,
+                    'penyakit_bawaan_lahir' => $medical['penyakit_bawaan_lahir'] ?? null,
+                    'penyakit_kronis' => $medical['penyakit_kronis'] ?? null,
+                    'riwayat_kecelakaan' => $medical['riwayat_kecelakaan'] ?? null,
+                    'updated_at' => $now,
+                    'updated_by' => $employee->nama_lengkap,
+                ];
+                $existingMedical = DB::table('rekam_medis_karyawan')->where('karyawan_id', $employee->id)->where('is_active', 1)->first();
+                if ($existingMedical) DB::table('rekam_medis_karyawan')->where('id', $existingMedical->id)->update($medicalValues);
+                else DB::table('rekam_medis_karyawan')->insert(array_merge($medicalValues, [
+                    'karyawan_id' => $employee->id, 'is_active' => 1, 'created_at' => $now, 'created_by' => $employee->nama_lengkap,
+                ]));
+            }
             DB::table('assessment_internal_attempts')->where('id', $attempt->id)->update([
                 'profile_completed_at' => Carbon::now(),
                 'last_activity_at' => Carbon::now(),
@@ -402,23 +474,37 @@ class InternalAssessmentController extends Controller
     private function ensureSessions($assessment, $attemptId)
     {
         $definitions = json_decode($assessment->category_question ?: '[]', true) ?: [];
-        foreach (array_values($definitions) as $index => $definition) {
-            $definition = is_array($definition) ? $definition : ['id' => $definition];
-            $categoryId = $definition['question_category_id'] ?? $definition['category_id'] ?? $definition['id'] ?? null;
-            if (!$categoryId) {
+        $attempt = DB::table('assessment_internal_attempts')->where('id', $attemptId)->first();
+        $employee = $attempt
+            ? DB::table('master_karyawan')->whereRaw('LOWER(email) = ?', [strtolower((string) $attempt->email)])->first()
+            : null;
+        if (!$employee) {
+            return;
+        }
+
+        $hasEvaluationTarget = Schema::hasColumn('assessment_internal_sessions', 'evaluation_target_karyawan_id');
+        $nextSessionOrder = (int) DB::table('assessment_internal_sessions')
+            ->where('assessment_internal_attempt_id', $attemptId)
+            ->max('session_order');
+        $questionPayloadCache = [];
+
+        foreach ($this->orderedInternalSessionDefinitions($definitions) as $item) {
+            $definition = $item['definition'];
+            $category = $item['category'];
+            $categoryId = $category->id;
+
+            $targets = $this->evaluationTargetsForCategory($category->name, $employee);
+            if (empty($targets)) {
                 continue;
             }
 
-            $category = DB::table('question_categories')->where('id', $categoryId)->first();
-            if (!$category) {
-                continue;
-            }
-
-            $sessionExists = DB::table('assessment_internal_sessions')
+            // Preserve attempts created before target-aware sessions existed.
+            // They must not gain duplicate sessions midway through an assessment.
+            if ($hasEvaluationTarget && $targets[0] !== null && DB::table('assessment_internal_sessions')
                 ->where('assessment_internal_attempt_id', $attemptId)
                 ->where('question_category_id', $categoryId)
-                ->exists();
-            if ($sessionExists) {
+                ->whereNull('evaluation_target_karyawan_id')
+                ->exists()) {
                 continue;
             }
 
@@ -433,26 +519,151 @@ class InternalAssessmentController extends Controller
                 $durationMinutes = null;
             }
 
-            $questions = $this->sessionQuestions($category, $questionCount);
+            foreach ($targets as $target) {
+                $sessionExists = DB::table('assessment_internal_sessions')
+                    ->where('assessment_internal_attempt_id', $attemptId)
+                    ->where('question_category_id', $categoryId)
+                    ->when($hasEvaluationTarget, function ($query) use ($target) {
+                        if ($target) {
+                            $query->where('evaluation_target_karyawan_id', $target->id);
+                        } else {
+                            $query->whereNull('evaluation_target_karyawan_id');
+                        }
+                    })
+                    ->exists();
+                if ($sessionExists) {
+                    continue;
+                }
 
-            if (!$questions) {
-                continue;
+                $questionCacheKey = $categoryId . ':' . $questionCount;
+                if (!array_key_exists($questionCacheKey, $questionPayloadCache)) {
+                    // Set pertanyaan yang sama dipakai untuk semua target pada satu kategori.
+                    // Ini menjaga form evaluasi konsisten sekaligus mencegah query berulang per bawahan.
+                    $questionPayloadCache[$questionCacheKey] = $this->sessionQuestions($category, $questionCount);
+                }
+                $questions = $questionPayloadCache[$questionCacheKey];
+                if (!$questions) {
+                    continue;
+                }
+
+                $sessionData = [
+                    'assessment_internal_attempt_id' => $attemptId,
+                    'question_category_id' => $categoryId,
+                    'session_order' => ++$nextSessionOrder,
+                    'category_name' => $category->name,
+                    'duration_minutes' => $durationMinutes,
+                    'questions_json' => json_encode($questions),
+                    'answers_json' => json_encode(new \stdClass()),
+                    'result_json' => null,
+                    'status' => 'pending',
+                    'created_at' => Carbon::now(),
+                    'updated_at' => Carbon::now(),
+                ];
+                if ($hasEvaluationTarget) {
+                    $sessionData['evaluation_target_karyawan_id'] = $target->id ?? null;
+                    $sessionData['evaluation_target_name'] = $target->nama_lengkap ?? null;
+                }
+                DB::table('assessment_internal_sessions')->insert($sessionData);
+            }
+        }
+    }
+
+    /**
+     * Session internal selalu dibentuk per blok agar alurnya mudah dipahami:
+     * DISC/PAPI lebih dahulu, lalu kategori HR lainnya dan kategori default.
+     * Urutan dalam dua blok terakhir diacak hanya ketika session baru dibuat.
+     */
+    private function orderedInternalSessionDefinitions(array $definitions): array
+    {
+        $items = collect(array_values($definitions))->map(function ($definition) {
+            $definition = is_array($definition) ? $definition : ['id' => $definition];
+            $categoryId = $definition['question_category_id'] ?? $definition['category_id'] ?? $definition['id'] ?? null;
+            if (!$categoryId) {
+                return null;
             }
 
-            DB::table('assessment_internal_sessions')->insert([
-                'assessment_internal_attempt_id' => $attemptId,
-                'question_category_id' => $categoryId,
-                'session_order' => $index + 1,
-                'category_name' => $category->name,
-                'duration_minutes' => $durationMinutes,
-                'questions_json' => json_encode($questions),
-                'answers_json' => json_encode(new \stdClass()),
-                'result_json' => null,
-                'status' => 'pending',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ]);
+            $category = DB::table('question_categories')->where('id', $categoryId)->first();
+            if (!$category) {
+                return null;
+            }
+
+            return [
+                'definition' => $definition,
+                'category' => $category,
+            ];
+        })->filter()->values();
+
+        $mandatoryNames = ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK'];
+        $mandatory = $items->filter(function ($item) use ($mandatoryNames) {
+            return in_array(strtoupper(trim((string) $item['category']->name)), $mandatoryNames, true);
+        })->sortBy(function ($item) {
+            return strtoupper(trim((string) $item['category']->name)) === 'DISC' ? 1 : 2;
+        })->values();
+
+        $default = $items->reject(function ($item) use ($mandatoryNames) {
+            return in_array(strtoupper(trim((string) $item['category']->name)), $mandatoryNames, true);
+        })->filter(function ($item) {
+            return strtolower(trim((string) ($item['category']->category_scope ?? 'hr'))) === 'default';
+        })->shuffle()->values();
+
+        $hr = $items->reject(function ($item) use ($mandatoryNames) {
+            return in_array(strtoupper(trim((string) $item['category']->name)), $mandatoryNames, true);
+        })->reject(function ($item) {
+            return strtolower(trim((string) ($item['category']->category_scope ?? 'hr'))) === 'default';
+        })->shuffle()->values();
+
+        return $mandatory->concat($hr)->concat($default)->values()->all();
+    }
+
+    private function evaluationTargetsForCategory($categoryName, $employee)
+    {
+        $categoryName = strtoupper(trim((string) $categoryName));
+        $isManager = strtoupper(trim((string) ($employee->grade ?? ''))) === 'MANAGER';
+        if ($isManager && in_array($categoryName, [
+            'EMPLOYEE SATISFACTION', 'MANAGEMENT EVALUATION', 'SATISFACTION OF LEADER',
+        ], true)) {
+            return [];
         }
+
+        if ($categoryName === 'EMPLOYEE EVALUATION') {
+            if ($isManager) {
+                return DB::table('master_karyawan')
+                    ->where('is_active', 1)
+                    ->where('id_department', $employee->id_department)
+                    ->where('id', '!=', $employee->id)
+                    ->orderBy('nama_lengkap')
+                    ->get()
+                    ->all();
+            }
+
+            return DB::table('master_karyawan')->where('is_active', 1)->orderBy('nama_lengkap')->get()
+                ->filter(function ($candidate) use ($employee) {
+                    return in_array((string) $employee->id, $this->supervisorIds($candidate->atasan_langsung ?? null), true);
+                })->values()->all();
+        }
+
+        if ($categoryName === 'SATISFACTION OF LEADER') {
+            $supervisorIds = $this->supervisorIds($employee->atasan_langsung ?? null);
+            if (empty($supervisorIds)) {
+                return [];
+            }
+            return DB::table('master_karyawan')->where('is_active', 1)
+                ->whereIn('id', $supervisorIds)->orderBy('nama_lengkap')->get()->all();
+        }
+
+        return [null];
+    }
+
+    private function supervisorIds($value)
+    {
+        $decoded = is_string($value) ? json_decode($value, true) : $value;
+        $ids = is_array($decoded) ? $decoded : [$decoded ?? $value];
+
+        return collect($ids)->filter(function ($id) {
+            return $id !== null && $id !== '';
+        })->map(function ($id) {
+            return (string) $id;
+        })->values()->all();
     }
 
     private function sessionQuestions($category, $questionCount)
@@ -473,11 +684,24 @@ class InternalAssessmentController extends Controller
             $query->limit($questionCount);
         }
 
-        return $query->inRandomOrder()->get()->values()->map(function ($question, $questionIndex) {
-            $options = DB::table('question_options')
-                ->where('question_id', $question->id)
-                ->orderBy('option_order')
-                ->get()
+        $questions = $query->inRandomOrder()->get()->values();
+        if ($questions->isEmpty()) {
+            return [];
+        }
+
+        $optionsByQuestion = DB::table('question_options')
+            ->whereIn('question_id', $questions->pluck('id')->all())
+            ->orderBy('question_id')
+            ->orderBy('option_order')
+            ->get()
+            ->groupBy('question_id');
+        $scaleTypes = DB::table('scale_types')
+            ->whereIn('id', $questions->pluck('scale_type_id')->filter()->unique()->values()->all())
+            ->get()
+            ->keyBy('id');
+
+        return $questions->map(function ($question, $questionIndex) use ($optionsByQuestion, $scaleTypes) {
+            $options = collect($optionsByQuestion->get($question->id, []))
                 ->map(function ($option) {
                     return [
                         'id' => (string) $option->id,
@@ -498,8 +722,10 @@ class InternalAssessmentController extends Controller
             }
 
             if ($question->question_type === 'scale') {
-                $scale = DB::table('scale_types')->where('id', $question->scale_type_id)->first();
-                $options = $scale ? ScaleScoringService::buildScaleOptions($scale) : [];
+                $scale = $scaleTypes->get($question->scale_type_id);
+                // Untuk assessment internal, urutan label mengikuti konfigurasi scale.
+                // Nilai numeriknya tetap dipakai saat scoring, tanpa mengubah urutan yang dilihat peserta.
+                $options = $scale ? ScaleScoringService::buildScaleOptions($scale, true) : [];
                 $options = collect($options)->map(function ($option) {
                     if (trim((string) ($option['label'] ?? '')) !== '') {
                         $option['text'] = $option['label'];
@@ -607,14 +833,39 @@ class InternalAssessmentController extends Controller
         $assessment = DB::table('assessment_internal')->where('id', $attempt->assessment_internal_id)->first();
         $requiresProfile = $assessment && (bool) ($assessment->is_completed_profile ?? false);
         $sessionOrderOffset = $requiresProfile ? 1 : 0;
+        $defaultCategoryIds = DB::table('question_categories')
+            ->whereIn('id', $sessions->pluck('question_category_id')->filter()->unique()->values()->all())
+            ->where('category_scope', 'default')
+            ->pluck('id')
+            ->map(function ($id) {
+                return (int) $id;
+            })->all();
 
-        $sessionNavigation = $sessions->map(function ($item) use ($sessionOrderOffset) {
-            return [
-                'order' => (int) $item->session_order + $sessionOrderOffset,
-                'name' => $item->category_name,
-                'status' => $item->status,
+        $sessionNavigation = [];
+        $sessionGroupById = [];
+        foreach ($sessions->groupBy('question_category_id')->values() as $groupIndex => $group) {
+            $groupStatuses = $group->pluck('status');
+            $groupStatus = $groupStatuses->contains('in_progress') ? 'in_progress'
+                : ($groupStatuses->every(function ($status) { return in_array($status, ['completed', 'expired'], true); }) ? 'completed' : 'pending');
+            $targets = $group->filter(function ($item) {
+                return trim((string) ($item->evaluation_target_name ?? '')) !== '';
+            })->map(function ($item) {
+                return [
+                    'name' => $item->evaluation_target_name,
+                    'status' => $item->status,
+                ];
+            })->values()->all();
+            $meta = [
+                'order' => $groupIndex + 1 + $sessionOrderOffset,
+                'name' => (string) $group->first()->category_name,
+                'status' => $groupStatus,
+                'targets' => $targets,
             ];
-        })->values()->all();
+            $sessionNavigation[] = $meta;
+            foreach ($group as $item) {
+                $sessionGroupById[$item->id] = $meta;
+            }
+        }
 
         if ($requiresProfile) {
             array_unshift($sessionNavigation, [
@@ -641,12 +892,15 @@ class InternalAssessmentController extends Controller
                 return ['status' => 'ready_to_complete', 'sessions' => $sessionNavigation];
             }
             $firstQuestions = json_decode($first->questions_json ?: '[]', true) ?: [];
+            $firstGroup = $sessionGroupById[$first->id] ?? ['order' => (int) $first->session_order + $sessionOrderOffset, 'name' => $first->category_name, 'targets' => []];
             return [
                 'status' => 'ready',
                 'sessions' => $sessionNavigation,
                 'session' => [
-                    'order' => (int) $first->session_order + $sessionOrderOffset,
-                    'name' => $first->category_name,
+                    'order' => $firstGroup['order'],
+                    'name' => $firstGroup['name'],
+                    'target_name' => $first->evaluation_target_name ?? null,
+                    'targets' => $firstGroup['targets'],
                     'duration_minutes' => $first->duration_minutes,
                     'question_count' => count($firstQuestions),
                     'is_first' => true,
@@ -659,12 +913,15 @@ class InternalAssessmentController extends Controller
             $pending = $sessions->firstWhere('status', 'pending');
             if ($pending) {
                 $pendingQuestions = json_decode($pending->questions_json ?: '[]', true) ?: [];
+                $pendingGroup = $sessionGroupById[$pending->id] ?? ['order' => (int) $pending->session_order + $sessionOrderOffset, 'name' => $pending->category_name, 'targets' => []];
                 return [
                     'status' => 'waiting',
                     'sessions' => $sessionNavigation,
                     'session' => [
-                        'order' => (int) $pending->session_order + $sessionOrderOffset,
-                        'name' => $pending->category_name,
+                        'order' => $pendingGroup['order'],
+                        'name' => $pendingGroup['name'],
+                        'target_name' => $pending->evaluation_target_name ?? null,
+                        'targets' => $pendingGroup['targets'],
                         'duration_minutes' => $pending->duration_minutes,
                         'question_count' => count($pendingQuestions),
                         'is_first' => !$sessions->contains(function ($item) {
@@ -700,18 +957,25 @@ class InternalAssessmentController extends Controller
             return $this->statePayload($attemptId);
         }
 
+        if (in_array((int) $session->question_category_id, $defaultCategoryIds, true)) {
+            $next['options'] = $this->defaultScaleDisplayOrder($next['options'] ?? []);
+        }
+
         unset($next['answer_key'], $next['answer_map']);
         foreach ($next['options'] as &$option) {
             unset($option['is_correct']);
         }
 
+        $activeGroup = $sessionGroupById[$session->id] ?? ['order' => (int) $session->session_order + $sessionOrderOffset, 'name' => $session->category_name, 'targets' => []];
         return [
             'status' => 'in_progress',
             'sessions' => $sessionNavigation,
             'session' => [
                 'id' => $session->id,
-                'order' => (int) $session->session_order + $sessionOrderOffset,
-                'name' => $session->category_name,
+                'order' => $activeGroup['order'],
+                'name' => $activeGroup['name'],
+                'target_name' => $session->evaluation_target_name ?? null,
+                'targets' => $activeGroup['targets'],
                 'duration_minutes' => $session->duration_minutes,
                 'expires_at' => $session->expires_at,
             ],
@@ -720,6 +984,45 @@ class InternalAssessmentController extends Controller
             'question' => $next,
             'proctoring' => $this->proctoringPayload($attemptId),
         ];
+    }
+
+    /**
+     * Nilai opsi scale legacy dapat dibalik untuk scoring, tetapi urutan label
+     * yang dilihat peserta harus konsisten agar tidak membingungkan antar soal.
+     */
+    private function defaultScaleDisplayOrder(array $options): array
+    {
+        $rankByLabel = [
+            'SANGAT SETUJU' => 1,
+            'SANGAT BAIK' => 1,
+            'SETUJU' => 2,
+            'BAIK' => 2,
+            'CUKUP' => 3,
+            'STANDAR / NORMAL BIASA' => 3,
+            'NORMAL' => 3,
+            'KURANG' => 4,
+            'KURANG SETUJU' => 4,
+            'TIDAK SETUJU' => 4,
+            'BURUK' => 4,
+            'SANGAT TIDAK SETUJU' => 5,
+            'SANGAT KURANG SETUJU' => 5,
+            'SANGAT BURUK' => 5,
+            'TIDAK MENGETAHUI' => 6,
+        ];
+
+        return collect($options)->values()->sortBy(function ($option, $index) use ($rankByLabel) {
+            $label = strtoupper(trim((string) ($option['label'] ?? $option['text'] ?? '')));
+
+            return (($rankByLabel[$label] ?? 99) * 1000) + $index;
+        })->values()->all();
+    }
+
+    private function sessionDisplayName($session)
+    {
+        $targetName = trim((string) ($session->evaluation_target_name ?? ''));
+        return $targetName === ''
+            ? (string) $session->category_name
+            : (string) $session->category_name . ' - ' . $targetName;
     }
 
     private function finishSession($session, array $answers, $status)
@@ -1034,6 +1337,29 @@ class InternalAssessmentController extends Controller
             return null;
         }
 
+        $educationRows = Schema::hasTable('pendidikan_karyawan') ? DB::table('pendidikan_karyawan')->where('karyawan_id', $employee->id)->where('is_active', 1)->orderBy('id')->get()->map(function ($row) {
+            return (array) $row;
+        })->all() : [];
+        $experienceRows = Schema::hasTable('pengalaman_kerja_karyawan') ? DB::table('pengalaman_kerja_karyawan')->where('karyawan_id', $employee->id)->where('is_active', 1)->orderBy('id')->get()->map(function ($row) {
+            return (array) $row;
+        })->all() : [];
+        $skillRows = Schema::hasTable('keahlian_karyawan') ? DB::table('keahlian_karyawan')->where('karyawan_id', $employee->id)->orderBy('id')->get()->map(function ($row) {
+            return (array) $row;
+        })->all() : [];
+        $medical = Schema::hasTable('rekam_medis_karyawan') ? DB::table('rekam_medis_karyawan')->where('karyawan_id', $employee->id)->where('is_active', 1)->first() : null;
+        $contacts = Schema::hasTable('kontak_darurat_karyawan') ? DB::table('kontak_darurat_karyawan')->where('karyawan_id', $employee->id)->where('is_active', 1)->orderBy('id')->get()->map(function ($row) {
+            return (array) $row;
+        })->all() : [];
+        $documents = Schema::hasTable('karyawan_dokumen_arsip') ? DB::table('karyawan_dokumen_arsip')->where('karyawan_id', $employee->id)->where('is_active', 1)->orderByDesc('id')->get()->map(function ($row) {
+            return [
+                'id' => $row->id,
+                'jenis_dokumen' => $row->jenis_dokumen,
+                'nama_file' => $row->nama_file,
+                'path_file' => $row->path_file,
+                'mime_type' => $row->mime_type,
+            ];
+        })->all() : [];
+
         return [
             'nama_lengkap' => $employee->nama_lengkap,
             'email' => $employee->email,
@@ -1054,8 +1380,12 @@ class InternalAssessmentController extends Controller
             'provinsi' => $employee->provinsi,
             'negara' => $employee->negara,
             'kode_pos' => $employee->kode_pos,
-            'pendidikan' => json_decode($employee->pendidikan ?: '[]', true) ?: [],
-            'skill' => json_decode($employee->skill ?: '[]', true) ?: [],
+            'pendidikan' => $educationRows ?: (json_decode($employee->pendidikan ?: '[]', true) ?: []),
+            'pengalaman_kerja' => $experienceRows ?: (json_decode($employee->pengalaman_kerja ?: '[]', true) ?: []),
+            'skill' => $skillRows ?: (json_decode($employee->skill ?: '[]', true) ?: []),
+            'medical' => $medical ? (array) $medical : [],
+            'kontak_darurat' => $contacts,
+            'documents' => $documents,
         ];
     }
 }

@@ -23,7 +23,9 @@ class Crypto
             throw new RuntimeException('Slice encryption failed');
         }
 
-        return self::SLICE_VERSION . '.' . base64_encode($iv . $ciphertext);
+        $encoded = $this->encodeSliceBase64($iv . $ciphertext);
+
+        return self::SLICE_VERSION . '.' . $encoded;
     }
 
     public function decryptSlice(string $data, bool $validateTtl = true): string
@@ -37,7 +39,7 @@ class Crypto
             throw new InvalidArgumentException('Unsupported slice format');
         }
 
-        $raw = base64_decode(substr($data, strlen($prefix)), true);
+        $raw = $this->decodeSliceBase64(substr($data, strlen($prefix)));
         if ($raw === false || strlen($raw) < 17) {
             throw new RuntimeException('Invalid slice payload');
         }
@@ -74,6 +76,30 @@ class Crypto
         if ($age > $ttl) {
             throw new RuntimeException('Slice expired');
         }
+    }
+
+    private function encodeSliceBase64(string $binary): string
+    {
+        return rtrim(strtr(base64_encode($binary), '+/', '-_'), '=');
+    }
+
+    private function decodeSliceBase64(string $encoded): string
+    {
+        if (strpos($encoded, '+') === false && strpos($encoded, '/') === false) {
+            $encoded = strtr($encoded, '-_', '+/');
+        }
+
+        $pad = strlen($encoded) % 4;
+        if ($pad > 0) {
+            $encoded .= str_repeat('=', 4 - $pad);
+        }
+
+        $raw = base64_decode($encoded, true);
+        if ($raw === false) {
+            throw new RuntimeException('Invalid slice payload');
+        }
+
+        return $raw;
     }
 
     private function getSliceKey(): string

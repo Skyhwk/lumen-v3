@@ -1199,22 +1199,31 @@ class LimsBasOnlineController extends Controller
                     }
                 })->first();
 
-            if ($persiapanHeaderKategori && $persiapanHeaderKategori->is_emailed_bas == 1) {
-                $dataBas = json_decode($persiapanHeaderKategori->detail_bas_documents, true);
-                if (!empty($dataBas) && is_array($dataBas)) {
-                    $dataBas = end($dataBas);
-                }
-
-                return $dataBas["filename"];
+            if (!$persiapanHeaderKategori) {
+                return response()->json([
+                    'message' => 'Data persiapan sampel tidak ditemukan.',
+                ], 404);
             }
 
-            if ($persiapanHeaderKategori->is_emailed_bas == 0 && $persiapanHeaderKategori->detail_bas_documents != null) {
-                $dataBas = json_decode($persiapanHeaderKategori->detail_bas_documents, true);
-                if (!empty($dataBas) && is_array($dataBas)) {
-                    $dataBas = end($dataBas);
+            $dataBas = json_decode($persiapanHeaderKategori->detail_bas_documents, true);
+            $lastBas = (!empty($dataBas) && is_array($dataBas)) ? end($dataBas) : null;
+            $storedFilename = is_array($lastBas) ? ($lastBas['filename'] ?? null) : null;
+
+            // updateData hanya menulis nama file + struktur JSON, lalu unlink PDF.
+            // File fisik baru ada setelah sampler submit akhir (preview/cetak).
+            if (!empty($storedFilename)) {
+                $pdfPath = public_path('dokumen/bas/' . $storedFilename);
+                if (file_exists($pdfPath)) {
+                    return $storedFilename;
                 }
 
-                return $dataBas["filename"];
+                $message = $persiapanHeaderKategori->is_emailed_bas
+                    ? 'File PDF BAS tidak ditemukan di server. Gunakan regenerate jika dokumen sudah dikirim ke customer.'
+                    : 'Data ini masih dalam tahap proses oleh sampler. File PDF belum terbentuk sampai sampler melakukan submit akhir.';
+
+                return response()->json([
+                    'message' => $message,
+                ], 422);
             }
 
             $noSample = json_decode($persiapanHeaderKategori->no_sampel, true);

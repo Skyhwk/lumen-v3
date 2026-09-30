@@ -85,6 +85,10 @@ return [
             '9' => "Jangka waktu pembuatan dokumen dikerjakan selama 2 - 3 bulan, dengan kewajiban pelanggan melengkapi dokumen sebelum sampling dilakukan.",
             '10' => "Biaya sudah termasuk :costs.",
             '11' => "Laboratorium menjunjung tinggi prinsip independensi, ketidakberpihakan, objektivitas, dan pengelolaan terhadap potensi konflik kepentingan dalam seluruh kegiatan pengujian, sesuai dengan kebijakan dan prosedur yang berlaku.",
+            '12' => "Data yang diperlukan untuk pelaksanaan pengujian psikologi wajib diterima paling lambat 3 (tiga) hari kalender sebelum pelaksanaan sampling.",
+            '13' => "Pengisian kuesioner pengujian psikologi wajib diselesaikan paling lambat 10 (sepuluh) hari kalender sejak tautan kuesioner dikirimkan. Perpanjangan waktu pengisian dapat diberikan maksimal 3 (tiga) kali, dengan total waktu pengisian paling lama 30 (tiga puluh) hari kalender sejak tautan pertama kali dikirimkan. Apabila keterlambatan pengisian menyebabkan tautan kuesioner tidak dapat diaktifkan kembali, maka hal tersebut menjadi tanggung jawab pelanggan sepenuhnya.",
+            '14' => "Untuk pengujian emisi genset, pelanggan wajib memastikan genset dalam kondisi siap operasi dan berfungsi secara normal/stabil pada saat pelaksanaan pengujian. Genset wajib dipersiapkan dan dioperasikan terlebih dahulu sesuai dengan kondisi operasi normalnya sebelum dilakukan pengujian, guna memastikan kondisi pengujian dapat merepresentasikan kondisi operasi genset yang sebenarnya.",
+            '15' => "Pelaksanaan pengujian ergonomi hanya dapat dilakukan dengan adanya persetujuan pelanggan untuk pengambilan dokumentasi (foto/video) selama proses pengujian, yang diperlukan sebagai bagian dari pelaksanaan dan/atau dokumentasi hasil pengujian.",
         ],
     ],
     'tax' => [

@@ -5,7 +5,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use App\Models\AssessmentInternal;
+use App\Models\MasterKaryawan;
 use App\Models\QuestionCategory;
+use App\Services\InternalAssessmentExcelExportService;
 
 class AssessmentInternalController extends Controller
 {
@@ -92,7 +94,7 @@ class AssessmentInternalController extends Controller
 
             // Format URL Assessment
             $baseUrl = env('PORTALV4');
-            $assessment->link_qr = $baseUrl . '/private/assessment/' . $token;
+            $assessment->link_qr = $baseUrl . 'private/assessment/' . $token;
             $assessment->is_link_active = true;
             
             $assessment->save();
@@ -157,6 +159,33 @@ class AssessmentInternalController extends Controller
         }
     }
 
+    public function getGrades(Request $request)
+    {
+        try {
+            $grades = MasterKaryawan::query()
+                ->where('is_active', 1)
+                ->whereNotNull('grade')
+                ->whereRaw("TRIM(grade) <> ''")
+                ->selectRaw('TRIM(grade) as grade')
+                ->distinct()
+                ->orderBy('grade')
+                ->pluck('grade')
+                ->map(function ($grade) {
+                    $grade = trim((string) $grade);
+
+                    return [
+                        'value' => $grade,
+                        'text' => $grade,
+                    ];
+                })
+                ->values();
+
+            return response()->json(['data' => $grades], 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal memuat daftar grade: ' . $e->getMessage()], 500);
+        }
+    }
+
     public function publish(Request $request)
     {
         try {
@@ -193,6 +222,19 @@ class AssessmentInternalController extends Controller
                 return response()->json(['message' => 'Minimal pilih 1 kategori soal!'], 400);
             }
 
+            $grade = trim((string) $request->input('grade'));
+            if ($grade === '') {
+                return response()->json(['message' => 'Grade peserta wajib dipilih!'], 422);
+            }
+
+            $gradeExists = MasterKaryawan::query()
+                ->where('is_active', 1)
+                ->whereRaw('TRIM(grade) = ?', [$grade])
+                ->exists();
+            if (!$gradeExists) {
+                return response()->json(['message' => 'Grade yang dipilih tidak ditemukan pada master karyawan aktif.'], 422);
+            }
+
             $assessment = AssessmentInternal::find($request->id);
             if (!$assessment) {
                 return response()->json(['message' => 'Data not found'], 404);
@@ -200,6 +242,7 @@ class AssessmentInternalController extends Controller
 
             // 1. Simpan Kategori Soal & Pengaturan Profil
             $assessment->category_question = $normalizedCategories;
+            $assessment->grade = $grade;
             if ($request->has('is_completed_profile')) {
                 $assessment->is_completed_profile = filter_var($request->is_completed_profile, FILTER_VALIDATE_BOOLEAN);
             }
@@ -213,7 +256,7 @@ class AssessmentInternalController extends Controller
                 
                 $baseUrl = env('PORTALV4');
                 $assessment->token = $token;
-                $assessment->link_qr = $baseUrl . '/private/assessment/' . $token;
+                $assessment->link_qr = $baseUrl . 'private/assessment/' . $token;
                 $assessment->is_link_active = true;
             }
 
@@ -312,15 +355,25 @@ class AssessmentInternalController extends Controller
             $totalAnswered += $answered;
             $totalQuestions += $questionCount;
 
+            $targetName = $this->resolveEvaluationTargetName($session);
+            $categoryName = $session->category_name ?? 'Kategori Soal';
+
             $sessionData[] = [
                 'id' => (int) $session->id,
                 'order' => (int) ($session->session_order ?? 1),
-                'name' => $session->category_name ?? 'Kategori Soal',
+                'name' => $categoryName,
+                'display_name' => $this->internalSessionDisplayName($session),
+                'target_name' => $targetName !== '' ? $targetName : null,
+                'evaluation_target_karyawan_id' => isset($session->evaluation_target_karyawan_id)
+                    ? (int) $session->evaluation_target_karyawan_id
+                    : null,
                 'status' => $session->status ?? 'pending',
                 'answered' => $answered,
                 'total' => $questionCount,
                 'progress_percent' => $questionCount > 0 ? round(($answered / $questionCount) * 100) : 0,
                 'has_result' => !empty($session->result_json),
+                'use_progress_metric' => $this->internalSessionUsesProgressMetric($session),
+                'score_preview' => $this->extractInternalSessionScorePreview($session),
                 'duration_minutes' => (int) ($session->duration_minutes ?? 0),
                 'started_at' => $session->started_at,
                 'completed_at' => $session->completed_at,
@@ -432,19 +485,26 @@ class AssessmentInternalController extends Controller
                 return response()->json(['success' => false, 'message' => 'Session not found'], 404);
             }
 
+            $sessionDisplayName = $this->internalSessionDisplayName($session);
+            $targetName = $this->resolveEvaluationTargetName($session);
+
             if (empty($session->result_json)) {
                 return response()->json([
                     'success' => true,
                     'data' => [
                         'session_id' => (int) $session->id,
-                        'session_name' => $session->category_name,
+                        'session_name' => $sessionDisplayName,
                         'session_order' => (int) $session->session_order,
                         'status' => $session->status,
+                        'target_name' => $targetName !== '' ? $targetName : null,
                         'has_result' => false,
                         'summary_text' => $session->status === 'completed'
                             ? 'Sesi selesai, namun hasil belum tersedia.'
                             : 'Sesi belum selesai — hasil belum tersedia.',
-                        'items' => [],
+                        'items' => $targetName !== '' ? [[
+                            'label' => $this->evaluationTargetItemLabel($session),
+                            'value' => $targetName,
+                        ]] : [],
                         'scored_at' => null,
                     ],
                 ], 200);
@@ -457,7 +517,7 @@ class AssessmentInternalController extends Controller
                 'success' => true,
                 'data' => array_merge([
                     'session_id' => (int) $session->id,
-                    'session_name' => $session->category_name,
+                    'session_name' => $summary['session_display_name'] ?? $sessionDisplayName,
                     'session_order' => (int) $session->session_order,
                     'status' => $session->status,
                     'has_result' => true,
@@ -468,6 +528,42 @@ class AssessmentInternalController extends Controller
                 'success' => false,
                 'message' => 'Failed to fetch session result: ' . $e->getMessage(),
             ], 500);
+        }
+    }
+
+    public function exportParticipantReport(Request $request)
+    {
+        try {
+            $attemptId = (int) ($request->input('attempt_id') ?? $request->id);
+            if (!$attemptId) {
+                return response()->json(['message' => 'Parameter attempt_id wajib diisi'], 400);
+            }
+
+            $payload = app(InternalAssessmentExcelExportService::class)->exportForAttempt($attemptId);
+
+            return response()->json($payload, 200);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 404);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal export Excel: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function exportAssessmentReport(Request $request)
+    {
+        try {
+            $assessmentId = (int) ($request->input('assessment_id') ?? $request->id);
+            if (!$assessmentId) {
+                return response()->json(['message' => 'Parameter assessment_id wajib diisi'], 400);
+            }
+
+            $payload = app(InternalAssessmentExcelExportService::class)->exportAssessmentSummary($assessmentId);
+
+            return response()->json($payload, 200);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 404);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal export Excel: ' . $e->getMessage()], 500);
         }
     }
 }

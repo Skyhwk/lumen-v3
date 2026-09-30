@@ -50,6 +50,9 @@ class BaseController extends Controller
             
             return app()->call([$controller, $method], $parameters);
         } catch (Exception $e) {
+            if ($controller instanceof \App\Http\Controllers\api\SamplerTrackingController && $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                return response()->json(['message' => $e->getMessage()], $e->getStatusCode());
+            }
             return response()->json(['message' => 'An error occurred: ' . $e->getMessage()], 500);
         }
     }
