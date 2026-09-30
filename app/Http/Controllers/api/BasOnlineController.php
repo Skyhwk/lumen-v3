@@ -1684,23 +1684,39 @@ class BasOnlineController extends Controller
     public function regenerateBasFromLastEntryBypass(Request $request)
     {
         try {
+            // PDF BAS dengan ratusan sampel (mis. Psikologi) butuh waktu panjang
+            @set_time_limit(300);
+            @ini_set('max_execution_time', '300');
+            @ini_set('memory_limit', '512M');
+
             // ── Ambil PersiapanSampelHeader ──────────────────────────
             $requestSamples = explode(",", $request->kategori);
-            $requestSamples = array_map(function ($item) {
+            $requestSamples = array_values(array_filter(array_map(function ($item) {
                 preg_match('/(\d+)$/', trim($item), $matches);
                 return $matches[1] ?? null;
-            }, $requestSamples);
-            $requestSamples = array_filter($requestSamples);
+            }, $requestSamples)));
 
-            $persiapanHeaderKategori = PersiapanSampelHeader::where('no_order', $request->no_order)
+            // Hindari OR LIKE × N sampel — filter intersection di PHP
+            $persiapanCandidates = PersiapanSampelHeader::where('no_order', $request->no_order)
                 ->where('no_quotation', $request->no_document)
                 ->where('tanggal_sampling', $request->tanggal_sampling)
                 ->where('is_active', true)
-                ->where(function ($q) use ($requestSamples) {
-                    foreach ($requestSamples as $sample) {
-                        $q->orWhere('no_sampel', 'like', '%/' . $sample . '%');
+                ->get();
+
+            $persiapanHeaderKategori = $persiapanCandidates->first(function ($item) use ($requestSamples) {
+                $stored = json_decode($item->no_sampel ?? '[]', true) ?? [];
+                if (!is_array($stored) || empty($stored) || empty($requestSamples)) {
+                    return false;
+                }
+                $codes = array_map(function ($s) {
+                    $s = (string) $s;
+                    if (preg_match('/(\d+)$/', $s, $m)) {
+                        return $m[1];
                     }
-                })->first();
+                    return $s;
+                }, $stored);
+                return count(array_intersect($codes, $requestSamples)) > 0;
+            });
 
             if (!$persiapanHeaderKategori) {
                 return response()->json(['message' => 'Data persiapan sampel tidak ditemukan.'], 404);
@@ -1722,8 +1738,16 @@ class BasOnlineController extends Controller
             $noKatSample = $lastEntry['no_sampel'] ?? [];
             $noSample = [];
             foreach ($noKatSample as $nosampel) {
-                $noSample[] = $request->no_order . '/' . $nosampel;
+                $nosampel = trim((string) $nosampel);
+                if ($nosampel === '') {
+                    continue;
+                }
+                // Sudah full "ORDER/001" → pakai apa adanya
+                $noSample[] = (strpos($nosampel, '/') !== false)
+                    ? $nosampel
+                    : ($request->no_order . '/' . $nosampel);
             }
+            $noSample = array_values(array_unique($noSample));
 
             if (empty($noSample)) {
                 return response()->json(['message' => 'Data no_sampel di entry terakhir kosong.'], 422);
@@ -1792,7 +1816,7 @@ class BasOnlineController extends Controller
                     'koding_sampling'       => $vv->koding_sampling,
                     'file_koding_sample'    => $vv->file_koding_sampel,
                     'file_koding_sampling'  => $vv->file_koding_sampling,
-                    'konsultan'             => $vv->orderHeader->konsultan,
+                    'konsultan'             => $orderH->konsultan,
                     'tanggal_sampling'      => $vv->tanggal_sampling,
                     'keterangan_1'          => $vv->keterangan_1,
                     'jumlah_label'          => $vv->codingSampling->jumlah_label ?? null,
@@ -1805,7 +1829,7 @@ class BasOnlineController extends Controller
                     'tgl_order'             => $orderH->tanggal_order,
                     'botol'                 => $vv->botol,
                     'parameter'             => $vv->parameter,
-                    'no_order'              => $vv->orderHeader->no_order,
+                    'no_order'              => $orderH->no_order,
                     'no_document'           => $request->no_document,
                 ];
 
@@ -1815,24 +1839,14 @@ class BasOnlineController extends Controller
             }
 
             // ── Status sampling (BYPASS) ──────────────────────────────
-            $status      = [];
+            // Apapun yang terjadi: dianggap selesai (termasuk sampel input manual
+            // seperti 013 yang belum punya baris FDL di database).
+            $now = Carbon::now();
+            $status = [];
             $hariTanggal = [];
             foreach ($dataSampling as $sample) {
-                // BYPASS: Semua dianggap selesai
                 $status[$sample->no_sample] = 'selesai';
-
-                $dataLapangan = $this->getDataLapangan(
-                    $sample->kategori_2,
-                    $sample->kategori_3,
-                    $sample->no_sample,
-                    $sample->parameter
-                );
-
-                if ($dataLapangan && $dataLapangan->created_at) {
-                    $hariTanggal[$sample->no_sample] = $dataLapangan->created_at;
-                } else {
-                    $hariTanggal[$sample->no_sample] = \Carbon\Carbon::now();
-                }
+                $hariTanggal[$sample->no_sample] = $now;
             }
 
             // ── Siapkan data untuk PDF ────────────────────────────────
@@ -1848,7 +1862,7 @@ class BasOnlineController extends Controller
                 'BAS_' . trim($orderH->no_document) . '_' . trim($orderH->nama_perusahaan) . '_' . $microtime . '.pdf'
             );
 
-            // ── Generate PDF ──────────────────────────────────────────
+            // Force selesai di PDF: abaikan baris sampel_tidak_selesai (penyebab checkbox Belum selesai)
             self::cetakBASPDF2(
                 $orderH,
                 $dataSampling,
@@ -1859,12 +1873,13 @@ class BasOnlineController extends Controller
                 $samplerJadwal,
                 $status,
                 $hariTanggal,
-                $lastEntry
+                $lastEntry,
+                true
             );
 
             // ── Update entry terakhir ─────────────────────────────────
             $allDocuments[$lastIndex]['filename']           = $filenameNew;
-            $allDocuments[$lastIndex]['tanggal_regenerate'] = \Carbon\Carbon::now()->toDateTimeString();
+            $allDocuments[$lastIndex]['tanggal_regenerate'] = Carbon::now()->toDateTimeString();
 
             $persiapanHeaderKategori->update([
                 'detail_bas_documents' => json_encode(array_values($allDocuments)),
@@ -1893,7 +1908,8 @@ class BasOnlineController extends Controller
         $samplerJadwal,
         $status,
         $hariTanggal,
-        $lastEntry = null
+        $lastEntry = null,
+        $forceAllSelesai = false
     ) {
         $result = (new AppsBasService($this->karyawan, $this->user_id))->cetakBASPDFWeb(
             $dataHeader,
@@ -1905,7 +1921,8 @@ class BasOnlineController extends Controller
             $samplerJadwal,
             $status,
             $hariTanggal,
-            $lastEntry
+            $lastEntry,
+            $forceAllSelesai
         );
 
         if ($result instanceof \Illuminate\Http\JsonResponse) {
@@ -1914,8 +1931,6 @@ class BasOnlineController extends Controller
 
         return response()->json([$result], 200);
     }
-
-
 
     private function getDataLapangan($kategori_2, $kategori_3, $no_sample, $parameter)
     {
