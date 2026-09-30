@@ -22,6 +22,9 @@ class CopyNonKontrakJob extends Job
         $this->id       = $id;
     }
 
+    /**
+     * @return QuotationNonKontrak
+     */
     public function handle()
     {
         DB::beginTransaction();
@@ -31,8 +34,7 @@ class CopyNonKontrakJob extends Job
             $bulan_chek = DATE('m');  // 2 digit bulan (misal: 01)
             $bulan_chek = self::romawi($bulan_chek);
 
-            $cek = QuotationNonKontrak::where('id_cabang', $this->idcabang)
-                ->where('no_document', 'not like', '%R%')
+            $cek = QuotationNonKontrak::where('no_document', 'not like', '%R%')
                 ->where('no_document', 'like', '%/' . $tahun_chek . '-%')
                 ->orderBy('id', 'DESC')
                 ->first();
@@ -83,15 +85,22 @@ class CopyNonKontrakJob extends Job
             $newQuery->generated_at = null;
             $newQuery->generated_by = null;
             $newQuery->id_token = null;
+            $newQuery->filename = null;
+            $newQuery->is_rejected = 0;
+            $newQuery->rejected_by = null;
+            $newQuery->rejected_at = null;
             $newQuery->save();
 
             // RenderPdfHelpers::run($newQuery->id, 'non_kontrak', $newQuery->no_document);
-            
+
             DB::commit();
             Log::channel('quotation')->info('CreateCopyNonKontrakJob:  Penawaran berhasil dibuat dengan nomor dokumen ' . $no_document);
+
+            return $newQuery->fresh();
         } catch (\Exception $e) {
             DB::rollBack();
             Log::channel('quotation')->info('CreateNonKontrakJob: Terjadi kesalahan saat membuat penawaran: ' . $e->getMessage());
+            throw $e;
         }
     }
 
