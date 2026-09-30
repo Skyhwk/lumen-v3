@@ -30,7 +30,13 @@ class PayrollRecordSyncService
         ];
 
         foreach ([BpjsKesehatan::class, BpjsTk::class, PPH21::class, MasterSallary::class] as $modelClass) {
-            $modelClass::where('nik_karyawan', $nik)
+            $modelClass::where(function ($query) use ($karyawan, $nik) {
+                $query->where('id_karyawan', $karyawan->id)
+                    ->orWhere(function ($query) use ($nik) {
+                        $query->whereNull('id_karyawan')
+                            ->where('nik_karyawan', $nik);
+                    });
+            })
                 ->where('is_active', true)
                 ->update($payload);
         }
@@ -47,5 +53,19 @@ class PayrollRecordSyncService
                 ->whereColumn('master_karyawan.nik_karyawan', $nikColumn)
                 ->where('master_karyawan.is_active', true);
         });
+    }
+
+    /**
+     * Hanya tampilkan data payroll karyawan aktif berdasarkan id_karyawan.
+     */
+    public static function scopeActiveKaryawanById(Builder $query, string $idColumn = 'id_karyawan'): Builder
+    {
+        return $query->whereNotNull($idColumn)
+            ->whereExists(function ($subQuery) use ($idColumn) {
+                $subQuery->select(DB::raw(1))
+                    ->from('master_karyawan')
+                    ->whereColumn('master_karyawan.id', $idColumn)
+                    ->where('master_karyawan.is_active', true);
+            });
     }
 }

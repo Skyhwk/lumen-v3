@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Models\Kasbon;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Services\PayrollRecordSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -20,34 +21,49 @@ class KasbonController extends Controller
 {
     public function index()
     {
-        $data = Kasbon::where('is_active', true);
+        $data = PayrollRecordSyncService::scopeActiveKaryawanById(
+            Kasbon::query()->where('kasbon.is_active', true),
+            'kasbon.id_karyawan'
+        );
 
         return Datatables::of($data)->make(true);
     }
 
     public function getKaryawan()
     {
-        $existingKaryawan = Kasbon::where('is_active', true)->pluck('nik_karyawan')->toArray();
+        $existingIds = Kasbon::where('is_active', true)
+            ->whereNotNull('id_karyawan')
+            ->pluck('id_karyawan')
+            ->all();
 
         $karyawan = MasterKaryawan::where('is_active', true)
-            ->whereNotIn('nik_karyawan', $existingKaryawan)
-            ->select('nik_karyawan', 'nama_lengkap')
-            ->get();
-        
-            return response()->json([
-                'success' => true,
-                'data' => $karyawan,
-                'message' => 'Available karyawan data retrieved successfully',
-            ], 201);
+            ->when(!empty($existingIds), function ($query) use ($existingIds) {
+                $query->whereNotIn('id', $existingIds);
+            })
+            ->select('id', 'nama_lengkap')
+            ->orderBy('nama_lengkap')
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'id_karyawan' => $row->id,
+                    'nama_lengkap' => $row->nama_lengkap,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => $karyawan,
+            'message' => 'Available karyawan data retrieved successfully',
+        ], 201);
     }
 
     public function delete(Request $request){
         try {
-        $bonusKaryawan = Kasbon::findOrFail($request->id);
-        $bonusKaryawan->is_active = false;
-        $bonusKaryawan->deleted_at = DATE('Y-m-d H:i:s');
-        $bonusKaryawan->deleted_by = $this->karyawan;
-        $bonusKaryawan->save();
+        $kasbon = Kasbon::findOrFail($request->id);
+        $kasbon->is_active = false;
+        $kasbon->deleted_at = DATE('Y-m-d H:i:s');
+        $kasbon->deleted_by = $this->karyawan;
+        $kasbon->save();
 
         return response()->json([
             'success' => true,
@@ -67,13 +83,19 @@ class KasbonController extends Controller
                     'message' => 'Nominal Terlalu Besar',
                 ], 401);
             }
-            $existingKaryawan = Kasbon::where('is_active', true)->pluck('nik_karyawan')->toArray();
+
+            $existingKaryawan = Kasbon::where('is_active', true)
+                ->whereNotNull('id_karyawan')
+                ->pluck('id_karyawan')
+                ->toArray();
 
             $kasbon = new Kasbon();
             $kasbon->total_kasbon = str_replace(['Rp', '.', ','], '', $request->total_kasbon);
             $kasbon->nominal_potongan = str_replace(['Rp', '.', ','], '', $request->nominal_potongan);
             $kasbon->tenor = $request->tenor;
-            $kasbon->bulan_mulai_pemotongan = $request->bulan_mulai_pemotongan;
+            $kasbon->bulan_mulai_pemotongan = preg_match('/^(\d{4}-\d{2})/', (string) $request->bulan_mulai_pemotongan, $m)
+                ? $m[1]
+                : $request->bulan_mulai_pemotongan;
             $kasbon->tanggal_permintaan = $request->tanggal_permintaan;
             $kasbon->tanggal_pencairan = $request->tanggal_pencairan;
             $kasbon->keterangan = $request->keterangan;
@@ -83,7 +105,7 @@ class KasbonController extends Controller
             $kasbon->created_by = $this->karyawan;
             $kasbon->created_at = DATE('Y-m-d H:i:s');
 
-            if($request->id && in_array($request->nik_karyawan, $existingKaryawan)) {
+            if ($request->id && in_array((int) $request->id_karyawan, array_map('intval', $existingKaryawan), true)) {
                 $oldKasbon = Kasbon::findorFail($request->id);
                 $oldKasbon->updated_at = DATE('Y-m-d H:i:s');
                 $oldKasbon->updated_by = $this->karyawan;
@@ -92,20 +114,19 @@ class KasbonController extends Controller
 
                 $kasbon->previous_id = $request->id;
                 $kasbon->kode_kasbon = $oldKasbon->kode_kasbon;
-                $kasbon->karyawan = $oldKasbon->karyawan; 
+                $kasbon->karyawan = $oldKasbon->karyawan;
                 $kasbon->nik_karyawan = $oldKasbon->nik_karyawan;
+                $kasbon->id_karyawan = $oldKasbon->id_karyawan;
 
                 $message = 'Kasbon data updated successfully';
-
             } else {
-                $karyawan = MasterKaryawan::where('nik_karyawan', $request->nik_karyawan)->first();
+                $karyawan = MasterKaryawan::findOrFail($request->id_karyawan);
+                $kasbon->id_karyawan = $karyawan->id;
                 $kasbon->nik_karyawan = $karyawan->nik_karyawan;
-                $kasbon->karyawan = $karyawan->nama_lengkap; 
-
+                $kasbon->karyawan = $karyawan->nama_lengkap;
                 $kasbon->kode_kasbon = $this->generateNoDoc();
 
                 $message = 'Kasbon data inserted successfully';
-                
             }
 
             $kasbon->save();
@@ -118,6 +139,7 @@ class KasbonController extends Controller
             return response()->json(['message' => $th->getMessage()], 500);
         }
     }
+
     private function generateNoDoc()
     {
         $latestDocument = Kasbon::orderBy('kode_kasbon', 'desc')->first();
@@ -164,12 +186,16 @@ class KasbonController extends Controller
 
     public function getHistory(Request $request)
     {
-        
-        $data = Kasbon::where('nik_karyawan', $request->nik_karyawan)
-            ->orderBy('created_at', 'asc')
-            ->get();
+        $query = Kasbon::query();
+
+        if (!empty($request->id_karyawan)) {
+            $query->where('id_karyawan', $request->id_karyawan);
+        } elseif (!empty($request->nik_karyawan)) {
+            $query->where('nik_karyawan', $request->nik_karyawan);
+        }
+
+        $data = $query->orderBy('created_at', 'asc');
 
         return Datatables::of($data)->make(true);
-
     }
 }
