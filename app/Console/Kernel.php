@@ -55,6 +55,7 @@ class Kernel extends ConsoleKernel
         Commands\SendPendingAssessmentInvitations::class,
         Commands\CustomerServiceAutoCloseCommand::class,
         Commands\CustomerServiceAutoArchiveCommand::class,
+        Commands\ReactivateNeverOrderedQuotationCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,
