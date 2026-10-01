@@ -389,6 +389,7 @@ class MasterKaryawanController extends Controller
 
                     if ($oldNik !== $newNik) {
                         MasterSallaryNikSyncService::syncOnNikChange(
+                            $karyawan->id,
                             $request->personal['nama_lengkap'] ?? $karyawan->nama_lengkap,
                             $oldNik,
                             $newNik,
@@ -668,7 +669,7 @@ class MasterKaryawanController extends Controller
     public function getAllKaryawan(Request $request)
     {
         $data = MasterKaryawan::where('is_active', true)
-            ->select('nama_lengkap', 'nik_karyawan')
+            ->select('id', 'nama_lengkap', 'nik_karyawan')
             ->get();
         return response()->json(['message' => 'Data hasbeen show', 'data' => $data], 200);
     }

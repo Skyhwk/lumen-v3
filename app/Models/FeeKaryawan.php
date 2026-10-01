@@ -12,6 +12,7 @@ class FeeKaryawan extends Sector{
     protected $fillable = [
         'karyawan',
         'nik_karyawan',
+        'id_karyawan',
         'id_master_fee',
         'created_at',
         'created_by',
@@ -25,4 +26,8 @@ class FeeKaryawan extends Sector{
 
     public $timestamps = false;
 
+    public function masterKaryawan()
+    {
+        return $this->belongsTo(MasterKaryawan::class, 'id_karyawan', 'id');
+    }
 }

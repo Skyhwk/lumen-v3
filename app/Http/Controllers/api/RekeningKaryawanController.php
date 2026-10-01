@@ -27,18 +27,30 @@ class RekeningKaryawanController extends Controller
 
     public function getKaryawan()
     {
-        $existingKaryawan = RekeningKaryawan::where('is_active', true)->pluck('nik_karyawan')->toArray();
+        $existingIds = RekeningKaryawan::where('is_active', true)
+            ->whereNotNull('id_karyawan')
+            ->pluck('id_karyawan')
+            ->all();
 
         $karyawan = MasterKaryawan::where('is_active', true)
-            ->whereNotIn('nik_karyawan', $existingKaryawan)
-            ->select('nik_karyawan', 'nama_lengkap')
-            ->get();
-        
-            return response()->json([
-                'success' => true,
-                'data' => $karyawan,
-                'message' => 'Available karyawan data retrieved successfully',
-            ], 201);
+            ->when(!empty($existingIds), function ($query) use ($existingIds) {
+                $query->whereNotIn('id', $existingIds);
+            })
+            ->select('id', 'nama_lengkap')
+            ->orderBy('nama_lengkap')
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'id_karyawan' => $row->id,
+                    'nama_lengkap' => $row->nama_lengkap,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => $karyawan,
+            'message' => 'Available karyawan data retrieved successfully',
+        ], 201);
     }
 
     public function delete(Request $request){
@@ -61,15 +73,17 @@ class RekeningKaryawanController extends Controller
     public function store(Request $request)
     {
         try{
-            $existingKaryawan = RekeningKaryawan::where('is_active', true)->pluck('nik_karyawan')->toArray();
+            $existingKaryawan = RekeningKaryawan::where('is_active', true)
+                ->whereNotNull('id_karyawan')
+                ->pluck('id_karyawan')
+                ->toArray();
             $data = new RekeningKaryawan();
-            // $data = fill($request->all());
             $data->created_by = $this->karyawan;
             $data->created_at = DATE('Y-m-d H:i:s');
             $data->no_rekening = $request->no_rekening;
             $data->nama_bank = $request->nama_bank;
 
-            if($request->id && in_array($request->nik_karyawan, $existingKaryawan)) {
+            if ($request->id && in_array((int) $request->id_karyawan, array_map('intval', $existingKaryawan), true)) {
                 $oldData = RekeningKaryawan::findorFail($request->id);
                 $oldData->updated_at = DATE('Y-m-d H:i:s');
                 $oldData->updated_by = $this->karyawan;
@@ -77,15 +91,17 @@ class RekeningKaryawanController extends Controller
                 $oldData->save();
 
                 $data->previous_id = $request->id;
-                $data->karyawan = $oldData->karyawan; 
+                $data->karyawan = $oldData->karyawan;
                 $data->nik_karyawan = $oldData->nik_karyawan;
+                $data->id_karyawan = $oldData->id_karyawan;
 
                 $message = 'BPJS TK data updated successfully';
 
             } else {
-                $karyawan = MasterKaryawan::where('nik_karyawan', $request->nik_karyawan)->first();
+                $karyawan = MasterKaryawan::findOrFail($request->id_karyawan);
+                $data->id_karyawan = $karyawan->id;
                 $data->nik_karyawan = $karyawan->nik_karyawan;
-                $data->karyawan = $karyawan->nama_lengkap; 
+                $data->karyawan = $karyawan->nama_lengkap;
 
                 $message = 'BPJS TK data inserted successfully';
             }
@@ -103,7 +119,7 @@ class RekeningKaryawanController extends Controller
 
     public function getHistory(Request $request)
     {
-        
+
         $data = RekeningKaryawan::where('nik_karyawan', $request->nik_karyawan)
             ->orderBy('created_at', 'desc')
             ->get();
