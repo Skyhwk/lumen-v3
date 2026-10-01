@@ -3788,6 +3788,10 @@ class AppsBasService
         return ['K3-KB', 'K3-KFK', 'K3-KFPBP', 'K3-KFS', 'K3-KRU', 'K3-KTRTHK'];
     }
 
+    /**
+     * Parameter K3-* (hygiene ULK) diinput manual di lapangan, tidak tersimpan di FDL DB.
+     * Perlakuan sama seperti Psikologi: dianggap selesai tanpa cek DataLapangan.
+     */
     private function isUlkHygieneK3Parameter($item, $kategori3)
     {
         if ($kategori3 !== '27-Udara Lingkungan Kerja') {
@@ -3800,13 +3804,11 @@ class AppsBasService
         }
 
         $name = explode(';', (string) $item)[1] ?? (string) $item;
-        return in_array($name, $this->ulkHygieneK3Names(), true);
-    }
+        if (strpos($name, 'K3-') === 0) {
+            return true;
+        }
 
-    private function isUlkHygieneK3Completed($noSampel)
-    {
-        return DataLapanganLingkunganKerja::where('no_sampel', $noSampel)->exists()
-            || DataLapanganPartikulatMeter::where('no_sampel', $noSampel)->exists();
+        return in_array($name, $this->ulkHygieneK3Names(), true);
     }
 
     private function getStatusSampling($sample)
@@ -3867,9 +3869,9 @@ class AppsBasService
                 return is_array($param) && isset($param['model']);
             });
 
+            // Sampel hanya berisi K3-* (manual, tidak ada di FDL) → langsung selesai (mirip Psikologi)
             if ($hasK3Hygiene && empty($parameters)) {
-                $sampleNumber = $sample->no_sampel ?? $sample->no_sample;
-                return $this->isUlkHygieneK3Completed($sampleNumber) ? 'selesai' : 'belum selesai';
+                return 'selesai';
             }
 
             $status = 'selesai';
