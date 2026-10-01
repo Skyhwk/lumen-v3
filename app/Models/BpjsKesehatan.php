@@ -11,12 +11,14 @@ class BpjsKesehatan extends Sector{
     
     protected $fillable = [
         'karyawan',
+        'nik_karyawan',
+        'id_karyawan',
         'gaji_pokok',
         'potongan_karyawan',
         'nominal_potongan_karyawan',
         'potongan_kantor',
         'nominal_potongan_kantor',
-        'no_bpjs_tk',
+        'no_bpjs',
         'bulan_efektif',
         'created_at',
         'created_by',
@@ -30,12 +32,8 @@ class BpjsKesehatan extends Sector{
 
     public $timestamps = false;
 
-    // public function previous()
-    // {
-    //     return $this->belongsTo(YourModel::class, 'previous_id');
-    // }
-
-    // public function karyawan(){
-    //     return $this->belongsTo(MasterKaryawan::class, 'karyawan_id', 'id');
-    // }
+    public function masterKaryawan()
+    {
+        return $this->belongsTo(MasterKaryawan::class, 'id_karyawan', 'id');
+    }
 }

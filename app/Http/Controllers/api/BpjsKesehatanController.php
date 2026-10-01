@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Models\BpjsKesehatan;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Services\PayrollRecordSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -20,10 +21,12 @@ class BpjsKesehatanController extends Controller
 {
     public function index()
     {
-        $data = BpjsKesehatan::query()
-            ->where('bpjs_kesehatan.is_active', true)
-            ->join('master_karyawan', function ($join) {
-                $join->on('bpjs_kesehatan.nik_karyawan', '=', 'master_karyawan.nik_karyawan')
+        $data = PayrollRecordSyncService::scopeActiveKaryawanById(
+            BpjsKesehatan::query()->where('bpjs_kesehatan.is_active', true),
+            'bpjs_kesehatan.id_karyawan'
+        )
+            ->leftJoin('master_karyawan', function ($join) {
+                $join->on('bpjs_kesehatan.id_karyawan', '=', 'master_karyawan.id')
                     ->where('master_karyawan.is_active', true);
             })
             ->select('bpjs_kesehatan.*', 'master_karyawan.jabatan');
@@ -33,20 +36,30 @@ class BpjsKesehatanController extends Controller
 
     public function getKaryawan()
     {
-        $existingNik = BpjsKesehatan::where('is_active', true)->pluck('nik_karyawan')->toArray();
-        $existingNames = BpjsKesehatan::where('is_active', true)->pluck('karyawan')->toArray();
+        $existingIds = BpjsKesehatan::where('is_active', true)
+            ->whereNotNull('id_karyawan')
+            ->pluck('id_karyawan')
+            ->all();
 
         $karyawan = MasterKaryawan::where('is_active', true)
-            ->whereNotIn('nik_karyawan', $existingNik)
-            ->whereNotIn('nama_lengkap', $existingNames)
-            ->select('nik_karyawan', 'nama_lengkap')
-            ->get();
-        
-            return response()->json([
-                'success' => true,
-                'data' => $karyawan,
-                'message' => 'Available karyawan data retrieved successfully',
-            ], 201);
+            ->when(!empty($existingIds), function ($query) use ($existingIds) {
+                $query->whereNotIn('id', $existingIds);
+            })
+            ->select('id', 'nama_lengkap')
+            ->orderBy('nama_lengkap')
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'id_karyawan' => $row->id,
+                    'nama_lengkap' => $row->nama_lengkap,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => $karyawan,
+            'message' => 'Available karyawan data retrieved successfully',
+        ], 201);
     }
 
     public function delete(Request $request){
@@ -75,13 +88,18 @@ class BpjsKesehatanController extends Controller
                     'message' => 'Nominal Terlalu Besar',
                 ], 401);
             }
-            $existingKaryawan = BpjsKesehatan::where('is_active', true)->pluck('nik_karyawan')->toArray();
+
+            $existingKaryawan = BpjsKesehatan::where('is_active', true)
+                ->whereNotNull('id_karyawan')
+                ->pluck('id_karyawan')
+                ->toArray();
 
             $BpjsKesehatan = new BpjsKesehatan();
-            // $BpjsKesehatan = fill($request->all());
             $BpjsKesehatan->created_by = $this->karyawan;
             $BpjsKesehatan->no_bpjs = $request->no_bpjs;
-            $BpjsKesehatan->bulan_efektif = $request->bulan_efektif;
+            $BpjsKesehatan->bulan_efektif = preg_match('/^(\d{4}-\d{2})/', (string) $request->bulan_efektif, $m)
+                ? $m[1]
+                : $request->bulan_efektif;
             $BpjsKesehatan->gaji_pokok = str_replace(['Rp', '.', ','], '', $request->gaji_pokok);
             $BpjsKesehatan->potongan_karyawan = $request->potongan_karyawan / 100;
             $BpjsKesehatan->nominal_potongan_karyawan = $BpjsKesehatan->potongan_karyawan * $BpjsKesehatan->gaji_pokok;
@@ -89,7 +107,7 @@ class BpjsKesehatanController extends Controller
             $BpjsKesehatan->nominal_potongan_kantor = $BpjsKesehatan->potongan_kantor * $BpjsKesehatan->gaji_pokok;
             $BpjsKesehatan->created_at = DATE('Y-m-d H:i:s');
 
-            if($request->id && in_array($request->nik_karyawan, $existingKaryawan)) {
+            if ($request->id && in_array((int) $request->id_karyawan, array_map('intval', $existingKaryawan), true)) {
                 $oldBpjsKesehatan = BpjsKesehatan::findorFail($request->id);
                 $oldBpjsKesehatan->updated_at = DATE('Y-m-d H:i:s');
                 $oldBpjsKesehatan->updated_by = $this->karyawan;
@@ -97,18 +115,18 @@ class BpjsKesehatanController extends Controller
                 $oldBpjsKesehatan->save();
 
                 $BpjsKesehatan->previous_id = $request->id;
-                $BpjsKesehatan->karyawan = $oldBpjsKesehatan->karyawan; 
+                $BpjsKesehatan->karyawan = $oldBpjsKesehatan->karyawan;
                 $BpjsKesehatan->nik_karyawan = $oldBpjsKesehatan->nik_karyawan;
+                $BpjsKesehatan->id_karyawan = $oldBpjsKesehatan->id_karyawan;
 
                 $message = 'BPJS Kesehatan data updated successfully';
-
             } else {
-                $karyawan = MasterKaryawan::where('nik_karyawan', $request->nik_karyawan)->first();
+                $karyawan = MasterKaryawan::findOrFail($request->id_karyawan);
+                $BpjsKesehatan->id_karyawan = $karyawan->id;
                 $BpjsKesehatan->nik_karyawan = $karyawan->nik_karyawan;
-                $BpjsKesehatan->karyawan = $karyawan->nama_lengkap; 
+                $BpjsKesehatan->karyawan = $karyawan->nama_lengkap;
 
                 $message = 'BPJS Kesehatan data inserted successfully';
-                
             }
 
             $BpjsKesehatan->save();
@@ -124,12 +142,16 @@ class BpjsKesehatanController extends Controller
 
     public function getHistory(Request $request)
     {
-        
-        $data = BpjsKesehatan::where('nik_karyawan', $request->nik_karyawan)
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $query = BpjsKesehatan::query();
+
+        if (!empty($request->id_karyawan)) {
+            $query->where('id_karyawan', $request->id_karyawan);
+        } elseif (!empty($request->nik_karyawan)) {
+            $query->where('nik_karyawan', $request->nik_karyawan);
+        }
+
+        $data = $query->orderBy('created_at', 'desc');
 
         return Datatables::of($data)->make(true);
-
     }
 }

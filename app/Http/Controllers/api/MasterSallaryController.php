@@ -31,7 +31,7 @@ class MasterSallaryController extends Controller
                 DB::raw('(master_sallary.gaji_pokok + master_sallary.tunjangan_kerja) as total_gaji')
             )
             ->leftJoin('master_karyawan', function ($join) {
-                $join->on('master_sallary.nik_karyawan', '=', 'master_karyawan.nik_karyawan')
+                $join->on('master_sallary.id_karyawan', '=', 'master_karyawan.id')
                     ->where('master_karyawan.is_active', true);
             })
             ->leftJoin('master_divisi', function ($join) {
@@ -39,10 +39,11 @@ class MasterSallaryController extends Controller
                     ->where('master_divisi.is_active', true);
             })
             ->where('master_sallary.is_active', true)
+            ->whereNotNull('master_sallary.id_karyawan')
             ->whereExists(function ($query) {
                 $query->select(DB::raw(1))
                     ->from('master_karyawan as mk_current')
-                    ->whereColumn('mk_current.nik_karyawan', 'master_sallary.nik_karyawan')
+                    ->whereColumn('mk_current.id', 'master_sallary.id_karyawan')
                     ->where('mk_current.is_active', true);
             });
 
@@ -61,20 +62,30 @@ class MasterSallaryController extends Controller
 
     public function getKaryawan()
     {
-        $existingNik = MasterSallary::where('is_active', true)->pluck('nik_karyawan')->toArray();
-        $existingNames = MasterSallary::where('is_active', true)->pluck('karyawan')->toArray();
+        $existingIds = MasterSallary::where('is_active', true)
+            ->whereNotNull('id_karyawan')
+            ->pluck('id_karyawan')
+            ->all();
 
         $karyawan = MasterKaryawan::where('is_active', true)
-            ->whereNotIn('nik_karyawan', $existingNik)
-            ->whereNotIn('nama_lengkap', $existingNames)
-            ->select('nik_karyawan', 'nama_lengkap')
-            ->get();
-        
-            return response()->json([
-                'success' => true,
-                'data' => $karyawan,
-                'message' => 'Available karyawan data retrieved successfully',
-            ], 201);
+            ->when(!empty($existingIds), function ($query) use ($existingIds) {
+                $query->whereNotIn('id', $existingIds);
+            })
+            ->select('id', 'nama_lengkap')
+            ->orderBy('nama_lengkap')
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'id_karyawan' => $row->id,
+                    'nama_lengkap' => $row->nama_lengkap,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => $karyawan,
+            'message' => 'Available karyawan data retrieved successfully',
+        ], 201);
     }
 
     public function delete(Request $request){
@@ -104,17 +115,21 @@ class MasterSallaryController extends Controller
                 ], 401);
             }
 
-            $existingKaryawan = MasterSallary::where('is_active', true)->pluck('nik_karyawan')->toArray();
+            $existingKaryawan = MasterSallary::where('is_active', true)
+                ->whereNotNull('id_karyawan')
+                ->pluck('id_karyawan')
+                ->toArray();
 
             $masterSallary = new MasterSallary();
-            // $masterSallary = fill($request->all());
             $masterSallary->created_by = $this->karyawan;
             $masterSallary->created_at = DATE('Y-m-d H:i:s');
             $masterSallary->gaji_pokok = str_replace(['Rp', '.', ','], '', $request->gaji_pokok);
-            $masterSallary->bulan_efektif = $request->bulan_efektif;
+            $masterSallary->bulan_efektif = preg_match('/^(\d{4}-\d{2})/', (string) $request->bulan_efektif, $m)
+                ? $m[1]
+                : $request->bulan_efektif;
             $masterSallary->tunjangan_kerja = str_replace(['Rp', '.', ','], '', $request->tunjangan_kerja);
 
-            if($request->id && in_array($request->nik_karyawan, $existingKaryawan)) {
+            if ($request->id && in_array((int) $request->id_karyawan, array_map('intval', $existingKaryawan), true)) {
                 $oldMasterSallary = MasterSallary::findorFail($request->id);
                 $oldMasterSallary->updated_at = DATE('Y-m-d H:i:s');
                 $oldMasterSallary->updated_by = $this->karyawan;
@@ -122,18 +137,18 @@ class MasterSallaryController extends Controller
                 $oldMasterSallary->save();
 
                 $masterSallary->previous_id = $request->id;
-                $masterSallary->karyawan = $oldMasterSallary->karyawan; 
+                $masterSallary->karyawan = $oldMasterSallary->karyawan;
                 $masterSallary->nik_karyawan = $oldMasterSallary->nik_karyawan;
+                $masterSallary->id_karyawan = $oldMasterSallary->id_karyawan;
 
                 $message = 'Master Sallary data updated successfully';
-
             } else {
-                $karyawan = MasterKaryawan::where('nik_karyawan', $request->nik_karyawan)->first();
+                $karyawan = MasterKaryawan::findOrFail($request->id_karyawan);
+                $masterSallary->id_karyawan = $karyawan->id;
                 $masterSallary->nik_karyawan = $karyawan->nik_karyawan;
-                $masterSallary->karyawan = $karyawan->nama_lengkap; 
+                $masterSallary->karyawan = $karyawan->nama_lengkap;
 
                 $message = 'Master Sallary data inserted successfully';
-                
             }
 
             $masterSallary->save();
@@ -151,10 +166,12 @@ class MasterSallaryController extends Controller
     {
         $query = MasterSallary::query();
 
-        if (!empty($request->karyawan)) {
-            $query->where('karyawan', $request->karyawan);
-        } else {
+        if (!empty($request->id_karyawan)) {
+            $query->where('id_karyawan', $request->id_karyawan);
+        } elseif (!empty($request->nik_karyawan)) {
             $query->where('nik_karyawan', $request->nik_karyawan);
+        } elseif (!empty($request->karyawan)) {
+            $query->where('karyawan', $request->karyawan);
         }
 
         $data = $query->orderBy('created_at', 'desc');
@@ -178,7 +195,7 @@ class MasterSallaryController extends Controller
                 DB::raw('(master_sallary.gaji_pokok + master_sallary.tunjangan_kerja) as total_gaji')
             )
             ->leftJoin('master_karyawan', function ($join) {
-                $join->on('master_sallary.nik_karyawan', '=', 'master_karyawan.nik_karyawan')
+                $join->on('master_sallary.id_karyawan', '=', 'master_karyawan.id')
                     ->where('master_karyawan.is_active', true);
             })
             ->leftJoin('master_divisi', function ($join) {
@@ -186,10 +203,11 @@ class MasterSallaryController extends Controller
                     ->where('master_divisi.is_active', true);
             })
             ->where('master_sallary.is_active', true)
+            ->whereNotNull('master_sallary.id_karyawan')
             ->whereExists(function ($query) {
                 $query->select(DB::raw(1))
                     ->from('master_karyawan as mk_current')
-                    ->whereColumn('mk_current.nik_karyawan', 'master_sallary.nik_karyawan')
+                    ->whereColumn('mk_current.id', 'master_sallary.id_karyawan')
                     ->where('mk_current.is_active', true);
             })
             ->orderBy('master_sallary.karyawan', 'asc')
@@ -285,11 +303,13 @@ class MasterSallaryController extends Controller
     {
         try {
             $karyawan = MasterKaryawan::where('is_active', true)
+                ->when($request->id_karyawan, fn ($q) => $q->where('id', $request->id_karyawan))
                 ->when($request->nik_karyawan, fn ($q) => $q->where('nik_karyawan', $request->nik_karyawan))
                 ->when($request->nama_lengkap, fn ($q) => $q->where('nama_lengkap', $request->nama_lengkap))
                 ->firstOrFail();
 
             MasterSallaryNikSyncService::reconcileDuplicates(
+                $karyawan->id,
                 $karyawan->nama_lengkap,
                 $karyawan->nik_karyawan,
                 $this->karyawan
