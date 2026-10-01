@@ -1618,17 +1618,7 @@ class SamplerTrackingService
 
     public function consolidateActivities($sessions)
     {
-        if ($sessions->isEmpty()) return $sessions;
-        $orders = OrderHeader::whereIn('no_order', $sessions->pluck('no_order')->filter()->all())
-            ->where('is_active', true)->get()->keyBy('no_order');
-        $missingOrderSessions = $sessions->filter(function ($session) use ($orders) { return !$orders->has($session->no_order); });
-        $quotations = $missingOrderSessions->isEmpty() ? collect() : OrderHeader::whereIn('no_document', $missingOrderSessions->pluck('no_quotation')->filter()->all())
-            ->where('is_active', true)->get()->keyBy('no_document');
-        $customers = [];
-        foreach ($sessions as $session) {
-            $customers[$session->id] = optional($orders->get($session->no_order) ?: $quotations->get($session->no_quotation))->id_pelanggan;
-        }
-        return SamplerTrackingActivity::consolidate($sessions, $customers);
+        return SamplerTrackingActivity::consolidate($sessions);
     }
     public function dataTableByDate($request, $samplerId = null, $samplerName = null)
     {

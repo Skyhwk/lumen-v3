@@ -8,15 +8,15 @@ class SamplerTrackingActivity
 {
     // A logical stop retains all source sessions/orders and all historical events.
     // No schedule, member or event is deleted by consolidation.
-    public static function consolidate($sessions, array $customers)
+    public static function consolidate($sessions)
     {
-        return $sessions->groupBy(function ($session) use ($customers) {
-            $customer = $customers[$session->id] ?? null;
-            if (!$customer) return 'session:' . $session->id;
+        return $sessions->groupBy(function ($session) {
+            $order = trim((string) $session->no_order);
+            if ($order === '') return 'session:' . $session->id;
             $team = $session->activeMembers->map(function ($member) {
                 return self::samplerKey($member);
             })->unique()->sort()->values()->all();
-            return json_encode([$session->tanggal_sampling, (string) $customer, $team]);
+            return json_encode([$session->tanggal_sampling, $order, $team]);
         })->map(function ($group) {
             $stop = clone $group->first();
             $stop->activity_session_ids = $group->pluck('id')->values()->all();
