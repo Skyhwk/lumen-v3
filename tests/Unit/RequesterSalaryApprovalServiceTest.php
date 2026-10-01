@@ -112,6 +112,31 @@ class RequesterSalaryApprovalServiceTest extends TestCase
         $this->assertTrue(Service::canSendCandidateOffering($applicant, $offer->fresh())['allowed']);
     }
 
+    /** @dataProvider zeroReferenceSalaryProvider */
+    public function testZeroUserSalaryDoesNotRequireApproval(int $hrdAmount): void
+    {
+        [$applicant, $offer] = $this->applicant();
+        $offer->update(['sallary_offer_user' => 0, 'sallary_offer_hrd' => $hrdAmount]);
+        $this->assertSame(0, Service::resolveUserAmount($applicant));
+        $this->assertSame('not_required', Service::syncAfterHrdSalarySave($applicant, $offer, $hrdAmount));
+        $this->assertTrue(Service::canSendCandidateOffering($applicant, $offer->fresh())['allowed']);
+        $this->assertSame(0, DecisionSalary::count());
+        $this->assertSame([], $this->notifications);
+    }
+
+    public static function zeroReferenceSalaryProvider(): array
+    {
+        return [[1], [5000000], [7000000]];
+    }
+
+    public function testZeroReferenceIsDistinctFromMissingSalary(): void
+    {
+        $this->assertSame(0, Service::normalizeAmount('0', true));
+        $this->assertNull(Service::normalizeAmount('', true));
+        $this->assertNull(Service::normalizeAmount(null, true));
+        $this->assertNull(Service::normalizeAmount(0));
+    }
+
     public function testNewApprovalNotifiesOnlyAfterCommit(): void
     {
         [$applicant, $offer] = $this->applicant();

@@ -22,7 +22,7 @@ class RequesterSalaryApprovalService
     public const HISTORY_APPROVED = 'requester_salary_offer_approved';
     public const HISTORY_REJECTED = 'requester_salary_offer_rejected';
 
-    public static function normalizeAmount($value): ?int
+    public static function normalizeAmount($value, bool $allowZero = false): ?int
     {
         if ($value === null || $value === '') {
             return null;
@@ -38,7 +38,7 @@ class RequesterSalaryApprovalService
 
         $amount = (int) round((float) $value);
 
-        return $amount > 0 ? $amount : null;
+        return $amount > 0 || ($allowZero && $amount === 0) ? $amount : null;
     }
 
     public static function amountsMatch($a, $b): bool
@@ -79,7 +79,7 @@ class RequesterSalaryApprovalService
     public static function resolveUserAmount(NewRecruitment $applicant): ?int
     {
         return self::normalizeAmount(
-            SallaryOfferService::resolveUserReferenceSalary($applicant)
+            SallaryOfferService::resolveUserReferenceSalary($applicant), true
         );
     }
 
@@ -111,7 +111,7 @@ class RequesterSalaryApprovalService
             ?? self::resolveHrdComparableAmount($applicant, $hrdAmount);
         $pencadangan = self::resolvePencadanganUpah($applicant);
 
-        if ($userAmount === null || $hrdNormalized === null) {
+        if ($userAmount === null || $userAmount === 0 || $hrdNormalized === null) {
             self::markOfferStatus($offer, self::STATUS_NOT_REQUIRED);
             self::supersedePendingRounds((int) $applicant->id);
             self::appendHistory(
@@ -121,6 +121,7 @@ class RequesterSalaryApprovalService
                 [
                     'user_amount' => $userAmount,
                     'hrd_amount' => $hrdNormalized,
+                    'reason' => $userAmount === 0 ? 'Salary Offer User bernilai 0; approval tidak diperlukan.' : null,
                 ]
             );
 
