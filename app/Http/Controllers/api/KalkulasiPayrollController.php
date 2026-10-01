@@ -182,7 +182,16 @@ class KalkulasiPayrollController extends Controller
                 $join->on('rekap_masuk_kerja.karyawan_id', '=', 'master_karyawan.id')->where('rekap_masuk_kerja.is_active', true);
             })
             ->leftJoin('master_sallary', function($join){
-                $join->on('master_karyawan.id', '=', 'master_sallary.id_karyawan')->where('master_sallary.is_active', true);
+                $join->on('master_karyawan.id', '=', 'master_sallary.id_karyawan')
+                    ->where(function ($salary) {
+                        $salary->where('master_sallary.is_active', true)
+                            ->orWhere(function ($fallback) {
+                                // Use the latest salary history only for inactive employees without an active salary.
+                                $fallback->where('master_karyawan.is_active', false)
+                                    ->whereRaw('NOT EXISTS (SELECT 1 FROM master_sallary AS active_salary WHERE active_salary.id_karyawan = master_karyawan.id AND active_salary.is_active = 1)')
+                                    ->whereRaw('master_sallary.id = (SELECT MAX(latest_salary.id) FROM master_sallary AS latest_salary WHERE latest_salary.id_karyawan = master_karyawan.id)');
+                            });
+                    });
             })
             ->leftJoin('bonus_karyawan', function($join) use ($request){
                 $join->on('master_karyawan.id', '=', 'bonus_karyawan.id_karyawan')
