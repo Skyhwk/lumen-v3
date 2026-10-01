@@ -452,7 +452,7 @@ class InternalAssessmentExcelExportService
             }
 
             $row = $this->writeLegacySectionTitle($sheet, $row, $meta['title']);
-            $headers = ['No', 'Total Soal', $meta['targetHeader'], 'Total Jawaban', 'Persentase (%)'];
+            $headers = ['No', 'Total Soal', $meta['targetHeader'], 'Total Nilai Skala', 'Persentase (%)'];
             $row = $this->writeTableHeader($sheet, $row, $headers);
             $startRow = $row;
 
