@@ -182,10 +182,10 @@ class KalkulasiPayrollController extends Controller
                 $join->on('rekap_masuk_kerja.karyawan_id', '=', 'master_karyawan.id')->where('rekap_masuk_kerja.is_active', true);
             })
             ->leftJoin('master_sallary', function($join){
-                $join->on('master_karyawan.nik_karyawan', '=', 'master_sallary.nik_karyawan')->where('master_sallary.is_active', true);
+                $join->on('master_karyawan.id', '=', 'master_sallary.id_karyawan')->where('master_sallary.is_active', true);
             })
             ->leftJoin('bonus_karyawan', function($join) use ($request){
-                $join->on('master_karyawan.nik_karyawan', '=', 'bonus_karyawan.nik_karyawan')
+                $join->on('master_karyawan.id', '=', 'bonus_karyawan.id_karyawan')
                 ->where('bonus_karyawan.is_active', true);
             })
             ->leftJoin('rekening_karyawan', function($join) use ($request){
@@ -193,17 +193,17 @@ class KalkulasiPayrollController extends Controller
                 ->where('rekening_karyawan.is_active', true);
             })
             ->leftJoin('bpjs_tk', function($join) use ($request){
-                $join->on('master_karyawan.nik_karyawan', '=', 'bpjs_tk.nik_karyawan')->where('bpjs_tk.is_active', true);
+                $join->on('master_karyawan.id', '=', 'bpjs_tk.id_karyawan')->where('bpjs_tk.is_active', true);
             })
             ->leftJoin('bpjs_kesehatan', function($join) use ($request){
-                $join->on('master_karyawan.nik_karyawan', '=', 'bpjs_kesehatan.nik_karyawan')->where('bpjs_kesehatan.bulan_efektif', '<=', $request->periode)->where('bpjs_kesehatan.is_active', true);
+                $join->on('master_karyawan.id', '=', 'bpjs_kesehatan.id_karyawan')->where('bpjs_kesehatan.bulan_efektif', '<=', $request->periode)->where('bpjs_kesehatan.is_active', true);
             })
             ->leftJoin('kasbon', function($join) use ($request) {
                 $join->on('master_karyawan.id', '=', 'kasbon.id_karyawan')->where('kasbon.is_active', true)
                      ->where('kasbon.bulan_mulai_pemotongan', '<=', $request->periode);
             })
             ->leftJoin('denda_karyawan', function($join) use ($request) {
-                $join->on('master_karyawan.nik_karyawan', '=', 'denda_karyawan.nik_karyawan')->where('denda_karyawan.is_active', true)
+                $join->on('master_karyawan.id', '=', 'denda_karyawan.id_karyawan')->where('denda_karyawan.is_active', true)
                      ->where('denda_karyawan.bulan_mulai_pemotongan', '<=', $request->periode);
             })
             ->leftJoin('pph_21', function($join) use ($request) {
@@ -211,10 +211,10 @@ class KalkulasiPayrollController extends Controller
                      ->where('pph_21.bulan_mulai_pemotongan', '<=', $request->periode);
             })
             ->leftJoin('payroll', function($join) use ($request){
-                $join->on('master_karyawan.nik_karyawan', '=', 'payroll.nik_karyawan')->where('payroll.periode_payroll', '=', $request->periode)->where('payroll.is_active', '=', true);
+                $join->on('master_karyawan.id', '=', 'payroll.id_karyawan')->where('payroll.periode_payroll', '=', $request->periode)->where('payroll.is_active', '=', true);
             })
             ->leftJoin('pencadangan_upah', function($join) use ($request){
-                $join->on('master_karyawan.nik_karyawan', '=', 'pencadangan_upah.nik_karyawan')
+                $join->on('master_karyawan.id', '=', 'pencadangan_upah.id_karyawan')
                      ->where('pencadangan_upah.is_active', true)
                      ->where('pencadangan_upah.bulan_efektif', '<=', $request->periode_payroll)
                      ->where('pencadangan_upah.status', 'ONGOING');
