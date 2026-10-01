@@ -571,7 +571,7 @@ class InternalAssessmentController extends Controller
     /**
      * Session internal selalu dibentuk per blok agar alurnya mudah dipahami:
      * DISC/PAPI lebih dahulu, lalu kategori HR lainnya dan kategori default.
-     * Urutan dalam dua blok terakhir diacak hanya ketika session baru dibuat.
+     * Kategori HR lainnya diacak, sedangkan kategori default memakai urutan tetap.
      */
     private function orderedInternalSessionDefinitions(array $definitions): array
     {
@@ -600,11 +600,19 @@ class InternalAssessmentController extends Controller
             return strtoupper(trim((string) $item['category']->name)) === 'DISC' ? 1 : 2;
         })->values();
 
+        $defaultOrder = [
+            'EMPLOYEE SATISFACTION' => 1,
+            'SATISFACTION OF LEADER' => 2,
+            'EMPLOYEE EVALUATION' => 3,
+            'MANAGEMENT EVALUATION' => 4,
+        ];
         $default = $items->reject(function ($item) use ($mandatoryNames) {
             return in_array(strtoupper(trim((string) $item['category']->name)), $mandatoryNames, true);
         })->filter(function ($item) {
             return strtolower(trim((string) ($item['category']->category_scope ?? 'hr'))) === 'default';
-        })->shuffle()->values();
+        })->sortBy(function ($item) use ($defaultOrder) {
+            return $defaultOrder[strtoupper(trim((string) $item['category']->name))] ?? 5;
+        })->values();
 
         $hr = $items->reject(function ($item) use ($mandatoryNames) {
             return in_array(strtoupper(trim((string) $item['category']->name)), $mandatoryNames, true);
