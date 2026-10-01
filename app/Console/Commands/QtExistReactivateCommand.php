@@ -11,7 +11,8 @@ class QtExistReactivateCommand extends Command
     protected $signature = 'qt-exist:reactivate
                             {--limit= : Batasi jumlah kandidat}
                             {--dry-run : Preview saja, tidak duplicate/generate/email}
-                            {--actor=SYSTEM : Nama actor untuk created_by}';
+                            {--actor=SYSTEM : Nama actor untuk created_by}
+                            {--to= : Override penerima email (test), CC/BCC dikosongkan}';
 
     protected $description = 'Reaktivasi QT exist: duplikat QT non-kontrak → approved, generate link, kirim email customer';
 
@@ -31,7 +32,9 @@ class QtExistReactivateCommand extends Command
         }
 
         $actor = trim((string) $this->option('actor')) ?: 'SYSTEM';
-        $service = new QtExistReactivationService();
+        $toOverride = trim((string) $this->option('to'));
+        $service = (new QtExistReactivationService())
+            ->withEmailOverride($toOverride !== '' ? $toOverride : null, $toOverride !== '');
 
         if ($this->option('dry-run')) {
             $this->warn('Dry-run aktif: preview kandidat saja (tidak insert log / generate / email).');
@@ -74,6 +77,9 @@ class QtExistReactivateCommand extends Command
         }
         $this->info('Actor: ' . $actor);
         $this->info('Approved/emailed by: Lani Febriana Safitri');
+        if ($toOverride !== '') {
+            $this->warn("TEST MODE: email HANYA ke {$toOverride} (CC/BCC kosong)");
+        }
 
         $result = $service->execute($actor, $limit);
 

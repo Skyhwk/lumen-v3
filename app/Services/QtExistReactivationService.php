@@ -21,9 +21,22 @@ class QtExistReactivationService
     private const APPROVED_BY = 'Lani Febriana Safitri';
     private const TZ = 'Asia/Jakarta';
 
+    /** @var string|null Override penerima email (test) */
+    private $emailToOverride = null;
+
+    /** @var bool Jika true, CC/BCC dikosongkan */
+    private $emailClearCcBcc = false;
+
     private function cutoff(): Carbon
     {
         return Carbon::now(self::TZ)->subMonths(self::MONTHS);
+    }
+
+    public function withEmailOverride(?string $to, bool $clearCcBcc = false): self
+    {
+        $this->emailToOverride = $to ? trim($to) : null;
+        $this->emailClearCcBcc = $clearCcBcc;
+        return $this;
     }
 
     /**
@@ -73,6 +86,8 @@ class QtExistReactivationService
             'timestamp' => Carbon::now()->toDateTimeString(),
             'actor' => $actorName,
             'limit' => $limit,
+            'email_to_override' => $this->emailToOverride,
+            'email_clear_cc_bcc' => $this->emailClearCcBcc,
         ]);
 
         try {
@@ -419,7 +434,7 @@ class QtExistReactivationService
         $copy = $source->replicate();
         $copy->no_quotation = $noQuotation;
         $copy->no_document = $noDocument;
-        $copy->data_lama = $source->no_document;
+        $copy->data_lama = null;
         $copy->tanggal_penawaran = $now->toDateString();
         $copy->flag_status = 'draft';
         $copy->is_approved = true;
@@ -440,19 +455,20 @@ class QtExistReactivationService
         $copy->keterangan_reject_sp = null;
         $copy->id_token = null;
         $copy->expired = null;
-        $copy->konfirmasi_order = null;
+        $copy->konfirmasi_order = 0;
+        $copy->use_kuota = 0;
         $copy->is_ready_order = 0;
-        $copy->document_status = null;
+        $copy->document_status = 'Aktif';
         $copy->filename = null;
         $copy->jadwalfile = null;
         $copy->kode_promo = null;
         $copy->promo_id = null;
-        $copy->discount_promo = 0;
+        $copy->discount_promo = null;
         $copy->total_discount_promo = 0;
         $copy->created_by = $actorName ?: 'SYSTEM';
         $copy->created_at = $now->format('Y-m-d H:i:s');
-        $copy->updated_by = null;
-        $copy->updated_at = null;
+        $copy->updated_by = self::APPROVED_BY;
+        $copy->updated_at = $now->format('Y-m-d H:i:s');
         $copy->deleted_by = null;
         $copy->deleted_at = null;
         $copy->save();
@@ -503,6 +519,8 @@ class QtExistReactivationService
         $quote->generated_at = Carbon::now()->format('Y-m-d H:i:s');
         $quote->id_token = $token->id;
         $quote->expired = $token->expired;
+        $quote->updated_by = $actor;
+        $quote->updated_at = Carbon::now()->format('Y-m-d H:i:s');
         $quote->save();
 
         $linkRow = GenerateLink::where([
@@ -521,13 +539,22 @@ class QtExistReactivationService
         }
         $portalLink = $portalBase . $linkRow->token;
 
-        $to = $this->normalizeEmail($quote->email_pic_order);
-        if ($to === null) {
-            throw new \RuntimeException('email_pic_order kosong untuk ' . $quote->no_document);
+        if ($this->emailToOverride) {
+            $to = $this->normalizeEmail($this->emailToOverride);
+            if ($to === null) {
+                throw new \RuntimeException('Email override tidak valid: ' . $this->emailToOverride);
+            }
+            $cc = [];
+            $bcc = [];
+        } else {
+            $to = $this->normalizeEmail($quote->email_pic_order);
+            if ($to === null) {
+                throw new \RuntimeException('email_pic_order kosong untuk ' . $quote->no_document);
+            }
+            $cc = $this->emailClearCcBcc ? [] : $this->buildCcEmails($quote);
+            $bcc = $this->emailClearCcBcc ? [] : $this->buildBccEmails((int) ($quote->sales_id ?: 0), $quote->email_cc);
         }
 
-        $cc = $this->buildCcEmails($quote);
-        $bcc = $this->buildBccEmails((int) ($quote->sales_id ?: 0), $quote->email_cc);
         $subject = $this->buildEmailSubject($quote);
         $body = $this->buildEmailBody($quote, $portalLink);
 
@@ -549,6 +576,8 @@ class QtExistReactivationService
         $quote->is_emailed = true;
         $quote->emailed_at = Carbon::now()->format('Y-m-d H:i:s');
         $quote->emailed_by = $actor;
+        $quote->updated_by = $actor;
+        $quote->updated_at = Carbon::now()->format('Y-m-d H:i:s');
         $this->applyPostEmailFlags($quote);
         $quote->save();
 
@@ -658,8 +687,10 @@ class QtExistReactivationService
         $noDocument = e((string) $quote->no_document);
         $safeLink = e($link);
         $approver = e(self::APPROVED_BY);
+        $jabatan = 'Admin Sales';
 
-        return <<<HTML
+        // Template diselaraskan dengan ComposeMail QT Approved
+        $body = <<<HTML
 <p>
     Kepada yang terhormat, <br />
     <b>{$namaPic} <br />{$namaPerusahaan}</b>
@@ -667,7 +698,7 @@ class QtExistReactivationService
 <p>{$ucapan}</p>
 <p>
     Berikut kami lampirkan : <br />
-    <b>Surat Penawaran ({$noDocument}) - {$statusSampling}</b>
+    <b>Surat Penawaran ({$noDocument}) - {$statusSampling} </b>
 </p>
 <p>Kategori Pengujian : {$htmlKategori}</p>
 <p>
@@ -675,17 +706,46 @@ class QtExistReactivationService
     kami melalui {$salesName} ({$salesPhone})
 </p>
 <p>Terima kasih atas perhatian, kepercayaan, serta kerjasama yang sangat baik.</p>
-<p><u><strong>CATATAN PENTING</strong></u></p>
-<p>Mohon Bapak/Ibu dapat meninjau kembali form penawaran ini untuk memastikan seluruh data kebutuhan telah sesuai. Sebagai bentuk persetujuan, mohon menandatangani dan mengirimkan kembali kepada kami melalui email: <a href="mailto:sales@intilab.com">sales@intilab.com</a></p>
-<p><u><strong>INFORMASI PENTING</strong></u></p>
 <p>
-    <em>E-mail</em> ini dikirimkan secara otomatis oleh sistem PT Inti Surya Laboratorium (INTILAB) melalui
-    <strong><u>alamat <i>E-mail</i> resmi perusahaan, yaitu <span style="color: rgb(255, 0, 0)"><strong><u>admsales01@intilab.com</u></strong></span></u></strong>.
+    <u><strong>CATATAN PENTING</strong></u>
 </p>
-<p>Best Regards,</p>
-<br />
-<p><strong>{$approver}</strong><br />Admin Sales<br />PT Inti Surya Laboratorium</p>
+<p>Mohon Bapak/Ibu dapat meninjau kembali form penawaran ini untuk memastikan seluruh data kebutuhan telah sesuai. Sebagai bentuk persetujuan, mohon menandatangani dan mengirimkan kembali kepada kami melalui email: <a href="mailto:sales@intilab.com">sales@intilab.com</a></p>
+<p>
+    <u><strong>INFORMASI PENTING</strong></u>
+</p>
+<p>
+    <em>E-mail</em> ini dikirimkan secara otomatis oleh sistem PT Inti Surya Laboratorium (INTILAB) melalui <br />
+    <strong>
+        <u>alamat <i>E-mail</i> resmi perusahaan, yaitu
+            <span style="color: rgb(255, 0, 0)"><strong><u>admsales01@intilab.com</u></strong></span>
+        </u>
+    </strong>. Untuk menjaga keamanan data dan <br />informasi, disarankan agar penerima <em>E-mail</em> : <br />
+    a. <strong>Memastikan kembali alamat pengirim </strong><em><strong>E-mail</strong></em><strong> ini adalah sesuai alamat </strong><em><strong>E-mail</strong></em><strong> resmi perusahaan; dan,</strong><br />
+    b. <strong>Tidak mengklik tautan dan/atau mengunduh lampiran apapun jika </strong><em><strong>E-mail</strong></em><strong> ini dikirimkan selain</strong><br />
+    <strong>dari alamat </strong><em><strong>E-mail</strong></em><strong> resmi perusahaan.</strong>
+</p>
+<p><em>E-mail</em> dan dokumen lampiran ini bersifat rahasia (berisi data dan informasi rahasia) yang ditujukan <br />secara eksklusif kepada penerima <em>E-mail</em>.</p>
 HTML;
+
+        return $body . $this->buildEmailSignature($approver, $jabatan);
+    }
+
+    /**
+     * Signature QT Approve (ComposeMail.js) — QR + logo + icon sosmed (base64).
+     */
+    private function buildEmailSignature(string $name, string $jabatan): string
+    {
+        $path = base_path('app/Services/templates/qt_approve_email_signature.html');
+        if (!is_file($path)) {
+            return '<p>Best Regards,</p><br /><p><strong>' . e($name) . '</strong><br />' . e($jabatan) . '<br />PT Inti Surya Laboratorium</p>';
+        }
+
+        $html = file_get_contents($path);
+        return str_replace(
+            ['{{NAME}}', '{{JABATAN}}'],
+            [$name, e($jabatan)],
+            $html
+        );
     }
 
     private function ucapanSalam(): string
