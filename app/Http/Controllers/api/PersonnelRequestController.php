@@ -4,11 +4,11 @@ namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
+use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question,DecisionSalary};
 use App\Services\SallaryOfferService;
 use App\Services\GenerateAssessmentDocumentService;
 use App\Services\CandidateDocumentAttachmentService;
-use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService,RecruitmentStatusService};
+use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService,RecruitmentStatusService,RequesterSalaryApprovalService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
@@ -574,6 +574,10 @@ class PersonnelRequestController extends Controller
             return [];
         }
 
+        if ($category === 'salary_approval') {
+            return $this->resolveSalaryApprovalIds();
+        }
+
         return $this->ownedCandidateBaseQuery()
             ->orderByDesc('id')
             ->get()
@@ -583,6 +587,108 @@ class PersonnelRequestController extends Controller
             ->pluck('id')
             ->values()
             ->all();
+    }
+
+    private function resolveSalaryApprovalIds(): array
+    {
+        $ownedRequestIds = $this->ownedPersonnelRequestQuery()->pluck('id');
+        if ($ownedRequestIds->isEmpty()) {
+            return [];
+        }
+
+        // pending / rejected / approved (approved stay sampai HRD kirim offering ke kandidat)
+        $openDecisions = DecisionSalary::query()
+            ->whereIn('personnel_request_id', $ownedRequestIds)
+            ->whereIn('decision', [
+                DecisionSalary::DECISION_PENDING,
+                DecisionSalary::DECISION_REJECTED,
+                DecisionSalary::DECISION_APPROVED,
+            ])
+            ->whereIn('id', function ($q) {
+                $q->selectRaw('MAX(id)')
+                    ->from('decision_salary')
+                    ->whereIn('decision', [
+                        DecisionSalary::DECISION_PENDING,
+                        DecisionSalary::DECISION_REJECTED,
+                        DecisionSalary::DECISION_APPROVED,
+                    ])
+                    ->groupBy('new_recruitment_id');
+            })
+            ->orderByDesc('id')
+            ->get(['id', 'new_recruitment_id', 'decision', 'decided_at']);
+
+        if ($openDecisions->isEmpty()) {
+            return [];
+        }
+
+        $recruitments = NewRecruitment::query()
+            ->whereIn('id', $openDecisions->pluck('new_recruitment_id')->unique()->values())
+            ->get(['id', 'meta_history'])
+            ->keyBy('id');
+
+        return $openDecisions
+            ->filter(function ($decision) use ($recruitments) {
+                if (in_array($decision->decision, [
+                    DecisionSalary::DECISION_PENDING,
+                    DecisionSalary::DECISION_REJECTED,
+                ], true)) {
+                    return true;
+                }
+
+                // approved: hilang dari tab setelah HRD approve & kirim offering ke kandidat
+                $row = $recruitments->get($decision->new_recruitment_id);
+                if (!$row) {
+                    return true;
+                }
+
+                return !$this->hasCandidateOfferingSentAfterDecision($row, $decision->decided_at);
+            })
+            ->pluck('new_recruitment_id')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function hasCandidateOfferingSentAfterDecision($recruitment, $decidedAt): bool
+    {
+        $history = RecruitmentStatusService::parseMetaHistory($recruitment);
+        if (empty($history)) {
+            return false;
+        }
+
+        $cutoff = null;
+        if ($decidedAt) {
+            try {
+                $cutoff = Carbon::parse($decidedAt);
+            } catch (\Throwable $e) {
+                $cutoff = null;
+            }
+        }
+
+        foreach (array_reverse($history) as $entry) {
+            if ((string) ($entry['status'] ?? '') !== 'candidate_offering_sent') {
+                continue;
+            }
+
+            if (!$cutoff) {
+                return true;
+            }
+
+            $at = $entry['at'] ?? null;
+            if (!$at) {
+                return true;
+            }
+
+            try {
+                if (Carbon::parse($at)->greaterThanOrEqualTo($cutoff)) {
+                    return true;
+                }
+            } catch (\Throwable $e) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -607,6 +713,7 @@ class PersonnelRequestController extends Controller
                 'scheduled' => 0,
                 'today_scheduled' => 0,
                 'overdue' => 0,
+                'salary_approval' => count($this->resolveSalaryApprovalIds()),
             ];
 
             $this->ownedCandidateBaseQuery()
@@ -614,7 +721,7 @@ class PersonnelRequestController extends Controller
                 ->get()
                 ->each(function ($row) use (&$candidateCounts) {
                     $category = $this->resolveCandidateActionCategory($row);
-                    if ($category && isset($candidateCounts[$category])) {
+                    if ($category && isset($candidateCounts[$category]) && $category !== 'salary_approval') {
                         $candidateCounts[$category]++;
                     }
                 });
@@ -639,7 +746,7 @@ class PersonnelRequestController extends Controller
     {
         try {
             $category = $request->input('action_category');
-            $allowed = ['shortlisted', 'unscheduled', 'scheduled', 'today_scheduled', 'overdue'];
+            $allowed = ['shortlisted', 'unscheduled', 'scheduled', 'today_scheduled', 'overdue', 'salary_approval'];
             if (!in_array($category, $allowed, true)) {
                 return response()->json(['message' => 'Kategori tindakan kandidat tidak valid.'], 422);
             }
@@ -654,6 +761,9 @@ class PersonnelRequestController extends Controller
                     'userInterview',
                     'candidateProfile',
                     'sallaryOffer',
+                    'candidateDataOffer',
+                    'pendingDecisionSalary',
+                    'openDecisionSalary',
                 ])
                 ->whereIn('id', $ids ?: [-1])
                 ->orderByDesc('id');
@@ -675,8 +785,49 @@ class PersonnelRequestController extends Controller
                 ->addColumn('interview_schedule', function ($row) {
                     return optional($row->userInterview)->tgl_interview;
                 })
-                ->addColumn('action_category', function ($row) {
-                    return $this->resolveCandidateActionCategory($row);
+                ->addColumn('action_category', function ($row) use ($category) {
+                    return $category === 'salary_approval'
+                        ? 'salary_approval'
+                        : $this->resolveCandidateActionCategory($row);
+                })
+                ->addColumn('decision_salary_id', function ($row) {
+                    return optional($row->openDecisionSalary)->id
+                        ?? optional($row->pendingDecisionSalary)->id;
+                })
+                ->addColumn('decision_salary_decision', function ($row) {
+                    return optional($row->openDecisionSalary)->decision
+                        ?? optional($row->pendingDecisionSalary)->decision;
+                })
+                ->addColumn('user_amount', function ($row) {
+                    return optional($row->openDecisionSalary)->user_amount
+                        ?? optional($row->pendingDecisionSalary)->user_amount
+                        ?? optional($row->sallaryOffer)->sallary_offer_user
+                        ?? 0;
+                })
+                ->addColumn('hrd_amount', function ($row) {
+                    return optional($row->openDecisionSalary)->hrd_amount
+                        ?? optional($row->pendingDecisionSalary)->hrd_amount
+                        ?? optional($row->sallaryOffer)->sallary_offer_hrd
+                        ?? 0;
+                })
+                ->addColumn('pencadangan_upah', function ($row) {
+                    return optional($row->openDecisionSalary)->pencadangan_upah
+                        ?? optional($row->pendingDecisionSalary)->pencadangan_upah
+                        ?? optional($row->candidateDataOffer)->pencadangan_upah
+                        ?? 0;
+                })
+                ->addColumn('decision_round', function ($row) {
+                    return optional($row->openDecisionSalary)->round
+                        ?? optional($row->pendingDecisionSalary)->round
+                        ?? null;
+                })
+                ->addColumn('requester_salary_status', function ($row) {
+                    return optional($row->openDecisionSalary)->decision
+                        ?? optional($row->sallaryOffer)->requester_salary_status
+                        ?? RequesterSalaryApprovalService::STATUS_NOT_REQUIRED;
+                })
+                ->addColumn('decision_reason', function ($row) {
+                    return optional($row->openDecisionSalary)->reason;
                 })
                 ->filterColumn('no_request', function ($q, $keyword) {
                     $q->whereHas('personnelRequest', function ($pr) use ($keyword) {
@@ -704,6 +855,151 @@ class PersonnelRequestController extends Controller
                 'line' => $th->getLine(),
                 'file' => $th->getFile(),
             ], 500);
+        }
+    }
+
+    /**
+     * Preview detail putaran nego gaji (read-only untuk User).
+     */
+    public function requesterSalaryPreview(Request $request)
+    {
+        try {
+            $recruitment = $this->findOwnedRecruitment($request->input('new_recruitment_id'));
+            if (!$recruitment) {
+                return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+            }
+
+            $recruitment->load([
+                'sallaryOffer',
+                'candidateDataOffer',
+                'personnelRequest.detailPosisi',
+                'appliedPositionJabatan',
+            ]);
+
+            $pending = null;
+            if ($request->filled('decision_salary_id')) {
+                $pending = DecisionSalary::query()
+                    ->where('id', $request->input('decision_salary_id'))
+                    ->where('new_recruitment_id', $recruitment->id)
+                    ->first();
+            }
+            if (!$pending) {
+                $pending = RequesterSalaryApprovalService::getPendingForRecruitment((int) $recruitment->id);
+            }
+            // Setelah reject, putaran tetap ditampilkan di tab User sampai HRD re-input / User approve
+            if (!$pending) {
+                $pending = DecisionSalary::query()
+                    ->where('new_recruitment_id', $recruitment->id)
+                    ->where('decision', DecisionSalary::DECISION_REJECTED)
+                    ->orderByDesc('id')
+                    ->first();
+            }
+
+            $posisiName = optional($recruitment->personnelRequest->detailPosisi)->nama_jabatan
+                ?? optional($recruitment->appliedPositionJabatan)->nama_jabatan
+                ?? optional($recruitment->personnelRequest)->posisi
+                ?? null;
+
+            if (!$posisiName || is_numeric($posisiName)) {
+                $rawPosisi = $recruitment->posisi_dilamar;
+                $posisiName = (!empty($rawPosisi) && !is_numeric($rawPosisi)) ? $rawPosisi : '-';
+            }
+
+            $recruitment->setAttribute('posisi_name', $posisiName);
+
+            return response()->json([
+                'data' => [
+                    'recruitment' => $recruitment,
+                    'decision_salary' => $pending,
+                    'sallary_offer' => $recruitment->sallaryOffer,
+                    'candidate_data_offer' => $recruitment->candidateDataOffer,
+                    'posisi_name' => $posisiName,
+                ],
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json(['message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * User approve / reject mismatch gaji (decision_salary).
+     */
+    public function submitRequesterSalaryDecision(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $recruitment = $this->findOwnedRecruitment($request->input('new_recruitment_id'));
+            if (!$recruitment) {
+                return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+            }
+
+            $decision = strtolower(trim((string) $request->input('decision')));
+            if (!in_array($decision, ['approve', 'approved', 'reject', 'rejected'], true)) {
+                return response()->json(['message' => 'Keputusan tidak valid.'], 422);
+            }
+
+            $normalized = in_array($decision, ['approve', 'approved'], true)
+                ? DecisionSalary::DECISION_APPROVED
+                : DecisionSalary::DECISION_REJECTED;
+
+            $row = null;
+            if ($request->filled('decision_salary_id')) {
+                $row = DecisionSalary::query()
+                    ->where('id', $request->input('decision_salary_id'))
+                    ->where('new_recruitment_id', $recruitment->id)
+                    ->pending()
+                    ->first();
+            }
+            if (!$row) {
+                $row = RequesterSalaryApprovalService::getPendingForRecruitment((int) $recruitment->id);
+            }
+            if (!$row) {
+                return response()->json(['message' => 'Tidak ada pengajuan gaji yang menunggu approval.'], 404);
+            }
+
+            $saved = RequesterSalaryApprovalService::recordDecision(
+                $row,
+                $normalized,
+                $this->karyawan,
+                $request->input('reason')
+            );
+
+            DB::commit();
+
+            return response()->json([
+                'message' => $normalized === DecisionSalary::DECISION_APPROVED
+                    ? 'Gaji HRD disetujui. HRD dapat melanjutkan kirim offering ke kandidat.'
+                    : 'Gaji HRD ditolak. HRD perlu menginput ulang penawaran.',
+                'data' => $saved,
+            ], 200);
+        } catch (\InvalidArgumentException $e) {
+            DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json(['message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Riwayat putaran nego gaji User ↔ HRD.
+     */
+    public function requesterSalaryApprovalHistory(Request $request)
+    {
+        try {
+            $recruitment = $this->findOwnedRecruitment($request->input('new_recruitment_id'));
+            if (!$recruitment) {
+                return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+            }
+
+            $history = RequesterSalaryApprovalService::historyForRecruitment((int) $recruitment->id);
+
+            return response()->json(['data' => $history], 200);
+        } catch (\Throwable $th) {
+            return response()->json(['message' => $th->getMessage()], 500);
         }
     }
 
@@ -1571,6 +1867,16 @@ class PersonnelRequestController extends Controller
             $pr = PersonnelRequest::with(['detailDivisi', 'detailPosisi', 'detailCabang'])->find($recruitment->personnel_request_id);
            
             if ($request->decision === 'approve') {
+                $salaryNormalized = RequesterSalaryApprovalService::normalizeAmount(
+                    $request->input('sallary_offer_user')
+                );
+                if ($salaryNormalized === null) {
+                    DB::rollBack();
+                    return response()->json([
+                        'message' => 'Salary Offer User wajib diisi saat merekomendasikan kandidat.',
+                    ], 422);
+                }
+
                 $tokenService = new GenerateToken();
                 $tokenKey = $pr->id . $recruitment->nama_lengkap. 'approval' . str_replace('.', '', microtime(true));
                 $token = $tokenService->encrypt(md5($tokenKey) . '|' . $tokenService->encrypt(DATE('Y-m-d')));
@@ -1583,15 +1889,14 @@ class PersonnelRequestController extends Controller
                     'status' => 'management_decision'
                 ]);
 
-                // Simpan salary offer user jika diisi
-                if ($request->filled('sallary_offer_user')) {
-                    $salaryValue = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $request->input('sallary_offer_user'))));
-                    SallaryOfferService::upsertActive(
-                        (int) $recruitment->id,
-                        ['sallary_offer_user' => $salaryValue ?: null],
-                        $this->karyawan
-                    );
-                }
+                SallaryOfferService::upsertActive(
+                    (int) $recruitment->id,
+                    [
+                        'sallary_offer_user' => $salaryNormalized,
+                        'requester_salary_status' => RequesterSalaryApprovalService::STATUS_NOT_REQUIRED,
+                    ],
+                    $this->karyawan
+                );
             } else {
                 $rejectReason = trim((string) ($request->input('alasan_reject') ?? $interview->catatan_interview ?? ''));
                 if ($rejectReason === '') {
