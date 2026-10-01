@@ -20,7 +20,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 {
 	public function index(Request $request)
 	{
-		$data = OrderDetail::with(['dataLapanganEmisiKendaraan', 'dataLapanganEmisiCerobong'])->where('is_active', $request->is_active)
+		$data = OrderDetail::with(['dataLapanganEmisiCerobong'])->where('is_active', $request->is_active)
 			->where('kategori_2', '5-Emisi')
 			->whereIn('kategori_3', [
 				'34-Emisi Sumber Tidak Bergerak',

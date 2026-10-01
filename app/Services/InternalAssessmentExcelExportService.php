@@ -33,14 +33,28 @@ class InternalAssessmentExcelExportService
         $row = $this->writeSessionSummarySection($sheet, $row, $context['sessions']);
         $row = $this->writeCognitiveAggregateSection($sheet, $row, $context['sessions']);
         $row = $this->writeEvaluationAggregateSections($sheet, $row, $context['sessions']);
-        $row = $this->writeDetailedSessionSections($sheet, $row, $context['sessions']);
-
-        foreach (range('A', 'O') as $columnId) {
-            $sheet->getColumnDimension($columnId)->setAutoSize(true);
+        foreach ($context['sessions'] as $index => $session) {
+            $sessionSheet = $spreadsheet->createSheet();
+            // Prefix with the sequence so repeated modules/targets remain distinct.
+            $title = preg_replace('/[\\\\\/\?\*\[\]:\x00-\x1F]/u', ' ', $this->internalSessionDisplayName($session));
+            $sessionSheet->setTitle(mb_substr(($index + 1) . '. ' . trim($title), 0, 31));
+            $sessionRow = $this->writeParticipantHeader($sessionSheet, 1, $context);
+            $sessionRow = $this->writeSessionSummarySection($sessionSheet, $sessionRow, collect([$session]));
+            if (empty($session->result_json)) {
+                $sessionSheet->setCellValue('A' . $sessionRow, 'Hasil sesi belum tersedia.');
+            } else {
+                $this->writeDetailedSessionSections($sessionSheet, $sessionRow, [$session]);
+            }
         }
 
-        $sheet->getPageSetup()->setOrientation(PageSetup::ORIENTATION_LANDSCAPE);
-        $sheet->getPageSetup()->setPaperSize(PageSetup::PAPERSIZE_LEGAL);
+        foreach ($spreadsheet->getAllSheets() as $reportSheet) {
+            foreach (range('A', 'O') as $columnId) {
+                $reportSheet->getColumnDimension($columnId)->setAutoSize(true);
+            }
+            $reportSheet->getPageSetup()->setOrientation(PageSetup::ORIENTATION_LANDSCAPE);
+            $reportSheet->getPageSetup()->setPaperSize(PageSetup::PAPERSIZE_LEGAL);
+        }
+        $spreadsheet->setActiveSheetIndex(0);
 
         $link = $this->saveSpreadsheet(
             $spreadsheet,
@@ -83,7 +97,9 @@ class InternalAssessmentExcelExportService
                 $label = $this->internalSessionDisplayName($session);
                 $moduleColumns[$label] = true;
                 $preview = $this->extractInternalSessionScorePreview($session);
-                if ($preview) {
+                if ($this->isSupportingInformation($session)) {
+                    $sessionScores[$label] = '-';
+                } elseif ($preview) {
                     $sessionScores[$label] = $preview['score_text'];
                 } elseif ($this->internalSessionUsesProgressMetric($session)) {
                     $answered = $this->countAnsweredQuestions($session->answers_json);
@@ -302,7 +318,9 @@ class InternalAssessmentExcelExportService
             $questions = json_decode($session->questions_json ?: '[]', true) ?: [];
             $total = count($questions);
 
-            if ($preview) {
+            if ($this->isSupportingInformation($session)) {
+                $metric = '-';
+            } elseif ($preview) {
                 $metric = $preview['score_text'];
             } elseif ($this->internalSessionUsesProgressMetric($session)) {
                 $metric = $total > 0 ? round(($answered / $total) * 100, 0) . '% (' . $answered . '/' . $total . ')' : '-';
@@ -344,7 +362,7 @@ class InternalAssessmentExcelExportService
             if (empty($session->result_json) || $this->internalSessionUsesProgressMetric($session)) {
                 continue;
             }
-            if ($this->isEvaluationCategory($session->category_name ?? '')) {
+            if ($this->isSupportingInformation($session) || $this->isEvaluationCategory($session->category_name ?? '')) {
                 continue;
             }
 
@@ -434,7 +452,7 @@ class InternalAssessmentExcelExportService
             }
 
             $row = $this->writeLegacySectionTitle($sheet, $row, $meta['title']);
-            $headers = ['No', 'Total Soal', $meta['targetHeader'], 'Total Jawaban', 'Persentase (%)'];
+            $headers = ['No', 'Total Soal', $meta['targetHeader'], 'Total Nilai Skala', 'Persentase (%)'];
             $row = $this->writeTableHeader($sheet, $row, $headers);
             $startRow = $row;
 
@@ -635,8 +653,9 @@ class InternalAssessmentExcelExportService
 
     private function writeGenericSection(Worksheet $sheet, int $row, $session, array $result): int
     {
+        $supportingInformation = $this->isSupportingInformation($session);
         $summary = $this->buildSessionResultSummary($session, $result);
-        foreach ($summary['items'] ?? [] as $item) {
+        foreach ($supportingInformation ? [] : ($summary['items'] ?? []) as $item) {
             $sheet->setCellValue('A' . $row, $item['label'] ?? '-');
             $sheet->setCellValue('B' . $row, $item['value'] ?? '-');
             $this->applyStyle($sheet, 'A' . $row, ['font' => ['bold' => true]]);
@@ -644,7 +663,9 @@ class InternalAssessmentExcelExportService
         }
         $row++;
 
-        $headers = ['No', 'Pertanyaan', 'Jawaban', 'Status', 'Kunci / Catatan'];
+        $headers = $supportingInformation
+            ? ['No', 'Pernyataan', 'Jawaban', 'Status Pengisian']
+            : ['No', 'Pertanyaan', 'Jawaban', 'Status', 'Kunci / Catatan'];
         $row = $this->writeTableHeader($sheet, $row, $headers);
 
         $startRow = $row;
@@ -652,6 +673,8 @@ class InternalAssessmentExcelExportService
             $status = '-';
             if ($item['unanswered'] ?? false) {
                 $status = 'Kosong';
+            } elseif ($supportingInformation) {
+                $status = 'Terisi';
             } elseif (($item['is_scale'] ?? false) === true) {
                 $status = 'Skala';
             } elseif ($item['is_correct'] === true) {
@@ -665,13 +688,16 @@ class InternalAssessmentExcelExportService
                 $note = 'Nilai skala: ' . ($item['answer_text'] ?? '-');
             }
 
-            $this->writeTableRow($sheet, $row, [
+            $values = [
                 $item['no'] ?? '-',
                 $item['text'] ?? '-',
                 $item['answer_text'] ?? '-',
                 $status,
-                $note ?? '-',
-            ]);
+            ];
+            if (!$supportingInformation) {
+                $values[] = $note ?? '-';
+            }
+            $this->writeTableRow($sheet, $row, $values);
             $sheet->getStyle('B' . $row . ':E' . $row)->getAlignment()->setWrapText(true);
             $row++;
         }
@@ -681,6 +707,11 @@ class InternalAssessmentExcelExportService
         }
 
         return $row;
+    }
+
+    private function isSupportingInformation($session): bool
+    {
+        return strtoupper(trim((string) ($session->category_name ?? ''))) === 'INFORMASI PENDUKUNG';
     }
 
     private function saveSpreadsheet(Spreadsheet $spreadsheet, string $fileName): string

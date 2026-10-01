@@ -85,6 +85,36 @@ class NewRecruitment extends Model
             ->latest('id');
     }
 
+    public function decisionSalaries()
+    {
+        return $this->hasMany(DecisionSalary::class, 'new_recruitment_id')
+            ->orderByDesc('id');
+    }
+
+    public function pendingDecisionSalary()
+    {
+        return $this->hasOne(DecisionSalary::class, 'new_recruitment_id')
+            ->where('decision', DecisionSalary::DECISION_PENDING)
+            ->latest('id');
+    }
+
+    /**
+     * Putaran nego aktif di tab User:
+     * - pending: menunggu keputusan User
+     * - rejected: menunggu HRD re-input
+     * - approved: tetap tampil sampai HRD kirim offering ke kandidat
+     */
+    public function openDecisionSalary()
+    {
+        return $this->hasOne(DecisionSalary::class, 'new_recruitment_id')
+            ->whereIn('decision', [
+                DecisionSalary::DECISION_PENDING,
+                DecisionSalary::DECISION_REJECTED,
+                DecisionSalary::DECISION_APPROVED,
+            ])
+            ->latest('id');
+    }
+
     public function candidateDataOffer()
     {
         return $this->hasOne(CandidateDataOffers::class, 'new_recruitment_id');

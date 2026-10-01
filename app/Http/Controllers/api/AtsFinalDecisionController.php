@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Helpers\ShioElemenHelper;
 use App\Http\Controllers\Controller;
 use App\Models\CandidateDataOffers;
+use App\Models\DecisionSalary;
 use App\Models\NewRecruitment;
 use App\Models\PersonnelRequest;
 use App\Models\RecruitmentInterview;
@@ -14,6 +15,7 @@ use App\Services\GenerateToken;
 use App\Services\CandidateDocumentAttachmentService;
 use App\Services\GenerateAssessmentDocumentService;
 use App\Services\RecruitmentStatusService;
+use App\Services\RequesterSalaryApprovalService;
 use App\Services\SallaryOfferService;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
@@ -472,6 +474,10 @@ class AtsFinalDecisionController extends Controller
             ->addColumn('sallary_offer_user', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_user ?? 0;
             })
+            ->addColumn('requester_salary_status', function ($row) {
+                return optional($row->sallaryOffer)->requester_salary_status
+                    ?? RequesterSalaryApprovalService::STATUS_NOT_REQUIRED;
+            })
             ->addColumn('offering_status', function ($row) {
                 $offer = $row->sallaryOffer;
                 $emailSentAt = $offer->email_sent_at ?? null;
@@ -481,6 +487,42 @@ class AtsFinalDecisionController extends Controller
                 $history = is_array($history) ? $history : [];
                 $lastHistory = !empty($history) ? end($history) : [];
                 $lastHistoryStatus = (string) ($lastHistory['status'] ?? '');
+
+                $requesterStatus = strtolower(trim((string) ($offer->requester_salary_status ?? '')));
+                if ($requesterStatus === RequesterSalaryApprovalService::STATUS_PENDING) {
+                    return [
+                        'code' => 'awaiting_requester_salary',
+                        'label' => 'Menunggu Approval Salary User',
+                        'email_sent_at' => $emailSentAt,
+                        'requester_salary_status' => $requesterStatus,
+                    ];
+                }
+                if ($requesterStatus === RequesterSalaryApprovalService::STATUS_REJECTED) {
+                    $rejectReason = null;
+                    foreach (array_reverse($history) as $entry) {
+                        if (($entry['status'] ?? '') === RequesterSalaryApprovalService::HISTORY_REJECTED) {
+                            $rejectReason = trim((string) ($entry['reason'] ?? '')) ?: null;
+                            break;
+                        }
+                    }
+                    if ($rejectReason === null) {
+                        $openDecision = DecisionSalary::query()
+                            ->where('new_recruitment_id', $row->id)
+                            ->where('decision', DecisionSalary::DECISION_REJECTED)
+                            ->orderByDesc('id')
+                            ->first();
+                        $rejectReason = $openDecision ? trim((string) ($openDecision->reason ?? '')) : null;
+                        $rejectReason = $rejectReason !== '' ? $rejectReason : null;
+                    }
+
+                    return [
+                        'code' => 'requester_salary_rejected',
+                        'label' => 'Gaji Ditolak User (Re-input HRD)',
+                        'email_sent_at' => $emailSentAt,
+                        'requester_salary_status' => $requesterStatus,
+                        'reject_reason' => $rejectReason,
+                    ];
+                }
 
                 if ($lastHistoryStatus === 'candidate_offering_sent' && in_array($status, ['salary_offer', 'internal_sallary_offer'], true)) {
                     return [
@@ -884,6 +926,24 @@ class AtsFinalDecisionController extends Controller
 
     public function updateExpectedSalary(Request $request, $id = null)
     {
+        $writesSalary = ($request->input('expected_salary') ?? $request->input('ekspetasi_gaji')) !== null;
+        $operation = function () use ($request, $id, $writesSalary) {
+            $recruitmentId = $id ?? $request->header('id') ?? $request->input('id');
+            if ($writesSalary) {
+                NewRecruitment::where('id', $recruitmentId)->lockForUpdate()->first();
+            }
+            $offer = SallaryOfferService::getActive((int) $recruitmentId);
+            if ($offer && $offer->requester_salary_status === RequesterSalaryApprovalService::STATUS_PENDING) {
+                return response()->json(['status' => 422, 'message' => 'Gaji tidak dapat diedit atau dikirim selama menunggu Approval Salary User.'], 422);
+            }
+            return $this->performUpdateExpectedSalary($request, $id);
+        };
+        // Serialize HRD saves with requester decisions; normal email dispatch keeps its existing transaction boundary.
+        return $writesSalary ? DB::transaction($operation) : $operation();
+    }
+
+    private function performUpdateExpectedSalary(Request $request, $id = null)
+    {
         $id = $id ?? $request->header('id') ?? $request->input('id');
 
         $applicant = NewRecruitment::find($id);
@@ -1092,6 +1152,7 @@ class AtsFinalDecisionController extends Controller
         }
 
         $expectedSalary = $request->input('expected_salary') ?? $request->input('ekspetasi_gaji');
+        $requesterSalaryStatus = null;
 
         $cleanSalary = function ($salary) {
             if ($salary === null || $salary === '') return '';
@@ -1169,6 +1230,18 @@ class AtsFinalDecisionController extends Controller
                     'updated_by'          => $user ?? 'HRD',
                 ]
             );
+
+            // Sync setelah CDO tersimpan agar snapshot pencadangan ikut ter-capture
+            $activeOffer = SallaryOfferService::getActive((int) $id);
+            $requesterSalaryStatus = null;
+            if ($activeOffer) {
+                $requesterSalaryStatus = RequesterSalaryApprovalService::syncAfterHrdSalarySave(
+                    $applicant,
+                    $activeOffer,
+                    $valueToSave,
+                    $user
+                );
+            }
         }
 
         $action = $request->input('action', 'save');
@@ -1239,6 +1312,20 @@ class AtsFinalDecisionController extends Controller
                 return response()->json([
                     'status'  => 422,
                     'message' => 'Silakan simpan data Input Gaji & Potongan terlebih dahulu sebelum approve.',
+                ], 422);
+            }
+
+            $applicant->loadMissing('sallaryOffer', 'userInterview', 'candidateDataOffer');
+            $requesterGate = RequesterSalaryApprovalService::canSendCandidateOffering(
+                $applicant,
+                SallaryOfferService::getActive((int) $id)
+            );
+            if (!$requesterGate['allowed']) {
+                return response()->json([
+                    'status'  => 422,
+                    'message' => $requesterGate['message']
+                        ?: 'Menunggu Approval Salary User sebelum mengirim offering ke kandidat.',
+                    'requester_salary_status' => $requesterGate['status'] ?? null,
                 ], 422);
             }
 
@@ -1336,10 +1423,23 @@ class AtsFinalDecisionController extends Controller
             }
         }
 
+        $fresh = $applicant->fresh(['candidateDataOffer', 'sallaryOffer']);
+        $requesterStatus = $requesterSalaryStatus
+            ?? optional($fresh->sallaryOffer)->requester_salary_status
+            ?? RequesterSalaryApprovalService::STATUS_NOT_REQUIRED;
+
+        $message = 'Data penawaran gaji berhasil disimpan.';
+        if ($requesterStatus === RequesterSalaryApprovalService::STATUS_PENDING) {
+            $message = 'Data disimpan. Gaji HRD berbeda dari gaji User — menunggu Approval Salary di Personnel Request.';
+        } elseif ($requesterStatus === RequesterSalaryApprovalService::STATUS_REJECTED) {
+            $message = 'Data disimpan. Penawaran sebelumnya ditolak User — pastikan nominal sudah disesuaikan.';
+        }
+
         return response()->json([
             'status'  => 200,
-            'message' => 'Data penawaran gaji berhasil disimpan.',
-            'data'    => $applicant->fresh(['candidateDataOffer', 'sallaryOffer']),
+            'message' => $message,
+            'requester_salary_status' => $requesterStatus,
+            'data'    => $fresh,
         ], 200);
     }
 
