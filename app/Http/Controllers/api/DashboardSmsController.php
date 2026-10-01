@@ -2,6 +2,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Models\DFUS;
 use App\Models\MasterKaryawan;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
@@ -925,6 +926,224 @@ class DashboardSmsController extends Controller
         unset($item);
 
         return $heading;
+    }
+
+    public function fetchCallPerformance(Request $request)
+    {
+        try {
+            $periodType = in_array($request->period_type, ['daily', 'yearly', 'range'], true)
+                ? $request->period_type
+                : 'monthly';
+
+            if ($periodType === 'daily') {
+                $startDate = Carbon::parse($request->date ?: $request->start_date ?: Carbon::now())->startOfDay();
+                $endDate = $startDate->copy()->endOfDay();
+            } elseif ($periodType === 'yearly') {
+                $year = max(2024, (int) ($request->year ?: Carbon::now()->year));
+                $startDate = Carbon::create($year, 1, 1)->startOfDay();
+                $endDate = $startDate->copy()->endOfYear();
+            } elseif ($periodType === 'range') {
+                $startDate = Carbon::parse($request->start_date ?: Carbon::now()->startOfMonth())->startOfDay();
+                $endDate = Carbon::parse($request->end_date ?: Carbon::now())->endOfDay();
+
+                if ($endDate->lt($startDate)) {
+                    return response()->json([
+                        'message' => 'Tanggal selesai harus sama atau setelah tanggal mulai.',
+                    ], 422);
+                }
+            } else {
+                $arr = explode(' ', (string) $request->periode);
+                $periode = count($arr) === 2 && isset($this->bulan[$arr[0]])
+                    ? $arr[1] . '-' . $this->bulan[$arr[0]]
+                    : Carbon::now()->format('Y-m');
+                $startDate = Carbon::createFromFormat('Y-m', $periode)->startOfMonth();
+                $endDate = $startDate->copy()->endOfMonth();
+            }
+
+            $referencePeriode = $startDate->format('Y-m');
+            $hierarchy = app(SalesTeamHierarchyService::class);
+
+            if ($request->mode === 'team' && $request->karyawan_id) {
+                $rootId = (int) str_replace('team_', '', $request->karyawan_id);
+                [$hierarchyRows] = $this->prepareHierarchyRows($referencePeriode, [$rootId]);
+            } elseif ($request->mode === 'single' && $request->karyawan_id) {
+                $karyawanId = (int) $request->karyawan_id;
+                $member = MasterKaryawan::find($karyawanId);
+                $isExecutive = in_array($karyawanId, $hierarchy->salesExecutiveIds(), true);
+                $isSalesStaff = $member && $hierarchy->isSalesStaff($member);
+
+                [$hierarchyRows] = ($isSalesStaff || $isExecutive)
+                    ? $this->prepareHierarchyRows($referencePeriode, null, [$karyawanId])
+                    : $this->prepareHierarchyRows($referencePeriode, [$karyawanId]);
+            } else {
+                [$hierarchyRows] = $this->prepareHierarchyRows($referencePeriode);
+            }
+
+            return response()->json([
+                'period_type' => $periodType,
+                'call_performance' => $this->buildCallPerformanceRowsForRange($startDate, $endDate, $hierarchyRows),
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan pada server',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function fetchQuotationAnalytics(Request $request)
+    {
+        try {
+            if ($request->period_type === 'daily') {
+                $startDate = Carbon::parse($request->date ?: $request->start_date ?: Carbon::now())->startOfDay();
+                $endDate = $startDate->copy()->endOfDay();
+            } elseif ($request->period_type === 'yearly') {
+                $startDate = Carbon::create((int) ($request->year ?: Carbon::now()->year), 1, 1)->startOfDay();
+                $endDate = $startDate->copy()->endOfYear();
+            } elseif ($request->period_type === 'range') {
+                $startDate = Carbon::parse($request->start_date)->startOfDay();
+                $endDate = Carbon::parse($request->end_date)->endOfDay();
+            } else {
+                $arr = explode(' ', (string) $request->periode);
+                $periode = count($arr) === 2 && isset($this->bulan[$arr[0]]) ? $arr[1] . '-' . $this->bulan[$arr[0]] : Carbon::now()->format('Y-m');
+                $startDate = Carbon::createFromFormat('Y-m', $periode)->startOfMonth();
+                $endDate = $startDate->copy()->endOfMonth();
+            }
+            $salesIds = $this->resolveDashboardSalesIds($request);
+
+            $quotes = collect([QuotationNonKontrak::class, QuotationKontrakH::class])
+                ->flatMap(function ($model) use ($salesIds, $startDate, $endDate) {
+                    return $model::query()
+                        ->where('is_active', 1)
+                        ->whereBetween('created_at', [$startDate, $endDate])
+                        ->when($salesIds !== null, fn($query) => $query->whereIn('sales_id', $salesIds))
+                        ->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'kode_promo', 'promo_id', 'total_discount_promo', 'biaya_akhir', 'tanggal_penawaran']);
+                })
+                ->map(function ($quote) {
+                    $flag = strtolower(trim((string) $quote->flag_status));
+                    $status = strtolower(trim((string) $quote->status_quotation));
+                    $category = $flag === 'ordered' ? 'ordered'
+                        : ($flag === 'void' ? 'void' : (in_array($status, ['cold', 'warm', 'hot'], true) ? $status : 'no_status'));
+
+                    return [
+                        'no_document' => $quote->no_document,
+                        'pelanggan_id' => $quote->pelanggan_ID,
+                        'flag_status' => $flag,
+                        'category' => $category,
+                        'amount' => (float) ($quote->biaya_akhir ?? 0),
+                        'has_promo' => filled($quote->kode_promo) || filled($quote->promo_id) || (float) ($quote->total_discount_promo ?? 0) > 0,
+                        'is_revisi' => (bool) preg_match('/R\d+$/i', (string) $quote->no_document),
+                        'tanggal_penawaran' => $quote->tanggal_penawaran,
+                    ];
+                })
+                ->values();
+
+            $customerIds = $quotes->pluck('pelanggan_id')->filter()->unique()->values();
+            $firstOrders = $customerIds->isEmpty() ? collect() : \DB::table('order_header')
+                ->where('is_active', 1)
+                ->whereIn('id_pelanggan', $customerIds)
+                ->selectRaw('id_pelanggan, MIN(tanggal_order) as first_order_date')
+                ->groupBy('id_pelanggan')
+                ->pluck('first_order_date', 'id_pelanggan');
+
+            $quotes = $quotes->map(function ($quote) use ($firstOrders) {
+                $firstOrder = $firstOrders->get($quote['pelanggan_id']);
+                $quote['customer_type'] = $firstOrder && Carbon::parse($firstOrder)->lt(Carbon::parse($quote['tanggal_penawaran']))
+                    ? 'repeat'
+                    : 'new';
+                return $quote;
+            });
+
+            $summarize = fn($items) => ['qty' => $items->count(), 'amount' => round((float) $items->sum('amount'), 2)];
+            $statusKeys = ['cold', 'warm', 'hot', 'ordered', 'void', 'no_status'];
+            $status = collect($statusKeys)->mapWithKeys(fn($key) => [$key => $summarize($quotes->where('category', $key))])->all();
+            $breakdown = function ($items) use ($summarize) {
+                return [
+                    'total' => $summarize($items),
+                    'customer' => ['new' => $summarize($items->where('customer_type', 'new')), 'repeat' => $summarize($items->where('customer_type', 'repeat'))],
+                    'promo' => ['with' => $summarize($items->where('has_promo', true)), 'without' => $summarize($items->where('has_promo', false))],
+                    'revision' => ['with' => $summarize($items->where('is_revisi', true)), 'without' => $summarize($items->where('is_revisi', false))],
+                ];
+            };
+
+            return response()->json([
+                'status' => $status,
+                'total' => $summarize($quotes),
+                'pending' => $breakdown($quotes->whereNotIn('category', ['ordered', 'void'])),
+                'ordered' => $breakdown($quotes->where('category', 'ordered')),
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json(['message' => 'Terjadi kesalahan saat mengambil analytics penawaran.', 'error' => $th->getMessage()], 500);
+        }
+    }
+
+    private function resolveDashboardSalesIds(Request $request): ?array
+    {
+        $hierarchy = app(SalesTeamHierarchyService::class);
+
+        if ($request->mode === 'all') {
+            return null;
+        }
+
+        if ($request->mode === 'team' && $request->karyawan_id) {
+            return $hierarchy->resolveDescendantIds((int) str_replace('team_', '', $request->karyawan_id));
+        }
+
+        if ($request->mode === 'single' && $request->karyawan_id) {
+            $karyawanId = (int) $request->karyawan_id;
+            $member = MasterKaryawan::find($karyawanId);
+
+            return (in_array($karyawanId, $hierarchy->salesExecutiveIds(), true) || ($member && $hierarchy->isSalesStaff($member)))
+                ? [$karyawanId]
+                : $hierarchy->resolveDescendantIds($karyawanId);
+        }
+
+        return null;
+    }
+
+    /** Metrik call per sales berdasarkan status akhir follow-up DFUS. */
+    private function buildCallPerformanceRowsForRange(Carbon $startDate, Carbon $endDate, array $hierarchyRows): array
+    {
+        $salesIds = array_values(array_unique(array_filter(array_map(
+            'intval',
+            array_column($hierarchyRows, 'karyawan_id')
+        ))));
+
+        if (empty($salesIds)) {
+            return [];
+        }
+
+        $sales = MasterKaryawan::whereIn('id', $salesIds)
+            ->pluck('nama_lengkap', 'id');
+        $salesNames = $sales->filter()->values()->all();
+
+        $statusRows = empty($salesNames)
+            ? collect()
+            : DFUS::whereIn('sales_penanggung_jawab', $salesNames)
+                ->whereBetween('tanggal', [$startDate->toDateString(), $endDate->toDateString()])
+                ->selectRaw("sales_penanggung_jawab, UPPER(TRIM(COALESCE(keterangan, ''))) as status, COUNT(*) as total")
+                ->groupBy('sales_penanggung_jawab')
+                ->groupByRaw("UPPER(TRIM(COALESCE(keterangan, '')))")
+                ->get();
+
+        $statusesBySales = $statusRows->groupBy('sales_penanggung_jawab');
+
+        return array_map(function (array $row) use ($sales, $statusesBySales) {
+            $salesId = (int) $row['karyawan_id'];
+            $name = $sales->get($salesId, $row['nama_lengkap'] ?? '');
+            $statusCounts = $statusesBySales->get($name, collect())->pluck('total', 'status');
+            $totalCalls = (int) $statusCounts->sum();
+            $picContacted = (int) ($statusCounts->get('PIC', 0));
+
+            return array_merge($row, [
+                'total_call' => $totalCalls,
+                'pic_contacted' => $picContacted,
+                'unreachable' => (int) ($statusCounts->get('NA', 0)) + (int) ($statusCounts->get('D', 0)) + (int) ($statusCounts->get('FO', 0)),
+                'unqualified' => (int) ($statusCounts->get('NI', 0)),
+                'success_rate' => $totalCalls > 0 ? round(($picContacted / $totalCalls) * 100, 1) : 0,
+            ]);
+        }, $hierarchyRows);
     }
 
     private function karyawanIdsWithKpiActivity(string $periode): array
