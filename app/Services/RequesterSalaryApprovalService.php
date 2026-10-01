@@ -8,6 +8,7 @@ use App\Models\NewRecruitment;
 use App\Models\SallaryOffer;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class RequesterSalaryApprovalService
 {
@@ -21,7 +22,7 @@ class RequesterSalaryApprovalService
     public const HISTORY_APPROVED = 'requester_salary_offer_approved';
     public const HISTORY_REJECTED = 'requester_salary_offer_rejected';
 
-    public static function normalizeAmount($value): ?int
+    public static function normalizeAmount($value, bool $allowZero = false): ?int
     {
         if ($value === null || $value === '') {
             return null;
@@ -37,7 +38,7 @@ class RequesterSalaryApprovalService
 
         $amount = (int) round((float) $value);
 
-        return $amount > 0 ? $amount : null;
+        return $amount > 0 || ($allowZero && $amount === 0) ? $amount : null;
     }
 
     public static function amountsMatch($a, $b): bool
@@ -78,7 +79,7 @@ class RequesterSalaryApprovalService
     public static function resolveUserAmount(NewRecruitment $applicant): ?int
     {
         return self::normalizeAmount(
-            SallaryOfferService::resolveUserReferenceSalary($applicant)
+            SallaryOfferService::resolveUserReferenceSalary($applicant), true
         );
     }
 
@@ -102,14 +103,17 @@ class RequesterSalaryApprovalService
         $hrdAmount,
         ?string $by = null
     ): string {
+        if ($offer->requester_salary_status === self::STATUS_PENDING) {
+            throw new \RuntimeException('Gaji tidak dapat diedit selama menunggu Approval Salary User.');
+        }
         $userAmount = self::resolveUserAmount($applicant);
         $hrdNormalized = self::normalizeAmount($hrdAmount)
             ?? self::resolveHrdComparableAmount($applicant, $hrdAmount);
         $pencadangan = self::resolvePencadanganUpah($applicant);
 
-        if ($userAmount === null || $hrdNormalized === null) {
+        if ($userAmount === null || $userAmount === 0 || $hrdNormalized === null) {
             self::markOfferStatus($offer, self::STATUS_NOT_REQUIRED);
-            self::supersedeOpenRounds((int) $applicant->id);
+            self::supersedePendingRounds((int) $applicant->id);
             self::appendHistory(
                 (int) $applicant->id,
                 self::HISTORY_NOT_REQUIRED,
@@ -117,6 +121,7 @@ class RequesterSalaryApprovalService
                 [
                     'user_amount' => $userAmount,
                     'hrd_amount' => $hrdNormalized,
+                    'reason' => $userAmount === 0 ? 'Salary Offer User bernilai 0; approval tidak diperlukan.' : null,
                 ]
             );
 
@@ -124,8 +129,10 @@ class RequesterSalaryApprovalService
         }
 
         if ($userAmount === $hrdNormalized) {
+            $previousDecision = DecisionSalary::where('new_recruitment_id', $applicant->id)
+                ->orderByDesc('id')->first();
             self::markOfferStatus($offer, self::STATUS_NOT_REQUIRED);
-            self::supersedeOpenRounds((int) $applicant->id);
+            self::supersedePendingRounds((int) $applicant->id);
             self::appendHistory(
                 (int) $applicant->id,
                 self::HISTORY_NOT_REQUIRED,
@@ -133,6 +140,8 @@ class RequesterSalaryApprovalService
                 [
                     'user_amount' => $userAmount,
                     'hrd_amount' => $hrdNormalized,
+                    'previous_hrd_amount' => $previousDecision ? $previousDecision->hrd_amount : null,
+                    'reason' => 'Nominal HRD sudah sesuai request User; approval tidak diperlukan.',
                 ]
             );
 
@@ -172,6 +181,13 @@ class RequesterSalaryApprovalService
                 'sallary_offer_id' => (int) $offer->id,
             ]
         );
+
+        // Notify only after the approval round is committed, never for a rolled-back save.
+        DB::afterCommit(function () use ($applicant, $userAmount, $hrdNormalized, $nextRound) {
+            app(AtsNotificationService::class)->requesterSalaryApprovalRequested(
+                $applicant, $userAmount, $hrdNormalized, $nextRound
+            );
+        });
 
         return self::STATUS_PENDING;
     }
@@ -226,6 +242,25 @@ class RequesterSalaryApprovalService
         ?string $by = null,
         ?string $reason = null
     ): DecisionSalary {
+        return DB::transaction(function () use ($row, $decision, $by, $reason) {
+            NewRecruitment::where('id', $row->new_recruitment_id)->lockForUpdate()->firstOrFail();
+            $locked = DecisionSalary::where('id', $row->id)->lockForUpdate()->firstOrFail();
+            $offer = SallaryOfferService::getActive((int) $locked->new_recruitment_id);
+            $latest = self::getPendingForRecruitment((int) $locked->new_recruitment_id);
+            if ($locked->decision !== DecisionSalary::DECISION_PENDING
+                || !$latest || (int) $latest->id !== (int) $locked->id
+                || !$offer || (int) $offer->id !== (int) $locked->sallary_offer_id
+                || $offer->requester_salary_status !== self::STATUS_PENDING
+                || !self::amountsMatch($locked->hrd_amount, $offer->sallary_offer_hrd)
+                || !self::amountsMatch($locked->user_amount, $offer->sallary_offer_user)) {
+                throw new \RuntimeException('Pengajuan gaji sudah diproses atau berubah. Silakan muat ulang data.');
+            }
+            return self::applyDecision($locked, $decision, $by, $reason);
+        });
+    }
+
+    private static function applyDecision(DecisionSalary $row, string $decision, ?string $by, ?string $reason): DecisionSalary
+    {
         $decision = strtolower(trim($decision));
         if (!in_array($decision, [
             DecisionSalary::DECISION_APPROVED,
@@ -282,6 +317,14 @@ class RequesterSalaryApprovalService
             ]
         );
 
+        $recruitmentId = (int) $row->new_recruitment_id;
+        DB::afterCommit(function () use ($recruitmentId, $decision, $reason) {
+            $applicant = NewRecruitment::find($recruitmentId);
+            if ($applicant) {
+                app(AtsNotificationService::class)->requesterSalaryDecisionMade($applicant, $decision, $reason);
+            }
+        });
+
         return $row->fresh();
     }
 
@@ -310,7 +353,7 @@ class RequesterSalaryApprovalService
 
         if (in_array($status, [self::STATUS_APPROVED, self::STATUS_REJECTED], true)) {
             $payload['requester_salary_decided_at'] = $decidedAt ?: Carbon::now();
-        } elseif ($status === self::STATUS_PENDING) {
+        } else {
             $payload['requester_salary_decided_at'] = null;
         }
 
@@ -319,20 +362,9 @@ class RequesterSalaryApprovalService
 
     private static function supersedePendingRounds(int $recruitmentId): void
     {
-        self::supersedeOpenRounds($recruitmentId, [DecisionSalary::DECISION_PENDING]);
-    }
-
-    private static function supersedeOpenRounds(int $recruitmentId, ?array $decisions = null): void
-    {
-        $decisions = $decisions ?: [
-            DecisionSalary::DECISION_PENDING,
-            DecisionSalary::DECISION_REJECTED,
-            DecisionSalary::DECISION_APPROVED,
-        ];
-
         DecisionSalary::query()
             ->where('new_recruitment_id', $recruitmentId)
-            ->whereIn('decision', $decisions)
+            ->where('decision', DecisionSalary::DECISION_PENDING)
             ->update([
                 'decision' => DecisionSalary::DECISION_SUPERSEDED,
                 'updated_at' => Carbon::now(),

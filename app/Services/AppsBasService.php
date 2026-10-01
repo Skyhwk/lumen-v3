@@ -1959,6 +1959,7 @@ class AppsBasService
 
     private function cetakBASPDF($dataHeader, $dataSampling, $dataParam, $dataPersiapan, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal)
     {
+        $forceAllSelesai = false;
 
         $psh = $dataPersiapan;
         if (!$psh) {
@@ -2354,13 +2355,16 @@ class AppsBasService
 
             // Process sampling data for this specific sampler
             foreach ($samplerSamplingData as $key => $val) {
-                $dataSampelTidakSelesai = \Illuminate\Support\Facades\DB::table('sampel_tidak_selesai')->where('no_sampel', $val->no_sample)->where('no_order', $val->no_order)->orderBy('created_at', 'desc')->first();
+                $dataSampelTidakSelesai = $forceAllSelesai
+                    ? null
+                    : \Illuminate\Support\Facades\DB::table('sampel_tidak_selesai')->where('no_sampel', $val->no_sample)->where('no_order', $val->no_order)->orderBy('created_at', 'desc')->first();
                 $dat = explode("-", $val->kategori_3);
                 $boxChecked = '&#9745;'; // ☑
                 $boxUnchecked = '&#9744;'; // ☐
 
-                $isSelesai = isset($status[$val->no_sample]) && $status[$val->no_sample] == 'selesai';
-                if ($dataSampelTidakSelesai) {
+                $isSelesai = $forceAllSelesai
+                    || (isset($status[$val->no_sample]) && $status[$val->no_sample] == 'selesai');
+                if (!$forceAllSelesai && $dataSampelTidakSelesai) {
                     $isSelesai = false;
                 }
                 $selesaiBox = $isSelesai ? $boxChecked : $boxUnchecked;
@@ -2709,7 +2713,7 @@ class AppsBasService
         return $filename;
     }
 
-    public function cetakBASPDFWeb($dataHeader, $dataSampling, $dataParam, $dataPersiapan, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal, $lastEntry = null)
+    public function cetakBASPDFWeb($dataHeader, $dataSampling, $dataParam, $dataPersiapan, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal, $lastEntry = null, $forceAllSelesai = false)
     {
 
         $psh = $dataPersiapan;
@@ -3138,13 +3142,16 @@ class AppsBasService
 
             // Process sampling data for this specific sampler
             foreach ($samplerSamplingData as $key => $val) {
-                $dataSampelTidakSelesai = \Illuminate\Support\Facades\DB::table('sampel_tidak_selesai')->where('no_sampel', $val->no_sample)->where('no_order', $val->no_order)->orderBy('created_at', 'desc')->first();
+                $dataSampelTidakSelesai = $forceAllSelesai
+                    ? null
+                    : \Illuminate\Support\Facades\DB::table('sampel_tidak_selesai')->where('no_sampel', $val->no_sample)->where('no_order', $val->no_order)->orderBy('created_at', 'desc')->first();
                 $dat = explode("-", $val->kategori_3);
                 $boxChecked = '&#9745;'; // ☑
                 $boxUnchecked = '&#9744;'; // ☐
 
-                $isSelesai = isset($status[$val->no_sample]) && $status[$val->no_sample] == 'selesai';
-                if ($dataSampelTidakSelesai) {
+                $isSelesai = $forceAllSelesai
+                    || (isset($status[$val->no_sample]) && $status[$val->no_sample] == 'selesai');
+                if (!$forceAllSelesai && $dataSampelTidakSelesai) {
                     $isSelesai = false;
                 }
                 $selesaiBox = $isSelesai ? $boxChecked : $boxUnchecked;

@@ -926,6 +926,24 @@ class AtsFinalDecisionController extends Controller
 
     public function updateExpectedSalary(Request $request, $id = null)
     {
+        $writesSalary = ($request->input('expected_salary') ?? $request->input('ekspetasi_gaji')) !== null;
+        $operation = function () use ($request, $id, $writesSalary) {
+            $recruitmentId = $id ?? $request->header('id') ?? $request->input('id');
+            if ($writesSalary) {
+                NewRecruitment::where('id', $recruitmentId)->lockForUpdate()->first();
+            }
+            $offer = SallaryOfferService::getActive((int) $recruitmentId);
+            if ($offer && $offer->requester_salary_status === RequesterSalaryApprovalService::STATUS_PENDING) {
+                return response()->json(['status' => 422, 'message' => 'Gaji tidak dapat diedit atau dikirim selama menunggu Approval Salary User.'], 422);
+            }
+            return $this->performUpdateExpectedSalary($request, $id);
+        };
+        // Serialize HRD saves with requester decisions; normal email dispatch keeps its existing transaction boundary.
+        return $writesSalary ? DB::transaction($operation) : $operation();
+    }
+
+    private function performUpdateExpectedSalary(Request $request, $id = null)
+    {
         $id = $id ?? $request->header('id') ?? $request->input('id');
 
         $applicant = NewRecruitment::find($id);

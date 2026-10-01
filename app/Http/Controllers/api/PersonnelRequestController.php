@@ -599,6 +599,13 @@ class PersonnelRequestController extends Controller
         // pending / rejected / approved (approved stay sampai HRD kirim offering ke kandidat)
         $openDecisions = DecisionSalary::query()
             ->whereIn('personnel_request_id', $ownedRequestIds)
+            ->whereHas('sallaryOffer', function ($query) {
+                $query->where('is_active', true)->whereIn('requester_salary_status', [
+                    RequesterSalaryApprovalService::STATUS_PENDING,
+                    RequesterSalaryApprovalService::STATUS_REJECTED,
+                    RequesterSalaryApprovalService::STATUS_APPROVED,
+                ]);
+            })
             ->whereIn('decision', [
                 DecisionSalary::DECISION_PENDING,
                 DecisionSalary::DECISION_REJECTED,
@@ -822,8 +829,7 @@ class PersonnelRequestController extends Controller
                         ?? null;
                 })
                 ->addColumn('requester_salary_status', function ($row) {
-                    return optional($row->openDecisionSalary)->decision
-                        ?? optional($row->sallaryOffer)->requester_salary_status
+                    return optional($row->sallaryOffer)->requester_salary_status
                         ?? RequesterSalaryApprovalService::STATUS_NOT_REQUIRED;
                 })
                 ->addColumn('decision_reason', function ($row) {
@@ -930,11 +936,13 @@ class PersonnelRequestController extends Controller
         try {
             $recruitment = $this->findOwnedRecruitment($request->input('new_recruitment_id'));
             if (!$recruitment) {
+                DB::rollBack();
                 return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
             }
 
             $decision = strtolower(trim((string) $request->input('decision')));
             if (!in_array($decision, ['approve', 'approved', 'reject', 'rejected'], true)) {
+                DB::rollBack();
                 return response()->json(['message' => 'Keputusan tidak valid.'], 422);
             }
 
@@ -951,9 +959,14 @@ class PersonnelRequestController extends Controller
                     ->first();
             }
             if (!$row) {
+                if ($request->filled('decision_salary_id')) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'Putaran approval sudah diproses atau berubah. Silakan muat ulang data.'], 422);
+                }
                 $row = RequesterSalaryApprovalService::getPendingForRecruitment((int) $recruitment->id);
             }
             if (!$row) {
+                DB::rollBack();
                 return response()->json(['message' => 'Tidak ada pengajuan gaji yang menunggu approval.'], 404);
             }
 

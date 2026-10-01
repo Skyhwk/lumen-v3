@@ -278,6 +278,23 @@ class AtsNotificationService
         );
     }
 
+    public function requesterSalaryApprovalRequested($recruitment, int $userAmount, int $hrdAmount, int $round): void
+    {
+        $this->safeSend(function () use ($recruitment, $userAmount, $hrdAmount, $round) {
+            $personnelRequest = $recruitment->personnelRequest;
+            $candidate = $this->candidateName($recruitment);
+            $noRequest = $this->noRequest($personnelRequest);
+            $userSalary = number_format($userAmount, 0, ',', '.');
+            $hrdSalary = number_format($hrdAmount, 0, ',', '.');
+            $this->notifyPersonnelRequestCreator(
+                $personnelRequest,
+                'Permintaan Approval Salary User',
+                "Gaji HRD kandidat {$candidate} ({$noRequest}, putaran {$round}) sebesar Rp {$hrdSalary} berbeda dari request Anda Rp {$userSalary}. Silakan approve/reject melalui tab Approval Salary di Personnel Request.",
+                self::URL_PERSONNEL_REQUEST
+            );
+        });
+    }
+
     public function salarySubmittedToFinance($recruitment): void
     {
         $candidate = $this->candidateName($recruitment);
@@ -285,6 +302,23 @@ class AtsNotificationService
             'Review Gaji Kandidat',
             "Kandidat {$candidate} menunggu review gaji Finance.",
             self::URL_FINANCE_OFFERING
+        );
+    }
+
+    public function requesterSalaryDecisionMade($recruitment, string $decision, ?string $reason = null): void
+    {
+        $candidate = $this->candidateName($recruitment);
+        $approved = $decision === 'approved';
+        $message = $approved
+            ? "User menyetujui gaji kandidat {$candidate}. HRD dapat melanjutkan kirim offering ke kandidat."
+            : "User menolak gaji kandidat {$candidate}. HRD perlu menginput ulang penawaran gaji.";
+        if (!$approved && trim((string) $reason) !== '') {
+            $message .= ' Alasan: ' . trim($reason);
+        }
+        $this->notifyHrdTeam(
+            $approved ? 'User Menyetujui Gaji' : 'User Menolak Gaji',
+            $message,
+            self::URL_FINAL_DECISION
         );
     }
 
