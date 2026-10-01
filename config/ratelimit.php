@@ -41,7 +41,6 @@ return [
 
     'authenticated' => [
         // /api/route & /api/mobile — limit per user (bukan per IP, aman untuk NAT kantor)
-        // Token integrasi portal (assessment, dll.) pakai user yang sama; naikkan via RATE_LIMIT_USER_MAX bila perlu.
         'max_attempts' => (int) env('RATE_LIMIT_USER_MAX', 3000),
         'decay_minutes' => (int) env('RATE_LIMIT_USER_DECAY', 1),
     ],
