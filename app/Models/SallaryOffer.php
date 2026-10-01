@@ -10,13 +10,19 @@ class SallaryOffer extends Model
     protected $guarded = [];
 
     protected $casts = [
-        'sallary_offer_hrd'      => 'float',
-        'sallary_offer_user'     => 'float',
-        'sallary_offer_direktur' => 'float',
-        'final_sallary'          => 'float',
-        'is_active'              => 'boolean',
-        'rejected_at'            => 'datetime',
+        'sallary_offer_hrd'            => 'float',
+        'sallary_offer_user'           => 'float',
+        'sallary_offer_direktur'       => 'float',
+        'final_sallary'                => 'float',
+        'is_active'                    => 'boolean',
+        'rejected_at'                  => 'datetime',
+        'requester_salary_decided_at'  => 'datetime',
     ];
+
+    public function decisionSalaries()
+    {
+        return $this->hasMany(DecisionSalary::class, 'sallary_offer_id');
+    }
 
     public function scopeActive($query)
     {
