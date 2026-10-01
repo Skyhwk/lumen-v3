@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Models\DendaKaryawan;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Services\PayrollRecordSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -20,34 +21,49 @@ class DendaKaryawanController extends Controller
 {
     public function index()
     {
-        $data = DendaKaryawan::where('is_active', true);
+        $data = PayrollRecordSyncService::scopeActiveKaryawanById(
+            DendaKaryawan::query()->where('denda_karyawan.is_active', true),
+            'denda_karyawan.id_karyawan'
+        );
 
         return Datatables::of($data)->make(true);
     }
 
     public function getKaryawan()
     {
-        $existingKaryawan = DendaKaryawan::where('is_active', true)->pluck('nik_karyawan')->toArray();
+        $existingIds = DendaKaryawan::where('is_active', true)
+            ->whereNotNull('id_karyawan')
+            ->pluck('id_karyawan')
+            ->all();
 
         $karyawan = MasterKaryawan::where('is_active', true)
-            ->whereNotIn('nik_karyawan', $existingKaryawan)
-            ->select('nik_karyawan', 'nama_lengkap')
-            ->get();
-        
-            return response()->json([
-                'success' => true,
-                'data' => $karyawan,
-                'message' => 'Available karyawan data retrieved successfully',
-            ], 201);
+            ->when(!empty($existingIds), function ($query) use ($existingIds) {
+                $query->whereNotIn('id', $existingIds);
+            })
+            ->select('id', 'nama_lengkap')
+            ->orderBy('nama_lengkap')
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'id_karyawan' => $row->id,
+                    'nama_lengkap' => $row->nama_lengkap,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => $karyawan,
+            'message' => 'Available karyawan data retrieved successfully',
+        ], 201);
     }
 
     public function delete(Request $request){
         try {
-        $bonusKaryawan = DendaKaryawan::findOrFail($request->id);
-        $bonusKaryawan->is_active = false;
-        $bonusKaryawan->deleted_at = DATE('Y-m-d H:i:s');
-        $bonusKaryawan->deleted_by = $this->karyawan;
-        $bonusKaryawan->save();
+        $dendaKaryawan = DendaKaryawan::findOrFail($request->id);
+        $dendaKaryawan->is_active = false;
+        $dendaKaryawan->deleted_at = DATE('Y-m-d H:i:s');
+        $dendaKaryawan->deleted_by = $this->karyawan;
+        $dendaKaryawan->save();
 
         return response()->json([
             'success' => true,
@@ -111,10 +127,13 @@ class DendaKaryawanController extends Controller
                     'message' => 'Nominal Terlalu Besar',
                 ], 401);
             }
-            // dd(str_replace(['Rp', '.', ','], '', $request->total_denda));
-            $existingKaryawan = DendaKaryawan::where('is_active', true)->pluck('nik_karyawan')->toArray();
 
-            if($request->id && in_array($request->nik_karyawan, $existingKaryawan)) {
+            $existingKaryawan = DendaKaryawan::where('is_active', true)
+                ->whereNotNull('id_karyawan')
+                ->pluck('id_karyawan')
+                ->toArray();
+
+            if ($request->id && in_array((int) $request->id_karyawan, array_map('intval', $existingKaryawan), true)) {
                 $updatedData = DendaKaryawan::findorFail($request->id);
                 $updatedData->updated_at = DATE('Y-m-d H:i:s');
                 $updatedData->updated_by = $this->karyawan;
@@ -129,7 +148,6 @@ class DendaKaryawanController extends Controller
                 $updatedData->save();
 
                 $message = 'Denda Karyawan data updated successfully';
-
             } else {
                 $inputData = new DendaKaryawan();
                 $inputData->created_by = $this->karyawan;
@@ -142,15 +160,16 @@ class DendaKaryawanController extends Controller
                 $inputData->sisa_tenor = $request->tenor;
                 $inputData->kode_denda = $this->generateNoDoc();
                 $inputData->sisa_denda = $inputData->total_denda;
-                $karyawan = MasterKaryawan::where('nik_karyawan', $request->nik_karyawan)->first();
+
+                $karyawan = MasterKaryawan::findOrFail($request->id_karyawan);
+                $inputData->id_karyawan = $karyawan->id;
                 $inputData->nik_karyawan = $karyawan->nik_karyawan;
-                $inputData->karyawan = $karyawan->nama_lengkap; 
+                $inputData->karyawan = $karyawan->nama_lengkap;
 
                 $message = 'Denda Karyawan data inserted successfully';
-                
+
                 $inputData->save();
             }
-
 
             return response()->json([
                 'success' => true,
@@ -163,12 +182,16 @@ class DendaKaryawanController extends Controller
 
     public function getHistory(Request $request)
     {
-        
-        $data = DendaKaryawan::where('nik_karyawan', $request->nik_karyawan)
-            ->orderBy('created_at', 'asc')
-            ->get();
+        $query = DendaKaryawan::query();
+
+        if (!empty($request->id_karyawan)) {
+            $query->where('id_karyawan', $request->id_karyawan);
+        } elseif (!empty($request->nik_karyawan)) {
+            $query->where('nik_karyawan', $request->nik_karyawan);
+        }
+
+        $data = $query->orderBy('created_at', 'asc');
 
         return Datatables::of($data)->make(true);
-
     }
 }

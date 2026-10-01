@@ -11,6 +11,8 @@ class BpjsTk extends Sector{
     
     protected $fillable = [
         'karyawan',
+        'nik_karyawan',
+        'id_karyawan',
         'gaji_pokok',
         'potongan_karyawan',
         'nominal_potongan_karyawan',
@@ -29,4 +31,9 @@ class BpjsTk extends Sector{
     ];
 
     public $timestamps = false;
+
+    public function masterKaryawan()
+    {
+        return $this->belongsTo(MasterKaryawan::class, 'id_karyawan', 'id');
+    }
 }
