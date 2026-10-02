@@ -618,40 +618,40 @@ class ReadyOrderController extends Controller
             // }
             $name = $dataQuotation->konsultan ?: $dataQuotation->nama_perusahaan;
 
-            $emailBody = "
-                        <p>Yth. Bapak/Ibu {$name},</p>
+            // $emailBody = "
+            //             <p>Yth. Bapak/Ibu {$name},</p>
 
-                        <p>Ringkasan order Anda dapat diakses melalui tautan berikut:
-                            <br>
-                            👉 <a href=\"{$linkRingkasanOrder->link}\" target=\"_blank\">
-                                    Klik di sini untuk melihat Ringkasan Order
-                                </a>
-                        </p>
+            //             <p>Ringkasan order Anda dapat diakses melalui tautan berikut:
+            //                 <br>
+            //                 👉 <a href=\"{$linkRingkasanOrder->link}\" target=\"_blank\">
+            //                         Klik di sini untuk melihat Ringkasan Order
+            //                     </a>
+            //             </p>
 
-                        <p>Apabila terdapat pertanyaan atau data yang perlu dikonfirmasi, silakan hubungi sales terkait.</p>
+            //             <p>Apabila terdapat pertanyaan atau data yang perlu dikonfirmasi, silakan hubungi sales terkait.</p>
 
-                        <p>Terima kasih atas kerja samanya.</p>
+            //             <p>Terima kasih atas kerja samanya.</p>
 
-                        <p>
-                            Hormat kami,<br>
-                            PT. Inti Surya Laboratorium
-                        </p>
-                    ";
-            $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
-            $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $data->sales_id)->get()->pluck('email')->toArray());
-            SendEmail::where('to', $data->email_pic_order)
-                ->where('subject', "Ringkasan Order - {$data->no_order} / " . ($data->konsultan ?: $data->nama_perusahaan))
-                ->where('body', $emailBody)
-                ->where('cc', json_decode($dataQuotation->email_cc, true))
-                ->where('bcc', $emailbcc)
-                ->noReply()
-                ->send();
+            //             <p>
+            //                 Hormat kami,<br>
+            //                 PT. Inti Surya Laboratorium
+            //             </p>
+            //         ";
+            // $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
+            // $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $data->sales_id)->get()->pluck('email')->toArray());
+            // SendEmail::where('to', $data->email_pic_order)
+            //     ->where('subject', "Ringkasan Order - {$data->no_order} / " . ($data->konsultan ?: $data->nama_perusahaan))
+            //     ->where('body', $emailBody)
+            //     ->where('cc', json_decode($dataQuotation->email_cc, true))
+            //     ->where('bcc', $emailbcc)
+            //     ->noReply()
+            //     ->send();
 
-            $linkRingkasanOrder->is_emailed = 1;
-            $linkRingkasanOrder->count_email += 1;
-            $linkRingkasanOrder->emailed_by = $this->karyawan;
-            $linkRingkasanOrder->emailed_at = Carbon::now();
-            $linkRingkasanOrder->save();
+            // $linkRingkasanOrder->is_emailed = 1;
+            // $linkRingkasanOrder->count_email += 1;
+            // $linkRingkasanOrder->emailed_by = $this->karyawan;
+            // $linkRingkasanOrder->emailed_at = Carbon::now();
+            // $linkRingkasanOrder->save();
 
             $type = 'kontrak';
 
@@ -1476,45 +1476,45 @@ class ReadyOrderController extends Controller
             (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, false, false, false, $dataQuotation->use_kuota, $this->karyawan))->run();
 
             $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $dataOrderHeader->no_order)->latest()->first();
-            if ($linkRingkasanOrder) {
-                $name = $dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan;
+            // if ($linkRingkasanOrder) {
+            //     $name = $dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan;
 
-                $emailBody = "
-                    <p>Yth. Bapak/Ibu {$name},</p>
+            //     $emailBody = "
+            //         <p>Yth. Bapak/Ibu {$name},</p>
 
-                    <p>Ringkasan order Anda dapat diakses melalui tautan berikut:
-                        <br>
-                        👉 <a href=\"{$linkRingkasanOrder->link}\" target=\"_blank\">
-                                Klik di sini untuk melihat Ringkasan Order
-                            </a>
-                    </p>
+            //         <p>Ringkasan order Anda dapat diakses melalui tautan berikut:
+            //             <br>
+            //             👉 <a href=\"{$linkRingkasanOrder->link}\" target=\"_blank\">
+            //                     Klik di sini untuk melihat Ringkasan Order
+            //                 </a>
+            //         </p>
 
-                    <p>Apabila terdapat pertanyaan atau data yang perlu dikonfirmasi, silakan hubungi sales terkait.</p>
+            //         <p>Apabila terdapat pertanyaan atau data yang perlu dikonfirmasi, silakan hubungi sales terkait.</p>
 
-                    <p>Terima kasih atas kerja samanya.</p>
+            //         <p>Terima kasih atas kerja samanya.</p>
 
-                    <p>
-                        Hormat kami,<br>
-                        PT. Inti Surya Laboratorium
-                    </p>
-                ";
+            //         <p>
+            //             Hormat kami,<br>
+            //             PT. Inti Surya Laboratorium
+            //         </p>
+            //     ";
 
-                $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
-                $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray());
-                SendEmail::where('to', $dataOrderHeader->email_pic_order)
-                    ->where('subject', "Ringkasan Order - {$dataOrderHeader->no_order} / " . ($dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan))
-                    ->where('body', $emailBody)
-                    ->where('cc', json_decode($dataQuotation->email_cc, true))
-                    ->where('bcc', $emailbcc)
-                    ->noReply()
-                    ->send();
+            //     $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
+            //     $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray());
+            //     SendEmail::where('to', $dataOrderHeader->email_pic_order)
+            //         ->where('subject', "Ringkasan Order - {$dataOrderHeader->no_order} / " . ($dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan))
+            //         ->where('body', $emailBody)
+            //         ->where('cc', json_decode($dataQuotation->email_cc, true))
+            //         ->where('bcc', $emailbcc)
+            //         ->noReply()
+            //         ->send();
 
-                $linkRingkasanOrder->is_emailed = 1;
-                $linkRingkasanOrder->count_email += 1;
-                $linkRingkasanOrder->emailed_by = $this->karyawan;
-                $linkRingkasanOrder->emailed_at = Carbon::now();
-                $linkRingkasanOrder->save();
-            }
+            //     $linkRingkasanOrder->is_emailed = 1;
+            //     $linkRingkasanOrder->count_email += 1;
+            //     $linkRingkasanOrder->emailed_by = $this->karyawan;
+            //     $linkRingkasanOrder->emailed_at = Carbon::now();
+            //     $linkRingkasanOrder->save();
+            // }
 
             DB::commit();
 
@@ -2047,7 +2047,7 @@ class ReadyOrderController extends Controller
 
             // Email Dimatikan dulu sampai waktunya diperlukan
 
-            // $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $data_lama->no_order)->latest()->first();
+            $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $data_lama->no_order)->latest()->first();
             // if ($linkRingkasanOrder) {
             //     $name = $dataQuotation->konsultan ?: $dataQuotation->nama_perusahaan;
 
@@ -2569,45 +2569,45 @@ class ReadyOrderController extends Controller
             (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, true, false, false, $dataQuotation->use_kuota, $this->karyawan))->run();
 
             $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $dataOrderHeader->no_order)->latest()->first();
-            if ($linkRingkasanOrder) {
-                $name = $dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan;
+            // if ($linkRingkasanOrder) {
+                // $name = $dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan;
 
-                $emailBody = "
-                    <p>Yth. Bapak/Ibu {$name},</p>
+                // $emailBody = "
+                //     <p>Yth. Bapak/Ibu {$name},</p>
 
-                    <p>Ringkasan order Anda dapat diakses melalui tautan berikut:
-                        <br>
-                        👉 <a href=\"{$linkRingkasanOrder->link}\" target=\"_blank\">
-                                Klik di sini untuk melihat Ringkasan Order
-                            </a>
-                    </p>
+                //     <p>Ringkasan order Anda dapat diakses melalui tautan berikut:
+                //         <br>
+                //         👉 <a href=\"{$linkRingkasanOrder->link}\" target=\"_blank\">
+                //                 Klik di sini untuk melihat Ringkasan Order
+                //             </a>
+                //     </p>
 
-                    <p>Apabila terdapat pertanyaan atau data yang perlu dikonfirmasi, silakan hubungi sales terkait.</p>
+                //     <p>Apabila terdapat pertanyaan atau data yang perlu dikonfirmasi, silakan hubungi sales terkait.</p>
 
-                    <p>Terima kasih atas kerja samanya.</p>
+                //     <p>Terima kasih atas kerja samanya.</p>
 
-                    <p>
-                        Hormat kami,<br>
-                        PT. Inti Surya Laboratorium
-                    </p>
-                ";
+                //     <p>
+                //         Hormat kami,<br>
+                //         PT. Inti Surya Laboratorium
+                //     </p>
+                // ";
 
-                $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
-                $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray());
-                SendEmail::where('to', $dataOrderHeader->email_pic_order)
-                    ->where('subject', "Ringkasan Order - {$dataOrderHeader->no_order} / " . ($dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan))
-                    ->where('body', $emailBody)
-                    ->where('cc', json_decode($dataQuotation->email_cc, true))
-                    ->where('bcc', $emailbcc)
-                    ->noReply()
-                    ->send();
+                // $emailbcc = ['admsales03@intilab.com', 'admsales04@intilab.com'];
+                // $emailbcc = array_merge($emailbcc, GetAtasan::where('id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray());
+                // SendEmail::where('to', $dataOrderHeader->email_pic_order)
+                //     ->where('subject', "Ringkasan Order - {$dataOrderHeader->no_order} / " . ($dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan))
+                //     ->where('body', $emailBody)
+                //     ->where('cc', json_decode($dataQuotation->email_cc, true))
+                //     ->where('bcc', $emailbcc)
+                //     ->noReply()
+                //     ->send();
 
-                $linkRingkasanOrder->is_emailed = 1;
-                $linkRingkasanOrder->count_email += 1;
-                $linkRingkasanOrder->emailed_by = $this->karyawan;
-                $linkRingkasanOrder->emailed_at = Carbon::now();
-                $linkRingkasanOrder->save();
-            }
+                // $linkRingkasanOrder->is_emailed = 1;
+                // $linkRingkasanOrder->count_email += 1;
+                // $linkRingkasanOrder->emailed_by = $this->karyawan;
+                // $linkRingkasanOrder->emailed_at = Carbon::now();
+                // $linkRingkasanOrder->save();
+            // }
 
             DB::commit();
 
@@ -3379,7 +3379,7 @@ class ReadyOrderController extends Controller
 
             // Email Dimatikan dulu sampai waktunya diperlukan
 
-            // $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $data_lama->no_order)->latest()->first();
+            $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $data_lama->no_order)->latest()->first();
             // if ($linkRingkasanOrder) {
             //     $name = $dataQuotation->konsultan ?: $dataQuotation->nama_perusahaan;
 
