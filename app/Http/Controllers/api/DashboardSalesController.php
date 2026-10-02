@@ -256,6 +256,7 @@ class DashboardSalesController extends Controller
         return [
             'status' => collect(['cold', 'warm', 'hot', 'ordered', 'void', 'no_status'])
                 ->mapWithKeys(fn($key) => [$key => $summarize($quotes->where('status', $key))])->all(),
+            'total' => $summarize($quotes),
             'pending' => $breakdown($quotes->where('category', 'pending')),
             'ordered' => $breakdown($quotes->where('category', 'ordered')),
         ];
