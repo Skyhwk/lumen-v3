@@ -208,14 +208,17 @@ class DashboardSalesController extends Controller
                     ->where('is_active', 1)
                     ->where('sales_id', $salesId)
                     ->whereBetween('created_at', [$date->copy()->startOfMonth(), $date->copy()->endOfMonth()])
-                    ->get(['no_document', 'pelanggan_ID', 'flag_status', 'kode_promo', 'total_discount_promo', 'biaya_akhir', 'tanggal_penawaran']);
+                    ->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'kode_promo', 'total_discount_promo', 'biaya_akhir', 'tanggal_penawaran']);
             })
             ->map(function ($quote) {
                 $flag = strtolower(trim((string) $quote->flag_status));
+                $status = strtolower(trim((string) $quote->status_quotation));
 
                 return [
                     'pelanggan_id' => $quote->pelanggan_ID,
                     'category' => $flag === 'ordered' ? 'ordered' : ($flag === 'void' ? 'void' : 'pending'),
+                    'status' => $flag === 'ordered' ? 'ordered'
+                        : ($flag === 'void' ? 'void' : (in_array($status, ['cold', 'warm', 'hot'], true) ? $status : 'no_status')),
                     'amount' => (float) ($quote->biaya_akhir ?? 0),
                     'has_promo' => filled($quote->kode_promo) || (float) ($quote->total_discount_promo ?? 0) > 0,
                     'is_revisi' => (bool) preg_match('/R\d+$/i', (string) $quote->no_document),
@@ -251,6 +254,8 @@ class DashboardSalesController extends Controller
         };
 
         return [
+            'status' => collect(['cold', 'warm', 'hot', 'ordered', 'void', 'no_status'])
+                ->mapWithKeys(fn($key) => [$key => $summarize($quotes->where('status', $key))])->all(),
             'pending' => $breakdown($quotes->where('category', 'pending')),
             'ordered' => $breakdown($quotes->where('category', 'ordered')),
         ];
