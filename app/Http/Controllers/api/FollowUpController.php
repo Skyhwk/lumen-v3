@@ -888,9 +888,11 @@ class FollowUpController extends Controller
         $allowedLabels = [
             'Perkenalan Awal & Identifikasi Peluang',
             'Kirim Company Profile',
+            'Tidak melakukan pengujian',
             'Penawaran Masih Dalam Review Management',
             'Penawaran Masih Proses Penyesuaian Kebutuhan (Revisi)',
             'Negosiasi Harga',
+            'Penawaran Tidak Disetujui Management/Void QT',
             'Follow Up PO atau Sign Quote',
             'Arrange Schedule Pengujian',
             'Follow Up Hasil Uji & Next Pengujian',
