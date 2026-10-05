@@ -155,6 +155,21 @@ class RequestQrController extends Controller
         }
     }
 
+    private function applyRequestPromo($data, $payload, $contract)
+    {
+        $promo = \App\Services\QuotationPromo::resolve($payload->promo_id);
+        $rows = json_decode($data->data_pendukung_sampling) ?: [];
+        if (!$promo) {
+            \App\Services\QuotationPromo::validateRows(null, $rows);
+            if ($data->promo_id) $data->promo_id = null;
+            return;
+        }
+        [$rows, $total] = \App\Services\QuotationPromo::requestRows($promo, $rows, date('Y-m-d'), $contract);
+        $data->promo_id = $promo->id;
+        $data->data_pendukung_sampling = json_encode($rows);
+        $data->grand_total = $total;
+    }
+
     public function submit(Request $request){
         try{
             $payload = $request->all();
@@ -443,6 +458,7 @@ class RequestQrController extends Controller
                     }
 
                     $data_sampling[$i] = [
+                        'is_promo' => !empty($item['is_promo']),
                         'kategori_1' => $item['kategori_1'],
                         'kategori_2' => $item['kategori_2'],
                         'regulasi' => isset($item['regulasi']) ? $item['regulasi'] : '',
@@ -506,6 +522,7 @@ class RequestQrController extends Controller
 
             $data->created_by = $this->karyawan;
             $data->created_at = DATE('Y-m-d H:i:s');
+            $this->applyRequestPromo($data, $payload, false);
             $data->save();
 
             // Remove the period loop since all prices are now being saved directly to $data
@@ -641,6 +658,7 @@ class RequestQrController extends Controller
                 $total_volume += $vol;
 
                 $dataToPush = (object) [
+                    'is_promo' => !empty($data_pendukungH['is_promo']),
                     'kategori_1' => $data_pendukungH['kategori_1'],
                     'kategori_2' => $data_pendukungH['kategori_2'],
                     'regulasi' => $regulasi,
@@ -676,6 +694,7 @@ class RequestQrController extends Controller
             $data->data_pendukung_sampling = json_encode(array_values($data_pendukung_h));
             $data->grand_total = $grand_total;
 
+            $this->applyRequestPromo($data, $payload, true);
             $data->save();
             DB::commit();
 
@@ -801,6 +820,7 @@ class RequestQrController extends Controller
                     }
 
                     $data_sampling[$i] = [
+                        'is_promo' => !empty($item['is_promo']),
                         'kategori_1' => $item['kategori_1'],
                         'kategori_2' => $item['kategori_2'],
                         'regulasi' => isset($item['regulasi']) ? $item['regulasi'] : '',
@@ -864,6 +884,7 @@ class RequestQrController extends Controller
 
             $data->updated_by = $this->karyawan;
             $data->updated_at = DATE('Y-m-d H:i:s');
+            $this->applyRequestPromo($data, $payload, false);
             $data->save();
 
             // Remove the period loop since all prices are now being saved directly to $data
@@ -998,6 +1019,7 @@ class RequestQrController extends Controller
                 $total_volume += $vol;
 
                 $dataToPush = (object) [
+                    'is_promo' => !empty($data_pendukungH['is_promo']),
                     'kategori_1' => $data_pendukungH['kategori_1'],
                     'kategori_2' => $data_pendukungH['kategori_2'],
                     'regulasi' => $regulasi,
@@ -1033,6 +1055,7 @@ class RequestQrController extends Controller
             $data->data_pendukung_sampling = json_encode(array_values($data_pendukung_h));
             $data->grand_total = $grand_total;
 
+            $this->applyRequestPromo($data, $payload, true);
             $data->save();
             DB::commit();
 

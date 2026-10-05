@@ -35,6 +35,7 @@ class ForwardKontrakJob extends Job
         $payload = $this->data;
         DB::beginTransaction();
         try {
+            $promo = \App\Services\QuotationPromo::resolve($payload->promo_id ?? null);
             $tahun_chek = date('y', strtotime($payload->informasi_pelanggan['tgl_penawaran']));  // 2 digit tahun (misal: 25)
             $bulan_chek = date('m', strtotime($payload->informasi_pelanggan['tgl_penawaran']));  // 2 digit bulan (misal: 01)
             $bulan_chek = self::romawi($bulan_chek);
@@ -259,6 +260,7 @@ class ForwardKontrakJob extends Job
 
             $dataH->data_pendukung_sampling = json_encode(array_values($data_pendukung_h));
 
+            if ($promo) $dataH->promo_id = $promo->id;
             $dataH->save();
 
             $period = array_values(array_unique($period));
@@ -286,6 +288,7 @@ class ForwardKontrakJob extends Job
                 $harga_preparasi = 0;
                 foreach ($payload->data_pendukung as $m => $data_pendukungD) {
                     if (in_array($per, $data_pendukungD['periode'])) {
+                        $is_paket = $data_pendukungD['is_paket_analisa'] ?? false;
                         $param = [];
                         $regulasi = '';
                         if ($data_pendukungD['parameter'] != null)
@@ -353,16 +356,16 @@ class ForwardKontrakJob extends Job
                         $hargaPaket = 0;
                         $hargaSatuan = 0;
                         $kelipatan = 0;
-                        // if($key == 1) dd($data_pendukungH);
+                        // if($key == 1) dd($data_pendukungD);
                         if($is_paket){
-                            $dataPaket = TemplatePaketAnalisa::where('id', $data_pendukungH['paket_id'])->first();
+                            $dataPaket = TemplatePaketAnalisa::where('id', $data_pendukungD['paket_id'])->first();
                             $dataPaketAnalisa = json_decode($dataPaket->data_pendukung_sampling, true);
                             foreach ($dataPaketAnalisa as $paket) {
                                 if(
-                                    $paket['regulasi'] == $data_pendukungH['regulasi'] &&
+                                    $paket['regulasi'] == $data_pendukungD['regulasi'] &&
                                     $paket['parameter'] == $param && 
-                                    $paket['kategori_1'] == $data_pendukungH['kategori_1'] &&
-                                    $paket['kategori_2'] == $data_pendukungH['kategori_2']
+                                    $paket['kategori_1'] == $data_pendukungD['kategori_1'] &&
+                                    $paket['kategori_2'] == $data_pendukungD['kategori_2']
                                 ) {
                                     $pengali = ($reqtitik / (int)$paket['jumlah_titik']);
                                     $harga_sementara = (int)$paket['harga_paket'] * $pengali;
@@ -402,6 +405,7 @@ class ForwardKontrakJob extends Job
                         }
 
                         $data_sampling[$n++] = [
+                            'is_promo' => !empty($data_pendukungD['is_promo']),
                             'kategori_1' => $data_pendukungD['kategori_1'],
                             'kategori_2' => $data_pendukungD['kategori_2'],
                             'regulasi' => $regulasi,
@@ -416,10 +420,10 @@ class ForwardKontrakJob extends Job
                         ];
 
                         if ($is_paket) {
-                            $data_sampling[$n++]['paket_id'] = $data_pendukungH['paket_id'];
-                            $data_sampling[$n++]['paket'] = $data_pendukungH['paket'];
-                            $data_sampling[$n++]['kelipatan_dasar'] = $kelipatan;
-                            $data_sampling[$n++]['is_paket_analisa'] = $is_paket;
+                            $data_sampling[$n - 1]['paket_id'] = $data_pendukungD['paket_id'];
+                            $data_sampling[$n - 1]['paket'] = $data_pendukungD['paket'];
+                            $data_sampling[$n - 1]['kelipatan_dasar'] = $kelipatan;
+                            $data_sampling[$n - 1]['is_paket_analisa'] = $is_paket;
                         }
 
                         // kalkulasi harga parameter sesuai titik
@@ -466,9 +470,11 @@ class ForwardKontrakJob extends Job
                 $dataD->biaya_preparasi = json_encode($desc_preparasi);
                 $dataD->total_biaya_preparasi = $harga_preparasi;
                 // dd($dataD);
+                \App\Services\QuotationPromo::finalizeRequestDraft($dataD, $promo, array_map(fn($r) => (object) $r, array_values($data_sampling)), $payload->informasi_pelanggan['tgl_penawaran'], $per);
                 $dataD->save();
             }
 
+            \App\Services\QuotationPromo::syncHeader($dataH);
             $data_request = RequestQr::where('id', $payload->informasi_pelanggan['id'])->first();
             // dd($data_request);
             $data_request->is_active = 0;
@@ -499,6 +505,7 @@ class ForwardKontrakJob extends Job
         } catch (\Exception $e) {
             DB::rollback();
             Log::channel('quotation')->info('ForwardKontrakJob: Terjadi kesalahan saat membuat penawaran: ' . $e->getMessage());
+            throw $e;
         }
     }
 
