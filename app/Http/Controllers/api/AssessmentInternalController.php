@@ -433,18 +433,22 @@ class AssessmentInternalController extends Controller
                 return strtolower(trim((string) $email));
             })->unique()->values()->all();
 
-            $karyawanIdByEmail = [];
+            $karyawanByEmail = [];
             if (!empty($emailList)) {
-                $karyawanRows = DB::table('master_karyawan')
+                $karyawanRows = DB::table('master_karyawan as karyawan')
+                    ->leftJoin('master_divisi as divisi', 'divisi.id', '=', 'karyawan.id_department')
                     ->where(function ($query) use ($emailList) {
                         foreach ($emailList as $email) {
-                            $query->orWhereRaw('LOWER(TRIM(email)) = ?', [$email]);
+                            $query->orWhereRaw('LOWER(TRIM(karyawan.email)) = ?', [$email]);
                         }
                     })
-                    ->get(['id', 'email']);
+                    ->get(['karyawan.id', 'karyawan.email', 'divisi.nama_divisi']);
 
                 foreach ($karyawanRows as $row) {
-                    $karyawanIdByEmail[strtolower(trim((string) $row->email))] = (int) $row->id;
+                    $karyawanByEmail[strtolower(trim((string) $row->email))] = [
+                        'id' => (int) $row->id,
+                        'nama_divisi' => $row->nama_divisi,
+                    ];
                 }
             }
 
@@ -453,7 +457,8 @@ class AssessmentInternalController extends Controller
                 $emailKey = strtolower(trim((string) ($attempt->email ?? '')));
                 $participantsMap[$attempt->id] = [
                     'id' => (int) $attempt->id,
-                    'karyawan_id' => $karyawanIdByEmail[$emailKey] ?? null,
+                    'karyawan_id' => $karyawanByEmail[$emailKey]['id'] ?? null,
+                    'nama_divisi' => $karyawanByEmail[$emailKey]['nama_divisi'] ?? null,
                     'nama_lengkap' => $attempt->participant_name ?? 'Unknown',
                     'nik' => $attempt->email ?? '-',
                     'status' => $attempt->status ?? 'in_progress',
