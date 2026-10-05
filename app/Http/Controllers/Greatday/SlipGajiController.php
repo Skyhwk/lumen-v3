@@ -274,7 +274,7 @@ class SlipGajiController extends Controller
             public_path('isl_logo.png'),
             public_path('logo-watermark.png'),
             resource_path('views/Slip-Gaji.blade.php'),
-            app_path('Services/Greatday/RenderSlipGajiService.php'),
+            base_path('app/Services/Greatday/RenderSlipGajiService.php'),
         ];
 
         foreach ($references as $referencePath) {
