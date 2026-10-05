@@ -19,7 +19,7 @@ class GdUser extends Model implements AuthenticatableContract
 
     public $incrementing = false;
 
-    protected $hidden = ['password'];
+    protected $hidden = ['password', 'pin_user'];
 
     protected $guarded = [];
 
