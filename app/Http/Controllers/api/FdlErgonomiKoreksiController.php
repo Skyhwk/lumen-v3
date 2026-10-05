@@ -508,35 +508,52 @@ class FdlErgonomiKoreksiController extends Controller
         }
 
         $totalSkor2 = 0;
+        $cleanFaktorResiko = [];
         if (isset($manualHandling['Faktor Resiko']) && is_array($manualHandling['Faktor Resiko'])) {
             foreach ($manualHandling['Faktor Resiko'] as $faktor => $nilai) {
                 if ($faktor === 'Total Poin 2') {
                     continue;
                 }
-                if (is_array($nilai)) {
-                    foreach ($nilai as $subNilai) {
-                        if (is_string($subNilai) && $subNilai !== 'Tidak') {
-                            $skor = explode('-', $subNilai)[0];
-                            if (is_numeric($skor)) {
-                                $totalSkor2 += (int) $skor;
-                            }
-                        }
-                    }
-                } elseif (is_string($nilai) && $nilai !== 'Tidak') {
-                    $skor = explode('-', $nilai)[0];
-                    if (is_numeric($skor)) {
-                        $totalSkor2 += (int) $skor;
-                    }
+                $entrySkor = $this->sumFaktorResikoEntryMethod8($nilai);
+                if ($entrySkor <= 0) {
+                    continue;
                 }
+                $cleanFaktorResiko[(string) $faktor] = $nilai;
+                $totalSkor2 += $entrySkor;
             }
         }
 
         $manualHandling['Total Poin 1'] = (int) $totalSkor1;
-        if (!isset($manualHandling['Faktor Resiko']) || !is_array($manualHandling['Faktor Resiko'])) {
-            $manualHandling['Faktor Resiko'] = [];
-        }
-        $manualHandling['Faktor Resiko']['Total Poin 2'] = (int) $totalSkor2;
+        $cleanFaktorResiko['Total Poin 2'] = (int) $totalSkor2;
+        $manualHandling['Faktor Resiko'] = $cleanFaktorResiko;
         $manualHandling['Total Poin Akhir'] = (int) ($totalSkor1 + $totalSkor2);
+    }
+
+    private function sumFaktorResikoEntryMethod8($nilai): int
+    {
+        $total = 0;
+        if (is_array($nilai)) {
+            if ($nilai === []) {
+                return 0;
+            }
+            foreach ($nilai as $subNilai) {
+                if (is_string($subNilai) && $subNilai !== 'Tidak') {
+                    $skor = explode('-', $subNilai)[0];
+                    if (is_numeric($skor)) {
+                        $total += (int) $skor;
+                    }
+                }
+            }
+            return $total;
+        }
+        if (is_string($nilai) && $nilai !== 'Tidak') {
+            $skor = explode('-', $nilai)[0];
+            if (is_numeric($skor)) {
+                return (int) $skor;
+            }
+        }
+
+        return 0;
     }
 
     private function hitungRisikoBebanMethod8(string $posisi, string $berat): int
