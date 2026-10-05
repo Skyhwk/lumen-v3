@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Models\RekeningKaryawan;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Services\PayrollRecordSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +21,10 @@ class RekeningKaryawanController extends Controller
 {
     public function index()
     {
-        $data = RekeningKaryawan::where('is_active', true);
+        $data = PayrollRecordSyncService::scopeActiveKaryawanById(
+            RekeningKaryawan::query()->where('rekening_karyawan.is_active', true),
+            'rekening_karyawan.id_karyawan'
+        );
 
         return Datatables::of($data)->make(true);
     }
