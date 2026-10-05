@@ -419,16 +419,46 @@ class AssessmentInternalController extends Controller
     {
         try {
             $assessmentId = $request->input('assessment_id') ?? $request->id;
+            $assessment = DB::table('assessment_internal')->where('id', $assessmentId)->first();
+            if (!$assessment) {
+                return response()->json(['success' => false, 'message' => 'Assessment tidak ditemukan.'], 404);
+            }
 
             $attempts = DB::table('assessment_internal_attempts')
                 ->where('assessment_internal_id', $assessmentId)
                 ->orderByDesc('id')
                 ->get();
 
+            $emailList = $attempts->pluck('email')->filter()->map(function ($email) {
+                return strtolower(trim((string) $email));
+            })->unique()->values()->all();
+
+            $karyawanByEmail = [];
+            if (!empty($emailList)) {
+                $karyawanRows = DB::table('master_karyawan as karyawan')
+                    ->leftJoin('master_divisi as divisi', 'divisi.id', '=', 'karyawan.id_department')
+                    ->where(function ($query) use ($emailList) {
+                        foreach ($emailList as $email) {
+                            $query->orWhereRaw('LOWER(TRIM(karyawan.email)) = ?', [$email]);
+                        }
+                    })
+                    ->get(['karyawan.id', 'karyawan.email', 'divisi.nama_divisi']);
+
+                foreach ($karyawanRows as $row) {
+                    $karyawanByEmail[strtolower(trim((string) $row->email))] = [
+                        'id' => (int) $row->id,
+                        'nama_divisi' => $row->nama_divisi,
+                    ];
+                }
+            }
+
             $participantsMap = [];
             foreach ($attempts as $attempt) {
+                $emailKey = strtolower(trim((string) ($attempt->email ?? '')));
                 $participantsMap[$attempt->id] = [
                     'id' => (int) $attempt->id,
+                    'karyawan_id' => $karyawanByEmail[$emailKey]['id'] ?? null,
+                    'nama_divisi' => $karyawanByEmail[$emailKey]['nama_divisi'] ?? null,
                     'nama_lengkap' => $attempt->participant_name ?? 'Unknown',
                     'nik' => $attempt->email ?? '-',
                     'status' => $attempt->status ?? 'in_progress',
@@ -456,9 +486,54 @@ class AssessmentInternalController extends Controller
                 unset($participant);
             }
 
+            // Penilaian terhadap peserta bisa berasal dari batch Staff/SPV lain
+            // pada tahun yang sama. Hanya dua kategori penilaian silang ini yang digabung.
+            $incomingParticipants = [];
+            $participantKaryawanIds = array_values(array_unique(array_filter(array_column($participantsMap, 'karyawan_id'))));
+            $assessmentYear = (int) substr((string) $assessment->created_at, 0, 4);
+            if (!empty($participantKaryawanIds) && $assessmentYear > 0) {
+                $incomingSessions = DB::table('assessment_internal_sessions as session')
+                    ->join('assessment_internal_attempts as attempt', 'attempt.id', '=', 'session.assessment_internal_attempt_id')
+                    ->join('assessment_internal as source', 'source.id', '=', 'attempt.assessment_internal_id')
+                    ->where('source.is_publish', 1)
+                    ->where('source.is_link_active', 1)
+                    ->whereNull('source.canceled_at')
+                    ->where('source.created_at', '>=', $assessmentYear . '-01-01 00:00:00')
+                    ->where('source.created_at', '<', ($assessmentYear + 1) . '-01-01 00:00:00')
+                    ->whereIn('session.evaluation_target_karyawan_id', $participantKaryawanIds)
+                    ->whereRaw('UPPER(TRIM(session.category_name)) IN (?, ?)', [
+                        'SATISFACTION OF LEADER', 'EMPLOYEE EVALUATION',
+                    ])
+                    ->get([
+                        'session.*',
+                        'attempt.id as rater_attempt_id',
+                        'attempt.participant_name as rater_name',
+                    ]);
+
+                foreach ($incomingSessions as $session) {
+                    $raterAttemptId = (int) $session->rater_attempt_id;
+                    if (!isset($incomingParticipants[$raterAttemptId])) {
+                        $incomingParticipants[$raterAttemptId] = [
+                            'id' => $raterAttemptId,
+                            'nama_lengkap' => $session->rater_name ?? '-',
+                            'assessment_data' => ['sessions' => []],
+                        ];
+                    }
+                    $incomingParticipants[$raterAttemptId]['assessment_data']['sessions'][] = [
+                        'id' => (int) $session->id,
+                        'name' => $session->category_name,
+                        'display_name' => $this->internalSessionDisplayName($session),
+                        'evaluation_target_karyawan_id' => (int) $session->evaluation_target_karyawan_id,
+                        'status' => $session->status,
+                        'score_preview' => $this->extractInternalSessionScorePreview($session),
+                    ];
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => array_values($participantsMap),
+                'incoming_participants' => array_values($incomingParticipants),
             ]);
         } catch (\Exception $e) {
             return response()->json([

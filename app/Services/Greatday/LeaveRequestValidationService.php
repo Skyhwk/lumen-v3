@@ -288,14 +288,9 @@ class LeaveRequestValidationService
 
         $start = Carbon::parse($startDate)->startOfDay();
         $today = Carbon::now()->startOfDay();
-        $maxAhead = max(0, (int) config('greatday.leave_urgent_max_start_days_ahead', 1));
-        $latestStart = $today->copy()->addDays($maxAhead);
 
         if ($start->lt($today)) {
             return 'Tanggal mulai cuti mendesak tidak boleh sebelum hari ini.';
-        }
-        if ($start->gt($latestStart)) {
-            return "Cuti mendesak hanya dapat dimulai hari ini atau paling lambat {$latestStart->format('d-m-Y')}.";
         }
 
         $holidayAdjacency = $this->validateNotAdjacentToCompanyHoliday($startDate, $endDate);
