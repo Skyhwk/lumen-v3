@@ -9,6 +9,7 @@ use App\Models\ServiceMobilLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
 class JadwalServiceMobilController extends Controller
@@ -54,7 +55,42 @@ class JadwalServiceMobilController extends Controller
 
     public function getOptions(Request $request)
     {
+        $editingServiceId = $request->filled('service_id') ? (int) $request->service_id : null;
+        $editingMobilId = null;
+
+        if ($editingServiceId) {
+            $editingMobilId = ServiceMobil::where('id', $editingServiceId)
+                ->where('is_active', true)
+                ->value('daftar_mobil_id');
+        }
+
+        // Mobil yang masih di jadwal / perbaikan tidak ditawarkan (sampai selesai atau dibatalkan).
+        $busyMobilIds = ServiceMobil::where('is_active', true)
+            ->whereIn('status', [
+                ServiceMobil::STATUS_DIJADWALKAN,
+                ServiceMobil::STATUS_DALAM_PERBAIKAN,
+            ])
+            ->when($editingServiceId, function ($q) use ($editingServiceId) {
+                $q->where('id', '!=', $editingServiceId);
+            })
+            ->pluck('daftar_mobil_id')
+            ->unique()
+            ->values()
+            ->all();
+
         $mobil = DaftarMobil::where('is_active', true)
+            ->where(function ($q) use ($busyMobilIds, $editingMobilId) {
+                $q->where(function ($available) use ($busyMobilIds) {
+                    if (empty($busyMobilIds)) {
+                        $available->whereRaw('1 = 1');
+                    } else {
+                        $available->whereNotIn('id', $busyMobilIds);
+                    }
+                });
+                if ($editingMobilId) {
+                    $q->orWhere('id', $editingMobilId);
+                }
+            })
             ->orderBy('plat_mobil')
             ->get()
             ->map(function ($item) {
@@ -478,16 +514,22 @@ class JadwalServiceMobilController extends Controller
             }
 
             $selesaiAktual = $request->tanggal_selesai_aktual;
-            $today = date('Y-m-d');
+            $today = Carbon::now('Asia/Jakarta')->toDateString();
+            $estimasi = $service->tanggal_selesai_estimasi
+                ? Carbon::parse($service->tanggal_selesai_estimasi)->toDateString()
+                : null;
+            $maxSelesai = ($estimasi && $estimasi > $today) ? $estimasi : $today;
 
             if ($service->tanggal_mulai_aktual && $selesaiAktual < $service->tanggal_mulai_aktual) {
                 DB::rollBack();
                 return response()->json(['message' => 'Tanggal selesai aktual tidak boleh sebelum tanggal mulai aktual'], 422);
             }
 
-            if ($selesaiAktual > $today) {
+            if ($selesaiAktual > $maxSelesai) {
                 DB::rollBack();
-                return response()->json(['message' => 'Tanggal selesai aktual tidak boleh di masa depan'], 422);
+                return response()->json([
+                    'message' => 'Tanggal selesai aktual tidak boleh setelah ' . $maxSelesai,
+                ], 422);
             }
 
             $before = ['status' => $service->status];
@@ -504,14 +546,13 @@ class JadwalServiceMobilController extends Controller
             $service->save();
 
             foreach ($request->details as $index => $detail) {
-                $spare = isset($detail['spare_part']) ? trim(strip_tags($detail['spare_part'])) : '';
-                $biaya = isset($detail['biaya']) ? trim(strip_tags($detail['biaya'])) : '';
+                $biayaPayload = $this->normalizeDetailBiaya($detail['biaya'] ?? null);
 
                 \App\Models\ServiceMobilDetail::create([
                     'service_mobil_id' => $service->id,
                     'deskripsi_pekerjaan' => trim($detail['deskripsi_pekerjaan']),
-                    'spare_part' => $spare !== '' ? trim($detail['spare_part']) : null,
-                    'biaya' => $biaya !== '' ? trim($detail['biaya']) : null,
+                    'spare_part' => null,
+                    'biaya' => $biayaPayload,
                     'urutan' => $index + 1,
                     'created_by' => $this->karyawan,
                     'created_at' => date('Y-m-d H:i:s'),
@@ -599,6 +640,83 @@ class JadwalServiceMobilController extends Controller
             })
             ->orderByDesc('id')
             ->first();
+    }
+
+    /**
+     * @return array|null Struktur biaya v1: lines[{uraian,keterangan,harga}], total, currency
+     */
+    private function normalizeDetailBiaya($raw): ?array
+    {
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        if (is_array($raw)) {
+            return $this->finalizeBiayaPayload($raw);
+        }
+
+        if (!is_string($raw)) {
+            return null;
+        }
+
+        $trimmed = trim($raw);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $decoded = json_decode($trimmed, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            return $this->finalizeBiayaPayload($decoded);
+        }
+
+        return [
+            'version' => 0,
+            'legacy_text' => $trimmed,
+        ];
+    }
+
+    private function finalizeBiayaPayload(array $data): ?array
+    {
+        if (($data['version'] ?? null) === 0) {
+            return [
+                'version' => 0,
+                'legacy_text' => trim((string) ($data['legacy_text'] ?? '')),
+            ];
+        }
+
+        $lines = [];
+        foreach ($data['lines'] ?? [] as $line) {
+            if (!is_array($line)) {
+                continue;
+            }
+            $uraian = trim((string) ($line['uraian'] ?? ''));
+            $keterangan = trim((string) ($line['keterangan'] ?? ''));
+            $harga = (int) preg_replace('/[^\d]/', '', (string) ($line['harga'] ?? '0'));
+            if ($uraian === '' && $keterangan === '' && $harga <= 0) {
+                continue;
+            }
+            $lines[] = [
+                'uraian' => $uraian,
+                'keterangan' => $keterangan,
+                'harga' => $harga,
+            ];
+        }
+
+        if ($lines === []) {
+            return null;
+        }
+
+        $total = (int) ($data['total'] ?? 0);
+        if ($total <= 0) {
+            $total = array_sum(array_column($lines, 'harga'));
+        }
+
+        return [
+            'version' => 1,
+            'currency' => 'IDR',
+            'lines' => $lines,
+            'total' => $total,
+        ];
     }
 
     private function writeLog($serviceId, string $jenis, $before = null, $after = null, ?string $alasan = null)

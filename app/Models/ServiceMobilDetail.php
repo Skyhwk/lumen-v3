@@ -23,6 +23,7 @@ class ServiceMobilDetail extends Sector
     protected $casts = [
         'is_active' => 'boolean',
         'urutan' => 'integer',
+        'biaya' => 'array',
     ];
 
     public function service()
