@@ -878,7 +878,7 @@ class AtsHiredCandidatesController extends Controller
         ];
 
         if ($gajiPokok > 0) {
-            $this->upsertPayroll('master_sallary', $nikKaryawan, $namaKaryawan, [
+            $this->upsertPayroll('master_sallary', $karyawan->id, $nikKaryawan, $namaKaryawan, [
                 'gaji_pokok' => $gajiPokok,
                 'tunjangan_kerja' => $tunjangan,
                 'bulan_efektif' => $effectiveMonth,
@@ -887,7 +887,7 @@ class AtsHiredCandidatesController extends Controller
         }
 
         if ($bpjsKes > 0 || !empty($noBpjsKs)) {
-            $this->upsertPayroll('bpjs_kesehatan', $nikKaryawan, $namaKaryawan, [
+            $this->upsertPayroll('bpjs_kesehatan', $karyawan->id, $nikKaryawan, $namaKaryawan, [
                 'gaji_pokok' => $gajiPokok,
                 'no_bpjs' => $noBpjsKs,
                 'potongan_karyawan' => 0.005,
@@ -900,7 +900,7 @@ class AtsHiredCandidatesController extends Controller
         }
 
         if ($bpjsTk > 0 || !empty($noBpjsTk)) {
-            $this->upsertPayroll('bpjs_tk', $nikKaryawan, $namaKaryawan, [
+            $this->upsertPayroll('bpjs_tk', $karyawan->id, $nikKaryawan, $namaKaryawan, [
                 'gaji_pokok' => $gajiPokok,
                 'no_bpjs_tk' => $noBpjsTk,
                 'potongan_karyawan' => 0.03,
@@ -913,7 +913,7 @@ class AtsHiredCandidatesController extends Controller
         }
 
         if ($pph21 > 0) {
-            $this->upsertPayroll('pph_21', $nikKaryawan, $namaKaryawan, [
+            $this->upsertPayroll('pph_21', $karyawan->id, $nikKaryawan, $namaKaryawan, [
                 'pajak_bulanan' => $pph21,
                 'pajak_tahunan' => $pph21 * 12,
                 'bulan_mulai_pemotongan' => $effectiveMonth,
@@ -922,7 +922,7 @@ class AtsHiredCandidatesController extends Controller
         }
 
         if ($pencadangan > 0) {
-            $this->upsertPayroll('pencadangan_upah', $nikKaryawan, $namaKaryawan, [
+            $this->upsertPayroll('pencadangan_upah', $karyawan->id, $nikKaryawan, $namaKaryawan, [
                 'nominal' => $pencadangan,
                 'nominal_berjalan' => -$pencadangan,
                 'tenor' => $tenor,
@@ -1527,7 +1527,7 @@ class AtsHiredCandidatesController extends Controller
         }, ARRAY_FILTER_USE_BOTH);
     }
 
-    private function upsertPayroll($table, $nikKaryawan, $namaKaryawan, array $data, Carbon $now)
+    private function upsertPayroll($table, $idKaryawan, $nikKaryawan, $namaKaryawan, array $data, Carbon $now)
     {
         if (!Schema::hasTable($table)) {
             return;
@@ -1536,13 +1536,18 @@ class AtsHiredCandidatesController extends Controller
         $timestamp = $now->format('Y-m-d H:i:s');
 
         $payload = $this->existingColumns($table, array_merge($data, [
+            'id_karyawan' => $idKaryawan,
             'nik_karyawan' => $nikKaryawan,
             'karyawan' => $namaKaryawan,
             'is_active' => 1,
             'updated_at' => $timestamp,
             'updated_by' => $this->karyawan,
         ]));
-        $existing = DB::table($table)->where('nik_karyawan', $nikKaryawan)->where('is_active', 1)->first();
+
+        $existing = Schema::hasColumn($table, 'id_karyawan') && $idKaryawan
+            ? DB::table($table)->where('is_active', 1)->where('id_karyawan', $idKaryawan)->first()
+            : null;
+
         if ($existing) {
             DB::table($table)->where('id', $existing->id)->update($payload);
             return;
