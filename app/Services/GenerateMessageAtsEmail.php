@@ -12,6 +12,84 @@ class GenerateMessageAtsEmail
         return rtrim((string) env('PORTALV4', ''), '/');
     }
 
+    /** Label ke kandidat: {grade_master_karyawan} - {divisi_alias}. */
+    public static function posisiLabelCandidate($data): string
+    {
+        if ($data === null) {
+            return '-';
+        }
+        if (method_exists($data, 'loadMissing')) {
+            $data->loadMissing(['personnelRequest', 'personalRequest']);
+        }
+        foreach (['personnelRequest', 'personalRequest'] as $relation) {
+            if (!empty($data->{$relation})) {
+                $label = self::posisiLabelFromPersonnelRequest($data->{$relation});
+                if ($label !== '-') {
+                    return $label;
+                }
+            }
+        }
+        $prId = $data->personnel_request_id ?? null;
+        if ($prId) {
+            $pr = \Illuminate\Support\Facades\DB::table('personnel_requests')->where('id', $prId)->first();
+            $label = self::posisiLabelFromPersonnelRequest($pr);
+            if ($label !== '-') {
+                return $label;
+            }
+        }
+        $recruitmentId = $data->id ?? $data->new_recruitment_id ?? null;
+        if ($recruitmentId && class_exists(\App\Models\NewRecruitment::class)) {
+            $recruitment = \App\Models\NewRecruitment::query()
+                ->with(['personnelRequest', 'personalRequest'])
+                ->find($recruitmentId);
+            if ($recruitment) {
+                foreach (['personnelRequest', 'personalRequest'] as $relation) {
+                    if (!empty($recruitment->{$relation})) {
+                        $label = self::posisiLabelFromPersonnelRequest($recruitment->{$relation});
+                        if ($label !== '-') {
+                            return $label;
+                        }
+                    }
+                }
+                if (!empty($recruitment->personnel_request_id)) {
+                    $pr = \Illuminate\Support\Facades\DB::table('personnel_requests')
+                        ->where('id', $recruitment->personnel_request_id)
+                        ->first();
+                    $label = self::posisiLabelFromPersonnelRequest($pr);
+                    if ($label !== '-') {
+                        return $label;
+                    }
+                }
+            }
+        }
+        return HrdEmailViewData::getNamaJabatan($data);
+    }
+
+    /** Label internal: posisi lamaran asli (master jabatan / posisi_dilamar). */
+    public static function posisiLabelInternal($data): string
+    {
+        return HrdEmailViewData::getNamaJabatan($data);
+    }
+
+    private static function posisiLabelFromPersonnelRequest($personnelRequest): string
+    {
+        if (!$personnelRequest) {
+            return '-';
+        }
+        $grade = trim((string) ($personnelRequest->grade_master_karyawan ?? ''));
+        $alias = trim((string) ($personnelRequest->divisi_alias ?? ''));
+        if ($grade !== '' && $alias !== '') {
+            return $grade . ' - ' . $alias;
+        }
+        if ($alias !== '') {
+            return $alias;
+        }
+        if ($grade !== '') {
+            return $grade;
+        }
+        return '-';
+    }
+
     private static function directorDecisionButtons($recruitment): object
     {
         $portalUrl = self::portalBaseUrl();
@@ -60,7 +138,7 @@ class GenerateMessageAtsEmail
         $letter = $letterData ?? (object) [];
         $actionButtonsHtml = self::candidateOfferingActionButtonsHtml($btn);
 
-        $posisi = htmlspecialchars(HrdEmailViewData::getNamaJabatan($data));
+        $posisi = htmlspecialchars(self::posisiLabelCandidate($data));
         $offerAmount = $letter->gaji_pokok
             ?? optional($data->sallaryOffer)->sallary_offer_hrd
             ?? $data->sallary_offer_hrd
@@ -154,7 +232,7 @@ class GenerateMessageAtsEmail
     public static function bodyEmailFinanceCandidateSalaryApproved($data): string
     {
         $namaKandidat = htmlspecialchars($data->nama_kandidat ?? 'Kandidat');
-        $posisi = htmlspecialchars($data->posisi ?? '-');
+        $posisi = htmlspecialchars($data->posisi ?? self::posisiLabelInternal($data));
         $noRequest = htmlspecialchars($data->no_request ?? '-');
         $penawaranGaji = htmlspecialchars($data->penawaran_gaji ?? '-');
         $approvedAt = htmlspecialchars($data->approved_at ?? '-');
@@ -241,7 +319,7 @@ class GenerateMessageAtsEmail
         }
 
         $letter = $letterData ?? $data;
-        $posisi = htmlspecialchars(HrdEmailViewData::getNamaJabatan($data));
+        $posisi = htmlspecialchars(self::posisiLabelCandidate($data));
         $gajiFormatted = htmlspecialchars(HrdEmailViewData::formatRupiah($letter->gaji_pokok ?? 0));
         $tglMulaiKerja = htmlspecialchars($letter->tanggal_mulai_kerja ?? '-');
         $deductionRowsHtml = $letterData ? self::buildSalaryDeductionEmailRows($letterData) : '';
@@ -418,8 +496,8 @@ class GenerateMessageAtsEmail
             'nama_lengkap'    => $applicant->nama_lengkap ?? ($dataObj->nama_lengkap ?? 'Kandidat'),
             'email'           => $applicant->email ?? null,
             'jenis_kelamin'   => $applicant->jenis_kelamin ?? ($dataObj->jenis_kelamin ?? null),
-            'posisi_di_lamar' => $dataObj->posisi_di_lamar ?? HrdEmailViewData::getNamaJabatan($applicant),
-            'nama_jabatan'    => $dataObj->nama_jabatan ?? HrdEmailViewData::getNamaJabatan($applicant),
+            'posisi_di_lamar' => $dataObj->posisi_di_lamar ?? self::posisiLabelCandidate($applicant),
+            'nama_jabatan'    => $dataObj->nama_jabatan ?? self::posisiLabelCandidate($applicant),
         ]);
 
         $message = (new GenerateMessageAtsWhatsapp($whatsappData))->SalaryOfferingLetter();
@@ -433,8 +511,8 @@ class GenerateMessageAtsEmail
             'nama_lengkap'    => $applicant->nama_lengkap ?? ($dataObj->nama_lengkap ?? 'Kandidat'),
             'email'           => $applicant->email ?? null,
             'jenis_kelamin'   => $applicant->jenis_kelamin ?? ($dataObj->jenis_kelamin ?? null),
-            'posisi_di_lamar' => $dataObj->posisi_di_lamar ?? HrdEmailViewData::getNamaJabatan($applicant),
-            'nama_jabatan'    => $dataObj->nama_jabatan ?? HrdEmailViewData::getNamaJabatan($applicant),
+            'posisi_di_lamar' => $dataObj->posisi_di_lamar ?? self::posisiLabelCandidate($applicant),
+            'nama_jabatan'    => $dataObj->nama_jabatan ?? self::posisiLabelCandidate($applicant),
         ]);
 
         $message = (new GenerateMessageAtsWhatsapp($whatsappData))->HiringLetter();
@@ -504,7 +582,7 @@ class GenerateMessageAtsEmail
 
         $offer = $applicant->sallaryOffer ?? null;
         $cOffer = $applicant->candidateDataOffer ?? null;
-        $posisiName = HrdEmailViewData::getNamaJabatan($applicant);
+        $posisiName = self::posisiLabelCandidate($applicant);
 
         $resolveAmount = function (string $key, array $fallbacks) use ($overrides) {
             if (array_key_exists($key, $overrides)) {
@@ -884,7 +962,7 @@ class GenerateMessageAtsEmail
      */
     public static function bodyEmailApproveKandidat($data)
     {
-        $posisi = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? 'Posisi Dilamar');
+        $posisi = htmlspecialchars(self::posisiLabelCandidate($data));
         $hari = htmlspecialchars($data->hariIndonesia ?? '');
         $tanggal = htmlspecialchars($data->tglInter ?? '');
         $jam = htmlspecialchars($data->jam_interview ?? $data->jam_interview_hrd ?? '');
@@ -1012,7 +1090,7 @@ class GenerateMessageAtsEmail
     {
         $namaLengkap = htmlspecialchars($data->nama_lengkap ?? 'Kandidat');
         $salutation = htmlspecialchars(self::resolveSalutation($data));
-        $posisi = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? 'Posisi Dilamar');
+        $posisi = htmlspecialchars(self::posisiLabelCandidate($data));
         $alamat = nl2br(htmlspecialchars($data->alamat ?? '-'));
         $noTelepon = htmlspecialchars($data->no_telepon ?? '-');
         $gajiPokok = number_format((float) ($data->gaji_pokok ?? 0), 0, ',', '.');
@@ -1239,7 +1317,7 @@ class GenerateMessageAtsEmail
     {
         $namaLengkap = htmlspecialchars($data->nama_lengkap ?? 'Kandidat');
         $salutation = htmlspecialchars(self::resolveSalutation($data));
-        $posisi = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? 'Posisi Dilamar');
+        $posisi = htmlspecialchars(self::posisiLabelCandidate($data));
         $alamat = nl2br(htmlspecialchars($data->alamat ?? 'Jakarta'));
         $noTelepon = htmlspecialchars($data->no_telepon ?? '-');
 
@@ -1486,7 +1564,7 @@ class GenerateMessageAtsEmail
      */
     public static function bodyEmailRejectKandidat($data)
     {
-        $posisi   = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? $data->posisi ?? 'Posisi Dilamar');
+        $posisi   = htmlspecialchars(self::posisiLabelCandidate($data));
         $greeting = self::candidateGreetingHtml($data, $data->nama_lengkap ?? $data->nama_kandidat ?? 'Kandidat');
 
         return "
@@ -1538,7 +1616,7 @@ class GenerateMessageAtsEmail
     {
         $namaUser      = htmlspecialchars($data->nama_user      ?? 'User');
         $namaKandidat  = htmlspecialchars($data->nama_kandidat  ?? 'Candidate');
-        $posisi        = htmlspecialchars($data->posisi         ?? '-');
+        $posisi        = htmlspecialchars(self::posisiLabelInternal($data));
         $noRequest     = htmlspecialchars($data->no_request     ?? '-');
         $approvedBy    = htmlspecialchars($data->approved_by    ?? 'HRD');
         $approvedAt    = htmlspecialchars($data->approved_at    ?? '-');
@@ -1629,7 +1707,7 @@ class GenerateMessageAtsEmail
      */
     public static function bodyEmailCompleteProfileCandidate($data)
     {
-        $posisi      = htmlspecialchars($data->posisi_di_lamar ?? $data->nama_jabatan ?? 'Posisi Dilamar');
+        $posisi      = htmlspecialchars(self::posisiLabelCandidate($data));
         $isReminder  = !empty($data->reminder_without_link);
         $linkProfile = $isReminder ? null : htmlspecialchars($data->link_complete_profile ?? ('https://apps.intilab.com/candidate-profile?id=' . ($data->id ?? '')));
         $greeting    = self::candidateGreetingHtml($data, $data->nama_lengkap ?? 'Kandidat');
@@ -1708,7 +1786,7 @@ class GenerateMessageAtsEmail
         $namaUser       = htmlspecialchars($data->nama_user ?? 'User');
         $namaKandidat   = htmlspecialchars($data->nama_kandidat ?? 'Candidate');
         $divisi         = htmlspecialchars($data->divisi ?? '-');
-        $posisi         = htmlspecialchars($data->posisi ?? '-');
+        $posisi         = htmlspecialchars($data->posisi ?? self::posisiLabelInternal($data));
         $cabang         = htmlspecialchars($data->cabang ?? '-');
         $jenisInterview = htmlspecialchars($data->jenis_interview ?? '-');
         $catatan        = $data->catatan_interview ?? '-'; // TinyMCE content (HTML)
@@ -1840,14 +1918,16 @@ class GenerateMessageAtsEmail
                     return $dateStr;
                 }
             };
+
+            $posisiInternal = HrdEmailViewData::getNamaJabatan($recruitment);
     
             $dataCv = (object) array_merge(
                 $recruitment ? $recruitment->toArray() : [],
                 $profile ? (array)$profile : [],
                 [
                     'nama_cabang' => $pr->detailCabang->nama_cabang ?? $pr->lokasi_penempatan_cabang ?? '-',
-                    'posisi_di_lamar' => $pr->posisi ?? '-',
-                    'nama_jabatan' => $pr->detailPosisi->nama_jabatan ?? '-',
+                    'posisi_di_lamar' => $posisiInternal,
+                    'nama_jabatan' => $posisiInternal,
                     'status_nikah' => $profile->status_pernikahan ?? null,
                     'bpjs_kesehatan' => $profile->no_bpjs_ks ?? null,
                     'bpjs_ketenagakerjaan' => $profile->no_bpjs_tk ?? null,
@@ -1931,7 +2011,7 @@ class GenerateMessageAtsEmail
                 'nama_lengkap' => $recruitment->nama_lengkap ?? '-',
                 'shio' => $shioElemen['shio'] ?? '-',
                 'elemen' => $shioElemen['elemen'] ?? '-',
-                'nama_jabatan' => $pr->detailPosisi->nama_jabatan ?? $pr->posisi ?? '-',
+                'nama_jabatan' => $posisiInternal,
                 'umur' => $umur,
                 'alamat' => $alamat,
             ];
@@ -1987,7 +2067,7 @@ class GenerateMessageAtsEmail
     public static function bodyEmailUserInterviewCandidate($data)
     {
         $namaKandidat   = htmlspecialchars($data->nama_kandidat ?? 'Candidate');
-        $posisi         = htmlspecialchars($data->posisi ?? '-');
+        $posisi         = htmlspecialchars(self::posisiLabelCandidate($data));
         $jenisInterview = htmlspecialchars($data->jenis_interview ?? '-');
         $linkGmeet      = htmlspecialchars($data->link_gmeet ?? '');
         $ruangan        = htmlspecialchars($data->ruangan_interview ?? 'Office Room');
@@ -2105,7 +2185,7 @@ class GenerateMessageAtsEmail
         $namaUser       = htmlspecialchars($data->nama_user ?? 'User');
         $namaKandidat   = htmlspecialchars($data->nama_kandidat ?? 'Candidate');
         $noRequest      = htmlspecialchars($data->no_request ?? '-');
-        $posisi         = htmlspecialchars($data->posisi ?? '-');
+        $posisi         = htmlspecialchars(self::posisiLabelInternal($data));
         $jenisInterview = htmlspecialchars($data->jenis_interview ?? '-');
         $linkGmeet      = htmlspecialchars($data->link_gmeet ?? '');
         $ruangan        = htmlspecialchars($data->ruangan_interview ?? 'Office Room');

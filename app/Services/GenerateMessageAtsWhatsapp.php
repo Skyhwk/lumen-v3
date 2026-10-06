@@ -49,6 +49,12 @@ class GenerateMessageAtsWhatsapp
         return WaMessageTemplateService::render($code, $variables);
     }
 
+    /** Semua WA ATS ditujukan ke kandidat — label grade + divisi_alias. */
+    private function posisiLabel(): string
+    {
+        return GenerateMessageAtsEmail::posisiLabelCandidate($this->data);
+    }
+
     /**
      * Concise, Neutral & Professional WhatsApp Message for Approved Candidate (HRD Interview)
      * 
@@ -57,7 +63,7 @@ class GenerateMessageAtsWhatsapp
     public function PassedCandidateSelection()
     {
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
-        $posisi = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
+        $posisi = $this->posisiLabel();
         $hari = $this->data->hariIndonesia ?? '-';
         $tanggal = $this->data->tglInter ?? '-';
         $jam = $this->data->jam_interview ?? $this->data->jam_interview_hrd ?? '-';
@@ -105,7 +111,7 @@ class GenerateMessageAtsWhatsapp
     public function RejectedCandidateSelection()
     {
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
-        $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
+        $posisi      = $this->posisiLabel();
         $databaseMessage = $this->databaseTemplate('candidate_rejection', [
             'sapaan' => $this->sapaan(), 'nama' => $namaLengkap, 'posisi' => $posisi,
         ]);
@@ -132,7 +138,7 @@ class GenerateMessageAtsWhatsapp
     public function CompleteProfileCandidate()
     {
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
-        $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
+        $posisi      = $this->posisiLabel();
         $linkProfile = $this->data->link_complete_profile ?? ('https://portal.intilab.com/public/recruitment/complete-profile/' . rawurlencode($this->data->token ?? ''));
         $databaseMessage = $this->databaseTemplate('complete_profile', [
             'sapaan' => $this->sapaan(), 'nama' => $namaLengkap, 'posisi' => $posisi, 'link' => $linkProfile,
@@ -162,7 +168,7 @@ class GenerateMessageAtsWhatsapp
     public function Assessment()
     {
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
-        $posisi      = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
+        $posisi      = $this->posisiLabel();
         $assessmentUrl = $this->data->assessment_url ?? ('https://portal.intilab.com/public/recruitment/assessment/' . rawurlencode($this->data->token ?? ''));
         $databaseMessage = $this->databaseTemplate('assessment_invitation', [
             'sapaan' => $this->sapaan(), 'nama' => $namaLengkap, 'posisi' => $posisi,
@@ -188,7 +194,7 @@ class GenerateMessageAtsWhatsapp
     public function UserInterviewScheduleCandidate()
     {
         $namaLengkap = \ucwords($this->data->nama_kandidat ?? $this->data->nama_lengkap ?? 'Kandidat');
-        $posisi      = $this->data->posisi ?? 'Posisi Dilamar';
+        $posisi      = $this->posisiLabel();
         $tgl         = $this->data->tgl_interview ?? '-';
         $jenis       = strtolower(strip_tags($this->data->jenis_interview ?? 'online'));
         $linkGmeet   = $this->data->link_gmeet ?? '';
@@ -239,7 +245,7 @@ class GenerateMessageAtsWhatsapp
     {
         $namaUser     = \ucwords($this->data->nama_user ?? 'Bapak/Ibu');
         $namaKandidat = \ucwords($this->data->nama_kandidat ?? 'Kandidat');
-        $posisi       = $this->data->posisi ?? 'Posisi Requested';
+        $posisi       = $this->posisiLabel();
         $noRequest    = $this->data->no_request ?? '-';
         $tgl          = $this->data->tgl_interview ?? '-';
         $jenis        = strtolower(strip_tags($this->data->jenis_interview ?? 'online'));
@@ -278,7 +284,7 @@ class GenerateMessageAtsWhatsapp
     public function SalaryOfferingLetter()
     {
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
-        $posisi = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
+        $posisi = $this->posisiLabel();
         $gaji = HrdEmailViewData::formatRupiah(
             $this->data->gaji_pokok
                 ?? $this->data->sallary_offer_hrd
@@ -320,7 +326,7 @@ class GenerateMessageAtsWhatsapp
     public function HiringLetter()
     {
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
-        $posisi = $this->data->posisi_di_lamar ?? $this->data->nama_jabatan ?? 'Posisi Dilamar';
+        $posisi = $this->posisiLabel();
         $gaji = HrdEmailViewData::formatRupiah($this->data->gaji_pokok ?? 0);
         $tglMulai = $this->data->tanggal_mulai_kerja ?? '-';
         $email = trim((string) ($this->data->email ?? ''));
