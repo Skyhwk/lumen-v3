@@ -1672,9 +1672,10 @@ class PersonnelRequestController extends Controller
             if ($hrds->isNotEmpty()) {
                 // Siapkan data untuk template email
                 $dataArray = (object)[
+                    'nama_user'         => $this->karyawan ?? 'User',
                     'nama_kandidat'     => $recruitment->nama_lengkap,
                     'divisi'            => $recruitment->personnelRequest->detailDivisi->nama_divisi ?? $recruitment->personnelRequest->divisi,
-                    'posisi'            => $recruitment->personnelRequest->detailPosisi->nama_jabatan ?? $recruitment->personnelRequest->posisi,
+                    'posisi'            => GenerateMessageAtsEmail::posisiLabelInternal($recruitment),
                     'cabang'            => $recruitment->personnelRequest->detailCabang->nama_cabang ?? $recruitment->personnelRequest->lokasi_penempatan_cabang,
                     'tgl_interview'     => $request->tgl_interview,
                     'jenis_interview'   => $request->jenis_interview,
@@ -1684,7 +1685,6 @@ class PersonnelRequestController extends Controller
                 foreach ($hrds as $user) {
                     if (!$user->email) continue; // Skip jika tidak ada email
 
-                    $dataArray->nama_user = $user->nama_lengkap;
                     $bodyEmail = GenerateMessageAtsEmail::bodyEmailHrdSchaduled($dataArray);
                     
                     SendEmail::where('to', $user->email)
@@ -1936,8 +1936,7 @@ class PersonnelRequestController extends Controller
                 app(AtsNotificationService::class)->userInterviewRejected($recruitment, $pr);
 
                 try {
-                    // Set posisi untuk template
-                    $recruitment->posisi_di_lamar = $pr->detailPosisi->nama_jabatan ?? $pr->posisi;
+                    $recruitment->loadMissing(['personnelRequest', 'personalRequest']);
 
                     if (!empty($recruitment->email)) {
                         $emailContent = GenerateMessageAtsEmail::bodyEmailRejectKandidat($recruitment);
