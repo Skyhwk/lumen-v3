@@ -18,9 +18,12 @@ class FirebaseService
 
     public function __construct()
     {
-        $path = base_path('storage/app/firebase/google-service.json');
-        if (!is_readable($path)) {
-            throw new \RuntimeException('Firebase credentials missing at storage/app/firebase/google-service.json');
+        $path = self::resolveCredentialsPath();
+        if ($path === null) {
+            throw new \RuntimeException(
+                'Firebase credentials tidak ditemukan. Salin google-service.json ke storage/app/firebase/ '
+                . 'lumen-v3 atau set FIREBASE_CREDENTIALS_PATH di .env (path absolut di container).'
+            );
         }
 
         $credentials = json_decode(file_get_contents($path), true);
@@ -248,6 +251,33 @@ class FirebaseService
         } catch (\Throwable $e) {
             Log::warning('Greatday MQTT: publish dilewati', ['message' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * Path service account FCM (Greatday).
+     */
+    public static function resolveCredentialsPath(): ?string
+    {
+        $candidates = [];
+
+        $configured = trim((string) env('FIREBASE_CREDENTIALS_PATH', ''));
+        if ($configured !== '') {
+            $candidates[] = $configured;
+        }
+
+        $candidates[] = base_path('storage/app/firebase/google-service.json');
+
+        // Docker dev: intilab-internal masih ter-mount di /var/www/intilab-internal
+        $candidates[] = '/var/www/intilab-internal/storage/app/firebase/google-service.json';
+        $candidates[] = base_path('../intilab-internal/storage/app/firebase/google-service.json');
+
+        foreach ($candidates as $path) {
+            if ($path !== '' && is_readable($path)) {
+                return $path;
+            }
+        }
+
+        return null;
     }
 
     private function stringifyData(array $data): array
