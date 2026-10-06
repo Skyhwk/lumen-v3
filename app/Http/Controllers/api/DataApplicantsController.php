@@ -369,14 +369,14 @@ class DataApplicantsController extends Controller
                     ->send();
             }
 
-            $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
-            if (!empty($phone)) {
-                $waObj = new GenerateMessageAtsWhatsapp($applicant);
-                $waMessage = $waObj->RejectedCandidateSelection();
-
-                $sendWa = new SendWhatsapp($phone, $waMessage);
-                $sendWa->send();
-            }
+            // DISABLED: WhatsApp rejection info (kebijakan HRD — notifikasi rejection via email saja)
+            // $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
+            // if (!empty($phone)) {
+            //     $waObj = new GenerateMessageAtsWhatsapp($applicant);
+            //     $waMessage = $waObj->RejectedCandidateSelection();
+            //     $sendWa = new SendWhatsapp($phone, $waMessage);
+            //     $sendWa->send();
+            // }
         } catch (\Exception $e) {
             // Silence exception
         }
