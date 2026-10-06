@@ -106,10 +106,10 @@ class Kernel extends ConsoleKernel
             ->dailyAt('07:00')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping(30);
-        $schedule->command('absensi:generate-monthly')
-            ->monthlyOn(1, '10:00')
-            ->timezone('Asia/Jakarta')
-            ->withoutOverlapping(180);
+        // $schedule->command('absensi:generate-monthly')
+        //     ->monthlyOn(1, '10:00')
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping(180);
     }
 
     protected function commands()
