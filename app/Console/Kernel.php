@@ -64,6 +64,9 @@ class Kernel extends ConsoleKernel
         Commands\VerifyHrMigrationCommand::class,
         Commands\VerifyHrStatusParityCommand::class,
         Commands\SmokeHrWorkflowCommand::class,
+        Commands\SendGreatdayTestNotificationCommand::class,
+        Commands\DetectGreatdayAttendanceRemindersCommand::class,
+        Commands\SendGreatdayAttendanceRemindersCommand::class,
         Commands\MigrateGdAuthFromAppsCommand::class,
         Commands\MigrateGdAppDataFromAppsCommand::class,
         Commands\VerifyGdAuthParityCommand::class,
@@ -105,6 +108,16 @@ class Kernel extends ConsoleKernel
             ->dailyAt('07:00')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping(30);
+
+        // Reminder absensi Greatday — aktifkan setelah ops tim infra (bukan bagian dev feature).
+        // $schedule->command('greatday:attendance-reminder-send --slot=morning')
+        //     ->dailyAt('09:00')
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping(45);
+        // $schedule->command('greatday:attendance-reminder-send --slot=evening')
+        //     ->dailyAt('21:00')
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping(45);
     }
 
     protected function commands()

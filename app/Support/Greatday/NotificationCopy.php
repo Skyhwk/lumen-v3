@@ -36,6 +36,60 @@ class NotificationCopy
         return '/notifications';
     }
 
+    public static function pathAttendance(): string
+    {
+        return '/attendance';
+    }
+
+    /**
+     * @return array{title: string, body: string, url: string, kind: string, reminder_type: string}
+     */
+    public static function attendanceReminderMissingMasuk(string $tanggalYmd, ?string $jadwalMasuk = null): array
+    {
+        $jam = self::formatJamSingkat($jadwalMasuk) ?: '08:00';
+        $hari = self::formatDate($tanggalYmd);
+
+        return [
+            'title' => 'Kehadiran · absen masuk belum tercatat',
+            'body' => "Hingga saat ini absen masuk Anda pada {$hari} belum tercatat (jadwal masuk {$jam}). "
+                . 'Segera lakukan absensi masuk melalui mesin atau aplikasi Attendance.',
+            'url' => self::pathAttendance(),
+            'kind' => 'attendance_reminder',
+            'reminder_type' => 'missing_masuk',
+        ];
+    }
+
+    /**
+     * @return array{title: string, body: string, url: string, kind: string, reminder_type: string}
+     */
+    public static function attendanceReminderMissingPulang(string $tanggalYmd, ?string $jadwalPulang = null): array
+    {
+        $jam = self::formatJamSingkat($jadwalPulang) ?: '17:00';
+        $hari = self::formatDate($tanggalYmd);
+
+        return [
+            'title' => 'Kehadiran · absen pulang belum tercatat',
+            'body' => "Hingga saat ini absen pulang Anda pada {$hari} belum tercatat (jadwal pulang {$jam}). "
+                . 'Segera lakukan absensi pulang melalui mesin atau aplikasi Attendance.',
+            'url' => self::pathAttendance(),
+            'kind' => 'attendance_reminder',
+            'reminder_type' => 'missing_pulang',
+        ];
+    }
+
+    private static function formatJamSingkat(?string $time): string
+    {
+        $time = trim((string) $time);
+        if ($time === '') {
+            return '';
+        }
+        if (preg_match('/^(\d{1,2}):(\d{2})/', $time, $m)) {
+            return sprintf('%02d:%02d', (int) $m[1], (int) $m[2]);
+        }
+
+        return '';
+    }
+
     /** Tab hub formulir dari teks notifikasi (untuk URL lama tanpa ?tab=). */
     public static function inferFormsTabFromCopy($title, $body): string
     {
