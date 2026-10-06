@@ -1114,16 +1114,8 @@ class AtsFinalDecisionController extends Controller
 
             try {
                 if (!empty($applicant->email)) {
-                    $posisiName = $this->resolvePositionName($applicant);
-                    $dataObj = (object) [
-                        'nama_lengkap'    => $applicant->nama_lengkap,
-                        'jenis_kelamin'   => $applicant->jenis_kelamin,
-                        'nama_jabatan'    => $posisiName,
-                        'posisi_di_lamar' => $posisiName,
-                        'alasan_reject'   => $rejectReason,
-                    ];
-
-                    $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataObj);
+                    $applicant->loadMissing(['personnelRequest', 'personalRequest']);
+                    $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($applicant);
                     SendEmail::where('to', $applicant->email)
                         ->where('subject', 'Selection Result Notification - PT Inti Surya Laboratorium')
                         ->where('body', $bodyEmail)
@@ -2032,18 +2024,10 @@ class AtsFinalDecisionController extends Controller
             ]);
 
         try {
-            $posisiName = $this->resolvePositionName($applicant);
-            $dataArray = (object) [
-                'nama_lengkap'    => $applicant->nama_lengkap,
-                'jenis_kelamin'   => $applicant->jenis_kelamin,
-                'posisi_di_lamar' => $posisiName,
-                'nama_jabatan'    => $posisiName,
-                'alasan_reject'   => $reason,
-                'hrd_name'        => $user,
-            ];
+            $applicant->loadMissing(['personnelRequest', 'personalRequest']);
 
             if (!empty($applicant->email)) {
-                $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataArray);
+                $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($applicant);
                 SendEmail::where('to', $applicant->email)
                     ->where('subject', 'Selection Result Notification - PT Inti Surya Laboratorium')
                     ->where('body', $bodyEmail)
@@ -2055,7 +2039,7 @@ class AtsFinalDecisionController extends Controller
 
             $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
             if (!empty($phone)) {
-                $waObj = new GenerateMessageAtsWhatsapp($dataArray);
+                $waObj = new GenerateMessageAtsWhatsapp($applicant);
                 $waMessage = $waObj->RejectedCandidateSelection();
 
                 (new SendWhatsapp($phone, $waMessage))->send();

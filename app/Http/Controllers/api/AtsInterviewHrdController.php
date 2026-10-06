@@ -379,25 +379,17 @@ class AtsInterviewHrdController extends Controller
             $tglInter = $dt->format('d F Y');
             $jamInterview = $dt->format('H:i');
 
-            $posisiName = $this->resolvePositionName($applicant);
-
-            $dataArray = (object) [
-                'nama_lengkap' => $applicant->nama_lengkap,
-                'jenis_kelamin' => $applicant->jenis_kelamin,
-                'posisi_di_lamar' => $posisiName,
-                'nama_jabatan' => $posisiName,
-                'hariIndonesia' => $hariIndonesia,
-                'tglInter' => $tglInter,
-                'jam_interview' => $jamInterview,
-                'jam_interview_hrd' => $jamInterview,
-                'jenis_interview_hrd' => $jenisInterview,
-                'link_gmeet_hrd' => $jenisInterview === 'Online' ? $linkGmeet : null,
-                'alamat_cabang' => $jenisInterview === 'Offline' ? $ruanganInterview : 'Online Meeting',
-                'kode_uniq' => $applicant->id,
-            ];
+            $applicant->loadMissing(['personnelRequest', 'personalRequest']);
+            $applicant->hariIndonesia = $hariIndonesia;
+            $applicant->tglInter = $tglInter;
+            $applicant->jam_interview = $jamInterview;
+            $applicant->jam_interview_hrd = $jamInterview;
+            $applicant->jenis_interview_hrd = $jenisInterview;
+            $applicant->link_gmeet_hrd = $jenisInterview === 'Online' ? $linkGmeet : null;
+            $applicant->alamat_cabang = $jenisInterview === 'Offline' ? $ruanganInterview : 'Online Meeting';
 
             if (!empty($applicant->email)) {
-                $bodyEmail = GenerateMessageAtsEmail::bodyEmailApproveKandidat($dataArray);
+                $bodyEmail = GenerateMessageAtsEmail::bodyEmailApproveKandidat($applicant);
                 SendEmail::where('to', $applicant->email)
                     ->where('subject', 'Reschedule Undangan Interview HRD - PT Inti Surya Laboratorium')
                     ->where('body', $bodyEmail)
@@ -409,7 +401,7 @@ class AtsInterviewHrdController extends Controller
 
             $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
             if (!empty($phone)) {
-                $waObj = new GenerateMessageAtsWhatsapp($dataArray);
+                $waObj = new GenerateMessageAtsWhatsapp($applicant);
                 $waMessage = $waObj->PassedCandidateSelection();
 
                 $sendWa = new SendWhatsapp($phone, $waMessage);
