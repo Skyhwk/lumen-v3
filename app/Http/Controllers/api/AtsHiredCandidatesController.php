@@ -537,7 +537,7 @@ class AtsHiredCandidatesController extends Controller
             'date_birth' => $birthDate,
             'gender' => $recruitment->jenis_kelamin,
             'religion' => optional($profile)->agama,
-            'marital_status' => $this->normalizeMaritalStatus(optional($profile)->status_pernikahan) ?: optional($profile)->status_pernikahan,
+            'marital_status' => optional($profile)->status_pernikahan,
             'status_nikah' => optional($profile)->status_pernikahan,
             'status_pernikahan' => optional($profile)->status_pernikahan,
             'marital_date' => '',
@@ -694,13 +694,11 @@ class AtsHiredCandidatesController extends Controller
             'personal.religion',
             'personal.agama',
         ], optional($profile)->agama);
-        $karyawan->status_pernikahan = $this->normalizeMaritalStatus(
-            $this->resolvePersonalField($request, [
-                'personal.marital_status',
-                'personal.status_pernikahan',
-                'personal.status_nikah',
-            ])
-        ) ?: optional($profile)->status_pernikahan;
+        $karyawan->status_pernikahan = $this->resolvePersonalField($request, [
+            'personal.marital_status',
+            'personal.status_pernikahan',
+            'personal.status_nikah',
+        ], optional($profile)->status_pernikahan);
         $karyawan->tempat_nikah = data_get($request, 'personal.marital_place') ?: null;
         $karyawan->tgl_nikah = data_get($request, 'personal.marital_date') ?: null;
         $karyawan->shio = $shioElemen['shio'] ?? null;
@@ -1354,35 +1352,6 @@ class AtsHiredCandidatesController extends Controller
         }
 
         return $fallback;
-    }
-
-    private function normalizeMaritalStatus($value): ?string
-    {
-        $normalized = strtolower(trim((string) $value));
-        if ($normalized === '') {
-            return null;
-        }
-
-        $aliases = [
-            'menikah' => 'Married',
-            'married' => 'Married',
-            'belum menikah' => 'Single',
-            'single' => 'Single',
-            'cerai' => 'Divorced',
-            'divorced' => 'Divorced',
-            'cerai mati' => 'Death Divorce',
-            'death divorced' => 'Death Divorce',
-            'death divorce' => 'Death Divorce',
-        ];
-
-        if (isset($aliases[$normalized])) {
-            return $aliases[$normalized];
-        }
-
-        $trimmed = trim((string) $value);
-        $allowed = ['Single', 'Married', 'Divorced', 'Death Divorce'];
-
-        return in_array($trimmed, $allowed, true) ? $trimmed : null;
     }
 
     private function nullableDate($value)
