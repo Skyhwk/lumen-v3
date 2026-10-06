@@ -11,6 +11,7 @@ use App\Services\SendWhatsapp;
 use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\AtsNotificationService;
 use App\Services\RecruitmentDecisionActionEmailService;
+use App\Services\RecruitmentDecisionActionTelegramService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -152,6 +153,10 @@ class SalaryApprovalController extends Controller
 
             app(AtsNotificationService::class)->directorSalaryDecision($recruitment, $decision);
             app(RecruitmentDecisionActionEmailService::class)->notifySalaryDecision($recruitment, $decision);
+            app(RecruitmentDecisionActionTelegramService::class)->notifySalaryDecision($recruitment, $decision, [
+                'reject_reason' => $rejectReason,
+                'negotiated_amount' => $amount,
+            ]);
 
             return response()->json([
                 'result' => $decision,

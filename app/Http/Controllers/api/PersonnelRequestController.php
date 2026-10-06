@@ -8,6 +8,7 @@ use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,Mast
 use App\Services\SallaryOfferService;
 use App\Services\GenerateAssessmentDocumentService;
 use App\Services\CandidateDocumentAttachmentService;
+use App\Services\RecruitmentDecisionActionTelegramService;
 use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService,RecruitmentStatusService,RequesterSalaryApprovalService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use Yajra\Datatables\Datatables;
@@ -1992,6 +1993,11 @@ class PersonnelRequestController extends Controller
                     'new_recruitment_id' => $recruitment->id ?? null,
                 ]);
             }
+
+            app(RecruitmentDecisionActionTelegramService::class)->notifyCandidateApprovalRequest($recruitment, [
+                'approved_by' => $this->karyawan,
+                'sallary_offer_user' => $salaryNormalized ?? null,
+            ]);
         }
 
         return response()->json(['message' => 'Keputusan berhasil disimpan!']);
