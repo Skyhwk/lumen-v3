@@ -6,6 +6,7 @@ use App\Models\Absensi;
 use App\Models\MasterKaryawan;
 use App\Models\RekapLiburKalender;
 use App\Models\RekapMasukKerja;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -24,10 +25,10 @@ class MonthlyAbsensiGenerateOrchestrator
     public function resolveTargetBulanYm(?string $asOfYmd = null): string
     {
         $asOf = $asOfYmd !== null && $asOfYmd !== ''
-            ? strtotime($asOfYmd)
-            : time();
+            ? Carbon::parse($asOfYmd, 'Asia/Jakarta')
+            : Carbon::now('Asia/Jakarta');
 
-        return date('Y-m', strtotime('-1 month', $asOf));
+        return $asOf->startOfMonth()->subMonth()->format('Y-m');
     }
 
     public function hasActiveRekap(int $karyawanId, string $bulanYm): bool
@@ -205,15 +206,39 @@ class MonthlyAbsensiGenerateOrchestrator
                 }
 
                 $payload = $this->buildPayloadFromRows($rows);
-                DB::transaction(function () use ($karyawanId, $bulanYm, $payload) {
+                $generated = DB::transaction(function () use ($karyawanId, $bulanYm, $payload, $skipExisting) {
+                    // Lock a row that exists even before the first monthly rekap.
+                    // Concurrent automatic commands wait here, then recheck.
+                    $employee = MasterKaryawan::where('id', $karyawanId)->lockForUpdate()->first();
+                    if (!$employee) {
+                        throw new \RuntimeException('Karyawan tidak ditemukan.');
+                    }
+                    if ($skipExisting && $this->hasActiveRekap($karyawanId, $bulanYm)) {
+                        return false;
+                    }
                     $this->persistGenerate(
                         $karyawanId,
                         $bulanYm,
-                        $payload['absensi'],
+                        // Rekap otomatis hanya membaca punch asli; koreksi punch
+                        // tetap melalui jalur generate manual.
+                        null,
                         $payload['data'],
                         null
                     );
+                    return true;
                 });
+
+                if (!$generated) {
+                    $summary['skipped']++;
+                    $summary['details'][] = [
+                        'karyawan_id' => $karyawanId,
+                        'nik' => $employee->nik_karyawan,
+                        'nama' => $employee->nama_lengkap,
+                        'status' => 'skipped',
+                        'message' => 'Rekap aktif untuk periode ini sudah ada.',
+                    ];
+                    continue;
+                }
 
                 $summary['generated']++;
                 $summary['details'][] = [
