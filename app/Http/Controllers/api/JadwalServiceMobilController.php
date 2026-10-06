@@ -43,14 +43,72 @@ class JadwalServiceMobilController extends Controller
 
     public function indexHistory(Request $request)
     {
-        $data = ServiceMobil::where('is_active', true)
+        $data = ServiceMobil::with([
+            'details' => function ($q) {
+                $q->where('is_active', true)->orderBy('urutan');
+            },
+        ])
+            ->where('is_active', true)
             ->whereIn('status', [
                 ServiceMobil::STATUS_SELESAI,
                 ServiceMobil::STATUS_DIBATALKAN,
             ])
             ->orderByDesc('id');
 
-        return Datatables::of($data)->make(true);
+        return Datatables::of($data)
+            ->addColumn('service_details', function ($row) {
+                if ($row->status !== ServiceMobil::STATUS_SELESAI) {
+                    return [];
+                }
+
+                return $row->details
+                    ->map(function ($detail) {
+                        return [
+                            'deskripsi_pekerjaan' => $detail->deskripsi_pekerjaan,
+                            'biaya' => $detail->biaya,
+                        ];
+                    })
+                    ->values()
+                    ->all();
+            })
+            ->make(true);
+    }
+
+    /**
+     * Detail service untuk modal view (header + detail biaya + lampiran).
+     */
+    public function show(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id' => ['required', 'integer'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $service = ServiceMobil::with([
+            'details' => function ($q) {
+                $q->where('is_active', true)->orderBy('urutan');
+            },
+            'attachments' => function ($q) {
+                $q->where('is_active', true)->orderBy('id');
+            },
+        ])
+            ->where('is_active', true)
+            ->find($request->id);
+
+        if (!$service) {
+            return response()->json(['message' => 'Data Not Found.!'], 404);
+        }
+
+        return response()->json([
+            'message' => 'Data loaded successfully',
+            'data' => $service,
+        ], 200);
     }
 
     public function getOptions(Request $request)
@@ -643,7 +701,7 @@ class JadwalServiceMobilController extends Controller
     }
 
     /**
-     * @return array|null Struktur biaya v1: lines[{uraian,keterangan,harga}], total, currency
+     * @return array|null Struktur biaya v1: lines[{uraian,qty,keterangan,harga}], total, currency
      */
     private function normalizeDetailBiaya($raw): ?array
     {
@@ -692,11 +750,19 @@ class JadwalServiceMobilController extends Controller
             $uraian = trim((string) ($line['uraian'] ?? ''));
             $keterangan = trim((string) ($line['keterangan'] ?? ''));
             $harga = (int) preg_replace('/[^\d]/', '', (string) ($line['harga'] ?? '0'));
-            if ($uraian === '' && $keterangan === '' && $harga <= 0) {
+            $qty = null;
+            if (array_key_exists('qty', $line) && $line['qty'] !== null && $line['qty'] !== '') {
+                $qtyParsed = (int) preg_replace('/[^\d]/', '', (string) $line['qty']);
+                if ($qtyParsed > 0) {
+                    $qty = $qtyParsed;
+                }
+            }
+            if ($uraian === '' && $keterangan === '' && $harga <= 0 && $qty === null) {
                 continue;
             }
             $lines[] = [
                 'uraian' => $uraian,
+                'qty' => $qty,
                 'keterangan' => $keterangan,
                 'harga' => $harga,
             ];
