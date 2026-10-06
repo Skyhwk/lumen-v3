@@ -10,6 +10,7 @@ use App\Models\DendaKaryawan;
 use App\Models\MasterKaryawan;
 use App\Models\RekapLiburKalender;
 use App\Http\Controllers\Controller;
+use App\Services\PencadanganUpahPayrollService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -123,6 +124,15 @@ class KalkulasiPayrollController extends Controller
 
             $workingDays = $workingDaysQuery ? $workingDaysQuery->working_days : 0;
 
+            $tidakHadirSql = '(' . $workingDays . ' - JSON_LENGTH(rekap_masuk_kerja.tanggal))';
+            $potonganAbsenEligibleSql = '(master_karyawan.status_karyawan NOT IN ("Permanent", "Contract", "Special") OR master_karyawan.is_active = 0)';
+            $potonganAbsenAmountSql = 'FLOOR(GREATEST(1000, ROUND((IFNULL(master_sallary.gaji_pokok, 0) + IFNULL(master_sallary.tunjangan_kerja, 0)) / ' . $workingDays . ' * ' . $tidakHadirSql . ', 0)) / 1000) * 1000';
+            $potonganAbsenCaseSql = 'CASE WHEN ' . $potonganAbsenEligibleSql . ' AND ' . $tidakHadirSql . ' > 0 THEN ' . $potonganAbsenAmountSql . ' ELSE 0 END';
+
+            $pcPencadanganColumn = PencadanganUpahPayrollService::sqlShowDataPencadanganColumn();
+            $pcThpRefundAdd = PencadanganUpahPayrollService::sqlShowDataThpRefundAdd();
+            $pcThpDeductionSub = PencadanganUpahPayrollService::sqlShowDataThpDeductionSub();
+
             $query = DB::table('master_karyawan')
             ->select(
                 DB::raw('master_karyawan.id as karyawan_id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, CASE WHEN payroll.id IS NULL THEN master_karyawan.id ELSE payroll.id_karyawan END as id_karyawan, CASE WHEN payroll.id IS NULL THEN master_karyawan.id_jabatan ELSE payroll.id_jabatan END as id_jabatan, CASE WHEN payroll.id IS NULL THEN master_jabatan.nama_jabatan ELSE payroll.nama_jabatan END as nama_jabatan, CASE WHEN payroll.id IS NULL THEN rekening_karyawan.no_rekening ELSE payroll.no_rekening END as no_rekening , CASE WHEN payroll.id IS NULL THEN rekening_karyawan.nama_bank ELSE payroll.nama_bank END as nama_bank,payroll.keterangan,
@@ -145,12 +155,8 @@ class KalkulasiPayrollController extends Controller
                 ROUND(IFNULL(CASE WHEN payroll.id IS NULL THEN bpjs_kesehatan.nominal_potongan_karyawan ELSE payroll.bpjs_kesehatan END, 0), 0) as bpjs_kesehatan, 
                 ROUND(IFNULL(bpjs_kesehatan.nominal_potongan_kantor, 0), 0) as nominal_p_kantor, 
                 payroll.id as payroll_id, payroll.status, payroll.payroll_header_id,
-                ROUND(IFNULL(SUM(CASE WHEN payroll.id IS NULL THEN pencadangan_upah.nominal_berjalan ELSE payroll.pencadangan_upah END), 0), 0) as pencadangan_upah,
-                ROUND(CASE WHEN payroll.id IS NULL THEN (IFNULL(master_sallary.gaji_pokok, 0) + IFNULL(master_sallary.tunjangan_kerja, 0) + IFNULL(SUM(bonus_karyawan.nominal), 0) + IFNULL(SUM(CASE 
-                    WHEN pencadangan_upah.tenor_berjalan > 0 AND pencadangan_upah.tenor_berjalan <= pencadangan_upah.tenor
-                    THEN pencadangan_upah.nominal
-                    ELSE 0
-                END), 0) + ROUND(IFNULL(SUM(CASE WHEN payroll.id IS NULL THEN 0 ELSE payroll.incentive END), 0), 0) - 
+                ' . $pcPencadanganColumn . ' as pencadangan_upah,
+                ROUND(CASE WHEN payroll.id IS NULL THEN (IFNULL(master_sallary.gaji_pokok, 0) + IFNULL(master_sallary.tunjangan_kerja, 0) + IFNULL(SUM(bonus_karyawan.nominal), 0) + ' . $pcThpRefundAdd . ' + ROUND(IFNULL(SUM(CASE WHEN payroll.id IS NULL THEN 0 ELSE payroll.incentive END), 0), 0) - 
                 (IFNULL(SUM(CASE 
                     WHEN kasbon.sisa_tenor > 0 AND kasbon.is_active = 1 AND kasbon.bulan_mulai_pemotongan <= "' . $request->periode . '" 
                     THEN kasbon.nominal_potongan
@@ -159,21 +165,9 @@ class KalkulasiPayrollController extends Controller
                     ELSE 0 
                 END), 0) + IFNULL(SUM(denda_karyawan.nominal_potongan), 0) + IFNULL(SUM(pph_21.pajak_bulanan), 0) +
                 IFNULL(bpjs_tk.nominal_potongan_karyawan, 0) + IFNULL(bpjs_kesehatan.nominal_potongan_karyawan, 0) +
-                CASE 
-                    WHEN master_karyawan.status_karyawan NOT IN ("Permanent", "Contract", "Special") AND (' . $workingDays . ' - JSON_LENGTH(rekap_masuk_kerja.tanggal)) > 0
-                    THEN FLOOR(GREATEST(1000, ROUND((IFNULL(master_sallary.gaji_pokok, 0) + IFNULL(master_sallary.tunjangan_kerja, 0)) / ' . $workingDays . ' * (' . $workingDays . ' - JSON_LENGTH(rekap_masuk_kerja.tanggal)), 0)) / 1000) * 1000
-                    ELSE 0
-                END + ROUND(IFNULL(SUM(CASE WHEN payroll.id IS NULL THEN 0 ELSE payroll.potongan_lainnya END), 0), 0) +
-                IFNULL(SUM(CASE 
-                    WHEN pencadangan_upah.tenor_berjalan < 0
-                    THEN pencadangan_upah.nominal
-                    ELSE 0
-                END), 0))) ELSE payroll.take_home_pay END, 0) as take_home_pay, 
-                CASE WHEN payroll.id IS NULL THEN CASE 
-                    WHEN master_karyawan.status_karyawan NOT IN ("Permanent", "Contract", "Special") AND (' . $workingDays . ' - JSON_LENGTH(rekap_masuk_kerja.tanggal)) > 0
-                    THEN FLOOR(GREATEST(1000, ROUND((IFNULL(master_sallary.gaji_pokok, 0) + IFNULL(master_sallary.tunjangan_kerja, 0)) / ' . $workingDays . ' * (' . $workingDays . ' - JSON_LENGTH(rekap_masuk_kerja.tanggal)), 0)) / 1000) * 1000
-                    ELSE 0
-                END ELSE payroll.potongan_absen END as potongan_absen,  
+                ' . $potonganAbsenCaseSql . ' + ROUND(IFNULL(SUM(CASE WHEN payroll.id IS NULL THEN 0 ELSE payroll.potongan_lainnya END), 0), 0) +
+                ' . $pcThpDeductionSub . ')) ELSE payroll.take_home_pay END, 0) as take_home_pay, 
+                CASE WHEN payroll.id IS NULL THEN ' . $potonganAbsenCaseSql . ' ELSE payroll.potongan_absen END as potongan_absen,  
                 JSON_LENGTH(rekap_masuk_kerja.tanggal) as masuk_kerja,
                 CASE WHEN payroll.id IS NULL THEN ' . $workingDays . ' ELSE payroll.hari_kerja END as hari_kerja,
                 CASE WHEN payroll.id IS NULL THEN (' . $workingDays . ' - JSON_LENGTH(rekap_masuk_kerja.tanggal)) ELSE payroll.tidak_hadir END as tidak_hadir')
@@ -237,7 +231,17 @@ class KalkulasiPayrollController extends Controller
             ->groupBy(DB::raw('master_karyawan.id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, master_karyawan.id_jabatan, master_jabatan.nama_jabatan, payroll.id_jabatan, payroll.nama_jabatan, payroll.id_karyawan, pph_21.pajak_bulanan,rekening_karyawan.no_rekening, rekening_karyawan.nama_bank,payroll.keterangan, master_sallary.gaji_pokok, master_sallary.tunjangan_kerja, bpjs_tk.nominal_potongan_karyawan, bpjs_tk.nominal_potongan_kantor, bpjs_kesehatan.nominal_potongan_karyawan, bpjs_kesehatan.nominal_potongan_kantor, payroll.id,payroll.status,payroll.payroll_header_id, rekap_masuk_kerja.tanggal'))
             ->orderBy('master_karyawan.nik_karyawan', 'ASC')
             // ->where('master_karyawan.nik_karyawan', 'ISP232')
-            ->whereRaw(('CASE WHEN master_karyawan.is_active = 0 THEN CAST(NOW() as DATE) <= DATE_ADD(master_karyawan.effective_date, INTERVAL 45 DAY) ELSE master_karyawan.is_active = 1 END'))
+            ->whereRaw(
+                '(
+                    master_karyawan.is_active = 1
+                    OR (
+                        master_karyawan.is_active = 0
+                        AND master_karyawan.effective_date IS NOT NULL
+                        AND DATE_FORMAT(DATE_ADD(master_karyawan.effective_date, INTERVAL 1 MONTH), "%Y-%m") >= ?
+                    )
+                )',
+                [$request->periode_payroll]
+            )
             ->where('rekap_masuk_kerja.bulan', $request->periode_payroll);
             // ->where('rekap_masuk_kerja.is_active', true);
             if($request->status_karyawan == 'Supervisor'){
@@ -336,7 +340,7 @@ class KalkulasiPayrollController extends Controller
             
             // Proses pengurangan kasbon
             // dd(new Kasbon, $request->periode_payroll, $request->nik_karyawan);
-            $cek_kasbon = Kasbon::where('nik_karyawan', $request->nik_karyawan)
+            $cek_kasbon = Kasbon::where('id_karyawan', $request->id_karyawan)
             ->where('is_active', true)
             ->where('bulan_mulai_pemotongan', '<=', $request->periode_payroll)
             ->where('sisa_tenor', '>', 0)
@@ -356,7 +360,7 @@ class KalkulasiPayrollController extends Controller
             }
 
             // proses pengurangan denda
-            $cek_denda = DendaKaryawan::where('nik_karyawan', $request->nik_karyawan)
+            $cek_denda = DendaKaryawan::where('id_karyawan', $request->id_karyawan)
                 ->where('is_active', true)
                 ->where('bulan_mulai_pemotongan', '<=', $request->periode_payroll)
                 ->where('sisa_tenor', '>', 0)
@@ -375,33 +379,28 @@ class KalkulasiPayrollController extends Controller
             }
 
             // proses pengurangan pencadangan upah
-            $cek_deposit = PencadanganUpah::where('nik_karyawan', $request->nik_karyawan)
+            $cek_deposit = PencadanganUpah::where('id_karyawan', $request->id_karyawan)
             ->where('is_active', true)
             ->where('bulan_efektif', '<=', $request->periode_payroll)
             ->where('status', 'ONGOING')
             ->first();
 
             if ($cek_deposit) {
-                if($cek_deposit->tenor_berjalan == $cek_deposit->tenor){
-                    $cek_deposit->status = 'END';
+                $pcAmountRaw = str_replace(['.', ','], '', (string) ($request->pencadangan_upah ?? ''));
+                if ($pcAmountRaw === '' || (float) $pcAmountRaw == 0) {
+                    $cek_deposit = null;
                 }
-                if($cek_deposit->tenor_berjalan < 0){
-                    if($cek_deposit->tenor_berjalan == '-1'){
-                        $cek_deposit->tenor_berjalan = $cek_deposit->tenor_berjalan + 2;
-                    } else {
-                        $cek_deposit->tenor_berjalan = $cek_deposit->tenor_berjalan + 1;
-                    }
+            }
+
+            if ($cek_deposit) {
+                $employeeStatus = $request->status_karyawan
+                    ?? MasterKaryawan::where('id', $request->id_karyawan)->value('status_karyawan');
+
+                if (PencadanganUpahPayrollService::advanceOnPayrollSubmit($cek_deposit, $employeeStatus)) {
+                    $cek_deposit->updated_by = $this->karyawan;
+                    $cek_deposit->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                    $cek_deposit->save();
                 }
-                if($cek_deposit->tenor_berjalan > 0 && $cek_deposit->nominal_berjalan < 0){
-                    $cek_deposit->nominal_berjalan = abs($cek_deposit->nominal_berjalan);
-                }
-                if($cek_deposit->tenor_berjalan > 0 && $cek_deposit->tenor_berjalan < $cek_deposit->tenor){
-                    $cek_deposit->tenor_berjalan = $cek_deposit->tenor_berjalan + 1;
-                }
-                
-                $cek_deposit->updated_by = $this->karyawan;
-                $cek_deposit->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-                $cek_deposit->save();
             }
 
             DB::commit();
@@ -433,7 +432,7 @@ class KalkulasiPayrollController extends Controller
             $payroll->save();
 
             // Proses pengembalian kasbon
-            $cek_kasbon = Kasbon::where('nik_karyawan', $payroll->nik_karyawan)
+            $cek_kasbon = Kasbon::where('id_karyawan', $payroll->id_karyawan)
             ->where('is_active', true)
             ->where('bulan_mulai_pemotongan', '<=', $request->periode_payroll)
             ->first();
@@ -451,7 +450,7 @@ class KalkulasiPayrollController extends Controller
             }
 
             // proses pengembalian denda
-            $cek_denda = DendaKaryawan::where('nik_karyawan', $payroll->nik_karyawan)
+            $cek_denda = DendaKaryawan::where('id_karyawan', $payroll->id_karyawan)
                 ->where('is_active', true)
                 ->where('bulan_mulai_pemotongan', '<=', $request->periode_payroll)
                 ->first();
@@ -469,25 +468,15 @@ class KalkulasiPayrollController extends Controller
             }
 
             // proses pengembalian pencadangan upah
-            $cek_deposit = PencadanganUpah::where('nik_karyawan', $payroll->nik_karyawan)
-            ->where('is_active', true)
-            ->where('bulan_efektif', '<=', $request->periode_payroll)
-            ->first();
+            $cek_deposit = PencadanganUpah::where('id_karyawan', $payroll->id_karyawan)
+                ->where('is_active', true)
+                ->where('bulan_efektif', '<=', $request->periode_payroll)
+                ->whereIn('status', ['ONGOING', 'END'])
+                ->orderByDesc('id')
+                ->first();
 
-            if ($cek_deposit) {
-                if ($cek_deposit->tenor_berjalan == $cek_deposit->tenor) {
-                    $cek_deposit->status = 'ONGOING';
-                } 
-                if ($cek_deposit->tenor_berjalan < 0) {
-                    $cek_deposit->tenor_berjalan = $cek_deposit->tenor_berjalan - 1;
-                } 
-                if ($cek_deposit->tenor_berjalan > 0) {
-                    $cek_deposit->tenor_berjalan = $cek_deposit->tenor_berjalan - ($cek_deposit->tenor_berjalan == '1' ? 2 : 1);
-                    if ($cek_deposit->nominal_berjalan < 0 ||  $cek_deposit->tenor_berjalan < 0) {
-                        $cek_deposit->nominal_berjalan = -abs($cek_deposit->nominal_berjalan);
-                    }
-                }
-                
+            $payrollPcAmount = (float) ($payroll->pencadangan_upah ?? 0);
+            if ($cek_deposit && $payrollPcAmount != 0 && PencadanganUpahPayrollService::revertOnPayrollCancel($cek_deposit)) {
                 $cek_deposit->updated_by = $this->karyawan;
                 $cek_deposit->updated_at = DATE('Y-m-d H:i:s');
                 $cek_deposit->save();
