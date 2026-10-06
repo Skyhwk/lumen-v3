@@ -17,6 +17,7 @@ use App\Services\Hr\HrFormAttachmentStorage;
 use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\HrTableMode;
 use App\Services\Hr\LegacyHrMirror;
+use App\Services\Hr\Portal\HrdLeaveVoidService;
 use App\Services\Hr\Portal\PortalLeaveDatatableQuery;
 use App\Services\Hr\PortalHrSync;
 use App\Services\Hr\WorkflowStatus;
@@ -180,6 +181,7 @@ class PermohonanCutiController extends Controller
                 'leave_requests.description as keterangan'
             )
             ->where('leave_requests.status', 'Approved Atasan')
+            ->where('leave_requests.is_active', 1)
             ->whereNull('leave_requests.approved_hrd_by')
             ->whereNull('leave_requests.rejected_atasan_by')
             ->whereNull('leave_requests.rejected_hrd_by')
@@ -243,6 +245,7 @@ class PermohonanCutiController extends Controller
                 'leave_requests.created_at as diajukan_pada',
                 'leave_requests.description as keterangan'
             )
+            ->where('leave_requests.is_active', 1)
             ->where(function ($q) {
                 $q->whereNotNull('leave_requests.approved_hrd_by')
                     ->orWhereNotNull('leave_requests.rejected_atasan_by')
@@ -254,6 +257,58 @@ class PermohonanCutiController extends Controller
         $dt = $this->applyDatatablesFilter($dt);
 
         return $dt->make(true);
+    }
+
+    /**
+     * Void / batalkan permohonan cuti oleh HRD (antrian portal).
+     */
+    public function voidCuti(Request $request)
+    {
+        $reason = trim((string) ($request->keterangan ?? $request->void_reason ?? ''));
+        if ($reason === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Alasan void wajib diisi',
+            ], 422);
+        }
+
+        $actor = MasterKaryawan::find($this->user_id);
+        if (!$actor) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data karyawan tidak ditemukan',
+            ], 403);
+        }
+
+        DB::beginTransaction();
+        try {
+            app(HrdLeaveVoidService::class)->void(
+                $this->resolveLeavePortalApiId($request->id),
+                $this->karyawan,
+                $reason
+            );
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Permohonan cuti berhasil divoid',
+            ], 200);
+        } catch (\InvalidArgumentException $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan sistem',
+                'error' => 'Error: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function tabCountsHrd(Request $request)
@@ -268,11 +323,13 @@ class PermohonanCutiController extends Controller
             $base = LeaveRequest::on('intilab_apps')->whereYear('leave_requests.start_date', $year);
             $onProgress = (clone $base)
                 ->where('leave_requests.status', 'Approved Atasan')
+                ->where('leave_requests.is_active', 1)
                 ->whereNull('leave_requests.approved_hrd_by')
                 ->whereNull('leave_requests.rejected_atasan_by')
                 ->whereNull('leave_requests.rejected_hrd_by')
                 ->count();
             $processed = (clone $base)
+                ->where('leave_requests.is_active', 1)
                 ->where(function ($q) {
                     $q->whereNotNull('leave_requests.approved_hrd_by')
                         ->orWhereNotNull('leave_requests.rejected_atasan_by')
