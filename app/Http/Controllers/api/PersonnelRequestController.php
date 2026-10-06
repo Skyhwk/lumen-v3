@@ -1950,13 +1950,14 @@ class PersonnelRequestController extends Controller
                                     ->send();
                     }
 
-                    $phone = $recruitment->no_telepon ?: ($recruitment->no_hp ?? null);
-                    if (!empty($phone)) {
-                        $waGen = new GenerateMessageAtsWhatsapp($recruitment);
-                        $waMessage = $waGen->RejectedCandidateSelection();
-                        $sendWa = new SendWhatsapp($phone, $waMessage);
-                        $sendWa->send();
-                    }
+                    // DISABLED: WhatsApp rejection info (kebijakan HRD — notifikasi rejection via email saja)
+                    // $phone = $recruitment->no_telepon ?: ($recruitment->no_hp ?? null);
+                    // if (!empty($phone)) {
+                    //     $waGen = new GenerateMessageAtsWhatsapp($recruitment);
+                    //     $waMessage = $waGen->RejectedCandidateSelection();
+                    //     $sendWa = new SendWhatsapp($phone, $waMessage);
+                    //     $sendWa->send();
+                    // }
                 } catch (\Throwable $th) {
                     Log::error('Gagal mengirim notifikasi reject kandidat: ' . $th->getMessage());
                 }

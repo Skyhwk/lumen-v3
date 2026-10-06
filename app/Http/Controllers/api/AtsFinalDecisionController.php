@@ -2037,13 +2037,13 @@ class AtsFinalDecisionController extends Controller
                     ->send();
             }
 
-            $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
-            if (!empty($phone)) {
-                $waObj = new GenerateMessageAtsWhatsapp($applicant);
-                $waMessage = $waObj->RejectedCandidateSelection();
-
-                (new SendWhatsapp($phone, $waMessage))->send();
-            }
+            // DISABLED: WhatsApp rejection info (kebijakan HRD — notifikasi rejection via email saja)
+            // $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
+            // if (!empty($phone)) {
+            //     $waObj = new GenerateMessageAtsWhatsapp($applicant);
+            //     $waMessage = $waObj->RejectedCandidateSelection();
+            //     (new SendWhatsapp($phone, $waMessage))->send();
+            // }
         } catch (\Exception $e) {
             \Log::warning('Final decision HRD reject notification failed', [
                 'recruitment_id' => $id,
