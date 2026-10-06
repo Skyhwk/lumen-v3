@@ -295,18 +295,19 @@ class SalaryApprovalController extends Controller
             }
         }
 
-        if (!empty($recruitment->no_telepon)) {
-            try {
-                $message = (new GenerateMessageAtsWhatsapp((object) [
-                    'nama_lengkap' => $recruitment->nama_lengkap,
-                    'posisi_di_lamar' => $this->positionLabel($recruitment),
-                    'jenis_kelamin' => $recruitment->jenis_kelamin,
-                ]))->RejectedCandidateSelection();
-                (new SendWhatsapp($recruitment->no_telepon, $message))->send();
-            } catch (\Throwable $exception) {
-                \Log::warning('Salary offer rejection WhatsApp failed', ['recruitment_id' => $recruitment->id, 'message' => $exception->getMessage()]);
-            }
-        }
+        // DISABLED: WhatsApp rejection info (kebijakan HRD — notifikasi rejection via email saja)
+        // if (!empty($recruitment->no_telepon)) {
+        //     try {
+        //         $message = (new GenerateMessageAtsWhatsapp((object) [
+        //             'nama_lengkap' => $recruitment->nama_lengkap,
+        //             'posisi_di_lamar' => $this->positionLabel($recruitment),
+        //             'jenis_kelamin' => $recruitment->jenis_kelamin,
+        //         ]))->RejectedCandidateSelection();
+        //         (new SendWhatsapp($recruitment->no_telepon, $message))->send();
+        //     } catch (\Throwable $exception) {
+        //         \Log::warning('Salary offer rejection WhatsApp failed', ['recruitment_id' => $recruitment->id, 'message' => $exception->getMessage()]);
+        //     }
+        // }
     }
 
     private function rejectionEmail($recruitment)
