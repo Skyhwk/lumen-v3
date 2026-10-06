@@ -1563,6 +1563,8 @@ class SamplerTrackingService
             ->orderBy('tanggal_sampling')
             ->orderBy('jam_mulai')
             ->orderBy('nama_perusahaan')
+            ->orderBy('no_order')
+            ->orderBy('id')
             ->get();
 
         foreach ($sessions as $session) {
@@ -2686,84 +2688,133 @@ public function buildTrackingRows($sessions)
         return $movementGroup;
     }
 
-    public function updateRouteOrder(array $payload, $actorName = null)
+    public function updateRouteOrder(array $payload, $actorName = null, $isFixingOverride = false, $dateOverride = null)
     {
         $table = 'sampler_tracking_route_overrides';
         if (!Schema::hasTable($table)) {
             throw new \Exception('Tabel sampler_tracking_route_overrides belum ada.');
         }
 
-        $date = $this->today();
+        $date = $dateOverride ?: $this->today();
         $samplerId = $payload['sampler_id'] ?? null;
         $samplerName = $payload['sampler_name'] ?? $actorName;
         $samplerKey = $this->samplerRouteKey($samplerId, $samplerName);
         $reason = trim($payload['reason'] ?? '');
-        $items = collect($payload['items'] ?? [])->values();
+        $items = collect($payload['items'] ?? [])->sortBy(function ($item, $index) {
+            return (int) ($item['route_order'] ?? ($index + 1));
+        })->values();
         $now = $this->now();
 
         if (!$samplerKey || $items->isEmpty() || $reason === '') {
             throw new \Exception('Urutan tujuan dan keterangan wajib diisi.');
         }
 
-        DB::transaction(function () use ($table, $date, $samplerKey, $samplerId, $samplerName, $reason, $items, $now, $actorName) {
+        DB::transaction(function () use ($table, $date, $samplerKey, $samplerId, $samplerName, $reason, $items, $now, $actorName, $isFixingOverride) {
             // Lock the same member rows used by storeEvent before checking the route.
             $sessions = $this->listByDate($date, $samplerId, $samplerName);
-            $memberIds = $sessions->flatMap(function ($session) use ($samplerId, $samplerName) {
-                return $session->activeMembers->filter(function ($member) use ($samplerId, $samplerName) {
-                    return $samplerId ? (string) $member->sampler_id === (string) $samplerId
-                        : $member->sampler_name === $samplerName;
-                })->flatMap(function ($member) {
-                    return $member->activity_member_ids ?? [$member->id];
+            $expectedIds = $sessions->pluck('id')->map(function ($id) { return (int) $id; })->sort()->values()->all();
+            $submittedIds = $items->pluck('session_id')->map(function ($id) { return (int) $id; })->values()->all();
+            $sortedSubmittedIds = $submittedIds;
+            sort($sortedSubmittedIds);
+            if ($expectedIds !== $sortedSubmittedIds || count($submittedIds) !== count(array_unique($submittedIds))) {
+                throw ValidationException::withMessages([
+                    'items' => ['Daftar tujuan sudah berubah. Muat ulang urutan sebelum menyimpan.'],
+                ]);
+            }
+
+            // One route change applies to samplers who share every stop in this route.
+            // A teammate's additional stops keep their existing positions.
+            $teamSamplerIds = $sessions->reduce(function ($sharedIds, $session) {
+                $sessionIds = $session->activeMembers->pluck('sampler_id')->filter()
+                    ->map(function ($id) { return (int) $id; })->unique()->values()->all();
+                return $sharedIds === null ? $sessionIds : array_values(array_intersect($sharedIds, $sessionIds));
+            }, null);
+            $targetSamplerIds = $samplerId && !empty($teamSamplerIds)
+                ? array_values(array_unique(array_merge([(int) $samplerId], $teamSamplerIds)))
+                : [$samplerId];
+            $routes = collect($targetSamplerIds)->map(function ($targetSamplerId) use ($sessions, $samplerId, $samplerName, $samplerKey, $date, $submittedIds) {
+                $targetMember = $sessions->flatMap(function ($session) { return $session->activeMembers; })
+                    ->first(function ($member) use ($targetSamplerId) {
+                        return $targetSamplerId && (int) $member->sampler_id === (int) $targetSamplerId;
+                    });
+                $targetName = $targetMember ? $targetMember->sampler_name : $samplerName;
+                $targetSessions = (string) $targetSamplerId === (string) $samplerId
+                    ? $sessions : $this->listByDate($date, $targetSamplerId, $targetName);
+                $routeIds = $targetSessions->pluck('id')->map(function ($id) { return (int) $id; })->values();
+                if (count(array_intersect($submittedIds, $routeIds->all())) !== count($submittedIds)) {
+                    throw ValidationException::withMessages([
+                        'items' => ['Rute anggota tim sudah berubah. Muat ulang urutan sebelum menyimpan.'],
+                    ]);
+                }
+                $nextSharedIndex = 0;
+                $orderedIds = $routeIds->map(function ($id) use ($submittedIds, &$nextSharedIndex) {
+                    if (!in_array($id, $submittedIds, true)) return $id;
+                    return $submittedIds[$nextSharedIndex++];
+                })->all();
+
+                return [
+                    'sampler_id' => $targetSamplerId,
+                    'sampler_name' => $targetName,
+                    'sampler_key' => $this->samplerRouteKey($targetSamplerId, $targetName) ?: $samplerKey,
+                    'sessions' => $targetSessions,
+                    'ordered_ids' => $orderedIds,
+                ];
+            });
+            $memberIds = $routes->flatMap(function ($route) {
+                return $route['sessions']->flatMap(function ($session) use ($route) {
+                    return $session->activeMembers->filter(function ($member) use ($route) {
+                        return $route['sampler_id']
+                            ? (int) $member->sampler_id === (int) $route['sampler_id']
+                            : $member->sampler_name === $route['sampler_name'];
+                    })->flatMap(function ($member) {
+                        return $member->activity_member_ids ?? [$member->id];
+                    });
                 });
             })->unique()->values();
             SamplerTrackingMember::whereIn('id', $memberIds)->orderBy('id')->lockForUpdate()->get();
-            if (SamplerTrackingEvent::whereIn('sampler_tracking_member_id', $memberIds)
+            if (!$isFixingOverride && SamplerTrackingEvent::whereIn('sampler_tracking_member_id', $memberIds)
                 ->whereIn('event_type', ['departure', 'checkin'])->exists()) {
                 throw ValidationException::withMessages([
                     'items' => ['Urutan tujuan tidak dapat diubah setelah berangkat atau check in.'],
                 ]);
             }
-            DB::table($table)
-                ->where('tanggal_sampling', $date)
-                ->where('sampler_key', $samplerKey)
-                ->update([
-                    'is_active' => 0,
-                    'updated_by' => $actorName,
-                    'updated_at' => $now,
-                ]);
+            foreach ($routes as $route) {
+                DB::table($table)
+                    ->where('tanggal_sampling', $date)
+                    ->where('sampler_key', $route['sampler_key'])
+                    ->update([
+                        'is_active' => 0,
+                        'updated_by' => $actorName,
+                        'updated_at' => $now,
+                    ]);
 
-            foreach ($items as $index => $item) {
-                $sessionId = $item['session_id'] ?? null;
-                if (!$sessionId) {
-                    continue;
+                foreach ($route['ordered_ids'] as $index => $sessionId) {
+                    $keys = [
+                        'tanggal_sampling' => $date,
+                        'sampler_key' => $route['sampler_key'],
+                        'sampler_tracking_session_id' => $sessionId,
+                    ];
+                    $values = [
+                        'sampler_id' => $route['sampler_id'],
+                        'sampler_name' => $route['sampler_name'],
+                        'route_order' => $index + 1,
+                        'reason' => $reason,
+                        'is_active' => 1,
+                        'updated_by' => $actorName,
+                        'updated_at' => $now,
+                    ];
+
+                    $existing = DB::table($table)->where($keys)->first();
+                    if ($existing) {
+                        DB::table($table)->where('id', $existing->id)->update($values);
+                        continue;
+                    }
+
+                    DB::table($table)->insert(array_merge($keys, $values, [
+                        'created_by' => $actorName,
+                        'created_at' => $now,
+                    ]));
                 }
-
-                $keys = [
-                    'tanggal_sampling' => $date,
-                    'sampler_key' => $samplerKey,
-                    'sampler_tracking_session_id' => $sessionId,
-                ];
-
-                $values = [
-                    'sampler_id' => $samplerId,
-                    'sampler_name' => $samplerName,
-                    'route_order' => (int) ($item['route_order'] ?? ($index + 1)),
-                    'reason' => $reason,
-                    'is_active' => 1,
-                    'updated_by' => $actorName,
-                    'updated_at' => $now,
-                ];
-
-                $existing = DB::table($table)->where($keys)->first();
-                if ($existing) {
-                    DB::table($table)->where('id', $existing->id)->update($values);
-                    continue;
-                }
-
-                DB::table($table)->insert(array_merge($keys, $values, [
-                    'created_by' => $actorName,
-                    'created_at' => $now,
-                ]));
             }
         }, 5);
 
@@ -2795,6 +2846,7 @@ public function buildTrackingRows($sessions)
             return str_pad($order, 6, '0', STR_PAD_LEFT)
                 . '|' . ($session->jam_mulai ?: '')
                 . '|' . ($session->nama_perusahaan ?: '')
+                . '|' . ($session->no_order ?: '')
                 . '|' . str_pad($session->id, 10, '0', STR_PAD_LEFT);
         })->values();
     }
