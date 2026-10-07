@@ -275,6 +275,9 @@ class FdlKebisinganSoundMeterController extends Controller
 
     public function updateNoSampel(Request $request)
     {
+        $request->merge([
+            'no_sampel_baru' => trim((string) $request->input('no_sampel_baru', '')),
+        ]);
         if (!isset($request->id) || $request->id == null) {
             
                 $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
