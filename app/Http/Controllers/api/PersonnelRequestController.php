@@ -551,6 +551,11 @@ class PersonnelRequestController extends Controller
         return null;
     }
 
+    private function scopeExcludeRejectedKandidat($query)
+    {
+        return $query->whereRaw('COALESCE(is_rejected_kandidat, 0) = 0');
+    }
+
     private function ownedCandidateBaseQuery()
     {
         $ownedRequestIds = $this->ownedPersonnelRequestQuery()->pluck('id');
@@ -564,7 +569,6 @@ class PersonnelRequestController extends Controller
                 'candidateProfile',
             ])
             ->where('is_active', 1)
-            ->where('is_rejected_kandidat', 0)
             ->whereIn('personnel_request_id', $ownedRequestIds->isEmpty() ? [-1] : $ownedRequestIds);
     }
 
@@ -586,8 +590,10 @@ class PersonnelRequestController extends Controller
 
     private function resolveApprovedCandidateIds(): array
     {
-        return $this->ownedCandidateBaseQuery()
-            ->whereIn('status', $this->approvedCandidatePipelineStatuses())
+        return $this->scopeExcludeRejectedKandidat(
+            $this->ownedCandidateBaseQuery()
+                ->whereIn('status', $this->approvedCandidatePipelineStatuses())
+        )
             ->orderByDesc('id')
             ->pluck('id')
             ->values()
@@ -808,8 +814,13 @@ class PersonnelRequestController extends Controller
                     'pendingDecisionSalary',
                     'openDecisionSalary',
                 ])
-                ->whereIn('id', $ids ?: [-1])
-                ->orderByDesc('id');
+                ->whereIn('id', $ids ?: [-1]);
+
+            if ($category === 'approved_candidate') {
+                $this->scopeExcludeRejectedKandidat($data);
+            }
+
+            $data->orderByDesc('id');
 
             return Datatables::of($data)
                 ->addColumn('no_request', function ($row) {
