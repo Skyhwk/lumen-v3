@@ -8,6 +8,7 @@ use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
 use App\Services\RecruitmentDecisionActionEmailService;
+use App\Services\RecruitmentDecisionActionTelegramService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -108,6 +109,7 @@ class DirectorDecisionController extends Controller
                     'management_decision_kept'
                 );
                 app(RecruitmentDecisionActionEmailService::class)->notifyFinalDecision($recruitment, 'keep');
+                app(RecruitmentDecisionActionTelegramService::class)->notifyFinalDecision($recruitment, $decision);
 
                 $result = $this->result($recruitment, 'kept', $now->toDateTimeString(), false);
                 $result['requested_decision'] = 'keep';
@@ -136,6 +138,7 @@ class DirectorDecisionController extends Controller
                 $decision === 'reject' ? ['reject_reason' => $rejectReason] : []
             );
             app(RecruitmentDecisionActionEmailService::class)->notifyFinalDecision($recruitment, $decision);
+            app(RecruitmentDecisionActionTelegramService::class)->notifyFinalDecision($recruitment, $decision, ['reject_reason' => $rejectReason]);
 
             if ($decision === 'reject') {
                 app(AtsNotificationService::class)->notifyHrdTeam(
