@@ -12,4 +12,11 @@ class AllQuote extends Sector
     {
         return $this->belongsTo(OrderHeader::class, 'no_document', 'no_document');
     }
+
+    public function lhpManuals()
+    {
+        return $this->hasMany(LhpManual::class, 'no_quotation', 'no_document')
+            ->where('is_active', true)
+            ->whereNull('deleted_at');
+    }
 }

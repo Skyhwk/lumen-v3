@@ -2064,4 +2064,80 @@ class AtsFinalDecisionController extends Controller
             'data'    => $applicant->fresh(),
         ], 200);
     }
+
+    public function void(Request $request)
+    {
+        $id = $request->id;
+        $reason = trim((string) ($request->reason ?? ''));
+
+        if (!$id || $reason === '') {
+            return response()->json([
+                'message' => 'ID dan alasan wajib diisi',
+                'status' => false,
+            ], 400);
+        }
+
+        $by = $this->karyawan;
+        $at = Carbon::now();
+
+        $recruitment = NewRecruitment::find($id);
+        if (!$recruitment) {
+            return response()->json([
+                'message' => 'Data kandidat tidak ditemukan',
+                'status' => false,
+            ], 404);
+        }
+
+        if ((int) ($recruitment->is_active ?? 1) === 0 || strtolower(trim((string) ($recruitment->status ?? ''))) === 'void') {
+            return response()->json([
+                'message' => 'Kandidat sudah divoid sebelumnya',
+                'status' => false,
+            ], 422);
+        }
+
+        if (!RecruitmentStatusService::matchesFinalDecisionStageTab($recruitment, 'salary_offer')) {
+            return response()->json([
+                'message' => 'Void hanya dapat dilakukan untuk kandidat pada tahap Salary Offer',
+                'status' => false,
+            ], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $history = json_decode($recruitment->meta_history ?: '[]', true);
+            $history = is_array($history) ? $history : [];
+            $history[] = [
+                'status' => 'salary_offer_void',
+                'reason' => $reason,
+                'by' => $by,
+                'at' => $at->toDateTimeString(),
+                'previous_status' => $recruitment->status ?? null,
+            ];
+
+            DB::table('new_recruitment')->where('id', $id)->update([
+                'status' => 'void',
+                'is_rejected_kandidat' => true,
+                'is_rejected_kandidat_by' => $by ?: null,
+                'is_rejected_kandidat_at' => $at,
+                'is_rejected_kandidat_reason' => $reason,
+                'meta_history' => json_encode(array_values($history)),
+                'updated_at' => $at,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Kandidat berhasil divoid',
+                'status' => true,
+            ], 200);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Gagal void kandidat: ' . $e->getMessage(),
+                'status' => false,
+            ], 500);
+        }
+    }
 }

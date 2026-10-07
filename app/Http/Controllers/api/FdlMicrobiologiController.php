@@ -268,6 +268,9 @@ class FdlMicrobiologiController extends Controller
 
     public function updateNoSampel(Request $request)
     {
+        $request->merge([
+            'no_sampel_baru' => trim((string) $request->input('no_sampel_baru', '')),
+        ]);
         if (isset($request->id) && $request->id != null) {
             DB::beginTransaction();
             try {

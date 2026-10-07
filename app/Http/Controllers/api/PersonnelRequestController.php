@@ -8,8 +8,10 @@ use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,Mast
 use App\Services\SallaryOfferService;
 use App\Services\GenerateAssessmentDocumentService;
 use App\Services\CandidateDocumentAttachmentService;
+use App\Services\RecruitmentDecisionActionTelegramService;
 use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService,RecruitmentStatusService,RequesterSalaryApprovalService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
+use App\Helpers\ShioElemenHelper;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -551,6 +553,11 @@ class PersonnelRequestController extends Controller
         return null;
     }
 
+    private function scopeExcludeRejectedKandidat($query)
+    {
+        return $query->whereRaw('COALESCE(is_rejected_kandidat, 0) = 0');
+    }
+
     private function ownedCandidateBaseQuery()
     {
         $ownedRequestIds = $this->ownedPersonnelRequestQuery()->pluck('id');
@@ -564,8 +571,38 @@ class PersonnelRequestController extends Controller
                 'candidateProfile',
             ])
             ->where('is_active', 1)
-            ->where('is_rejected_kandidat', 0)
             ->whereIn('personnel_request_id', $ownedRequestIds->isEmpty() ? [-1] : $ownedRequestIds);
+    }
+
+    private function approvedCandidatePipelineStatuses(): array
+    {
+        return [
+            'management_decision',
+            'internal_sallary_offer',
+            'salary_offer',
+            'sallary_offer',
+            'finance_review',
+            'waiting_approve_finance',
+            'approved',
+            'selesai',
+        ];
+    }
+
+    private function resolveApprovedCandidateIds(): array
+    {
+        return $this->scopeExcludeRejectedKandidat(
+            $this->ownedCandidateBaseQuery()
+                ->whereIn('status', $this->approvedCandidatePipelineStatuses())
+        )
+            ->orderByDesc('id')
+            ->pluck('id')
+            ->values()
+            ->all();
+    }
+
+    private function candidateStatusDisplayLabel($row): string
+    {
+        return RecruitmentStatusService::resolveApprovedCandidateUserStatusLabel($row);
     }
 
     private function resolveCandidateActionIds(?string $category): array
@@ -576,6 +613,10 @@ class PersonnelRequestController extends Controller
 
         if ($category === 'salary_approval') {
             return $this->resolveSalaryApprovalIds();
+        }
+
+        if ($category === 'approved_candidate') {
+            return $this->resolveApprovedCandidateIds();
         }
 
         return $this->ownedCandidateBaseQuery()
@@ -721,6 +762,7 @@ class PersonnelRequestController extends Controller
                 'today_scheduled' => 0,
                 'overdue' => 0,
                 'salary_approval' => count($this->resolveSalaryApprovalIds()),
+                'approved_candidate' => count($this->resolveApprovedCandidateIds()),
             ];
 
             $this->ownedCandidateBaseQuery()
@@ -753,7 +795,7 @@ class PersonnelRequestController extends Controller
     {
         try {
             $category = $request->input('action_category');
-            $allowed = ['shortlisted', 'unscheduled', 'scheduled', 'today_scheduled', 'overdue', 'salary_approval'];
+            $allowed = ['shortlisted', 'unscheduled', 'scheduled', 'today_scheduled', 'overdue', 'salary_approval', 'approved_candidate'];
             if (!in_array($category, $allowed, true)) {
                 return response()->json(['message' => 'Kategori tindakan kandidat tidak valid.'], 422);
             }
@@ -772,8 +814,14 @@ class PersonnelRequestController extends Controller
                     'pendingDecisionSalary',
                     'openDecisionSalary',
                 ])
-                ->whereIn('id', $ids ?: [-1])
-                ->orderByDesc('id');
+                ->whereIn('id', $ids ?: [-1]);
+
+            if ($category === 'approved_candidate') {
+                $this->scopeExcludeRejectedKandidat($data);
+                $data->whereNotIn('status', ['hired', 'training']);
+            }
+
+            $data->orderByDesc('id');
 
             return Datatables::of($data)
                 ->addColumn('no_request', function ($row) {
@@ -793,9 +841,22 @@ class PersonnelRequestController extends Controller
                     return optional($row->userInterview)->tgl_interview;
                 })
                 ->addColumn('action_category', function ($row) use ($category) {
-                    return $category === 'salary_approval'
-                        ? 'salary_approval'
-                        : $this->resolveCandidateActionCategory($row);
+                    if ($category === 'salary_approval') {
+                        return 'salary_approval';
+                    }
+                    if ($category === 'approved_candidate') {
+                        return 'approved_candidate';
+                    }
+
+                    return $this->resolveCandidateActionCategory($row);
+                })
+                ->addColumn('status_display', function ($row) {
+                    return $this->candidateStatusDisplayLabel($row);
+                })
+                ->addColumn('pipeline_status_label', function ($row) {
+                    $pipeline = RecruitmentStatusService::resolvePipelineStatus($row);
+
+                    return $pipeline['label'] ?? null;
                 })
                 ->addColumn('decision_salary_id', function ($row) {
                     return optional($row->openDecisionSalary)->id
@@ -853,6 +914,46 @@ class PersonnelRequestController extends Controller
                     });
                 })
                 ->filterColumn('status', fn($q, $k) => $q->where('status', 'like', "%{$k}%"))
+                ->filterColumn('status_display', function ($q, $keyword) {
+                    $q->where('status', 'like', "%{$keyword}%");
+                })
+                ->addColumn('usia', function ($row) {
+                    $birthYear = $this->extractCandidateBirthYear($row);
+                    if ($birthYear) {
+                        return (Carbon::now()->year - $birthYear) . ' thn';
+                    }
+
+                    return '-';
+                })
+                ->filterColumn('usia', function ($q, $keyword) {
+                    $this->filterCandidateUsiaColumn($q, $keyword);
+                })
+                ->addColumn('display_shio', function ($row) {
+                    $shioElemen = $this->resolveCandidateShioElemen($row);
+
+                    return !empty($shioElemen['shio']) ? $shioElemen['shio'] : '-';
+                })
+                ->filterColumn('display_shio', function ($q, $keyword) {
+                    $this->whereAnyExistingNewRecruitmentLike($q, [
+                        'shio',
+                        'tempat_tanggal_lahir',
+                        'tempat_lahir',
+                        'tanggal_lahir',
+                    ], $keyword);
+                })
+                ->addColumn('display_elemen', function ($row) {
+                    $shioElemen = $this->resolveCandidateShioElemen($row);
+
+                    return !empty($shioElemen['elemen']) ? $shioElemen['elemen'] : '-';
+                })
+                ->filterColumn('display_elemen', function ($q, $keyword) {
+                    $this->whereAnyExistingNewRecruitmentLike($q, [
+                        'elemen',
+                        'tempat_tanggal_lahir',
+                        'tempat_lahir',
+                        'tanggal_lahir',
+                    ], $keyword);
+                })
                 ->filterColumn('nilai_kecocokan', fn($q, $k) => $q->where('nilai_kecocokan', 'like', "%{$k}%"))
                 ->make(true);
         } catch (\Throwable $th) {
@@ -1992,6 +2093,11 @@ class PersonnelRequestController extends Controller
                     'new_recruitment_id' => $recruitment->id ?? null,
                 ]);
             }
+
+            app(RecruitmentDecisionActionTelegramService::class)->notifyCandidateApprovalRequest($recruitment, [
+                'approved_by' => $this->karyawan,
+                'sallary_offer_user' => $salaryNormalized ?? null,
+            ]);
         }
 
         return response()->json(['message' => 'Keputusan berhasil disimpan!']);
@@ -2289,6 +2395,162 @@ class PersonnelRequestController extends Controller
         $query->where('is_active', 1)
             ->whereRaw('COALESCE(is_rejected_kandidat, 0) = 0')
             ->whereRaw("LOWER(TRIM(COALESCE(status, ''))) NOT IN ('assessment', 'hired', 'training')");
+    }
+
+    private function resolveCandidateBirthDateForShio($row): ?string
+    {
+        if (!empty($row->tanggal_lahir)) {
+            return (string) $row->tanggal_lahir;
+        }
+
+        foreach (['tempat_tanggal_lahir', 'tempat_lahir'] as $field) {
+            if (empty($row->{$field})) {
+                continue;
+            }
+            $value = trim((string) $row->{$field});
+            if ($value !== '' && ShioElemenHelper::parseBirthDateParts($value)) {
+                return $value;
+            }
+        }
+
+        $ttl = $this->getCandidateTtlString($row);
+        if ($ttl && ShioElemenHelper::parseBirthDateParts($ttl)) {
+            return $ttl;
+        }
+
+        return $ttl ?: null;
+    }
+
+    private function resolveCandidateShioElemen($row): array
+    {
+        $birthDate = $this->resolveCandidateBirthDateForShio($row);
+
+        return ShioElemenHelper::resolve(
+            $birthDate,
+            $row->shio ?? null,
+            $row->elemen ?? null
+        );
+    }
+
+    private function getCandidateTtlString($row)
+    {
+        if (!empty($row->tempat_tanggal_lahir)) {
+            return $row->tempat_tanggal_lahir;
+        }
+        $parts = [];
+        if (!empty($row->tempat_lahir)) {
+            $parts[] = $row->tempat_lahir;
+        }
+        if (!empty($row->tanggal_lahir)) {
+            $parts[] = $row->tanggal_lahir;
+        }
+
+        return count($parts) > 0 ? implode(', ', $parts) : null;
+    }
+
+    private function extractCandidateBirthYear($row)
+    {
+        $ttl = is_string($row) ? $row : $this->getCandidateTtlString($row);
+
+        if (is_object($row) && !empty($row->tanggal_lahir)) {
+            try {
+                $dt = Carbon::parse($row->tanggal_lahir);
+                $year = (int) $dt->year;
+                if ($year >= 1930 && $year <= Carbon::now()->year) {
+                    return $year;
+                }
+                if ($year > 0) {
+                    $last2 = $year % 100;
+                    $currentYY = Carbon::now()->year % 100;
+
+                    return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
+                }
+            } catch (\Exception $e) {
+            }
+        }
+
+        if (!$ttl) {
+            return null;
+        }
+
+        if (preg_match('/\b(19\d\d|20\d\d)\b/', $ttl, $matches)) {
+            return (int) $matches[1];
+        }
+
+        if (preg_match('/\b(\d{4})\b/', $ttl, $matches)) {
+            $year = (int) $matches[1];
+            if ($year >= 1930 && $year <= Carbon::now()->year) {
+                return $year;
+            }
+            if ($year > 0) {
+                $last2 = $year % 100;
+                $currentYY = Carbon::now()->year % 100;
+
+                return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
+            }
+        }
+
+        return null;
+    }
+
+    private function newRecruitmentHasColumn($column)
+    {
+        static $columns = null;
+
+        if ($columns === null) {
+            $columns = Schema::hasTable('new_recruitment')
+                ? array_flip(Schema::getColumnListing('new_recruitment'))
+                : [];
+        }
+
+        return isset($columns[$column]);
+    }
+
+    private function whereAnyExistingNewRecruitmentLike($query, array $columns, $keyword)
+    {
+        $query->where(function ($sub) use ($columns, $keyword) {
+            $applied = false;
+
+            foreach ($columns as $column) {
+                if (!$this->newRecruitmentHasColumn($column)) {
+                    continue;
+                }
+
+                if (!$applied) {
+                    $sub->where($column, 'like', "%{$keyword}%");
+                    $applied = true;
+                    continue;
+                }
+
+                $sub->orWhere($column, 'like', "%{$keyword}%");
+            }
+
+            if (!$applied) {
+                $sub->whereRaw('1 = 0');
+            }
+        });
+    }
+
+    private function filterCandidateUsiaColumn($q, $keyword)
+    {
+        $cleanDigits = preg_replace('/[^0-9]/', '', $keyword);
+        $q->where(function ($sub) use ($keyword, $cleanDigits) {
+            if ($cleanDigits !== '') {
+                $targetYear = Carbon::now()->year - (int) $cleanDigits;
+                if ($this->newRecruitmentHasColumn('tanggal_lahir')) {
+                    $sub->whereYear('tanggal_lahir', $targetYear);
+                }
+                foreach (['tempat_tanggal_lahir', 'tempat_lahir'] as $column) {
+                    if ($this->newRecruitmentHasColumn($column)) {
+                        $sub->orWhere($column, 'like', "%{$cleanDigits}%");
+                    }
+                }
+
+                return;
+            }
+
+            $this->whereAnyExistingNewRecruitmentLike($sub, ['tempat_tanggal_lahir', 'tempat_lahir'], $keyword);
+        });
     }
 
 }

@@ -146,6 +146,13 @@ class QuotationKontrakH extends Sector
         return $this->hasMany(LinkLhp::class, 'no_quotation', 'no_document');
     }
 
+    public function lhpManuals()
+    {
+        return $this->hasMany(LhpManual::class, 'no_quotation', 'no_document')
+            ->where('is_active', true)
+            ->whereNull('deleted_at');
+    }
+
     public function invoices()
     {
         return $this->hasMany(Invoice::class, 'no_quotation', 'no_document')->where('is_active', true);
