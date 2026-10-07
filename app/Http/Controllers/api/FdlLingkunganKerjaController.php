@@ -70,6 +70,9 @@ class FdlLingkunganKerjaController extends Controller
 
     public function updateNoSampel(Request $request)
     {
+        $request->merge([
+            'no_sampel_baru' => trim((string) $request->input('no_sampel_baru', '')),
+        ]);
         if ($request->id != null && $request->id != '') {
             DB::beginTransaction();
             try {

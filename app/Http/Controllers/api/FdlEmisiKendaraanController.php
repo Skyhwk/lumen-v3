@@ -127,6 +127,9 @@ class FdlEmisiKendaraanController extends Controller
     }
 
     public function updateNoSampel(Request $request){
+        $request->merge([
+            'no_sampel_baru' => trim((string) $request->input('no_sampel_baru', '')),
+        ]);
         try {
             $cek_data = DataLapanganEmisiKendaraan::where('id', $request->id)->first();
             if($cek_data != null && $cek_data->no_sampel_lama != null){
