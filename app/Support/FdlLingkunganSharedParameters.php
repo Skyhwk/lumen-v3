@@ -66,6 +66,10 @@ class FdlLingkunganSharedParameters
 
     public static function getReadingThreshold(string $parameterName): int
     {
+        if (self::isDustfallParameter($parameterName)) {
+            return 2;
+        }
+
         $kateg = self::resolveKategoriFromParameterName($parameterName);
         if ($kateg === null) {
             return 1;
@@ -230,8 +234,9 @@ class FdlLingkunganSharedParameters
             }
 
             $kateg = self::resolveKategoriFromParameterName($orderParam);
+            $isDustfall = self::isDustfallParameter($orderParam);
 
-            if ($kateg === null) {
+            if ($kateg === null && !$isDustfall) {
                 if ($shift !== 'L1') {
                     continue;
                 }
@@ -356,6 +361,11 @@ class FdlLingkunganSharedParameters
     public static function parameterHasDurasiInName(string $parameter): bool
     {
         return self::resolveKategoriFromParameterName($parameter) !== null;
+    }
+
+    private static function isDustfallParameter(string $parameterName): bool
+    {
+        return str_contains(strtolower(trim($parameterName)), 'dustfall');
     }
 
     private static function normalizeParameterLabel(string $label): string
