@@ -568,6 +568,37 @@ class PersonnelRequestController extends Controller
             ->whereIn('personnel_request_id', $ownedRequestIds->isEmpty() ? [-1] : $ownedRequestIds);
     }
 
+    private function approvedCandidatePipelineStatuses(): array
+    {
+        return [
+            'management_decision',
+            'internal_sallary_offer',
+            'salary_offer',
+            'sallary_offer',
+            'finance_review',
+            'waiting_approve_finance',
+            'approved',
+            'hired',
+            'training',
+            'selesai',
+        ];
+    }
+
+    private function resolveApprovedCandidateIds(): array
+    {
+        return $this->ownedCandidateBaseQuery()
+            ->whereIn('status', $this->approvedCandidatePipelineStatuses())
+            ->orderByDesc('id')
+            ->pluck('id')
+            ->values()
+            ->all();
+    }
+
+    private function candidateStatusDisplayLabel($row): string
+    {
+        return RecruitmentStatusService::resolveApprovedCandidateUserStatusLabel($row);
+    }
+
     private function resolveCandidateActionIds(?string $category): array
     {
         if (!$category) {
@@ -576,6 +607,10 @@ class PersonnelRequestController extends Controller
 
         if ($category === 'salary_approval') {
             return $this->resolveSalaryApprovalIds();
+        }
+
+        if ($category === 'approved_candidate') {
+            return $this->resolveApprovedCandidateIds();
         }
 
         return $this->ownedCandidateBaseQuery()
@@ -721,6 +756,7 @@ class PersonnelRequestController extends Controller
                 'today_scheduled' => 0,
                 'overdue' => 0,
                 'salary_approval' => count($this->resolveSalaryApprovalIds()),
+                'approved_candidate' => count($this->resolveApprovedCandidateIds()),
             ];
 
             $this->ownedCandidateBaseQuery()
@@ -753,7 +789,7 @@ class PersonnelRequestController extends Controller
     {
         try {
             $category = $request->input('action_category');
-            $allowed = ['shortlisted', 'unscheduled', 'scheduled', 'today_scheduled', 'overdue', 'salary_approval'];
+            $allowed = ['shortlisted', 'unscheduled', 'scheduled', 'today_scheduled', 'overdue', 'salary_approval', 'approved_candidate'];
             if (!in_array($category, $allowed, true)) {
                 return response()->json(['message' => 'Kategori tindakan kandidat tidak valid.'], 422);
             }
@@ -793,9 +829,22 @@ class PersonnelRequestController extends Controller
                     return optional($row->userInterview)->tgl_interview;
                 })
                 ->addColumn('action_category', function ($row) use ($category) {
-                    return $category === 'salary_approval'
-                        ? 'salary_approval'
-                        : $this->resolveCandidateActionCategory($row);
+                    if ($category === 'salary_approval') {
+                        return 'salary_approval';
+                    }
+                    if ($category === 'approved_candidate') {
+                        return 'approved_candidate';
+                    }
+
+                    return $this->resolveCandidateActionCategory($row);
+                })
+                ->addColumn('status_display', function ($row) {
+                    return $this->candidateStatusDisplayLabel($row);
+                })
+                ->addColumn('pipeline_status_label', function ($row) {
+                    $pipeline = RecruitmentStatusService::resolvePipelineStatus($row);
+
+                    return $pipeline['label'] ?? null;
                 })
                 ->addColumn('decision_salary_id', function ($row) {
                     return optional($row->openDecisionSalary)->id
@@ -853,6 +902,9 @@ class PersonnelRequestController extends Controller
                     });
                 })
                 ->filterColumn('status', fn($q, $k) => $q->where('status', 'like', "%{$k}%"))
+                ->filterColumn('status_display', function ($q, $keyword) {
+                    $q->where('status', 'like', "%{$keyword}%");
+                })
                 ->filterColumn('nilai_kecocokan', fn($q, $k) => $q->where('nilai_kecocokan', 'like', "%{$k}%"))
                 ->make(true);
         } catch (\Throwable $th) {
