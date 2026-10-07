@@ -582,8 +582,6 @@ class PersonnelRequestController extends Controller
             'finance_review',
             'waiting_approve_finance',
             'approved',
-            'hired',
-            'training',
             'selesai',
         ];
     }
@@ -818,6 +816,7 @@ class PersonnelRequestController extends Controller
 
             if ($category === 'approved_candidate') {
                 $this->scopeExcludeRejectedKandidat($data);
+                $data->whereNotIn('status', ['hired', 'training']);
             }
 
             $data->orderByDesc('id');
