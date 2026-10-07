@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class RecruitmentDecisionActionTelegramService
@@ -115,66 +114,43 @@ class RecruitmentDecisionActionTelegramService
 
     private function buildFinalDecisionMessage($recruitment, string $decision, array $context): string
     {
-        $lines = array_merge(
-            $this->headerLines(
-                GenerateMessageAtsEmail::decisionActionTitle('final_decision', $decision),
-                'Pemberitahuan hasil keputusan persetujuan kandidat.'
-            ),
-            $this->candidateLines($recruitment)
-        );
+        $results = [
+            'approve' => 'disetujui',
+            'reject' => 'ditolak',
+            'keep' => 'di-keep',
+        ];
 
-        if ($decision === 'reject') {
-            $lines[] = 'Alasan Penolakan : ' . $this->escape($context['reject_reason'] ?? null);
-        }
+        $lines = [
+            'Yth. Bapak/Ibu,',
+            'Hasil persetujuan kandidat'
+                . ' <b>' . $this->escape($recruitment->nama_lengkap ?? null) . '</b>'
+                . ' untuk posisi <b>' . $this->escape($this->positionName($recruitment)) . '</b>'
+                . ' telah berhasil <b>' . ($results[$decision] ?? 'Diproses') . '</b>. ',
+        ];
 
-        if ($decision === 'keep') {
-            $lines[] = '';
-            $lines[] = '<i>Kandidat ditahan, pengingat akan dikirim kembali dalam 7 hari.</i>';
-        }
+        $lines[] = 'Rincian keputusan telah dikirimkan melalui email Bapak/Ibu.';
+        $lines[] = 'Terima kasih atas waktu dan perhatian Bapak/Ibu.';
 
-        return implode("\n", array_merge($lines, $this->footerLines()));
+        return implode("\n", $lines);
     }
 
     private function buildSalaryDecisionMessage($recruitment, string $decision, array $context): string
     {
-        $salaryOffer = DB::table('sallary_offer')
-            ->where('new_recruitment_id', $recruitment->id ?? null)
-            ->where('is_active', true)
-            ->orderByDesc('id')
-            ->first();
+        $results = [
+            'approve' => 'disetujui',
+            'reject' => 'ditolak',
+            'negotiate' => 'dinegosiasikan',
+        ];
 
-        $lines = array_merge(
-            $this->headerLines(
-                GenerateMessageAtsEmail::decisionActionTitle('salary_decision', $decision),
-                'Pemberitahuan hasil keputusan persetujuan penawaran gaji.'
-            ),
-            $this->candidateLines($recruitment),
-            [
-                '',
-                'Ekspektasi Gaji : ' . $this->rupiah($recruitment->ekspetasi_gaji ?? null),
-                'Penawaran HRD : ' . $this->rupiah($salaryOffer->sallary_offer_hrd ?? null),
-            ]
-        );
-
-        if ($decision === 'approve') {
-            $lines[] = 'Gaji Final : ' . $this->rupiah($salaryOffer->final_sallary ?? $salaryOffer->sallary_offer_hrd ?? null);
-            $lines[] = '';
-            $lines[] = '<i>Hiring letter dikirim ke kandidat.</i>';
-        }
-
-        if ($decision === 'negotiate') {
-            $lines[] = 'Nominal Negosiasi : ' . $this->rupiah($context['negotiated_amount'] ?? $salaryOffer->sallary_offer_direktur ?? null);
-            $lines[] = '';
-            $lines[] = '<i>Penawaran dikembalikan ke HRD untuk dinegosiasikan.</i>';
-        }
-
-        if ($decision === 'reject') {
-            $lines[] = 'Alasan Penolakan : ' . $this->escape($context['reject_reason'] ?? null);
-            $lines[] = '';
-            $lines[] = '<i>Penawaran dikembalikan ke HRD.</i>';
-        }
-
-        return implode("\n", array_merge($lines, $this->footerLines()));
+        return implode("\n", [
+            'Yth. Bapak/Ibu,',
+            'Hasil persetujuan offering salary kandidat'
+                . ' <b>' . $this->escape($recruitment->nama_lengkap ?? null) . '</b>'
+                . ' untuk posisi <b>' . $this->escape($this->positionName($recruitment)) . '</b>'
+                . ' telah berhasil <b>' . ($results[$decision] ?? 'diproses') . '.</b>' .
+            'Rincian keputusan telah dikirimkan melalui email Bapak/Ibu.',
+            'Terima kasih atas waktu dan perhatian Bapak/Ibu.',
+        ]);
     }
 
     private function buildCandidateApprovalRequestMessage($recruitment, array $context): string
@@ -200,49 +176,12 @@ class RecruitmentDecisionActionTelegramService
         ]);
     }
 
-    private function headerLines(string $title, string $subtitle): array
-    {
-        return [
-            '<b>' . $this->escape($title) . '</b>',
-            $this->escape($subtitle),
-            '',
-        ];
-    }
-
     private function positionName($recruitment): ?string
     {
         return DB::table('personnel_requests')
             ->where('id', $recruitment->personnel_request_id ?? null)
             ->value('divisi_alias')
             ?: ($recruitment->posisi_dilamar ?? null);
-    }
-
-    private function candidateLines($recruitment): array
-    {
-        return [
-            'Nama Kandidat : ' . $this->escape($recruitment->nama_lengkap ?? null),
-            'Posisi : ' . $this->escape($this->positionName($recruitment)),
-            'Email : ' . $this->escape($recruitment->email ?? null),
-            'No. Telepon : ' . $this->escape($recruitment->no_telepon ?? null),
-        ];
-    }
-
-    private function footerLines(): array
-    {
-        return [
-            '',
-            'Waktu : ' . $this->escape(Carbon::now()->format('d-m-Y H:i')),
-            '<i>Recruitment System - PT Inti Surya Laboratorium</i>',
-        ];
-    }
-
-    private function rupiah($amount): string
-    {
-        if ($amount === null || $amount === '' || !is_numeric($amount)) {
-            return '-';
-        }
-
-        return 'Rp ' . number_format((float) $amount, 0, ',', '.');
     }
 
     private function escape($value): string
