@@ -17,6 +17,8 @@ final class LeaveAlpaExcuseCalendar
     /** @var array<int, list<array{0: string, 1: string}>> */
     private $rangesByKaryawan = [];
 
+    private $reminderPermissionsByKaryawan = [];
+
     /** @param list<int> $karyawanIds */
     public static function forEmployees(array $karyawanIds, Carbon $rangeFrom, Carbon $rangeTo): self
     {
@@ -99,6 +101,67 @@ final class LeaveAlpaExcuseCalendar
         return false;
     }
 
+    public function isReminderExcused(int $karyawanId, string $shiftDate, string $type,
+        Carbon $scheduledAt, Carbon $evaluatedAt): bool
+    {
+        // Full-day leave belongs to the shift's start date, including overnight work.
+        if ($this->isExcused($karyawanId, $shiftDate)) {
+            return true;
+        }
+        foreach ($this->reminderPermissionsByKaryawan[$karyawanId] ?? [] as $permission) {
+            if ($permission['kind'] === 'late' && $type !== 'missing_masuk') {
+                continue;
+            }
+            $ymd = $scheduledAt->toDateString();
+            $end = $permission['end_time'];
+            if ($permission['kind'] === 'late') {
+                if ($ymd < $permission['start_date'] || $ymd > $permission['end_date']) {
+                    continue;
+                }
+                // Legacy late requests may only store the arrival time in start_time.
+                $arrivalTime = $end;
+                if ($arrivalTime === null || in_array($arrivalTime, ['00:00', '00:00:00'], true)) {
+                    $arrivalTime = $permission['start_time'];
+                }
+                // An unspecified arrival time excuses entry only, never checkout.
+                if ($arrivalTime === null || $evaluatedAt->lte(Carbon::parse($ymd . ' ' . $arrivalTime, 'Asia/Jakarta'))) {
+                    return true;
+                }
+                continue;
+            }
+            $start = Carbon::parse($permission['start_date'] . ' ' . ($permission['start_time'] ?? '00:00:00'), 'Asia/Jakarta');
+            $until = Carbon::parse($permission['end_date'] . ' ' . ($end ?? '23:59:59'), 'Asia/Jakarta');
+            if ($until->lt($start)) {
+                $until->addDay();
+            }
+            if ($scheduledAt->betweenIncluded($start, $until) && $evaluatedAt->lte($until)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function addReminderPermission(int $karyawanId, $detail, string $fromYmd, string $toYmd): void
+    {
+        $start = $this->formatDate($detail->start_date);
+        $end = $this->formatDate($detail->end_date ?? $detail->start_date);
+        if (!$start || !$end || $end < $fromYmd || $start > $toYmd) {
+            return;
+        }
+        $kind = (string) ($detail->permission_kind ?? '');
+        $startTime = $detail->start_time ?: null;
+        $endTime = $detail->end_time ?: null;
+        if ($kind !== 'late' && !$startTime && !$endTime) {
+            $this->addRange($karyawanId, $start, $end, $fromYmd, $toYmd);
+            return;
+        }
+        $this->reminderPermissionsByKaryawan[$karyawanId][] = [
+            'kind' => $kind, 'start_date' => $start, 'end_date' => $end,
+            'start_time' => $startTime, 'end_time' => $endTime,
+        ];
+    }
+
     /** @param list<int> $ids */
     private function loadHr(array $ids, string $fromYmd, string $toYmd, ?string $connection = null): void
     {
@@ -163,9 +226,7 @@ final class LeaveAlpaExcuseCalendar
             if (!$detail) {
                 continue;
             }
-            $start = $this->formatDate($detail->start_date);
-            $end = $this->formatDate($detail->end_date ?? $detail->start_date);
-            $this->addRange((int) $row->karyawan_id, $start, $end, $fromYmd, $toYmd);
+            $this->addReminderPermission((int) $row->karyawan_id, $detail, $fromYmd, $toYmd);
         }
 
         $leaves = $submittedActive()

@@ -18,6 +18,7 @@ class AttendanceReminderNotifier
         $date = (string) ($detectResult['date'] ?? '');
         $slot = (string) ($detectResult['slot'] ?? '');
         $reminders = $detectResult['reminders'] ?? [];
+        $runAt = Carbon::now('Asia/Jakarta');
 
         $sent = 0;
         $skippedDedupe = 0;
@@ -49,6 +50,9 @@ class AttendanceReminderNotifier
             if ($originalUserId <= 0) {
                 continue;
             }
+            if ($devRedirect && $originalUserId !== (int) $redirectUserId) {
+                continue;
+            }
 
             $recipientId = $devRedirect ? (int) $redirectUserId : $originalUserId;
 
@@ -60,19 +64,20 @@ class AttendanceReminderNotifier
 
             $payload['reminder_date'] = $date;
             $payload['reminder_slot'] = $slot;
+            $payload['reminder_run_at'] = $runAt->toDateTimeString();
 
             if ($devRedirect) {
                 $payload['dev_redirect'] = true;
                 $payload['dev_original_karyawan_id'] = $originalUserId;
                 $payload['dev_original_nama'] = (string) ($row['nama'] ?? '');
                 $payload['body'] .= sprintf(
-                    ' [DEV: semula untuk %s (ID %d).]',
+                    ' [TEST: %s (ID %d).]',
                     $payload['dev_original_nama'] !== '' ? $payload['dev_original_nama'] : 'karyawan',
                     $originalUserId
                 );
             }
 
-            if (!$devRedirect && $this->alreadySentToday($recipientId, $date, $reminderType)) {
+            if (!$devRedirect && $this->alreadySentThisHour($recipientId, $date, $reminderType, $runAt)) {
                 $skippedDedupe++;
 
                 continue;
@@ -128,19 +133,20 @@ class AttendanceReminderNotifier
         return null;
     }
 
-    private function alreadySentToday(int $userId, string $dateYmd, string $reminderType): bool
+    private function alreadySentThisHour(int $userId, string $dateYmd, string $reminderType, Carbon $runAt): bool
     {
-        $start = Carbon::parse($dateYmd, 'Asia/Jakarta')->startOfDay();
-        $end = $start->copy()->endOfDay();
+        $start = $runAt->copy()->startOfHour();
+        $end = $start->copy()->addHour();
 
-        $title = $reminderType === 'missing_pulang'
-            ? 'Kehadiran · absen pulang belum tercatat'
-            : 'Kehadiran · absen masuk belum tercatat';
+        $titles = $reminderType === 'missing_pulang'
+            ? [NotificationCopy::attendanceReminderMissingPulang($dateYmd)['title'], 'Kehadiran · absen pulang belum tercatat']
+            : [NotificationCopy::attendanceReminderMissingMasuk($dateYmd)['title'], 'Kehadiran · absen masuk belum tercatat'];
 
         return GreatdayAppData::notificationQuery()
             ->where('user_id', $userId)
-            ->whereBetween('created_at', [$start, $end])
-            ->where('title', $title)
+            ->where('created_at', '>=', $start)
+            ->where('created_at', '<', $end)
+            ->whereIn('title', $titles)
             ->exists();
     }
 }

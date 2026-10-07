@@ -3,7 +3,7 @@
 namespace App\Support\Greatday;
 
 /**
- * Uji console: alihkan penerima notif (opsi --redirect-to), bukan lewat .env.
+ * Uji console: batasi ke satu karyawan dan izinkan pengiriman ulang (--redirect-to).
  */
 final class AttendanceReminderDevLimit
 {

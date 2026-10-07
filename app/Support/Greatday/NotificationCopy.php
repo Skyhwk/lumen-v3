@@ -46,13 +46,9 @@ class NotificationCopy
      */
     public static function attendanceReminderMissingMasuk(string $tanggalYmd, ?string $jadwalMasuk = null): array
     {
-        $jam = self::formatJamSingkat($jadwalMasuk) ?: '08:00';
-        $hari = self::formatDate($tanggalYmd);
-
         return [
-            'title' => 'Kehadiran · absen masuk belum tercatat',
-            'body' => "Hingga saat ini absen masuk Anda pada {$hari} belum tercatat (jadwal masuk {$jam}). "
-                . 'Segera lakukan absensi masuk melalui mesin atau aplikasi Attendance.',
+            'title' => 'Pengingat Absen Masuk',
+            'body' => 'Anda belum melakukan absen masuk hari ini. Segera lakukan absensi melalui aplikasi Attendance.',
             'url' => self::pathAttendance(),
             'kind' => 'attendance_reminder',
             'reminder_type' => 'missing_masuk',
@@ -64,13 +60,9 @@ class NotificationCopy
      */
     public static function attendanceReminderMissingPulang(string $tanggalYmd, ?string $jadwalPulang = null): array
     {
-        $jam = self::formatJamSingkat($jadwalPulang) ?: '17:00';
-        $hari = self::formatDate($tanggalYmd);
-
         return [
-            'title' => 'Kehadiran · absen pulang belum tercatat',
-            'body' => "Hingga saat ini absen pulang Anda pada {$hari} belum tercatat (jadwal pulang {$jam}). "
-                . 'Segera lakukan absensi pulang melalui mesin atau aplikasi Attendance.',
+            'title' => 'Pengingat Absen Pulang',
+            'body' => 'Anda belum melakukan absen pulang hari ini. Segera lakukan absensi melalui aplikasi Attendance.',
             'url' => self::pathAttendance(),
             'kind' => 'attendance_reminder',
             'reminder_type' => 'missing_pulang',

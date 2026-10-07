@@ -65,7 +65,7 @@ class Kernel extends ConsoleKernel
         Commands\VerifyHrStatusParityCommand::class,
         Commands\SmokeHrWorkflowCommand::class,
         Commands\SendGreatdayTestNotificationCommand::class,
-        Commands\DetectGreatdayAttendanceRemindersCommand::class,
+        // Commands\DetectGreatdayAttendanceRemindersCommand::class,
         Commands\SendGreatdayAttendanceRemindersCommand::class,
         Commands\MigrateGdAuthFromAppsCommand::class,
         Commands\MigrateGdAppDataFromAppsCommand::class,
@@ -115,11 +115,11 @@ class Kernel extends ConsoleKernel
         //     ->withoutOverlapping(180);
 
         // Reminder absensi Greatday — aktifkan setelah ops tim infra (bukan bagian dev feature).
-        // $schedule->command('greatday:attendance-reminder-send --slot=morning')
+        // $schedule->command('greatday:attendance-reminder-send')
         //     ->dailyAt('09:00')
         //     ->timezone('Asia/Jakarta')
         //     ->withoutOverlapping(45);
-        // $schedule->command('greatday:attendance-reminder-send --slot=evening')
+        // $schedule->command('greatday:attendance-reminder-send')
         //     ->dailyAt('21:00')
         //     ->timezone('Asia/Jakarta')
         //     ->withoutOverlapping(45);

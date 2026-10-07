@@ -40,7 +40,8 @@ class AttendanceReminderDetectionService
     {
         $slot = $this->normalizeSlot($slot);
         $date = $date->copy()->timezone('Asia/Jakarta')->startOfDay();
-        $slotTime = $this->slotClockSeconds($slot);
+        $now = Carbon::now('Asia/Jakarta');
+        $slotTime = $now->hour * 3600 + $now->minute * 60 + $now->second;
 
         $employees = $this->loadEmployees($karyawanIds);
         $ids = $employees->pluck('id')->map(fn ($id) => (int) $id)->all();
@@ -51,7 +52,7 @@ class AttendanceReminderDetectionService
 
         $shifts = $this->loadShifts($ids, [$prev, $today, $next]);
         $attendance = $this->loadAttendanceFlags($ids, [$prev, $today, $next]);
-        $excuseCalendar = LeaveAlpaExcuseCalendar::forProduksiAttendanceReminder($ids, $date, $date);
+        $excuseCalendar = LeaveAlpaExcuseCalendar::forProduksiAttendanceReminder($ids, $date->copy()->subDay(), $date);
 
         $reminders = [];
         $skipped = 0;
@@ -79,7 +80,7 @@ class AttendanceReminderDetectionService
         return [
             'date' => $today,
             'slot' => $slot,
-            'slot_time' => $slot === self::SLOT_MORNING ? '09:00:00' : '21:00:00',
+            'slot_time' => $now->format('H:i:s'),
             'scanned' => $employees->count(),
             'skipped' => $skipped,
             'reminders' => $reminders,
@@ -180,15 +181,14 @@ class AttendanceReminderDetectionService
         $prev = $date->copy()->subDay()->toDateString();
         $next = $date->copy()->addDay()->toDateString();
 
-        if ($excuseCalendar->isExcused($karyawanId, $today)) {
-            return null;
-        }
-
         $shiftToday = $this->shiftRow($shifts, $karyawanId, $today);
         $shiftPrev = $this->shiftRow($shifts, $karyawanId, $prev);
+        if ($excuseCalendar->isExcused($karyawanId, $prev)) {
+            $shiftPrev = null;
+        }
 
         if ($slot === self::SLOT_MORNING) {
-            return $this->evaluateMorningSlot(
+            $reminder = $this->evaluateMorningSlot(
                 $employee,
                 $today,
                 $prev,
@@ -197,16 +197,33 @@ class AttendanceReminderDetectionService
                 $shiftPrev,
                 $attendance
             );
+        } else {
+            $reminder = $this->evaluateEveningSlot(
+                $employee,
+                $today,
+                $next,
+                $slotTime,
+                $shiftToday,
+                $attendance
+            );
         }
 
-        return $this->evaluateEveningSlot(
-            $employee,
-            $today,
-            $next,
-            $slotTime,
-            $shiftToday,
-            $attendance
-        );
+        if ($reminder === null) {
+            return null;
+        }
+        $scheduledAt = Carbon::parse($reminder['shift_date'], 'Asia/Jakarta')->startOfDay()
+            ->addSeconds($this->toSeconds($reminder['reminder_type'] === 'missing_masuk'
+                ? $reminder['time_in'] : $reminder['time_out']) ?? 0);
+        if ($reminder['reminder_type'] === 'missing_pulang'
+            && $this->isOvernightShift($reminder['shift'], $reminder['time_in'], $reminder['time_out'])) {
+            $scheduledAt->addDay();
+        }
+        if ($excuseCalendar->isReminderExcused($karyawanId, $reminder['shift_date'],
+            $reminder['reminder_type'], $scheduledAt, $date->copy()->addSeconds($slotTime))) {
+            return null;
+        }
+
+        return $reminder;
     }
 
     /**
@@ -226,10 +243,6 @@ class AttendanceReminderDetectionService
         if ($shiftPrev && $this->isOffShift($shiftPrev->shift)) {
             $shiftPrev = null;
         }
-        if ($shiftToday && $this->isOffShift($shiftToday->shift)) {
-            return null;
-        }
-
         if ($shiftPrev) {
             $prevSchedule = $this->resolveSchedule($shiftPrev);
             if ($this->isOvernightShift($prevSchedule['shift'], $prevSchedule['time_in'], $prevSchedule['time_out'])) {
@@ -246,15 +259,12 @@ class AttendanceReminderDetectionService
             }
         }
 
-        if (!$this->shouldExpectWorkToday($today, $shiftToday)) {
+        if (($shiftToday && $this->isOffShift($shiftToday->shift))
+            || !$this->shouldExpectWorkToday($today, $shiftToday)) {
             return null;
         }
 
         $schedule = $this->resolveSchedule($shiftToday);
-        if ($this->isOvernightShift($schedule['shift'], $schedule['time_in'], $schedule['time_out'])) {
-            return null;
-        }
-
         $inSeconds = $this->toSeconds($schedule['time_in']) ?? $this->toSeconds(self::DEFAULT_TIME_IN);
         if ($slotTime < $inSeconds) {
             return null;
@@ -450,15 +460,6 @@ class AttendanceReminderDetectionService
         }
 
         return self::SLOT_MORNING;
-    }
-
-    private function slotClockSeconds(string $slot): int
-    {
-        if ($slot === self::SLOT_EVENING) {
-            return $this->toSeconds('21:00:00') ?? 75600;
-        }
-
-        return $this->toSeconds('09:00:00') ?? 32400;
     }
 
     private function normalizeClock($value): ?string

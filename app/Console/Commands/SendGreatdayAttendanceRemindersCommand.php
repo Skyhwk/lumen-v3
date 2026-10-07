@@ -15,11 +15,11 @@ class SendGreatdayAttendanceRemindersCommand extends Command
 {
     protected $signature = 'greatday:attendance-reminder-send
                             {--date= : Tanggal YYYY-MM-DD (default: hari ini WIB)}
-                            {--slot=morning : morning (09:00) atau evening (21:00)}
+                            {--slot= : morning (09:00) atau evening (21:00); default otomatis berdasarkan waktu WIB}
                             {--user-id=* : Batasi ke karyawan_id}
                             {--user-ids= : CSV karyawan_id}
                             {--dry-run : Deteksi saja, tampilkan payload tanpa kirim}
-                            {--redirect-to= : Uji local: kirim semua notif ke karyawan_id ini (bukan production)}';
+                            {--redirect-to= : Uji non-production: hanya deteksi ID ini dan kirim ulang tanpa dedupe}';
 
     protected $description = 'Kirim reminder absen masuk/pulang ke app Attendance (shift-aware)';
 
@@ -34,8 +34,8 @@ class SendGreatdayAttendanceRemindersCommand extends Command
             return 1;
         }
 
-        $slot = strtolower(trim((string) $this->option('slot')));
-        if (!in_array($slot, [AttendanceReminderDetectionService::SLOT_MORNING, AttendanceReminderDetectionService::SLOT_EVENING], true)) {
+        $slot = $this->resolveSlot((string) $this->option('slot'));
+        if ($slot === null) {
             $this->error('--slot harus morning atau evening.');
 
             return 1;
@@ -48,8 +48,14 @@ class SendGreatdayAttendanceRemindersCommand extends Command
         $redirectTo = AttendanceReminderDevLimit::resolveRedirectTo(
             $this->option('redirect-to') !== null ? (int) $this->option('redirect-to') : null
         );
+        if ($this->option('redirect-to') !== null && $redirectTo === null) {
+            $this->error('--redirect-to hanya tersedia di non-production dan harus berupa ID karyawan positif.');
+
+            return 1;
+        }
         if ($redirectTo !== null) {
-            $this->warn("Uji: deteksi semua karyawan; setiap notif dialihkan ke karyawan_id {$redirectTo}.");
+            $karyawanIds = [$redirectTo];
+            $this->warn("Uji: hanya deteksi karyawan_id {$redirectTo}; pengecekan duplikat dilewati.");
         }
 
         $result = $detector->detect($date, $slot, $karyawanIds);
@@ -96,6 +102,19 @@ class SendGreatdayAttendanceRemindersCommand extends Command
         }
 
         return $send['failed'] > 0 ? 1 : 0;
+    }
+
+    private function resolveSlot(string $raw): ?string
+    {
+        $slot = strtolower(trim($raw));
+        if ($slot === '') {
+            return Carbon::now('Asia/Jakarta')->hour < 12
+                ? AttendanceReminderDetectionService::SLOT_MORNING
+                : AttendanceReminderDetectionService::SLOT_EVENING;
+        }
+
+        return in_array($slot, [AttendanceReminderDetectionService::SLOT_MORNING,
+            AttendanceReminderDetectionService::SLOT_EVENING], true) ? $slot : null;
     }
 
     private function resolveDate(): ?Carbon
