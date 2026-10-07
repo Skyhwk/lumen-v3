@@ -77,7 +77,7 @@ class RecruitmentDecisionActionTelegramService
         }, $chatIds))));
 
         if (empty($chatIds)) {
-            \Log::warning('Decision action telegram skipped: recipient is not configured.', [
+            \Log::channel('telegram')->warning('Decision action telegram skipped: recipient is not configured.', [
                 'flow' => $flow,
                 'recruitment_id' => $recruitment->id ?? null,
             ]);
@@ -87,7 +87,7 @@ class RecruitmentDecisionActionTelegramService
         try {
             $message = $buildMessage();
         } catch (\Throwable $e) {
-            \Log::warning('Decision action telegram failed to build message.', [
+            \Log::channel('telegram')->warning('Decision action telegram failed to build message.', [
                 'flow' => $flow,
                 'decision' => $decision,
                 'recruitment_id' => $recruitment->id ?? null,
@@ -100,8 +100,16 @@ class RecruitmentDecisionActionTelegramService
             try {
                 // SendTelegram keeps a static instance, so reset button to avoid leaking state from a previous send.
                 SendTelegram::text($message)->button([])->to($chatId)->send();
+
+                \Log::channel('telegram')->info('Decision action telegram sent.', [
+                    'flow' => $flow,
+                    'decision' => $decision,
+                    'chat_id' => $chatId,
+                    'recruitment_id' => $recruitment->id ?? null,
+                    'text' => $message,
+                ]);
             } catch (\Throwable $e) {
-                \Log::warning('Decision action telegram failed.', [
+                \Log::channel('telegram')->warning('Decision action telegram failed.', [
                     'flow' => $flow,
                     'decision' => $decision,
                     'chat_id' => $chatId,

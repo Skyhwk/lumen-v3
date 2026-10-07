@@ -270,6 +270,13 @@ return [
             'days' => 30,
         ],
 
+        'telegram' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/telegram/log.log'),
+            'level' => 'info',
+            'days' => 30,
+        ],
+
         'transaction' => [
             'driver' => 'daily',
             'path' => storage_path('logs/transaction/transaction.log'),
