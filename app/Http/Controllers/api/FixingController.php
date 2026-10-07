@@ -78,6 +78,83 @@ use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class FixingController extends Controller
 {
+    public function searchTrackingSamplerRoute(Request $request)
+    {
+        $this->validate($request, ['q' => 'required|string|min:2|max:100']);
+
+        $samplers = \App\Models\MasterKaryawan::query()
+            ->where('is_active', 1)
+            ->where('nama_lengkap', 'like', '%' . trim($request->q) . '%')
+            ->orderBy('nama_lengkap')
+            ->limit(20)
+            ->get(['id', 'nama_lengkap']);
+
+        return response()->json(['success' => true, 'data' => $samplers]);
+    }
+
+    public function previewTrackingSamplerRoute(Request $request)
+    {
+        $this->validate($request, [
+            'tanggal' => 'required|date_format:Y-m-d',
+            'sampler_id' => 'required|integer',
+        ]);
+
+        $sampler = \App\Models\MasterKaryawan::where('is_active', 1)->findOrFail($request->sampler_id);
+        $service = new \App\Services\SamplerTrackingService();
+        $sessions = $service->listByDate($request->tanggal, $sampler->id, $sampler->nama_lengkap);
+
+        return response()->json([
+            'success' => true,
+            'sampler' => ['id' => $sampler->id, 'name' => $sampler->nama_lengkap],
+            'data' => $this->trackingSamplerRouteStops($sessions, $sampler->id),
+        ]);
+    }
+
+    public function saveTrackingSamplerRoute(Request $request)
+    {
+        $this->validate($request, [
+            'tanggal' => 'required|date_format:Y-m-d',
+            'sampler_id' => 'required|integer',
+            'reason' => 'required|string|max:1000',
+            'items' => 'required|array|min:1',
+            'items.*.session_id' => 'required|integer',
+        ]);
+
+        $sampler = \App\Models\MasterKaryawan::where('is_active', 1)->findOrFail($request->sampler_id);
+        $service = new \App\Services\SamplerTrackingService();
+        $sessions = $service->updateRouteOrder([
+            'sampler_id' => $sampler->id,
+            'sampler_name' => $sampler->nama_lengkap,
+            'reason' => $request->reason,
+            'items' => $request->items,
+        ], $this->karyawan ?: 'Programmer', true, $request->tanggal);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Urutan tujuan tim berhasil diperbarui.',
+            'data' => $this->trackingSamplerRouteStops($sessions, $sampler->id),
+        ]);
+    }
+
+    protected function trackingSamplerRouteStops($sessions, $samplerId)
+    {
+        return $sessions->map(function ($session) use ($samplerId) {
+            $member = $session->activeMembers->first(function ($item) use ($samplerId) {
+                return (int) $item->sampler_id === (int) $samplerId;
+            });
+            $events = $member ? $member->events->pluck('event_type')->unique()->values()->all() : [];
+
+            return [
+                'session_id' => (int) $session->id,
+                'no_order' => $session->no_order,
+                'nama_perusahaan' => $session->nama_perusahaan,
+                'jam_mulai' => $session->jam_mulai,
+                'jam_selesai' => $session->jam_selesai,
+                'events' => $events,
+            ];
+        })->values();
+    }
+
     public function repairWsFinalApprovalEmptyResults(Request $request)
     {
         try {
