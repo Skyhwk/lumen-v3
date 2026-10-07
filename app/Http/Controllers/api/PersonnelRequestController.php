@@ -10,6 +10,7 @@ use App\Services\GenerateAssessmentDocumentService;
 use App\Services\CandidateDocumentAttachmentService;
 use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService,RecruitmentStatusService,RequesterSalaryApprovalService};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
+use App\Helpers\ShioElemenHelper;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -914,6 +915,43 @@ class PersonnelRequestController extends Controller
                 ->filterColumn('status', fn($q, $k) => $q->where('status', 'like', "%{$k}%"))
                 ->filterColumn('status_display', function ($q, $keyword) {
                     $q->where('status', 'like', "%{$keyword}%");
+                })
+                ->addColumn('usia', function ($row) {
+                    $birthYear = $this->extractCandidateBirthYear($row);
+                    if ($birthYear) {
+                        return (Carbon::now()->year - $birthYear) . ' thn';
+                    }
+
+                    return '-';
+                })
+                ->filterColumn('usia', function ($q, $keyword) {
+                    $this->filterCandidateUsiaColumn($q, $keyword);
+                })
+                ->addColumn('display_shio', function ($row) {
+                    $shioElemen = $this->resolveCandidateShioElemen($row);
+
+                    return !empty($shioElemen['shio']) ? $shioElemen['shio'] : '-';
+                })
+                ->filterColumn('display_shio', function ($q, $keyword) {
+                    $this->whereAnyExistingNewRecruitmentLike($q, [
+                        'shio',
+                        'tempat_tanggal_lahir',
+                        'tempat_lahir',
+                        'tanggal_lahir',
+                    ], $keyword);
+                })
+                ->addColumn('display_elemen', function ($row) {
+                    $shioElemen = $this->resolveCandidateShioElemen($row);
+
+                    return !empty($shioElemen['elemen']) ? $shioElemen['elemen'] : '-';
+                })
+                ->filterColumn('display_elemen', function ($q, $keyword) {
+                    $this->whereAnyExistingNewRecruitmentLike($q, [
+                        'elemen',
+                        'tempat_tanggal_lahir',
+                        'tempat_lahir',
+                        'tanggal_lahir',
+                    ], $keyword);
                 })
                 ->filterColumn('nilai_kecocokan', fn($q, $k) => $q->where('nilai_kecocokan', 'like', "%{$k}%"))
                 ->make(true);
@@ -2351,6 +2389,162 @@ class PersonnelRequestController extends Controller
         $query->where('is_active', 1)
             ->whereRaw('COALESCE(is_rejected_kandidat, 0) = 0')
             ->whereRaw("LOWER(TRIM(COALESCE(status, ''))) NOT IN ('assessment', 'hired', 'training')");
+    }
+
+    private function resolveCandidateBirthDateForShio($row): ?string
+    {
+        if (!empty($row->tanggal_lahir)) {
+            return (string) $row->tanggal_lahir;
+        }
+
+        foreach (['tempat_tanggal_lahir', 'tempat_lahir'] as $field) {
+            if (empty($row->{$field})) {
+                continue;
+            }
+            $value = trim((string) $row->{$field});
+            if ($value !== '' && ShioElemenHelper::parseBirthDateParts($value)) {
+                return $value;
+            }
+        }
+
+        $ttl = $this->getCandidateTtlString($row);
+        if ($ttl && ShioElemenHelper::parseBirthDateParts($ttl)) {
+            return $ttl;
+        }
+
+        return $ttl ?: null;
+    }
+
+    private function resolveCandidateShioElemen($row): array
+    {
+        $birthDate = $this->resolveCandidateBirthDateForShio($row);
+
+        return ShioElemenHelper::resolve(
+            $birthDate,
+            $row->shio ?? null,
+            $row->elemen ?? null
+        );
+    }
+
+    private function getCandidateTtlString($row)
+    {
+        if (!empty($row->tempat_tanggal_lahir)) {
+            return $row->tempat_tanggal_lahir;
+        }
+        $parts = [];
+        if (!empty($row->tempat_lahir)) {
+            $parts[] = $row->tempat_lahir;
+        }
+        if (!empty($row->tanggal_lahir)) {
+            $parts[] = $row->tanggal_lahir;
+        }
+
+        return count($parts) > 0 ? implode(', ', $parts) : null;
+    }
+
+    private function extractCandidateBirthYear($row)
+    {
+        $ttl = is_string($row) ? $row : $this->getCandidateTtlString($row);
+
+        if (is_object($row) && !empty($row->tanggal_lahir)) {
+            try {
+                $dt = Carbon::parse($row->tanggal_lahir);
+                $year = (int) $dt->year;
+                if ($year >= 1930 && $year <= Carbon::now()->year) {
+                    return $year;
+                }
+                if ($year > 0) {
+                    $last2 = $year % 100;
+                    $currentYY = Carbon::now()->year % 100;
+
+                    return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
+                }
+            } catch (\Exception $e) {
+            }
+        }
+
+        if (!$ttl) {
+            return null;
+        }
+
+        if (preg_match('/\b(19\d\d|20\d\d)\b/', $ttl, $matches)) {
+            return (int) $matches[1];
+        }
+
+        if (preg_match('/\b(\d{4})\b/', $ttl, $matches)) {
+            $year = (int) $matches[1];
+            if ($year >= 1930 && $year <= Carbon::now()->year) {
+                return $year;
+            }
+            if ($year > 0) {
+                $last2 = $year % 100;
+                $currentYY = Carbon::now()->year % 100;
+
+                return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
+            }
+        }
+
+        return null;
+    }
+
+    private function newRecruitmentHasColumn($column)
+    {
+        static $columns = null;
+
+        if ($columns === null) {
+            $columns = Schema::hasTable('new_recruitment')
+                ? array_flip(Schema::getColumnListing('new_recruitment'))
+                : [];
+        }
+
+        return isset($columns[$column]);
+    }
+
+    private function whereAnyExistingNewRecruitmentLike($query, array $columns, $keyword)
+    {
+        $query->where(function ($sub) use ($columns, $keyword) {
+            $applied = false;
+
+            foreach ($columns as $column) {
+                if (!$this->newRecruitmentHasColumn($column)) {
+                    continue;
+                }
+
+                if (!$applied) {
+                    $sub->where($column, 'like', "%{$keyword}%");
+                    $applied = true;
+                    continue;
+                }
+
+                $sub->orWhere($column, 'like', "%{$keyword}%");
+            }
+
+            if (!$applied) {
+                $sub->whereRaw('1 = 0');
+            }
+        });
+    }
+
+    private function filterCandidateUsiaColumn($q, $keyword)
+    {
+        $cleanDigits = preg_replace('/[^0-9]/', '', $keyword);
+        $q->where(function ($sub) use ($keyword, $cleanDigits) {
+            if ($cleanDigits !== '') {
+                $targetYear = Carbon::now()->year - (int) $cleanDigits;
+                if ($this->newRecruitmentHasColumn('tanggal_lahir')) {
+                    $sub->whereYear('tanggal_lahir', $targetYear);
+                }
+                foreach (['tempat_tanggal_lahir', 'tempat_lahir'] as $column) {
+                    if ($this->newRecruitmentHasColumn($column)) {
+                        $sub->orWhere($column, 'like', "%{$cleanDigits}%");
+                    }
+                }
+
+                return;
+            }
+
+            $this->whereAnyExistingNewRecruitmentLike($sub, ['tempat_tanggal_lahir', 'tempat_lahir'], $keyword);
+        });
     }
 
 }
