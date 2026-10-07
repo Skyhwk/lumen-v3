@@ -1495,7 +1495,7 @@ class AtsHiredCandidatesController extends Controller
 
         $updatePayload = [
             'is_publish' => 0,
-            'is_active' => 0,
+            'is_active' => 1,
             'is_completed' => 1,
             'completed_at' => $timestamp,
             'completed_by' => $this->karyawan,
