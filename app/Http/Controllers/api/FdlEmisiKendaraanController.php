@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Support\FdlOrderDetailNoSampelSync;
+
 use App\Models\DataLapanganEmisiKendaraan;
 use App\Models\DataLapanganEmisiOrder;
 use App\Models\MasterQr;
@@ -147,21 +149,8 @@ class FdlEmisiKendaraanController extends Controller
                 $data_order->no_sampel = $request->no_sampel_baru;
                 $data_order->no_sampel_lama = $request->no_sampel_lama;
                 $data_order->save();
+                FdlOrderDetailNoSampelSync::afterRename($request->no_sampel_lama, $request->no_sampel_baru);
 
-                // update OrderDetail
-                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
-                    ->first();
-
-                if ($order_detail_lama) {
-                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
-                        ->where('is_active', 1)
-                        ->update([
-                            'tanggal_terima' => $order_detail_lama->tanggal_terima
-                        ]);
-                    
-                    $order_detail_lama->tanggal_terima = NULL;
-                    $order_detail_lama->save();
-                }
 
                 return response()->json([
                     'message'=>'No Sampel '.$request->no_sampel_lama.' Berhasil Dirubah Menjadi '.$request->no_sampel_baru
@@ -180,22 +169,7 @@ class FdlEmisiKendaraanController extends Controller
             $data->id_regulasi = $request->regulasi;
             $data->save();
 
-            
-                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
-                    ->first();
-
-                if ($order_detail_lama) {
-                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
-                        ->where('is_active', 1)
-                        ->update([
-                            'tanggal_terima' => $order_detail_lama->tanggal_terima
-                        ]);
-                    
-                    $order_detail_lama->tanggal_terima = NULL;
-                    $order_detail_lama->save();
-                }
-
-                return response()->json([
+            return response()->json([
                 'message'=>'Regulasi Berhasil Dirubah'
             ],201);
         } catch (\Exception $e) {
