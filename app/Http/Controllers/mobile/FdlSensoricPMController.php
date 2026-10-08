@@ -31,6 +31,71 @@ use Yajra\Datatables\Datatables;
 
 class FdlSensoricPMController extends Controller
 {
+    /**
+     * Batas jumlah input per parameter berdasarkan durasi di nama parameter.
+     */
+    private function maxPengambilanForParameter(string $parameterName): int
+    {
+        $pLower = strtolower($parameterName);
+        if (str_contains($pLower, '24 jam') || str_contains($pLower, '24j')) {
+            return 5;
+        }
+        if (str_contains($pLower, '8 jam') || str_contains($pLower, '8j')) {
+            return 3;
+        }
+        if (str_contains($pLower, '6 jam')) {
+            return 3;
+        }
+        return 1;
+    }
+
+    private function formMappingForParameter(string $p): array
+    {
+        $pLower = strtolower($p);
+        $kategori = 'Sesaat';
+        $jam = 0;
+        if (str_contains($pLower, '24 jam') || str_contains($pLower, '24j')) {
+            $kategori = '24 Jam';
+            $jam = 24;
+        } elseif (str_contains($pLower, '8 jam') || str_contains($pLower, '8j')) {
+            $kategori = '8 Jam';
+            $jam = 8;
+        } elseif (str_contains($pLower, '6 jam')) {
+            $kategori = '6 Jam';
+            $jam = 6;
+        }
+
+        return [
+            'kategori' => $kategori,
+            'jam' => $jam,
+            'max_pengambilan' => $this->maxPengambilanForParameter($p),
+        ];
+    }
+
+    /** Parameter masih perlu input jika jumlah baris di DB belum mencapai batas. */
+    private function filterParametersNeedingInput(string $noSampel, array $parameters): array
+    {
+        $remaining = [];
+        foreach ($parameters as $p) {
+            $count = DataLapanganPartikulatMeter::where('no_sampel', $noSampel)
+                ->where('parameter', $p)
+                ->count();
+            if ($count < $this->maxPengambilanForParameter($p)) {
+                $remaining[] = $p;
+            }
+        }
+        return $remaining;
+    }
+
+    private function buildFormMappings(array $parameterNames): array
+    {
+        $form_mappings = [];
+        foreach ($parameterNames as $p) {
+            $form_mappings[$p] = $this->formMappingForParameter($p);
+        }
+        return $form_mappings;
+    }
+
     public function getSample(Request $request)
     {
         if ($response = $this->ensureSamplerCheckedInForSample($request)) {
@@ -69,53 +134,21 @@ class FdlSensoricPMController extends Controller
 
                     $no_sampel = strtoupper(trim($request->no_sample));
 
-                    $par = DataLapanganPartikulatMeter::where('no_sampel', $no_sampel)
-                                ->groupBy('parameter')->pluck('parameter')->toArray();
-
-                    // Ambil parameter dengan shift selain 'Sesaat', untuk memastikan hanya pengambilan waktu tertentu
-                    $paramSesaat = DataLapanganPartikulatMeter::where('no_sampel', $no_sampel)
-                                ->where('shift_pengambilan', 'Sesaat')
-                                ->groupBy('parameter')->pluck('parameter')->toArray();
-
-                    // Cari parameter yang seharusnya diuji tapi belum ada di tabel (belum dicatat)
-                    $nilai_param2 = array_values(array_diff($parameters, $paramSesaat));
-
-                    $param_fin = $nilai_param2;
-                    if(empty($param_fin)){
+                    $param_fin = $this->filterParametersNeedingInput($no_sampel, $parameters);
+                    
+                    if (empty($param_fin)) {
                         return response()->json([
-                            'message' => 'Data Parameter Sesaat sudah terinput semua .!'
+                            'message' => 'Semua parameter pada no sample ini sudah terinput lengkap .!'
                         ], 400);
                     }
-                    if(empty($param_fin)){
-                        return response()->json([
-                            'message' => 'Data Parameter Sesaat sudah terinput semua .!'
-                        ], 401);
-                    }
+
+
 
                     // Ambil informasi sub-kategori dari master berdasarkan ID kategori_3 (dipisah dengan '-')
                     $id_ket = explode('-', $data->kategori_3)[0];
                     $cek = MasterSubKategori::find($id_ket);
 
-                    $form_mappings = [];
-                    foreach ($param_fin as $p) {
-                        $pLower = strtolower($p);
-                        $kategori = 'Sesaat';
-                        $jam = 0;
-                        if (str_contains($pLower, '24 jam') || str_contains($pLower, '24j')) {
-                            $kategori = '24 Jam';
-                            $jam = 24;
-                        } else if (str_contains($pLower, '8 jam') || str_contains($pLower, '8j')) {
-                            $kategori = '8 Jam';
-                            $jam = 8;
-                        } else if (str_contains($pLower, '6 jam')) {
-                            $kategori = '6 Jam';
-                            $jam = 6;
-                        }
-                        $form_mappings[$p] = [
-                            'kategori' => $kategori,
-                            'jam' => $jam
-                        ];
-                    }
+                    $form_mappings = $this->buildFormMappings($param_fin);
 
                     return response()->json([
                         'no_sample'  => $data->no_sampel,
@@ -134,26 +167,7 @@ class FdlSensoricPMController extends Controller
                     $id_ket2 = explode('-', $data->kategori_2)[0];
                     $cek = MasterSubKategori::find($id_ket);
 
-                    $form_mappings = [];
-                    foreach ($parameters as $p) {
-                        $pLower = strtolower($p);
-                        $kategori = 'Sesaat';
-                        $jam = 0;
-                        if (str_contains($pLower, '24 jam') || str_contains($pLower, '24j')) {
-                            $kategori = '24 Jam';
-                            $jam = 24;
-                        } else if (str_contains($pLower, '8 jam') || str_contains($pLower, '8j')) {
-                            $kategori = '8 Jam';
-                            $jam = 8;
-                        } else if (str_contains($pLower, '6 jam')) {
-                            $kategori = '6 Jam';
-                            $jam = 6;
-                        }
-                        $form_mappings[$p] = [
-                            'kategori' => $kategori,
-                            'jam' => $jam
-                        ];
-                    }
+                    $form_mappings = $this->buildFormMappings($parameters);
 
                     return response()->json([
                         'no_sample'  => $data->no_sampel,
