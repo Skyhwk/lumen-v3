@@ -35,7 +35,58 @@ final class LeaveAlpaExcuseCalendar
             $calendar->loadLegacy($ids, $fromYmd, $toYmd);
         } else {
             $calendar->loadHr($ids, $fromYmd, $toYmd, null);
+            $calendar->loadHr($ids, $fromYmd, $toYmd, null);
         }
+
+        return $calendar;
+    }
+
+    /**
+     * Cuti/izin dari hr_request + detail di DB produksi (intilab_produksi), tanpa legacy apps.
+     * Dipakai reminder absensi & alur yang sudah migrasi ke hr_*.
+     *
+     * @param  list<int>  $karyawanIds
+     */
+    public static function forProduksiHrTables(array $karyawanIds, Carbon $rangeFrom, Carbon $rangeTo): self
+    {
+        $calendar = new self();
+        $ids = array_values(array_unique(array_filter(array_map('intval', $karyawanIds), fn ($id) => $id > 0)));
+        if ($ids === []) {
+            return $calendar;
+        }
+
+        $connection = (string) config('greatday.produksi_connection', config('database.default', 'mysql'));
+        $calendar->loadHr(
+            $ids,
+            $rangeFrom->toDateString(),
+            $rangeTo->toDateString(),
+            $connection
+        );
+
+        return $calendar;
+    }
+
+    /**
+     * Reminder absensi: cuti/izin cukup sudah diajukan (hr_request is_active + detail tanggal),
+     * tanpa wajib Approved HRD (tolak Rejected Atasan/HRD).
+     *
+     * @param  list<int>  $karyawanIds
+     */
+    public static function forProduksiAttendanceReminder(array $karyawanIds, Carbon $rangeFrom, Carbon $rangeTo): self
+    {
+        $calendar = new self();
+        $ids = array_values(array_unique(array_filter(array_map('intval', $karyawanIds), fn ($id) => $id > 0)));
+        if ($ids === []) {
+            return $calendar;
+        }
+
+        $connection = (string) config('greatday.produksi_connection', config('database.default', 'mysql'));
+        $calendar->loadHrForAttendanceReminder(
+            $ids,
+            $rangeFrom->toDateString(),
+            $rangeTo->toDateString(),
+            $connection
+        );
 
         return $calendar;
     }
@@ -164,9 +215,11 @@ final class LeaveAlpaExcuseCalendar
 
     /** @param list<int> $ids */
     private function loadHr(array $ids, string $fromYmd, string $toYmd, ?string $connection = null): void
+    private function loadHr(array $ids, string $fromYmd, string $toYmd, ?string $connection = null): void
     {
         $statuses = [WorkflowStatus::APPROVED_ATASAN, WorkflowStatus::APPROVED_HRD];
 
+        $permissions = $this->hrRequestQuery($connection)
         $permissions = $this->hrRequestQuery($connection)
             ->with('permissionDetail')
             ->whereIn('karyawan_id', $ids)
@@ -183,6 +236,7 @@ final class LeaveAlpaExcuseCalendar
             $this->addRange((int) $row->karyawan_id, $this->formatDate($detail->start_date), $this->formatDate($detail->end_date), $fromYmd, $toYmd);
         }
 
+        $leaves = $this->hrRequestQuery($connection)
         $leaves = $this->hrRequestQuery($connection)
             ->with('leaveDetail')
             ->whereIn('karyawan_id', $ids)
@@ -277,6 +331,16 @@ final class LeaveAlpaExcuseCalendar
                 $this->addRange((int) $row->employee_id, $this->formatDate($row->start_date ?? null), $this->formatDate($row->end_date ?? null), $fromYmd, $toYmd);
             }
         }
+    }
+
+    /** @return \Illuminate\Database\Eloquent\Builder<HrRequest> */
+    private function hrRequestQuery(?string $connection)
+    {
+        if ($connection !== null && $connection !== '') {
+            return HrRequest::on($connection);
+        }
+
+        return HrRequest::query();
     }
 
     /** @return \Illuminate\Database\Eloquent\Builder<HrRequest> */
