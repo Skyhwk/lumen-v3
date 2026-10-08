@@ -1,11 +1,31 @@
 @php
     use App\Services\SalaryAdjustmentEmailViewData as EmailData;
     use App\Services\SalaryAdjustmentEmailService as EmailRole;
+    use App\Services\EmployeeAdjustmentTypeRegistry as TypeRegistry;
     $request = $bundle['request'] ?? ($data ?? []);
     $showHrd = EmailData::showHrdColumn($request);
     $showFinanceDiff = EmailData::showFinanceDiff($request);
     $stageLabel = $approverLabel ?? EmailRole::LABEL_APPROVAL;
     $isFinalStage = ($approverRole ?? '') === EmailRole::ROLE_BAPAK;
+    $jenisPermohonan = $request['request_type_label']
+        ?? TypeRegistry::label($request['request_type'] ?? null);
+    $lewatFinance = !empty($request['finance_approved_at']);
+    $tahapan = ['evaluasi HRD'];
+    if ($lewatFinance) {
+        $tahapan[] = 'review Finance';
+    }
+    if ($isFinalStage) {
+        $tahapan[] = 'tahap ' . EmailRole::LABEL_APPROVAL;
+    }
+    if (count($tahapan) === 1) {
+        $rangkaianTahapan = $tahapan[0];
+    } elseif (count($tahapan) === 2) {
+        $rangkaianTahapan = $tahapan[0] . ' dan ' . $tahapan[1];
+    } else {
+        $lastTahapan = array_pop($tahapan);
+        $rangkaianTahapan = implode(', ', $tahapan) . ', dan ' . $lastTahapan;
+    }
+    $labelKeputusan = $isFinalStage ? EmailRole::LABEL_APPROVAL_FINAL : EmailRole::LABEL_APPROVAL;
 @endphp
 
 @include('TemplateEmail.hrd.partials.salary-adjustment-shell-open', [
@@ -19,13 +39,8 @@
 </p>
 
 <p style="margin:0 0 24px 0;font-size:14px;line-height:1.75;color:#52525b;">
-    @if($isFinalStage)
-        Berikut permohonan penyesuaian gaji karyawan internal yang telah melalui evaluasi HRD, review Finance,
-        dan tahap {{ EmailRole::LABEL_APPROVAL }}. Mohon keputusan {{ EmailRole::LABEL_APPROVAL_FINAL }} melalui tombol di bawah.
-    @else
-        Berikut permohonan penyesuaian gaji karyawan internal yang telah melalui evaluasi HRD dan review Finance.
-        Mohon keputusan {{ EmailRole::LABEL_APPROVAL }} melalui tombol di bawah.
-    @endif
+    Berikut permohonan {{ $jenisPermohonan }} karyawan internal yang telah melalui {{ $rangkaianTahapan }}.
+    Mohon keputusan {{ $labelKeputusan }} melalui tombol di bawah.
 </p>
 
 @if($isFinalStage && !empty($request['ibu_approved_at']))

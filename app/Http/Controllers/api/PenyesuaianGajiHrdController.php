@@ -1367,6 +1367,74 @@ class PenyesuaianGajiHrdController extends Controller
         }
     }
 
+    public function previewApprovalEmail(Request $request)
+    {
+        $id = (int) ($request->input('id') ?? 0);
+        if ($id <= 0) {
+            return response()->json(['success' => false, 'message' => 'id wajib diisi'], 422);
+        }
+
+        $roleInput = strtolower(trim((string) $request->input('role', SalaryAdjustmentEmailService::ROLE_IBU)));
+        $role = $roleInput === SalaryAdjustmentEmailService::ROLE_BAPAK
+            ? SalaryAdjustmentEmailService::ROLE_BAPAK
+            : SalaryAdjustmentEmailService::ROLE_IBU;
+
+        $format = strtolower((string) $request->input('format', 'html')) === 'json' ? 'json' : 'html';
+        $send = filter_var($request->input('send', false), FILTER_VALIDATE_BOOLEAN);
+        $persistToken = filter_var($request->input('persist_token', false), FILTER_VALIDATE_BOOLEAN);
+        $targetEmail = trim((string) $request->input('target_email', ''));
+        $sender = trim((string) ($request->input('sender') ?: ($this->karyawan ?? 'HRD')));
+
+        $record = SalaryAdjustmentRequest::find($id);
+        if (!$record || !$record->is_active) {
+            return response()->json(['success' => false, 'message' => 'Data tidak ditemukan'], 404);
+        }
+
+        try {
+            $emailService = new SalaryAdjustmentEmailService();
+            $html = $emailService->previewApprovalHtml($record, $role);
+            $sent = false;
+            $sentTo = $targetEmail !== '' ? $targetEmail : $emailService->resolveRecipient($role);
+
+            if ($send) {
+                $sent = $emailService->sendForRole($record, $role, $sender, [
+                    'email' => $sentTo,
+                    'persist_token' => $persistToken,
+                    'throw' => true,
+                ]);
+            }
+
+            $meta = [
+                'id' => $record->id,
+                'no_document' => $record->no_document,
+                'request_type' => $record->request_type,
+                'request_type_label' => EmployeeAdjustmentTypeRegistry::label($record->request_type),
+                'role' => $role,
+                'approver_label' => SalaryAdjustmentEmailService::actorLabel($role),
+                'finance_approved_at' => $record->finance_approved_at,
+                'sent' => $sent,
+                'target_email' => $send ? $sentTo : null,
+                'persist_token' => $persistToken,
+            ];
+
+            if ($format === 'html' && !$send) {
+                return response($html)->header('Content-Type', 'text/html; charset=UTF-8');
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => array_merge($meta, ['html' => $html]),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+            ], 500);
+        }
+    }
+
     private function ensureSubmittedSnapshot(SalaryAdjustmentRequest $record): void
     {
         if ($record->submitted_adjustment_gaji_pokok !== null) {
