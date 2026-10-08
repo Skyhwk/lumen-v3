@@ -321,6 +321,7 @@ class DashboardSmsController extends Controller
 
                 [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRows($periode);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
+                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, null);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 $years = [
@@ -487,6 +488,7 @@ class DashboardSmsController extends Controller
 
                 [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRows($periode, [$teamRootId]);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
+                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $bawahanIds);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 return response()->json([
@@ -614,6 +616,8 @@ class DashboardSmsController extends Controller
                     ? $this->prepareHierarchyRows($periode, null, [$karyawanId])
                     : $this->prepareHierarchyRows($periode, [$karyawanId]);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
+                $samplingScopeIds              = ($isSalesStaff || $isExecutive) ? [$karyawanId] : $scopeIds;
+                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $samplingScopeIds);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 return response()->json([
@@ -790,20 +794,21 @@ class DashboardSmsController extends Controller
             return $query;
         };
 
-        $revenueExpression = 'SUM(COALESCE(total_revenue, 0))';
+        $revenueExpression = 'SUM(COALESCE(daily_qsd.total_revenue, 0))';
 
         $topCustomers = $baseQuery()
+            ->leftJoin('master_pelanggan as mp', 'mp.id_pelanggan', '=', 'daily_qsd.pelanggan_ID')
             ->select(
-                'pelanggan_ID as id_pelanggan',
-                \DB::raw('MAX(nama_perusahaan) as nama_pelanggan'),
-                \DB::raw('MAX(sales_nama) as sales_nama'),
+                'daily_qsd.pelanggan_ID as id_pelanggan',
+                \DB::raw('MAX(COALESCE(mp.nama_pelanggan, daily_qsd.nama_perusahaan)) as nama_pelanggan'),
+                \DB::raw('MAX(mp.sales_penanggung_jawab) as sales_nama'),
                 \DB::raw($revenueExpression . ' as revenue')
             )
-            ->whereNotNull('pelanggan_ID')
-            ->groupBy('pelanggan_ID')
+            ->whereNotNull('daily_qsd.pelanggan_ID')
+            ->groupBy('daily_qsd.pelanggan_ID')
             ->havingRaw($revenueExpression . ' > 0')
             ->orderByDesc('revenue')
-            ->whereNull('konsultan')
+            ->whereNull('daily_qsd.konsultan')
             ->limit(30)
             ->get();
 
@@ -1260,6 +1265,260 @@ class DashboardSmsController extends Controller
             'revenue_non_sp'               => 0,
             'revenue_forecast'             => 0,
         ];
+    }
+
+    private function enrichRevenueHeadingWithSampling(array $heading, ?string $periode, ?array $salesIds): array
+    {
+        $totals = $this->calculateSamplingRevenueTotals($periode, $salesIds);
+        $suffix = "\nBelum Sampling : Rp " . number_format($totals['belum_sampling'], 0, ',', '.')
+            . "\nSudah Sampling : Rp " . number_format($totals['sudah_sampling'], 0, ',', '.');
+
+        foreach ($heading as &$item) {
+            if (($item['title'] ?? '') === 'Revenue') {
+                $item['info'] = ($item['info'] ?? '') . $suffix;
+            }
+        }
+        unset($item);
+
+        return $heading;
+    }
+
+    private function calculateSamplingRevenueTotals(?string $periode, ?array $salesIds): array
+    {
+        $empty = ['belum_sampling' => 0.0, 'sudah_sampling' => 0.0];
+        if (!$periode) {
+            return $empty;
+        }
+
+        [$year, $month] = array_pad(explode('-', $periode, 2), 2, null);
+        if (!$year || !$month) {
+            return $empty;
+        }
+
+        $query = \DB::table('daily_qsd')
+            ->select('no_order', 'no_quotation', 'periode', 'status_sampling', 'total_revenue')
+            ->whereNotNull('no_order')
+            ->where('no_order', '!=', '')
+            ->whereYear('tanggal_kelompok', (int) $year)
+            ->whereMonth('tanggal_kelompok', (int) $month);
+
+        if (is_array($salesIds) && count($salesIds) > 0) {
+            $query->whereIn('sales_id', $salesIds);
+        }
+
+        $rows = $query->get();
+        if ($rows->isEmpty()) {
+            return $empty;
+        }
+
+        $noOrders = $rows->pluck('no_order')->filter()->unique()->values();
+        $samplingCategoryByOrder = $this->mapOrderSamplingCategories($noOrders, $rows);
+        $sSamplingMap = $this->mapOrderTypeSSamplingStatus($noOrders);
+        $sdSamplingMap = $this->mapOrderTypeSdSamplingStatus($rows);
+
+        $belum = 0.0;
+        $sudah = 0.0;
+
+        foreach ($rows as $row) {
+            $revenue = (float) ($row->total_revenue ?? 0);
+            if ($revenue <= 0) {
+                continue;
+            }
+
+            $category = $this->resolveRowSamplingCategory($row, $samplingCategoryByOrder);
+            $isSampled = false;
+
+            if ($category === 'sd') {
+                $isSampled = (bool) ($sdSamplingMap[$this->sdSamplingKey($row)] ?? false);
+            } else {
+                // S / S24 / Non Pengujian / unknown → aturan tanggal_terima (tipe S)
+                $isSampled = (bool) ($sSamplingMap[$row->no_order] ?? false);
+            }
+
+            if ($isSampled) {
+                $sudah += $revenue;
+            } else {
+                $belum += $revenue;
+            }
+        }
+
+        return [
+            'belum_sampling' => $belum,
+            'sudah_sampling' => $sudah,
+        ];
+    }
+
+    private function mapOrderSamplingCategories($noOrders, $rows): array
+    {
+        $map = [];
+
+        if ($noOrders->isNotEmpty()) {
+            $detailTypes = \DB::table('order_detail')
+                ->whereIn('no_order', $noOrders)
+                ->where('is_active', 1)
+                ->selectRaw('no_order, GROUP_CONCAT(DISTINCT UPPER(TRIM(kategori_1)) ORDER BY kategori_1 SEPARATOR ", ") as types')
+                ->groupBy('no_order')
+                ->pluck('types', 'no_order');
+
+            foreach ($detailTypes as $noOrder => $typesRaw) {
+                $map[$noOrder] = $this->classifySamplingTokens($this->tokenizeSamplingStatus($typesRaw));
+            }
+        }
+
+        foreach ($rows as $row) {
+            $noOrder = $row->no_order ?? null;
+            if (!$noOrder || isset($map[$noOrder])) {
+                continue;
+            }
+
+            $map[$noOrder] = $this->classifySamplingTokens(
+                $this->tokenizeSamplingStatus($row->status_sampling ?? '')
+            );
+        }
+
+        return $map;
+    }
+
+    private function resolveRowSamplingCategory($row, array $categoryByOrder): string
+    {
+        $noOrder = $row->no_order ?? null;
+        if ($noOrder && isset($categoryByOrder[$noOrder])) {
+            return $categoryByOrder[$noOrder];
+        }
+
+        return $this->classifySamplingTokens(
+            $this->tokenizeSamplingStatus($row->status_sampling ?? '')
+        );
+    }
+
+    private function tokenizeSamplingStatus($raw): array
+    {
+        $raw = strtoupper(trim((string) $raw));
+        if ($raw === '') {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(function ($part) {
+            return trim($part);
+        }, preg_split('/\s*,\s*/', $raw) ?: [])));
+    }
+
+    /**
+     * @return 'sd'|'s'
+     */
+    private function classifySamplingTokens(array $tokens): string
+    {
+        $sdTokens = ['SD', 'SAR', 'SP'];
+        $sTokens = ['S', 'S24'];
+
+        foreach ($tokens as $token) {
+            if (in_array($token, $sdTokens, true)) {
+                return 'sd';
+            }
+        }
+
+        foreach ($tokens as $token) {
+            if (in_array($token, $sTokens, true)) {
+                return 's';
+            }
+        }
+
+        // Non Pengujian & legacy kosong → ikuti aturan S (tanggal_terima)
+        return 's';
+    }
+
+    private function mapOrderTypeSSamplingStatus($noOrders): array
+    {
+        if ($noOrders->isEmpty()) {
+            return [];
+        }
+
+        $stats = \DB::table('order_detail')
+            ->whereIn('no_order', $noOrders)
+            ->where('is_active', 1)
+            ->selectRaw("
+                no_order,
+                COUNT(*) as detail_count,
+                SUM(CASE
+                    WHEN tanggal_terima IS NOT NULL
+                        AND TRIM(CAST(tanggal_terima AS CHAR)) NOT IN ('', '0000-00-00')
+                    THEN 1 ELSE 0
+                END) as filled_count
+            ")
+            ->groupBy('no_order')
+            ->get();
+
+        $map = [];
+        foreach ($stats as $stat) {
+            $detailCount = (int) ($stat->detail_count ?? 0);
+            $filledCount = (int) ($stat->filled_count ?? 0);
+            $map[$stat->no_order] = $detailCount > 0 && $filledCount === $detailCount;
+        }
+
+        return $map;
+    }
+
+    private function mapOrderTypeSdSamplingStatus($dailyQsdRows): array
+    {
+        $noOrders = $dailyQsdRows->pluck('no_order')->filter()->unique()->values();
+        $noQuotations = $dailyQsdRows->pluck('no_quotation')->filter()->unique()->values();
+
+        if ($noOrders->isEmpty() && $noQuotations->isEmpty()) {
+            return [];
+        }
+
+        if (!\Schema::hasTable('sampel_diantar')) {
+            return [];
+        }
+
+        $sdQuery = \DB::table('sampel_diantar');
+        $sdQuery->where(function ($q) use ($noOrders, $noQuotations) {
+            if ($noOrders->isNotEmpty()) {
+                $q->whereIn('no_order', $noOrders);
+            }
+            if ($noQuotations->isNotEmpty()) {
+                $method = $noOrders->isNotEmpty() ? 'orWhereIn' : 'whereIn';
+                $q->{$method}('no_quotation', $noQuotations);
+            }
+        });
+
+        $sdRows = $sdQuery->get(['no_order', 'no_quotation', 'periode_kontrak']);
+        $map = [];
+        foreach ($sdRows as $sd) {
+            $order = trim((string) ($sd->no_order ?? ''));
+            $qt = trim((string) ($sd->no_quotation ?? ''));
+            $periode = trim((string) ($sd->periode_kontrak ?? ''));
+
+            if ($order !== '') {
+                $map[$order . '|' . $periode] = true;
+                $map[$order . '|'] = true;
+            }
+            if ($qt !== '') {
+                $map['qt:' . $qt . '|' . $periode] = true;
+                $map['qt:' . $qt . '|'] = true;
+            }
+        }
+
+        $result = [];
+        foreach ($dailyQsdRows as $row) {
+            $key = $this->sdSamplingKey($row);
+            $order = trim((string) ($row->no_order ?? ''));
+            $qt = trim((string) ($row->no_quotation ?? ''));
+            $periode = trim((string) ($row->periode ?? ''));
+
+            $result[$key] = ($order !== '' && (
+                isset($map[$order . '|' . $periode]) || isset($map[$order . '|'])
+            )) || ($qt !== '' && (
+                isset($map['qt:' . $qt . '|' . $periode]) || isset($map['qt:' . $qt . '|'])
+            ));
+        }
+
+        return $result;
+    }
+
+    private function sdSamplingKey($row): string
+    {
+        return trim((string) ($row->no_order ?? '')) . '|' . trim((string) ($row->periode ?? ''));
     }
 
 }

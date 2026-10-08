@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Support\FdlOrderDetailNoSampelSync;
+
 use App\Models\DataLapanganMicrobiologi;
 use App\Models\DetailMicrobiologi;
 use App\Models\OrderDetail;
@@ -302,21 +304,8 @@ class FdlMicrobiologiController extends Controller
                 $data->updated_by = $this->karyawan;
                 $data->updated_at = date('Y-m-d H:i:s');
                 $data->save();
+                FdlOrderDetailNoSampelSync::afterRename($request->no_sampel_lama, $request->no_sampel_baru);
 
-                // update OrderDetail
-                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
-                    ->first();
-
-                if ($order_detail_lama) {
-                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
-                        ->where('is_active', 1)
-                        ->update([
-                            'tanggal_terima' => $order_detail_lama->tanggal_terima
-                        ]);
-                    
-                    $order_detail_lama->tanggal_terima = NULL;
-                    $order_detail_lama->save();
-                }
 
                 DB::commit();
                 return response()->json([

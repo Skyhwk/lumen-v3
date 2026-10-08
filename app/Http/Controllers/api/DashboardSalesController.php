@@ -44,20 +44,7 @@ class DashboardSalesController extends Controller
         $currMonth = $date->month;
         $prevMonth = $date->copy()->subMonth()->month;
 
-        $dailyQsd = DailyQsd::with('orderHeader.orderDetail')
-            ->where('sales_id', $karyawanId)
-            ->whereYear('tanggal_kelompok', $request->year)
-            ->get()
-            ->map(function ($qsd) {
-                if ($qsd->periode) {
-                    $orderDetail = optional($qsd->orderHeader)->orderDetail ? $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values() : collect();
-                    if ($orderDetail->isNotEmpty()) {
-                        $qsd->orderHeader->setRelation('orderDetail', $orderDetail);
-                    }
-                }
-
-                return $qsd;
-            });
+        $dailyQsd = $this->loadDailyQsdForSales($karyawanId, (int) $request->year);
 
         $currQsd = $dailyQsd->filter(fn($qsd) => Carbon::parse($qsd->tanggal_kelompok)->month == $currMonth);
         $prevQsd = $dailyQsd->filter(fn($qsd) => Carbon::parse($qsd->tanggal_kelompok)->month == $prevMonth);
@@ -73,46 +60,13 @@ class DashboardSalesController extends Controller
             'tahun'       => $request->year
         ])->latest()->first();
 
-        $currTarget = 0;
-        $currAchieved = 0;
-        $prevTarget = 0;
-        $prevAchieved = 0;
-        if ($targetSales) {
-            $currTargetCategory = collect($targetSales->{$this->indoMonths[$currMonth]})->filter(fn($value) => $value > 0);
+        $currCategoryMetrics = $this->buildCategoryTargetMetrics($targetSales, $currQsd, $currMonth);
+        $prevCategoryMetrics = $this->buildCategoryTargetMetrics($targetSales, $prevQsd, $prevMonth);
 
-            $currAchievedCategory = $currTargetCategory->map(
-                function ($_, $category) use ($currQsd, $currTargetCategory) {
-                    $target = $currTargetCategory[$category];
-                    $achieved = $currQsd->flatMap(fn($q) => optional($q->orderHeader)->orderDetail)->filter(fn($orderDetail) => collect($this->categoryStr[$category])->contains($orderDetail->kategori_3))->count();
-
-                    return $target && $achieved ? floor($achieved / $target) : 0;
-                }
-            );
-
-            $currAchieved = $currAchievedCategory->sum() == 0 ? 1 : $currAchievedCategory->sum();
-            $currTarget = $currTargetCategory->count();
-
-            $prevTargetCategory = collect($targetSales->{$this->indoMonths[$prevMonth]})->filter(fn($value) => $value > 0);
-
-            $prevAchievedCategory = $prevTargetCategory->map(
-                function ($_, $category) use ($prevQsd, $prevTargetCategory) {
-                    $target = $prevTargetCategory[$category];
-                    $achieved = $prevQsd->flatMap(fn($q) => optional($q->orderHeader)->orderDetail)->filter(fn($orderDetail) => collect($this->categoryStr[$category])->contains($orderDetail->kategori_3))->count();
-
-                    return $target && $achieved ? floor($achieved / $target) : 0;
-                }
-            );
-
-            $prevAchieved = $prevAchievedCategory->sum() == 0 ? 1 : $prevAchievedCategory->sum();
-            $prevTarget = $prevTargetCategory->count();
-        }
-         
-        $currTargetKategori = $currAchieved . '/' . $currTarget;
-        $prevTargetKategori = $prevAchieved . '/' . $prevTarget;
-
+        $currTargetKategori = $currCategoryMetrics['target_kategori'];
         $growthTargetKategori = $this->calculateGrowth(
-            $currTarget > 0 ? $currAchieved / $currTarget : 0,
-            $prevTarget > 0 ? $prevAchieved / $prevTarget : 0
+            $currCategoryMetrics['ratio'],
+            $prevCategoryMetrics['ratio']
         );
 
         $currNewCustomer = $currQsd->filter(fn($qsd) => $qsd->status_customer == 'new')->count();
@@ -193,6 +147,113 @@ class DashboardSalesController extends Controller
                 'quotation_analytics'         => $this->getQuotationAnalytics($karyawanId, $date),
             ],
         ], 200);
+    }
+
+    public function categoryTargetDetail(Request $request)
+    {
+        $karyawan = $request->attributes->get('user')->karyawan;
+        $karyawanId = $karyawan->id;
+
+        $date = Carbon::create($request->year, $request->month, 1);
+        $currMonth = $date->month;
+
+        $dailyQsd = $this->loadDailyQsdForSales($karyawanId, (int) $request->year);
+        $currQsd = $dailyQsd->filter(fn($qsd) => Carbon::parse($qsd->tanggal_kelompok)->month == $currMonth);
+
+        $targetSales = MasterTargetSales::where([
+            'karyawan_id' => $karyawanId,
+            'is_active'   => true,
+            'tahun'       => $request->year,
+        ])->latest()->first();
+
+        $metrics = $this->buildCategoryTargetMetrics($targetSales, $currQsd, $currMonth);
+
+        return response()->json([
+            'message' => 'Data retrieved successfully',
+            'data'    => $metrics,
+        ], 200);
+    }
+
+    private function loadDailyQsdForSales(int $karyawanId, int $year)
+    {
+        return DailyQsd::with('orderHeader.orderDetail')
+            ->where('sales_id', $karyawanId)
+            ->whereYear('tanggal_kelompok', $year)
+            ->get()
+            ->map(function ($qsd) {
+                if ($qsd->periode) {
+                    $orderDetail = optional($qsd->orderHeader)->orderDetail
+                        ? $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values()
+                        : collect();
+                    if ($orderDetail->isNotEmpty()) {
+                        $qsd->orderHeader->setRelation('orderDetail', $orderDetail);
+                    }
+                }
+
+                return $qsd;
+            });
+    }
+
+    private function buildCategoryTargetMetrics($targetSales, $monthlyQsd, int $month): array
+    {
+        $empty = [
+            'target_kategori'      => '0/0',
+            'categories'           => [],
+            'total_target'         => 0,
+            'total_achieved'       => 0,
+            'total_point'          => '0/0',
+            'percentage_category'  => 0,
+            'ratio'                => 0,
+            'point_sum'            => 0,
+            'category_count'       => 0,
+        ];
+
+        if (!$targetSales) {
+            return $empty;
+        }
+
+        $monthKey = $this->indoMonths[$month];
+        $targetByCategory = collect($targetSales->{$monthKey})->filter(fn($value) => $value > 0);
+
+        if ($targetByCategory->isEmpty()) {
+            return $empty;
+        }
+
+        $categories = [];
+        $pointScores = $targetByCategory->map(function ($target, $category) use ($monthlyQsd, &$categories) {
+            $achieved = $monthlyQsd
+                ->flatMap(fn($q) => optional($q->orderHeader)->orderDetail)
+                ->filter(fn($orderDetail) => collect($this->categoryStr[$category] ?? [])->contains($orderDetail->kategori_3))
+                ->count();
+
+            $point = $target && $achieved ? (int) floor($achieved / $target) : 0;
+
+            $categories[] = [
+                'category' => $category,
+                'target'   => $target,
+                'achieved' => $achieved,
+                'point'    => $point,
+            ];
+
+            return $point;
+        });
+
+        $pointSum = $pointScores->sum() == 0 ? 1 : $pointScores->sum();
+        $categoryCount = $targetByCategory->count();
+
+        usort($categories, fn($a, $b) => strcmp($a['category'], $b['category']));
+
+        return [
+            'target_kategori'     => $pointSum . '/' . $categoryCount,
+            'categories'          => $categories,
+            'total_target'        => (int) $targetByCategory->sum(),
+            'total_achieved'      => (int) collect($categories)->sum('achieved'),
+            'total_point'         => $pointSum . '/' . $categoryCount,
+            'percentage_category' => $categoryCount > 0 ? $pointSum / $categoryCount : 0,
+            'ratio'               => $categoryCount > 0 ? $pointSum / $categoryCount : 0,
+            'point_sum'           => $pointSum,
+            'category_count'      => $categoryCount,
+        ];
     }
 
     private function calculateGrowth($current, $previous)
