@@ -27,6 +27,6 @@ class SummaryFeeSales extends Sector
 
     public function sales()
     {
-        return $this->belongsTo(MasterKaryawan::class, 'sales_id')->where('is_active', true);
+        return $this->belongsTo(MasterKaryawan::class, 'sales_id');
     }
 }
