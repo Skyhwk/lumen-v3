@@ -38,13 +38,13 @@ class FdlSensoricPMController extends Controller
     {
         $pLower = strtolower($parameterName);
         if (str_contains($pLower, '24 jam') || str_contains($pLower, '24j')) {
-            return 5;
+            return 24;
         }
         if (str_contains($pLower, '8 jam') || str_contains($pLower, '8j')) {
             return 3;
         }
-        if (str_contains($pLower, '6 jam')) {
-            return 3;
+        if (str_contains($pLower, '6 jam') || str_contains($pLower, '6j')) {
+            return 6;
         }
         return 1;
     }
