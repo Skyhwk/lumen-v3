@@ -1290,11 +1290,17 @@ class DashboardSmsController extends Controller
             return $empty;
         }
 
+        [$year, $month] = array_pad(explode('-', $periode, 2), 2, null);
+        if (!$year || !$month) {
+            return $empty;
+        }
+
         $query = \DB::table('daily_qsd')
             ->select('no_order', 'no_quotation', 'periode', 'status_sampling', 'total_revenue')
             ->whereNotNull('no_order')
             ->where('no_order', '!=', '')
-            ->whereRaw("DATE_FORMAT(tanggal_kelompok, '%Y-%m') = ?", [$periode]);
+            ->whereYear('tanggal_kelompok', (int) $year)
+            ->whereMonth('tanggal_kelompok', (int) $month);
 
         if (is_array($salesIds) && count($salesIds) > 0) {
             $query->whereIn('sales_id', $salesIds);
@@ -1306,6 +1312,7 @@ class DashboardSmsController extends Controller
         }
 
         $noOrders = $rows->pluck('no_order')->filter()->unique()->values();
+        $samplingCategoryByOrder = $this->mapOrderSamplingCategories($noOrders, $rows);
         $sSamplingMap = $this->mapOrderTypeSSamplingStatus($noOrders);
         $sdSamplingMap = $this->mapOrderTypeSdSamplingStatus($rows);
 
@@ -1318,15 +1325,14 @@ class DashboardSmsController extends Controller
                 continue;
             }
 
-            $type = strtoupper(trim((string) ($row->status_sampling ?? '')));
+            $category = $this->resolveRowSamplingCategory($row, $samplingCategoryByOrder);
             $isSampled = false;
 
-            if (in_array($type, ['S', 'S24'], true)) {
-                $isSampled = (bool) ($sSamplingMap[$row->no_order] ?? false);
-            } elseif (in_array($type, ['SD', 'SAR', 'SP'], true)) {
+            if ($category === 'sd') {
                 $isSampled = (bool) ($sdSamplingMap[$this->sdSamplingKey($row)] ?? false);
             } else {
-                continue;
+                // S / S24 / Non Pengujian / unknown → aturan tanggal_terima (tipe S)
+                $isSampled = (bool) ($sSamplingMap[$row->no_order] ?? false);
             }
 
             if ($isSampled) {
@@ -1340,6 +1346,85 @@ class DashboardSmsController extends Controller
             'belum_sampling' => $belum,
             'sudah_sampling' => $sudah,
         ];
+    }
+
+    private function mapOrderSamplingCategories($noOrders, $rows): array
+    {
+        $map = [];
+
+        if ($noOrders->isNotEmpty()) {
+            $detailTypes = \DB::table('order_detail')
+                ->whereIn('no_order', $noOrders)
+                ->where('is_active', 1)
+                ->selectRaw('no_order, GROUP_CONCAT(DISTINCT UPPER(TRIM(kategori_1)) ORDER BY kategori_1 SEPARATOR ", ") as types')
+                ->groupBy('no_order')
+                ->pluck('types', 'no_order');
+
+            foreach ($detailTypes as $noOrder => $typesRaw) {
+                $map[$noOrder] = $this->classifySamplingTokens($this->tokenizeSamplingStatus($typesRaw));
+            }
+        }
+
+        foreach ($rows as $row) {
+            $noOrder = $row->no_order ?? null;
+            if (!$noOrder || isset($map[$noOrder])) {
+                continue;
+            }
+
+            $map[$noOrder] = $this->classifySamplingTokens(
+                $this->tokenizeSamplingStatus($row->status_sampling ?? '')
+            );
+        }
+
+        return $map;
+    }
+
+    private function resolveRowSamplingCategory($row, array $categoryByOrder): string
+    {
+        $noOrder = $row->no_order ?? null;
+        if ($noOrder && isset($categoryByOrder[$noOrder])) {
+            return $categoryByOrder[$noOrder];
+        }
+
+        return $this->classifySamplingTokens(
+            $this->tokenizeSamplingStatus($row->status_sampling ?? '')
+        );
+    }
+
+    private function tokenizeSamplingStatus($raw): array
+    {
+        $raw = strtoupper(trim((string) $raw));
+        if ($raw === '') {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(function ($part) {
+            return trim($part);
+        }, preg_split('/\s*,\s*/', $raw) ?: [])));
+    }
+
+    /**
+     * @return 'sd'|'s'
+     */
+    private function classifySamplingTokens(array $tokens): string
+    {
+        $sdTokens = ['SD', 'SAR', 'SP'];
+        $sTokens = ['S', 'S24'];
+
+        foreach ($tokens as $token) {
+            if (in_array($token, $sdTokens, true)) {
+                return 'sd';
+            }
+        }
+
+        foreach ($tokens as $token) {
+            if (in_array($token, $sTokens, true)) {
+                return 's';
+            }
+        }
+
+        // Non Pengujian & legacy kosong → ikuti aturan S (tanggal_terima)
+        return 's';
     }
 
     private function mapOrderTypeSSamplingStatus($noOrders): array
