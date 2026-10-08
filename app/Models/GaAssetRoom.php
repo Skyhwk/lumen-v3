@@ -24,4 +24,9 @@ class GaAssetRoom extends Sector
     {
         return $this->belongsTo(GaAssetLocation::class, 'location_id');
     }
+
+    public function assets()
+    {
+        return $this->hasMany(GaAsset::class, 'room_id');
+    }
 }

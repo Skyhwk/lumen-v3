@@ -34,7 +34,7 @@ class GaAssetSequenceController extends Controller
             ->addColumn('next_cs_code', function ($row) {
                 $next = ((int) $row->last_number) + 1;
 
-                return $this->formatCsCode((string) ($row->nama_sub_kategori ?? ''), $next);
+                return GaAssetSequence::formatCode((string) ($row->nama_sub_kategori ?? ''), $next);
             })
             ->make(true);
     }
@@ -117,7 +117,7 @@ class GaAssetSequenceController extends Controller
                 'nama_sub_kategori' => $subKategori->nama_sub_kategori,
                 'last_number' => $lastNumber,
                 'next_number' => $next,
-                'cs_code' => $this->formatCsCode($subKategori->nama_sub_kategori, $next),
+                'cs_code' => GaAssetSequence::formatCode($subKategori->nama_sub_kategori, $next),
             ],
         ]);
     }
@@ -150,7 +150,7 @@ class GaAssetSequenceController extends Controller
                 'sub_kategori_aset_id' => $subKategoriId,
                 'nama_sub_kategori' => $subKategori->nama_sub_kategori,
                 'last_number' => $next,
-                'cs_code' => $this->formatCsCode($subKategori->nama_sub_kategori, $next),
+                'cs_code' => GaAssetSequence::formatCode($subKategori->nama_sub_kategori, $next),
             ];
         });
 
@@ -172,15 +172,4 @@ class GaAssetSequenceController extends Controller
         ];
     }
 
-    private function formatCsCode(string $name, int $number): string
-    {
-        $slug = strtoupper(trim($name));
-        $slug = preg_replace('/[^A-Z0-9]+/', '-', $slug);
-        $slug = trim((string) $slug, '-');
-        if ($slug === '') {
-            $slug = 'ASET';
-        }
-
-        return 'CS-' . $slug . '-' . str_pad((string) $number, 3, '0', STR_PAD_LEFT);
-    }
 }
