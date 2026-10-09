@@ -15,7 +15,9 @@ class InternalAssessmentParticipantPdfService
 
     public const OUTPUT_DIR = 'Export_Assessment_Internal_Pdf';
 
-    private const PDF_CATEGORY_ORDER = ['LOGIKA', 'NALAR', 'INTEGRITAS'];
+    private const PDF_CATEGORY_ORDER = ['LOGIKA', 'NALAR'];
+
+    private const EMAIL_SEND_DELAY_SECONDS = 3;
 
     public function generateForAttempt(int $attemptId): array
     {
@@ -23,7 +25,7 @@ class InternalAssessmentParticipantPdfService
         $sections = $this->buildPdfSections($context['sessions'], $context['attempt']);
 
         if (empty($sections)) {
-            throw new \RuntimeException('Belum ada data sesi Logika, Nalar, atau Integritas yang bisa diekspor untuk peserta ini.');
+            throw new \RuntimeException('Belum ada data sesi Logika atau Nalar yang bisa diekspor untuk peserta ini.');
         }
 
         $participantName = trim((string) ($context['attempt']->participant_name ?? 'Peserta'));
@@ -100,6 +102,7 @@ class InternalAssessmentParticipantPdfService
                         $attachmentPaths = array_column($payload['links'], 'link');
                         $this->sendParticipantPdfEmail($attempt, $assessment, $attachmentPaths);
                         $emailed[] = $row;
+                        sleep(self::EMAIL_SEND_DELAY_SECONDS);
                     }
                 }
 

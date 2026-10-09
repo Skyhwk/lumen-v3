@@ -14,7 +14,7 @@
 
         <p>Yth. {{ $name }},</p>
 
-        <p>Bersama email ini kami lampirkan dokumen PDF laporan jawaban assessment internal Anda, masing-masing untuk sesi <strong>Logika</strong>, <strong>Nalar</strong>, dan <strong>Integritas</strong> (sesuai data yang tersedia).</p>
+        <p>Bersama email ini kami lampirkan dokumen PDF laporan jawaban assessment internal Anda untuk sesi <strong>Logika</strong> dan <strong>Nalar</strong>.</p>
 
         <p>Assessment: <strong>{{ $assessmentName }}</strong></p>
 

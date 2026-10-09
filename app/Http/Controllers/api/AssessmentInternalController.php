@@ -645,7 +645,7 @@ class AssessmentInternalController extends Controller
         }
     }
 
-    /** PDF jawaban per sesi (Logika, Nalar, Integritas) per peserta. */
+    /** PDF jawaban per sesi (Logika, Nalar) per peserta. */
     public function exportParticipantPdf(Request $request)
     {
         try {
