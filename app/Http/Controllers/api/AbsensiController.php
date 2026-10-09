@@ -243,7 +243,7 @@ class AbsensiController extends Controller
 
             $month = $periode['month'];
             $year = $periode['year'];
-            $lastDay = cal_days_in_month(CAL_GREGORIAN, (int) $month, (int) $year);
+            $lastDay = self::daysInMonth((int) $month, (int) $year);
 
             $data = self::buildMonthlyAbsensiData(
                 $cekKaryawan->id,
