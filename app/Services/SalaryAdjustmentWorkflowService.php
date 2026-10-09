@@ -20,6 +20,7 @@ class SalaryAdjustmentWorkflowService
     public const STATUS_WAITING_APPROVAL_BAPAK = 'waiting_approval_bapak';
     public const STATUS_COMPLETED = 'completed';
     public const STATUS_REJECTED = 'rejected';
+    public const STATUS_CANCELLED = 'cancelled';
 
     public const MANAGER_TAB_WAITING = 'waiting';
     public const MANAGER_TAB_MUTASI_INBOX = 'mutasi_inbox';
@@ -81,6 +82,7 @@ class SalaryAdjustmentWorkflowService
         self::STATUS_WAITING_APPROVAL_BAPAK => 'Waiting Approval Final',
         self::STATUS_COMPLETED => 'Selesai',
         self::STATUS_REJECTED => 'Ditolak',
+        self::STATUS_CANCELLED => 'Dibatalkan',
     ];
 
     public const MANAGER_TAB_STATUS_MAP = [
@@ -100,8 +102,17 @@ class SalaryAdjustmentWorkflowService
             self::STATUS_WAITING_APPROVAL_BAPAK,
         ],
         self::MANAGER_TAB_COMPLETED => [self::STATUS_COMPLETED],
-        self::MANAGER_TAB_REJECTED => [self::STATUS_REJECTED],
+        self::MANAGER_TAB_REJECTED => [self::STATUS_REJECTED, self::STATUS_CANCELLED],
     ];
+
+    public static function canManagerCancel(?string $status): bool
+    {
+        if ($status === self::STATUS_HRD_PROCESSING) {
+            return false;
+        }
+
+        return in_array($status, self::statusesForManagerTab(self::MANAGER_TAB_WAITING), true);
+    }
 
     public static function isManagerGrade(?string $grade): bool
     {
@@ -131,6 +142,7 @@ class SalaryAdjustmentWorkflowService
         'mutasi_notify_receiver' => 'Notifikasi Mutasi ke Manager Penerima',
         'receiver_accept' => 'Manager Penerima Menerima Mutasi',
         'receiver_reject' => 'Manager Penerima Menolak Mutasi',
+        'cancel' => 'Dibatalkan Manager Pengaju',
         'generate_assessment' => 'Assessment Dibuat',
         'assessment_completed' => 'Assessment Selesai',
         'skip_assessment' => 'Assessment Dilewati',
@@ -240,11 +252,13 @@ class SalaryAdjustmentWorkflowService
             self::STATUS_WAITING_RECEIVER => [
                 self::STATUS_RECEIVER_RESPONDED,
                 self::STATUS_REJECTED,
+                self::STATUS_CANCELLED,
             ],
             self::STATUS_SUBMITTED => [
                 self::STATUS_HRD_PROCESSING,
                 self::STATUS_FINAL_EVALUATION,
                 self::STATUS_REJECTED,
+                self::STATUS_CANCELLED,
             ],
             self::STATUS_RECEIVER_RESPONDED => [
                 self::STATUS_HRD_PROCESSING,
