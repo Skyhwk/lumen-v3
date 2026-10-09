@@ -18,7 +18,7 @@
 
         <p>Assessment: <strong>{{ $assessmentName }}</strong></p>
 
-        <p style="font-size:13px;color:#475569">Pada PDF: teks hijau = jawaban benar; teks merah = pilihan salah Anda; teks tebal = jawaban yang Anda pilih. Soal salah ditandai <em>(Salah)</em> dan opsi benar dapat label <em>(jawaban benar)</em>.</p>
+        <p style="font-size:13px;color:#475569">Pada PDF: soal ditandai <em>(Benar)</em> atau <em>(Salah)</em>; teks hijau = jawaban benar; teks merah = pilihan salah Anda; teks tebal = jawaban yang Anda pilih. Pada soal salah, opsi benar dilabeli <em>(jawaban benar)</em>.</p>
 
         <p style="margin-top:28px">Hormat kami,<br><strong>HR Department<br>PT Inti Surya Laboratorium</strong></p>
 
