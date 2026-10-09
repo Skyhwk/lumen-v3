@@ -354,12 +354,15 @@ class DashboardSalesController extends Controller
         try {
             $karyawanId = (int) $request->attributes->get('user')->karyawan->id;
             $date = Carbon::create((int) $request->year, (int) $request->month, 1);
+            $service = app(DashboardQuotationNoStatusService::class);
+            $startDate = $date->copy()->startOfMonth();
+            $endDate = $date->copy()->endOfMonth();
 
-            $rows = app(DashboardQuotationNoStatusService::class)->list(
-                [$karyawanId],
-                $date->copy()->startOfMonth(),
-                $date->copy()->endOfMonth()
-            );
+            if ($request->has('draw')) {
+                return response()->json($service->datatable($request, [$karyawanId], $startDate, $endDate));
+            }
+
+            $rows = $service->list([$karyawanId], $startDate, $endDate);
 
             return response()->json([
                 'message' => 'Data retrieved successfully',

@@ -1074,12 +1074,13 @@ class DashboardSmsController extends Controller
         try {
             [$startDate, $endDate] = $this->resolveQuotationAnalyticsDateRange($request);
             $salesIds = $this->resolveDashboardSalesIds($request);
+            $service = app(\App\Services\DashboardQuotationNoStatusService::class);
 
-            $rows = app(\App\Services\DashboardQuotationNoStatusService::class)->list(
-                $salesIds,
-                $startDate,
-                $endDate
-            );
+            if ($request->has('draw')) {
+                return response()->json($service->datatable($request, $salesIds, $startDate, $endDate));
+            }
+
+            $rows = $service->list($salesIds, $startDate, $endDate);
 
             return response()->json([
                 'message' => 'Data retrieved successfully',
