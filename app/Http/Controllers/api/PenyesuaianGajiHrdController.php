@@ -1230,6 +1230,18 @@ class PenyesuaianGajiHrdController extends Controller
             return response()->json(['success' => false, 'message' => 'Permohonan tidak dapat ditolak pada status ini'], 400);
         }
 
+        $isWaitingProcessReject = in_array(
+            $record->status,
+            SalaryAdjustmentWorkflowService::hrdProcessableStatuses(),
+            true
+        );
+        if (!$isWaitingProcessReject && !SalaryAdjustmentWorkflowService::isManagerGrade($this->grade)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hanya Manager / Senior Manager yang dapat menolak permohonan pada tahap ini',
+            ], 403);
+        }
+
         DB::connection('mysql')->beginTransaction();
         try {
             $from = $record->status;
