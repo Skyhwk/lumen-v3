@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\SalaryAdjustmentRequest;
 use Illuminate\Http\Request;
+use Carbon\Carbon;
 
 class EmployeeAdjustmentMutasiService
 {
@@ -151,7 +152,7 @@ class EmployeeAdjustmentMutasiService
         }
 
         $record->status = SalaryAdjustmentWorkflowService::STATUS_RECEIVER_RESPONDED;
-        $record->receiver_responded_at = now();
+        $record->receiver_responded_at = Carbon::now();
     }
 
     public function formatReceiverFields(SalaryAdjustmentRequest $record): array
