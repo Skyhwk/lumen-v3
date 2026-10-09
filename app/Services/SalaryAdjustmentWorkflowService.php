@@ -218,6 +218,22 @@ class SalaryAdjustmentWorkflowService
         ];
     }
 
+    public static function hrdRejectableStatuses(): array
+    {
+        return [
+            self::STATUS_SUBMITTED,
+            self::STATUS_RECEIVER_RESPONDED,
+            self::STATUS_HRD_PROCESSING,
+            self::STATUS_WAITING_ASSESSMENT,
+            self::STATUS_ASSESSMENT_IN_PROGRESS,
+            self::STATUS_ASSESSMENT_COMPLETED,
+            self::STATUS_COUNSELING_SCHEDULED,
+            self::STATUS_COUNSELING_COMPLETED,
+            self::STATUS_FINAL_EVALUATION,
+            self::STATUS_FINANCE_RETURNED,
+        ];
+    }
+
     public static function canTransition(string $from, string $to): bool
     {
         $allowed = [
@@ -236,12 +252,19 @@ class SalaryAdjustmentWorkflowService
                 self::STATUS_REJECTED,
             ],
             self::STATUS_HRD_PROCESSING => [self::STATUS_WAITING_ASSESSMENT, self::STATUS_REJECTED],
+            self::STATUS_WAITING_ASSESSMENT => [self::STATUS_ASSESSMENT_IN_PROGRESS, self::STATUS_REJECTED],
+            self::STATUS_ASSESSMENT_IN_PROGRESS => [self::STATUS_ASSESSMENT_COMPLETED, self::STATUS_REJECTED],
             self::STATUS_ASSESSMENT_COMPLETED => [
                 self::STATUS_COUNSELING_SCHEDULED,
                 self::STATUS_FINAL_EVALUATION,
+                self::STATUS_REJECTED,
             ],
-            self::STATUS_COUNSELING_SCHEDULED => [self::STATUS_COUNSELING_COMPLETED, self::STATUS_FINAL_EVALUATION],
-            self::STATUS_COUNSELING_COMPLETED => [self::STATUS_FINAL_EVALUATION],
+            self::STATUS_COUNSELING_SCHEDULED => [
+                self::STATUS_COUNSELING_COMPLETED,
+                self::STATUS_FINAL_EVALUATION,
+                self::STATUS_REJECTED,
+            ],
+            self::STATUS_COUNSELING_COMPLETED => [self::STATUS_FINAL_EVALUATION, self::STATUS_REJECTED],
             self::STATUS_FINAL_EVALUATION => [
                 self::STATUS_FINANCE_REVIEW,
                 self::STATUS_WAITING_APPROVAL_IBU,
