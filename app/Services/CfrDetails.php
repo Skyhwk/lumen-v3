@@ -2,24 +2,27 @@
 
 namespace App\Services;
 
+use App\Http\Controllers\external\LHPHandleController;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Carbon;
 
 class CfrDetails
 {
     protected $orderHeader;
     protected $periode;
 
-    public function __construct($orderHeader, $periode = null)
+    /** @var LHPHandleController */
+    private $rekapBuilder;
+
+    public function __construct($orderHeader, $periode = null, LHPHandleController $rekapBuilder = null)
     {
         $this->orderHeader = $orderHeader;
         $this->periode = $periode;
+        $this->rekapBuilder = $rekapBuilder ?: app(LHPHandleController::class);
     }
 
     public function get()
     {
-        $data = $this->getCFRs($this->orderHeader, $this->periode);
-        return $data;
+        return $this->getCFRs($this->orderHeader, $this->periode);
     }
 
     private function getCFRs($orderHeader, $periode)
@@ -34,12 +37,21 @@ class CfrDetails
             $dataOrder = $orderBerjalan ? json_decode($orderBerjalan->dataOrderDetail, true) : null;
 
             if (empty($dataOrder) || !isset($dataOrder[0]['detail'])) {
-                return (new GroupedCfrByLhp($orderHeader, $periode))->get();
+                return collect((new GroupedCfrByLhp($orderHeader, $periode))->get())
+                    ->map(function ($item) {
+                        $item = is_array($item) ? $item : (array) $item;
+                        $item['rekap_pengujian'] = $this->rekapBuilder->getRekapPengujian($item['order_details'] ?? []);
+
+                        return $item;
+                    })
+                    ->values()
+                    ->all();
             }
 
-            $dataOrderDetails = $dataOrder[0]['detail'];
+            $dataOrderDetails = [];
 
-            foreach ($dataOrderDetails as $detail => &$value) {
+            foreach ($dataOrder[0]['detail'] as $rawDetail) {
+                $value = $rawDetail;
                 $orderDetails = [];
 
                 foreach ($value['sampelNumbers'] as $idx => $sampelNo) {
@@ -48,11 +60,11 @@ class CfrDetails
                         'periode'      => $periode ?? null,
                         'kategori_3'   => is_array($value['categories'] ?? null) ? ($value['categories'][$idx] ?? '-') : ($value['kategori_3'] ?? '-'),
                         'keterangan_1' => is_array($value['points'] ?? null) ? ($value['points'][$idx] ?? '-') : '-',
-                        'steps'        => $value['steps'] ?? []
+                        'steps'        => $value['steps'] ?? [],
                     ];
                 }
 
-                $value = [
+                $cfrItem = [
                     'cfr'             => $value['cfr'],
                     'periode'         => $periode ?? null,
                     'keterangan_1'    => $value['points'],
@@ -60,18 +72,19 @@ class CfrDetails
                     'no_sampel'       => $value['sampelNumbers'],
                     'total_no_sampel' => $value['jumlah_sampel'],
                     'order_details'   => $orderDetails,
-                    'steps'           => $value['steps']
+                    'steps'           => $value['steps'],
+                    'rekap_pengujian' => $this->rekapBuilder->getRekapPengujianFromOrderBerjalan($rawDetail),
                 ];
-            }
 
-            unset($value);
+                $dataOrderDetails[] = $cfrItem;
+            }
 
             $resolver = new ResolveLhpFile();
             foreach ($dataOrderDetails as &$cfrItem) {
                 $cfrItem['file_lhp'] = $resolver->byCfr(
                     $noOrder,
                     $cfrItem['cfr'],
-                    $cfrItem['no_sampel'][0] ?? ($cfrItem['sampelNumbers'][0] ?? null)
+                    $cfrItem['no_sampel'][0] ?? null
                 );
             }
             unset($cfrItem);

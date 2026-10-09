@@ -176,7 +176,7 @@ class LHPHandleController extends BaseController
             ->values();
     }
 
-    private function getRekapPengujianFromOrderBerjalan(array $detail): array
+    public function getRekapPengujianFromOrderBerjalan(array $detail): array
     {
         if (!empty($detail['rekap_pengujian']) && is_array($detail['rekap_pengujian'])) {
             return collect($detail['rekap_pengujian'])
@@ -343,7 +343,7 @@ class LHPHandleController extends BaseController
     /**
      * Mencari hasil uji dari berbagai sumber (Lab & Lapangan).
      */
-    private function getRekapPengujian($orderDetails)
+    public function getRekapPengujian($orderDetails)
     {
         return collect($orderDetails)->flatMap(function ($od) {
             $parameters = collect(json_decode($od['parameter'], true));
