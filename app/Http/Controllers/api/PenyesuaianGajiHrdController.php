@@ -411,58 +411,7 @@ class PenyesuaianGajiHrdController extends Controller
 
     public function rejectFinalEvaluation(Request $request)
     {
-        $reason = trim((string) ($request->reject_reason ?? $request->keterangan ?? ''));
-        if ($reason === '') {
-            return response()->json(['success' => false, 'message' => 'Alasan penolakan wajib diisi'], 422);
-        }
-
-        $record = SalaryAdjustmentRequest::find((int) $request->id);
-        if (!$record || !$record->is_active) {
-            return response()->json(['success' => false, 'message' => 'Data tidak ditemukan'], 404);
-        }
-
-        if ($record->status !== SalaryAdjustmentWorkflowService::STATUS_FINAL_EVALUATION) {
-            return response()->json(['success' => false, 'message' => 'Permohonan tidak dapat ditolak pada status ini'], 400);
-        }
-
-        DB::connection('mysql')->beginTransaction();
-        try {
-            $from = $record->status;
-
-            $record->status = SalaryAdjustmentWorkflowService::STATUS_REJECTED;
-            $record->rejected_stage = SalaryAdjustmentWorkflowService::STATUS_FINAL_EVALUATION;
-            $record->reject_reason = $reason;
-            $record->final_eval_rejected_by = $this->karyawan;
-            $record->final_eval_rejected_at = Carbon::now();
-            $record->rejected_by = $this->karyawan;
-            $record->rejected_at = Carbon::now();
-            $record->updated_by = $this->karyawan;
-            $record->save();
-
-            SalaryAdjustmentLogService::log(
-                $record->id,
-                $from,
-                $record->status,
-                'final_eval_reject',
-                $this->user_id,
-                $this->karyawan,
-                $reason
-            );
-
-            DB::connection('mysql')->commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Permohonan berhasil ditolak',
-            ]);
-        } catch (\Throwable $e) {
-            DB::connection('mysql')->rollBack();
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-            ], 500);
-        }
+        return $this->reject($request);
     }
 
     public function approveFinanceAppeal(Request $request)
@@ -552,56 +501,7 @@ class PenyesuaianGajiHrdController extends Controller
 
     public function rejectFinanceAppeal(Request $request)
     {
-        $reason = trim((string) ($request->reject_reason ?? $request->keterangan ?? ''));
-        if ($reason === '') {
-            return response()->json(['success' => false, 'message' => 'Alasan penolakan wajib diisi'], 422);
-        }
-
-        $record = SalaryAdjustmentRequest::find((int) $request->id);
-        if (!$record || !$record->is_active) {
-            return response()->json(['success' => false, 'message' => 'Data tidak ditemukan'], 404);
-        }
-
-        if ($record->status !== SalaryAdjustmentWorkflowService::STATUS_FINANCE_RETURNED) {
-            return response()->json(['success' => false, 'message' => 'Permohonan tidak dapat ditolak pada status ini'], 400);
-        }
-
-        DB::connection('mysql')->beginTransaction();
-        try {
-            $from = $record->status;
-
-            $record->status = SalaryAdjustmentWorkflowService::STATUS_REJECTED;
-            $record->rejected_stage = SalaryAdjustmentWorkflowService::STATUS_FINANCE_RETURNED;
-            $record->reject_reason = $reason;
-            $record->rejected_by = $this->karyawan;
-            $record->rejected_at = Carbon::now();
-            $record->updated_by = $this->karyawan;
-            $record->save();
-
-            SalaryAdjustmentLogService::log(
-                $record->id,
-                $from,
-                $record->status,
-                'hrd_appeal_reject',
-                $this->user_id,
-                $this->karyawan,
-                $reason
-            );
-
-            DB::connection('mysql')->commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Banding ditolak HRD — proses permohonan selesai',
-            ]);
-        } catch (\Throwable $e) {
-            DB::connection('mysql')->rollBack();
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-            ], 500);
-        }
+        return $this->reject($request);
     }
 
     public function indexCounselingSchedule(Request $request)
@@ -1326,18 +1226,43 @@ class PenyesuaianGajiHrdController extends Controller
             return response()->json(['success' => false, 'message' => 'Data tidak ditemukan'], 404);
         }
 
-        if (!in_array($record->status, SalaryAdjustmentWorkflowService::hrdProcessableStatuses(), true)) {
+        if (!in_array($record->status, SalaryAdjustmentWorkflowService::hrdRejectableStatuses(), true)) {
             return response()->json(['success' => false, 'message' => 'Permohonan tidak dapat ditolak pada status ini'], 400);
+        }
+
+        $isWaitingProcessReject = in_array(
+            $record->status,
+            SalaryAdjustmentWorkflowService::hrdProcessableStatuses(),
+            true
+        );
+        if (!$isWaitingProcessReject && !SalaryAdjustmentWorkflowService::isManagerGrade($this->grade)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hanya Manager / Senior Manager yang dapat menolak permohonan pada tahap ini',
+            ], 403);
         }
 
         DB::connection('mysql')->beginTransaction();
         try {
             $from = $record->status;
+            $now = Carbon::now();
+            $logAction = 'reject';
+            $message = 'Permohonan berhasil ditolak';
+
+            if ($from === SalaryAdjustmentWorkflowService::STATUS_FINAL_EVALUATION) {
+                $record->final_eval_rejected_by = $this->karyawan;
+                $record->final_eval_rejected_at = $now;
+                $logAction = 'final_eval_reject';
+            } elseif ($from === SalaryAdjustmentWorkflowService::STATUS_FINANCE_RETURNED) {
+                $logAction = 'hrd_appeal_reject';
+                $message = 'Banding ditolak HRD — proses permohonan selesai';
+            }
+
             $record->status = SalaryAdjustmentWorkflowService::STATUS_REJECTED;
             $record->rejected_stage = $from;
             $record->reject_reason = $reason;
             $record->rejected_by = $this->karyawan;
-            $record->rejected_at = Carbon::now();
+            $record->rejected_at = $now;
             $record->updated_by = $this->karyawan;
             $record->save();
 
@@ -1345,7 +1270,7 @@ class PenyesuaianGajiHrdController extends Controller
                 $record->id,
                 $from,
                 $record->status,
-                'reject',
+                $logAction,
                 $this->user_id,
                 $this->karyawan,
                 $reason
@@ -1355,7 +1280,7 @@ class PenyesuaianGajiHrdController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Permohonan berhasil ditolak',
+                'message' => $message,
             ]);
         } catch (\Throwable $e) {
             DB::connection('mysql')->rollBack();

@@ -179,18 +179,14 @@ class LHPHandleController extends BaseController
     private function getRekapPengujianFromOrderBerjalan(array $detail): array
     {
         if (!empty($detail['rekap_pengujian']) && is_array($detail['rekap_pengujian'])) {
-            return collect($detail['rekap_pengujian'])
-                ->map(function ($item) use ($detail) {
-                    $item = (array) $item;
+            return $this->mapHasilUjiRows($detail['rekap_pengujian'], $detail);
+        }
 
-                    return [
-                        'no_sampel' => $item['no_sampel'] ?? $this->getNoSampelFromOrderBerjalan($detail),
-                        'parameter' => $item['parameter'] ?? '-',
-                        'hasil_uji' => $this->normalizeHasilUji($item['hasil_uji'] ?? $item['hasilUji'] ?? $item['hasil'] ?? null),
-                    ];
-                })
-                ->values()
-                ->all();
+        foreach (['hasil_uji', 'hasilUji'] as $hasilKey) {
+            $hasilUji = $detail[$hasilKey] ?? null;
+            if ($this->isHasilUjiRowList($hasilUji)) {
+                return $this->mapHasilUjiRows($hasilUji, $detail);
+            }
         }
 
         $parameters = $detail['parameter_regulasi'] ?? [];
@@ -215,6 +211,44 @@ class LHPHandleController extends BaseController
                     'no_sampel' => $noSampel,
                     'parameter' => $parameter,
                     'hasil_uji' => $this->resolveHasilUjiFromOrderBerjalan($detail, $index, $parameter, $rawParameters[$index] ?? null),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function isHasilUjiRowList($values): bool
+    {
+        if (!is_array($values) || $values === []) {
+            return false;
+        }
+
+        $first = reset($values);
+        if (!is_array($first)) {
+            return false;
+        }
+
+        return array_key_exists('parameter_regulasi', $first)
+            || array_key_exists('parameter', $first)
+            || array_key_exists('hasil', $first)
+            || array_key_exists('hasil_uji', $first);
+    }
+
+    private function mapHasilUjiRows(array $rows, array $detail): array
+    {
+        return collect($rows)
+            ->map(function ($item) use ($detail) {
+                $item = (array) $item;
+
+                return [
+                    'no_sampel' => $item['no_sampel'] ?? $this->getNoSampelFromOrderBerjalan($detail),
+                    'parameter' => $item['parameter_regulasi']
+                        ?? $item['parameter']
+                        ?? $item['parameter_lab']
+                        ?? '-',
+                    'hasil_uji' => $this->normalizeHasilUji(
+                        $item['hasil_uji'] ?? $item['hasilUji'] ?? $item['hasil'] ?? null
+                    ),
                 ];
             })
             ->values()
