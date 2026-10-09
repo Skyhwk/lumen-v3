@@ -175,7 +175,9 @@ class PermohonanPenyesuaianGajiController extends Controller
                 ->where('sar.status', SalaryAdjustmentWorkflowService::STATUS_COMPLETED)
                 ->count(),
             SalaryAdjustmentWorkflowService::MANAGER_TAB_REJECTED => (clone $query)
-                ->where('sar.status', SalaryAdjustmentWorkflowService::STATUS_REJECTED)
+                ->whereIn('sar.status', SalaryAdjustmentWorkflowService::statusesForManagerTab(
+                    SalaryAdjustmentWorkflowService::MANAGER_TAB_REJECTED
+                ))
                 ->count(),
             SalaryAdjustmentWorkflowService::MANAGER_TAB_MUTASI_INBOX => $this->mutasiInboxCount($periode),
         ];
@@ -519,6 +521,11 @@ class PermohonanPenyesuaianGajiController extends Controller
                     ->addColumn('status_label', function ($row) {
                         return SalaryAdjustmentWorkflowService::statusLabel($row->status);
                     })
+                    ->addColumn('can_cancel', function ($row) use ($tab) {
+                        return $tab === SalaryAdjustmentWorkflowService::MANAGER_TAB_WAITING
+                            && SalaryAdjustmentWorkflowService::canManagerCancel($row->status)
+                            && (int) $row->requested_by_id === (int) $this->user_id;
+                    })
                     ->editColumn('adjustment_gaji_pokok', fn ($row) => $this->formatRupiah($row->adjustment_gaji_pokok))
                     ->editColumn('adjustment_tunjangan', fn ($row) => $this->formatRupiah($row->adjustment_tunjangan))
             )
@@ -598,6 +605,7 @@ class PermohonanPenyesuaianGajiController extends Controller
                 'sar.requested_tunjangan_kerja',
                 'sar.bulan_efektif',
                 'sar.status',
+                'sar.requested_by_id',
                 'sar.created_by',
                 'sar.created_at',
                 'sar.processed_by',
@@ -783,5 +791,96 @@ class PermohonanPenyesuaianGajiController extends Controller
         } while (SalaryAdjustmentRequest::where('no_document', $noDocument)->exists());
 
         return $noDocument;
+    }
+
+    public function rejectRequest(Request $request)
+    {
+        if (!SalaryAdjustmentWorkflowService::isManagerGrade($this->grade)) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak'], 403);
+        }
+
+        $reason = trim((string) ($request->reject_reason ?? $request->keterangan ?? ''));
+        $plainReason = trim(strip_tags(html_entity_decode($reason)));
+        if ($plainReason === '') {
+            return response()->json(['success' => false, 'message' => 'Alasan pembatalan wajib diisi'], 400);
+        }
+
+        $waitingStatuses = SalaryAdjustmentWorkflowService::statusesForManagerTab(
+            SalaryAdjustmentWorkflowService::MANAGER_TAB_WAITING
+        );
+
+        DB::connection('mysql')->beginTransaction();
+        try {
+            $record = SalaryAdjustmentRequest::where('id', (int) $request->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$record || !$record->is_active) {
+                DB::connection('mysql')->rollBack();
+
+                return response()->json(['success' => false, 'message' => 'Data tidak ditemukan'], 404);
+            }
+
+            if ((int) $record->requested_by_id !== (int) $this->user_id) {
+                DB::connection('mysql')->rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hanya pengaju yang dapat membatalkan permohonan ini',
+                ], 403);
+            }
+
+            if ($record->status === SalaryAdjustmentWorkflowService::STATUS_HRD_PROCESSING
+                || !SalaryAdjustmentWorkflowService::canManagerCancel($record->status)
+                || !in_array($record->status, $waitingStatuses, true)
+                || !SalaryAdjustmentWorkflowService::canTransition(
+                    $record->status,
+                    SalaryAdjustmentWorkflowService::STATUS_CANCELLED
+                )) {
+                DB::connection('mysql')->rollBack();
+
+                $message = $record->status === SalaryAdjustmentWorkflowService::STATUS_HRD_PROCESSING
+                    ? 'Permohonan sudah diproses HRD dan tidak dapat dibatalkan'
+                    : 'Permohonan tidak dapat dibatalkan pada status ini';
+
+                return response()->json([
+                    'success' => false,
+                    'message' => $message,
+                ], 400);
+            }
+
+            $from = $record->status;
+            $record->status = SalaryAdjustmentWorkflowService::STATUS_CANCELLED;
+            $record->rejected_stage = $from;
+            $record->reject_reason = $reason;
+            $record->rejected_by = $this->karyawan;
+            $record->rejected_at = Carbon::now();
+            $record->updated_by = $this->karyawan;
+            $record->save();
+
+            SalaryAdjustmentLogService::log(
+                $record->id,
+                $from,
+                $record->status,
+                'cancel',
+                $this->user_id,
+                $this->karyawan,
+                $reason
+            );
+
+            DB::connection('mysql')->commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Permohonan berhasil dibatalkan',
+            ]);
+        } catch (\Throwable $e) {
+            DB::connection('mysql')->rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }
