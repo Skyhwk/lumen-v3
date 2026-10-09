@@ -19,6 +19,12 @@ class InternalAssessmentParticipantPdfService
 
     private const EMAIL_SEND_DELAY_SECONDS = 3;
 
+    public const FAILURE_LOG_SUBDIR = 'internal-assessment-pdf/failures';
+
+    public const STAGE_GENERATE_PDF = 'generate_pdf';
+
+    public const STAGE_SEND_EMAIL = 'send_email';
+
     public function generateForAttempt(int $attemptId): array
     {
         $context = $this->loadAttemptContext($attemptId);
@@ -50,28 +56,41 @@ class InternalAssessmentParticipantPdfService
     /**
      * Generate (dan opsional kirim email) untuk semua atau satu peserta di assessment.
      *
-     * @return array{generated: array, failed: array, emailed: array, skipped_email: array}
+     * @return array{generated: array, failed: array, failed_email: array, emailed: array, skipped_email: array, failure_log_path: string|null}
      */
     public function processAssessment(
         int $assessmentId,
         ?string $emailFilter = null,
         bool $sendEmail = false,
-        bool $dryRun = false
+        bool $dryRun = false,
+        ?int $attemptIdFilter = null,
+        bool $retryFailedOnly = false,
+        string $source = 'cli'
     ): array {
         $assessment = DB::table('assessment_internal')->where('id', $assessmentId)->first();
         if (!$assessment) {
             throw new \RuntimeException('Assessment tidak ditemukan.');
         }
 
-        $attempts = $this->resolveAttempts($assessmentId, $emailFilter);
+        $retryAttemptIds = $retryFailedOnly
+            ? $this->getUnresolvedAttemptIds($assessmentId)
+            : null;
+
+        if ($retryFailedOnly && $retryAttemptIds === []) {
+            throw new \RuntimeException('Tidak ada kegagalan terbuka di log storage untuk assessment ini.');
+        }
+
+        $attempts = $this->resolveAttempts($assessmentId, $emailFilter, $attemptIdFilter, $retryAttemptIds);
         if ($attempts->isEmpty()) {
             throw new \RuntimeException('Tidak ada peserta yang cocok dengan filter.');
         }
 
         $generated = [];
         $failed = [];
+        $failedEmail = [];
         $emailed = [];
         $skippedEmail = [];
+        $failureLogPath = $this->failureLogPath($assessmentId);
 
         foreach ($attempts as $attempt) {
             $attemptId = (int) $attempt->id;
@@ -88,34 +107,82 @@ class InternalAssessmentParticipantPdfService
 
             try {
                 $payload = $this->generateForAttempt($attemptId);
+                $this->logFailureResolved($assessmentId, $attemptId, self::STAGE_GENERATE_PDF, $source);
+
                 $row = [
                     'attempt_id' => $attemptId,
                     'participant' => $label,
                     'links' => $payload['links'],
                     'link' => $payload['link'],
                 ];
+                $generated[] = $row;
 
                 if ($sendEmail) {
                     if (empty($attempt->email)) {
-                        $skippedEmail[] = array_merge($row, ['reason' => 'Email peserta kosong']);
+                        $reason = 'Email peserta kosong';
+                        $skippedEmail[] = array_merge($row, ['reason' => $reason]);
+                        $this->logFailure(
+                            $assessmentId,
+                            $attemptId,
+                            self::STAGE_SEND_EMAIL,
+                            $reason,
+                            [
+                                'participant' => $label,
+                                'email' => null,
+                            ],
+                            $source
+                        );
+                        $failedEmail[] = array_merge($row, ['message' => $reason]);
                     } else {
-                        $attachmentPaths = array_column($payload['links'], 'link');
-                        $this->sendParticipantPdfEmail($attempt, $assessment, $attachmentPaths);
-                        $emailed[] = $row;
-                        sleep(self::EMAIL_SEND_DELAY_SECONDS);
+                        try {
+                            $attachmentPaths = array_column($payload['links'], 'link');
+                            $this->sendParticipantPdfEmail($attempt, $assessment, $attachmentPaths);
+                            $this->logFailureResolved($assessmentId, $attemptId, self::STAGE_SEND_EMAIL, $source);
+                            $emailed[] = $row;
+                            sleep(self::EMAIL_SEND_DELAY_SECONDS);
+                        } catch (\Throwable $emailError) {
+                            $message = $emailError->getMessage();
+                            $this->logFailure(
+                                $assessmentId,
+                                $attemptId,
+                                self::STAGE_SEND_EMAIL,
+                                $message,
+                                [
+                                    'participant' => $label,
+                                    'email' => $attempt->email,
+                                    'pdf_paths' => $attachmentPaths ?? [],
+                                ],
+                                $source
+                            );
+                            Log::error('Internal assessment PDF email failed', [
+                                'assessment_id' => $assessmentId,
+                                'attempt_id' => $attemptId,
+                                'message' => $message,
+                            ]);
+                            $failedEmail[] = array_merge($row, ['message' => $message]);
+                        }
                     }
                 }
-
-                $generated[] = $row;
             } catch (\Throwable $e) {
-                Log::warning('Internal assessment PDF skipped for attempt', [
+                $message = $e->getMessage();
+                $this->logFailure(
+                    $assessmentId,
+                    $attemptId,
+                    self::STAGE_GENERATE_PDF,
+                    $message,
+                    ['participant' => $label, 'email' => $attempt->email ?? null],
+                    $source
+                );
+                Log::error('Internal assessment PDF generate failed', [
+                    'assessment_id' => $assessmentId,
                     'attempt_id' => $attemptId,
-                    'message' => $e->getMessage(),
+                    'message' => $message,
                 ]);
                 $failed[] = [
                     'attempt_id' => $attemptId,
                     'participant' => $label,
-                    'message' => $e->getMessage(),
+                    'stage' => self::STAGE_GENERATE_PDF,
+                    'message' => $message,
                 ];
             }
         }
@@ -128,8 +195,10 @@ class InternalAssessmentParticipantPdfService
             'assessment_id' => $assessmentId,
             'generated' => $generated,
             'failed' => $failed,
+            'failed_email' => $failedEmail,
             'emailed' => $emailed,
             'skipped_email' => $skippedEmail,
+            'failure_log_path' => $failureLogPath,
         ];
     }
 
@@ -189,14 +258,153 @@ class InternalAssessmentParticipantPdfService
             ->send();
     }
 
-    private function resolveAttempts(int $assessmentId, ?string $emailFilter)
+    public function failureLogPath(int $assessmentId): string
     {
+        $dir = storage_path('app/' . self::FAILURE_LOG_SUBDIR);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        return $dir . DIRECTORY_SEPARATOR . 'assessment_' . $assessmentId . '.jsonl';
+    }
+
+    /**
+     * @return array<int, array{attempt_id: int, stage: string, message: string, at: string, email: string|null}>
+     */
+    public function getUnresolvedFailures(int $assessmentId): array
+    {
+        $path = $this->failureLogPath($assessmentId);
+        if (!is_file($path)) {
+            return [];
+        }
+
+        $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if ($lines === false) {
+            return [];
+        }
+
+        /** @var array<string, array<string, mixed>> $state */
+        $state = [];
+        foreach ($lines as $line) {
+            $decoded = json_decode($line, true);
+            if (!is_array($decoded) || empty($decoded['attempt_id']) || empty($decoded['stage'])) {
+                continue;
+            }
+            $key = (int) $decoded['attempt_id'] . '|' . (string) $decoded['stage'];
+            $event = (string) ($decoded['event'] ?? 'failed');
+            if ($event === 'resolved') {
+                unset($state[$key]);
+                continue;
+            }
+            $state[$key] = $decoded;
+        }
+
+        $out = [];
+        foreach ($state as $row) {
+            $out[] = [
+                'attempt_id' => (int) $row['attempt_id'],
+                'stage' => (string) $row['stage'],
+                'message' => (string) ($row['message'] ?? ''),
+                'at' => (string) ($row['at'] ?? ''),
+                'email' => isset($row['context']['email']) ? (string) $row['context']['email'] : null,
+            ];
+        }
+
+        usort($out, fn ($a, $b) => $a['attempt_id'] <=> $b['attempt_id']);
+
+        return $out;
+    }
+
+    /**
+     * @return int[]
+     */
+    public function getUnresolvedAttemptIds(int $assessmentId): array
+    {
+        $ids = [];
+        foreach ($this->getUnresolvedFailures($assessmentId) as $row) {
+            $ids[$row['attempt_id']] = $row['attempt_id'];
+        }
+
+        return array_values($ids);
+    }
+
+    /**
+     * @param array<string, mixed> $context
+     */
+    public function logFailure(
+        int $assessmentId,
+        int $attemptId,
+        string $stage,
+        string $message,
+        array $context = [],
+        string $source = 'cli'
+    ): void {
+        $this->appendFailureLogLine($assessmentId, [
+            'event' => 'failed',
+            'at' => Carbon::now('Asia/Jakarta')->toIso8601String(),
+            'assessment_id' => $assessmentId,
+            'attempt_id' => $attemptId,
+            'stage' => $stage,
+            'source' => $source,
+            'message' => $message,
+            'context' => $context,
+        ]);
+    }
+
+    public function logFailureResolved(
+        int $assessmentId,
+        int $attemptId,
+        string $stage,
+        string $source = 'cli'
+    ): void {
+        $this->appendFailureLogLine($assessmentId, [
+            'event' => 'resolved',
+            'at' => Carbon::now('Asia/Jakarta')->toIso8601String(),
+            'assessment_id' => $assessmentId,
+            'attempt_id' => $attemptId,
+            'stage' => $stage,
+            'source' => $source,
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function appendFailureLogLine(int $assessmentId, array $payload): void
+    {
+        $path = $this->failureLogPath($assessmentId);
+        $line = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($line === false) {
+            Log::warning('Internal assessment PDF failure log encode failed', [
+                'assessment_id' => $assessmentId,
+            ]);
+
+            return;
+        }
+
+        file_put_contents($path, $line . PHP_EOL, FILE_APPEND | LOCK_EX);
+    }
+
+    private function resolveAttempts(
+        int $assessmentId,
+        ?string $emailFilter,
+        ?int $attemptIdFilter = null,
+        ?array $attemptIdsOnly = null
+    ) {
         $query = DB::table('assessment_internal_attempts')
             ->where('assessment_internal_id', $assessmentId)
             ->orderBy('participant_name');
 
         if ($emailFilter !== null && trim($emailFilter) !== '') {
             $query->whereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim($emailFilter))]);
+        }
+
+        if ($attemptIdFilter !== null && $attemptIdFilter > 0) {
+            $query->where('id', $attemptIdFilter);
+        }
+
+        if ($attemptIdsOnly !== null && $attemptIdsOnly !== []) {
+            $query->whereIn('id', $attemptIdsOnly);
         }
 
         return $query->get();

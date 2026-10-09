@@ -10,6 +10,8 @@ class SendInternalAssessmentNalarLogikaPdfCommand extends Command
     protected $signature = 'internal-assessment:send-nalar-logika-pdf
                             {assessment_id : ID assessment_internal}
                             {--email= : Hanya peserta dengan email ini (mode uji)}
+                            {--attempt-id= : Hanya satu attempt_id (cocok untuk retry)}
+                            {--retry-failed : Hanya peserta yang masih gagal menurut log storage}
                             {--send-email : Kirim PDF sebagai lampiran email ke peserta}
                             {--dry-run : Tampilkan target tanpa generate PDF / email}';
 
@@ -32,11 +34,25 @@ class SendInternalAssessmentNalarLogikaPdfCommand extends Command
 
         $sendEmail = (bool) $this->option('send-email');
         $dryRun = (bool) $this->option('dry-run');
+        $retryFailed = (bool) $this->option('retry-failed');
+        $attemptIdOption = $this->option('attempt-id');
+        $attemptIdFilter = is_numeric($attemptIdOption) ? (int) $attemptIdOption : null;
+        if ($attemptIdFilter !== null && $attemptIdFilter < 1) {
+            $attemptIdFilter = null;
+        }
 
         $service = app(InternalAssessmentParticipantPdfService::class);
 
         try {
-            $result = $service->processAssessment($assessmentId, $emailFilter, $sendEmail, $dryRun);
+            $result = $service->processAssessment(
+                $assessmentId,
+                $emailFilter,
+                $sendEmail,
+                $dryRun,
+                $attemptIdFilter,
+                $retryFailed,
+                'cli'
+            );
         } catch (\RuntimeException $e) {
             $this->error($e->getMessage());
 
@@ -46,6 +62,15 @@ class SendInternalAssessmentNalarLogikaPdfCommand extends Command
         $this->info('Assessment ID: ' . $assessmentId);
         if ($emailFilter) {
             $this->line('Filter email: ' . $emailFilter);
+        }
+        if ($attemptIdFilter) {
+            $this->line('Filter attempt_id: ' . $attemptIdFilter);
+        }
+        if ($retryFailed) {
+            $this->line('Mode: retry-failed (dari log storage)');
+        }
+        if (!empty($result['failure_log_path'])) {
+            $this->line('Log kegagalan: ' . $result['failure_log_path']);
         }
         if ($dryRun) {
             $this->warn('Mode dry-run — tidak ada file PDF atau email yang dikirim.');
@@ -82,11 +107,26 @@ class SendInternalAssessmentNalarLogikaPdfCommand extends Command
             }
         }
 
-        if (!empty($result['failed'])) {
-            $this->error('Gagal (' . count($result['failed']) . '):');
-            foreach ($result['failed'] as $row) {
+        if (!empty($result['failed_email'])) {
+            $this->error('Gagal kirim email (' . count($result['failed_email']) . '):');
+            foreach ($result['failed_email'] as $row) {
                 $this->line('- #' . $row['attempt_id'] . ' ' . ($row['message'] ?? ''));
             }
+        }
+
+        if (!empty($result['failed'])) {
+            $this->error('Gagal generate PDF (' . count($result['failed']) . '):');
+            foreach ($result['failed'] as $row) {
+                $stage = $row['stage'] ?? 'generate_pdf';
+                $this->line('- #' . $row['attempt_id'] . ' [' . $stage . '] ' . ($row['message'] ?? ''));
+            }
+        }
+
+        if (!empty($result['failed']) || !empty($result['failed_email'])) {
+            $this->newLine();
+            $this->warn('Proses ulang contoh:');
+            $this->line('  php artisan internal-assessment:send-nalar-logika-pdf ' . $assessmentId . ' --retry-failed' . ($sendEmail ? ' --send-email' : ''));
+            $this->line('  php artisan internal-assessment:send-nalar-logika-pdf ' . $assessmentId . ' --attempt-id=<ID>' . ($sendEmail ? ' --send-email' : ''));
 
             return 1;
         }
