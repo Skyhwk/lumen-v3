@@ -387,7 +387,8 @@ class PermohonanPenyesuaianGajiController extends Controller
             return response()->json(['success' => false, 'message' => 'Karyawan bukan bawahan Anda'], 403);
         }
 
-        if ($data['request_type'] === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI) {
+        $mutasiUnderSameManager = !empty($data['mutasi_under_same_manager']);
+        if ($data['request_type'] === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI && !$mutasiUnderSameManager) {
             $receiverError = $this->validateMutasiReceiver((int) $data['receiver_manager_id']);
             if ($receiverError) {
                 return response()->json(['success' => false, 'message' => $receiverError], 400);
@@ -411,7 +412,7 @@ class PermohonanPenyesuaianGajiController extends Controller
         $requestedGaji = $currentGaji + $adjustmentGaji;
         $requestedTunj = $currentTunjangan + $adjustmentTunj;
 
-        $initialStatus = $data['request_type'] === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI
+        $initialStatus = $data['request_type'] === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI && !$mutasiUnderSameManager
             ? SalaryAdjustmentWorkflowService::STATUS_WAITING_RECEIVER
             : SalaryAdjustmentWorkflowService::STATUS_SUBMITTED;
 
@@ -445,6 +446,7 @@ class PermohonanPenyesuaianGajiController extends Controller
                 'scheduled_apply_at' => $data['scheduled_apply_at'],
                 'apply_status' => EmployeeAdjustmentWorkflowResolver::APPLY_STATUS_PENDING,
                 'catatan_tambahan' => $data['catatan_tambahan'],
+                'type_metadata' => $data['type_metadata'] ?? null,
                 'status' => $initialStatus,
                 'created_by' => $this->karyawan,
                 'updated_by' => $this->karyawan,
@@ -466,6 +468,7 @@ class PermohonanPenyesuaianGajiController extends Controller
                 $this->user_id,
                 $this->karyawan,
                 'Permohonan ' . EmployeeAdjustmentTypeRegistry::label($data['request_type']) . ' dibuat'
+                    . ($mutasiUnderSameManager ? ' (mutasi dalam naungan manager yang sama — langsung HRD)' : '')
             );
 
             DB::connection('mysql')->commit();
@@ -693,6 +696,7 @@ class PermohonanPenyesuaianGajiController extends Controller
             'manager_nama' => $senderManager->nama_lengkap ?? $record->created_by,
             'receiver_manager_id' => $record->receiver_manager_id,
             'receiver_manager_nama' => optional($record->receiverManager)->nama_lengkap,
+            'mutasi_under_same_manager' => EmployeeAdjustmentMutasiService::isUnderSameManagerScope($record),
             'scheduled_apply_at' => $record->scheduled_apply_at,
             'catatan_tambahan' => $record->catatan_tambahan,
             'status' => $record->status,
