@@ -162,7 +162,7 @@ class KonfigurasiPraSamplingController extends Controller
             ->where('is_active', true)
             ->where('status',0)
             ->whereNotNull('regen')
-            ->selectRaw('MIN(id) as id, volume, regen, id_parameter, nama_parameter, nama_kategori')
+            ->selectRaw('MIN(id) as id, volume, regen, id_parameter, nama_parameter, nama_kategori, MIN(created_at) as created_at, MIN(created_by) as created_by, MAX(updated_at) as updated_at, MAX(updated_by) as updated_by')
             ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter', 'nama_kategori')
             ->get();
 
