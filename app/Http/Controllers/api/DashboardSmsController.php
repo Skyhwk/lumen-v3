@@ -1000,21 +1000,7 @@ class DashboardSmsController extends Controller
     public function fetchQuotationAnalytics(Request $request)
     {
         try {
-            if ($request->period_type === 'daily') {
-                $startDate = Carbon::parse($request->date ?: $request->start_date ?: Carbon::now())->startOfDay();
-                $endDate = $startDate->copy()->endOfDay();
-            } elseif ($request->period_type === 'yearly') {
-                $startDate = Carbon::create((int) ($request->year ?: Carbon::now()->year), 1, 1)->startOfDay();
-                $endDate = $startDate->copy()->endOfYear();
-            } elseif ($request->period_type === 'range') {
-                $startDate = Carbon::parse($request->start_date)->startOfDay();
-                $endDate = Carbon::parse($request->end_date)->endOfDay();
-            } else {
-                $arr = explode(' ', (string) $request->periode);
-                $periode = count($arr) === 2 && isset($this->bulan[$arr[0]]) ? $arr[1] . '-' . $this->bulan[$arr[0]] : Carbon::now()->format('Y-m');
-                $startDate = Carbon::createFromFormat('Y-m', $periode)->startOfMonth();
-                $endDate = $startDate->copy()->endOfMonth();
-            }
+            [$startDate, $endDate] = $this->resolveQuotationAnalyticsDateRange($request);
             $salesIds = $this->resolveDashboardSalesIds($request);
 
             $quotes = collect([QuotationNonKontrak::class, QuotationKontrakH::class])
@@ -1081,6 +1067,51 @@ class DashboardSmsController extends Controller
         } catch (\Throwable $th) {
             return response()->json(['message' => 'Terjadi kesalahan saat mengambil analytics penawaran.', 'error' => $th->getMessage()], 500);
         }
+    }
+
+    public function fetchQuotationNoStatusList(Request $request)
+    {
+        try {
+            [$startDate, $endDate] = $this->resolveQuotationAnalyticsDateRange($request);
+            $salesIds = $this->resolveDashboardSalesIds($request);
+
+            $rows = app(\App\Services\DashboardQuotationNoStatusService::class)->list(
+                $salesIds,
+                $startDate,
+                $endDate
+            );
+
+            return response()->json([
+                'message' => 'Data retrieved successfully',
+                'data' => $rows,
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat mengambil daftar quotation tanpa status.',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function resolveQuotationAnalyticsDateRange(Request $request): array
+    {
+        if ($request->period_type === 'daily') {
+            $startDate = Carbon::parse($request->date ?: $request->start_date ?: Carbon::now())->startOfDay();
+            $endDate = $startDate->copy()->endOfDay();
+        } elseif ($request->period_type === 'yearly') {
+            $startDate = Carbon::create((int) ($request->year ?: Carbon::now()->year), 1, 1)->startOfDay();
+            $endDate = $startDate->copy()->endOfYear();
+        } elseif ($request->period_type === 'range') {
+            $startDate = Carbon::parse($request->start_date)->startOfDay();
+            $endDate = Carbon::parse($request->end_date)->endOfDay();
+        } else {
+            $arr = explode(' ', (string) $request->periode);
+            $periode = count($arr) === 2 && isset($this->bulan[$arr[0]]) ? $arr[1] . '-' . $this->bulan[$arr[0]] : Carbon::now()->format('Y-m');
+            $startDate = Carbon::createFromFormat('Y-m', $periode)->startOfMonth();
+            $endDate = $startDate->copy()->endOfMonth();
+        }
+
+        return [$startDate, $endDate];
     }
 
     private function resolveDashboardSalesIds(Request $request): ?array
