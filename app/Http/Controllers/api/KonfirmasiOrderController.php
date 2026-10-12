@@ -458,14 +458,21 @@ class KonfirmasiOrderController extends Controller
 			if (!$data) {
 				throw new \Exception('Data quotation tidak ditemukan.');
 			}
-			// Cari atau buat objek konfirmasi
+			// Cari atau buat objek konfirmasi (update harus menemukan record yang sama, bukan insert baru)
 			$konfirmasi = null;
 
 			if ($request->id_konfirmasi) {
+				$konfirmasi = KelengkapanKonfirmasiQs::where('id', $request->id_konfirmasi)
+					->where('is_active', true)
+					->first();
+			}
+
+			if (!$konfirmasi) {
 				$query = KelengkapanKonfirmasiQs::where([
 					['id_quotation', $request->id],
 					['no_quotation', $request->no_document],
 					['type', $request->type],
+					['is_active', true],
 				]);
 
 				if ($request->type === 'kontrak') {
@@ -516,6 +523,13 @@ class KonfirmasiOrderController extends Controller
 					}
 					$lampiranTitikNames[] = $result['filename'];
 				}
+			}
+
+			if (empty($fileNames) && $konfirmasi->exists && !empty($konfirmasi->filename)) {
+				$fileNames = json_decode($konfirmasi->filename, true) ?? [];
+			}
+			if (empty($lampiranTitikNames) && $konfirmasi->exists && !empty($konfirmasi->lampiran_titik)) {
+				$lampiranTitikNames = json_decode($konfirmasi->lampiran_titik, true) ?? [];
 			}
 
 			$this->fillKonfirmasiData($konfirmasi, $request, $data, $fileNames, $lampiranTitikNames);
