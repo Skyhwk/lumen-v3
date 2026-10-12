@@ -100,6 +100,9 @@ class PencadanganUpahPayrollService
      */
     public static function advanceOnPayrollSubmit(PencadanganUpah $deposit, ?string $employeeStatus): bool
     {
+        if (self::previewAmount($deposit, $employeeStatus) == 0) {
+            return false;
+        }
         $tenor = (int) $deposit->tenor;
         $tenorBerjalan = (int) $deposit->tenor_berjalan;
         $tipe = self::normalizeTipe($deposit->tipe_pengembalian ?? null);
@@ -123,7 +126,11 @@ class PencadanganUpahPayrollService
             if (!self::isContractStatus($employeeStatus)) {
                 return false;
             }
-            $deposit->tenor_berjalan = 1;
+            // State 0 has already paid the first refund in this payroll.
+            $deposit->tenor_berjalan = $tenor === 1 ? 1 : 2;
+            if ($tenor === 1) {
+                $deposit->status = 'END';
+            }
             $changed = true;
         } elseif ($tenorBerjalan > 0 && $tenorBerjalan <= $tenor) {
             if ($tenorBerjalan >= $tenor) {
@@ -137,52 +144,23 @@ class PencadanganUpahPayrollService
         return $changed;
     }
 
-    /**
-     * Batalkan efek submit payroll pada pencadangan (rollback satu langkah).
-     */
-    public static function revertOnPayrollCancel(PencadanganUpah $deposit): bool
+    public static function previewAmount(PencadanganUpah $deposit, ?string $employeeStatus): float
     {
         $tenor = (int) $deposit->tenor;
-        $tenorBerjalan = (int) $deposit->tenor_berjalan;
-        $tipe = self::normalizeTipe($deposit->tipe_pengembalian ?? null);
-
-        if ($deposit->status === 'END') {
-            $deposit->status = 'ONGOING';
-            $deposit->tenor_berjalan = $tenor;
-
-            return true;
+        $current = (int) $deposit->tenor_berjalan;
+        if ($deposit->status !== null && $deposit->status !== 'ONGOING') {
+            return 0;
         }
-
-        if ($tenorBerjalan > 1 && $tenorBerjalan <= $tenor) {
-            $deposit->tenor_berjalan = $tenorBerjalan - 1;
-
-            return true;
+        if ($tenor < 1 || $current < -$tenor || $current > $tenor || (float) $deposit->nominal <= 0) {
+            throw new \DomainException('Data tenor/nominal pencadangan upah tidak valid. Rekonsiliasi terlebih dahulu.');
         }
-
-        if ($tenorBerjalan === 1) {
-            if ($tipe === self::TIPE_SETELAH_KONTRAK) {
-                $deposit->tenor_berjalan = 0;
-            } else {
-                $deposit->tenor_berjalan = -1;
-                $deposit->nominal_berjalan = -abs((float) $deposit->nominal_berjalan);
-            }
-
-            return true;
+        if ($current < 0) {
+            return -round((float) $deposit->nominal, 0);
         }
-
-        if ($tenorBerjalan === 0 && $tipe === self::TIPE_SETELAH_KONTRAK) {
-            $deposit->tenor_berjalan = -1;
-            $deposit->nominal_berjalan = -abs((float) $deposit->nominal_berjalan);
-
-            return true;
+        if ($current > 0 || (self::normalizeTipe($deposit->tipe_pengembalian) === self::TIPE_SETELAH_KONTRAK
+            && self::isContractStatus($employeeStatus))) {
+            return round((float) $deposit->nominal, 0);
         }
-
-        if ($tenorBerjalan < 0 && $tenorBerjalan > -$tenor) {
-            $deposit->tenor_berjalan = $tenorBerjalan - 1;
-
-            return true;
-        }
-
-        return false;
+        return 0;
     }
 }
