@@ -101,7 +101,7 @@ class KasbonController extends Controller
             $kasbon->keterangan = $request->keterangan;
             $kasbon->sisa_tenor = $request->tenor;
             $kasbon->sisa_kasbon = $kasbon->total_kasbon;
-            $kasbon->status = $request->status;
+            $kasbon->status = $request->filled('status') ? $request->status : 'ONGOING';
             $kasbon->created_by = $this->karyawan;
             $kasbon->created_at = DATE('Y-m-d H:i:s');
 

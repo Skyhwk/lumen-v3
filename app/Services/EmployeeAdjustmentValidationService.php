@@ -126,6 +126,19 @@ class EmployeeAdjustmentValidationService
         $tanggalBerakhirKerja = $this->normalizeDate($request->input('tanggal_berakhir_kerja'));
         $newJabatanId = (int) $request->input('new_jabatan_id');
         $receiverManagerId = (int) $request->input('receiver_manager_id');
+        $mutasiUnderSameManager = $requestType === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI
+            && filter_var($request->input('mutasi_under_same_manager'), FILTER_VALIDATE_BOOLEAN);
+
+        if ($mutasiUnderSameManager) {
+            $receiverManagerId = 0;
+        }
+
+        $typeMetadata = null;
+        if ($requestType === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI) {
+            $typeMetadata = [
+                EmployeeAdjustmentMutasiService::META_UNDER_SAME_MANAGER => $mutasiUnderSameManager,
+            ];
+        }
 
         $payloadForSchedule = [
             'request_type' => $requestType,
@@ -153,6 +166,8 @@ class EmployeeAdjustmentValidationService
                 'tanggal_berakhir_kerja' => $tanggalBerakhirKerja,
                 'new_jabatan_id' => $newJabatanId > 0 ? $newJabatanId : null,
                 'receiver_manager_id' => $receiverManagerId > 0 ? $receiverManagerId : null,
+                'mutasi_under_same_manager' => $mutasiUnderSameManager,
+                'type_metadata' => $typeMetadata,
                 'scheduled_apply_at' => $scheduledApplyAt ? $scheduledApplyAt->toDateString() : null,
                 'catatan_tambahan' => trim((string) ($request->catatan_tambahan ?? '')) ?: null,
                 'kpi' => [
@@ -245,9 +260,13 @@ class EmployeeAdjustmentValidationService
                 if (!$this->jabatanExists((int) $request->input('new_jabatan_id'))) {
                     return 'Posisi baru tidak ditemukan';
                 }
+                $underSameManager = filter_var($request->input('mutasi_under_same_manager'), FILTER_VALIDATE_BOOLEAN);
                 $receiverId = (int) $request->input('receiver_manager_id');
-                if (!$receiverId) {
+                if (!$underSameManager && !$receiverId) {
                     return 'Manager penerima mutasi wajib dipilih';
+                }
+                if ($hasSalaryAdjustment && $adjustmentGaji === 0.0 && $adjustmentTunj === 0.0) {
+                    return 'Minimal salah satu penyesuaian gaji pokok atau tunjangan harus diisi';
                 }
                 return null;
 

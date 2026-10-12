@@ -135,6 +135,7 @@ class DendaKaryawanController extends Controller
 
             if ($request->id && in_array((int) $request->id_karyawan, array_map('intval', $existingKaryawan), true)) {
                 $updatedData = DendaKaryawan::findorFail($request->id);
+                $updatedData->status = $request->filled('status') ? $request->status : ($updatedData->status ?: 'ONGOING');
                 $updatedData->updated_at = DATE('Y-m-d H:i:s');
                 $updatedData->updated_by = $this->karyawan;
                 $updatedData->total_denda = str_replace(['Rp', '.', ','], '', $request->total_denda);
@@ -150,6 +151,7 @@ class DendaKaryawanController extends Controller
                 $message = 'Denda Karyawan data updated successfully';
             } else {
                 $inputData = new DendaKaryawan();
+                $inputData->status = $request->filled('status') ? $request->status : 'ONGOING';
                 $inputData->created_by = $this->karyawan;
                 $inputData->created_at = DATE('Y-m-d H:i:s');
                 $inputData->total_denda = str_replace(['Rp', '.', ','], '', $request->total_denda);

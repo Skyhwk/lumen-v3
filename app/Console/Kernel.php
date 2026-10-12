@@ -55,6 +55,7 @@ class Kernel extends ConsoleKernel
         Commands\SendKeptManagementDecisionReminders::class,
         Commands\SendCandidateActionReminders::class,
         Commands\SendPendingAssessmentInvitations::class,
+        Commands\SendInternalAssessmentNalarLogikaPdfCommand::class,
         Commands\RejectOverdueAssessment::class,
         Commands\RollbackOverdueAssessment::class,
         Commands\ApplyScheduledEmployeeAdjustments::class,

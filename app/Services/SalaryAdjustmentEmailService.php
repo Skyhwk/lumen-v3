@@ -16,32 +16,50 @@ class SalaryAdjustmentEmailService
     public const LABEL_APPROVAL = 'Waiting Approval';
     public const LABEL_APPROVAL_FINAL = 'Waiting Approval Final';
 
-    public function sendForRole(SalaryAdjustmentRequest $request, string $role, string $sender): bool
+    /**
+     * @param array{email?: string, persist_token?: bool, throw?: bool} $options
+     */
+    public function sendForRole(SalaryAdjustmentRequest $request, string $role, string $sender, array $options = []): bool
     {
-        $emailTo = $this->resolveEmail($role);
+        $emailOverride = trim((string) ($options['email'] ?? ''));
+        $persistToken = array_key_exists('persist_token', $options)
+            ? (bool) $options['persist_token']
+            : true;
+        $throw = (bool) ($options['throw'] ?? false);
+
+        $emailTo = $emailOverride !== '' ? $emailOverride : $this->resolveEmail($role);
         if ($emailTo === '') {
             Log::warning('Salary adjustment approval email skipped: target email empty', [
                 'request_id' => $request->id,
                 'role' => $role,
             ]);
 
+            if ($throw) {
+                throw new \RuntimeException('target_email atau EMAIL_DIREKTUR belum diisi');
+            }
+
             return false;
         }
 
-        SalaryAdjustmentApprovalToken::where('request_id', $request->id)
-            ->where('approver_role', $role)
-            ->where('is_active', true)
-            ->update(['is_active' => false, 'updated_at' => Carbon::now()]);
+        $approvalToken = null;
+        if ($persistToken) {
+            SalaryAdjustmentApprovalToken::where('request_id', $request->id)
+                ->where('approver_role', $role)
+                ->where('is_active', true)
+                ->update(['is_active' => false, 'updated_at' => Carbon::now()]);
 
-        $token = bin2hex(random_bytes(32));
-        $approvalToken = SalaryAdjustmentApprovalToken::create([
-            'request_id' => $request->id,
-            'approver_role' => $role,
-            'token' => $token,
-            'email_to' => $emailTo,
-            'is_active' => true,
-            'created_by' => $sender,
-        ]);
+            $token = bin2hex(random_bytes(32));
+            $approvalToken = SalaryAdjustmentApprovalToken::create([
+                'request_id' => $request->id,
+                'approver_role' => $role,
+                'token' => $token,
+                'email_to' => $emailTo,
+                'is_active' => true,
+                'created_by' => $sender,
+            ]);
+        } else {
+            $token = 'preview-' . $request->id . '-' . $role;
+        }
 
         $bundle = $this->normalizeBundleForView(
             (new SalaryAdjustmentEvaluationService())->buildBundle($request)
@@ -65,8 +83,10 @@ class SalaryAdjustmentEmailService
                 ->noReply()
                 ->send();
 
-            $approvalToken->email_sent_at = Carbon::now();
-            $approvalToken->save();
+            if ($approvalToken) {
+                $approvalToken->email_sent_at = Carbon::now();
+                $approvalToken->save();
+            }
 
             return true;
         } catch (\Throwable $e) {
@@ -75,6 +95,10 @@ class SalaryAdjustmentEmailService
                 'role' => $role,
                 'message' => $e->getMessage(),
             ]);
+
+            if ($throw) {
+                throw $e;
+            }
 
             return false;
         } finally {
@@ -105,6 +129,16 @@ class SalaryAdjustmentEmailService
         ])->render();
     }
 
+    public function previewApprovalHtml(SalaryAdjustmentRequest $request, string $role): string
+    {
+        $bundle = $this->normalizeBundleForView(
+            (new SalaryAdjustmentEvaluationService())->buildBundle($request)
+        );
+        $buttons = $this->buildDecisionButtons('preview-' . $request->id . '-' . $role);
+
+        return $this->renderApprovalBody($bundle, $role, $buttons);
+    }
+
     public function approverLabel(string $role): string
     {
         return self::actorLabel($role);
@@ -113,6 +147,11 @@ class SalaryAdjustmentEmailService
     public static function actorLabel(string $role): string
     {
         return $role === self::ROLE_IBU ? self::LABEL_APPROVAL : self::LABEL_APPROVAL_FINAL;
+    }
+
+    public function resolveRecipient(string $role): string
+    {
+        return $this->resolveEmail($role);
     }
 
     private function resolveEmail(string $role): string

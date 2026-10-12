@@ -814,6 +814,7 @@ class PersonnelRequestController extends Controller
                     'pendingDecisionSalary',
                     'openDecisionSalary',
                 ])
+                ->where('is_rejected_kandidat', 0)
                 ->whereIn('id', $ids ?: [-1]);
 
             if ($category === 'approved_candidate') {

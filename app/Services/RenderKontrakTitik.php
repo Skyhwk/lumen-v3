@@ -911,7 +911,7 @@ class RenderKontrak
                                 $v = __('QTC.terms_conditions.general.8');
                             } else if (preg_match('/^Jangka waktu pembuatan dokumen dikerjakan selama 2 - 3 bulan, dengan kewajiban pelanggan melengkapi dokumen sebelum sampling dilakukan\.?$/i', $v)) {
                                 $v = __('QTC.terms_conditions.general.9');
-                            } else if (preg_match('/^Laboratorium menjunjung tinggi prinsip independensi, ketidakberpihakan, objektivitas, dan pengelolaan terhadap potensi konflik kepentingan dalam seluruh kegiatan pengujian, sesuai dengan kebijakan dan prosedur yang berlaku\.?$/i', $v)) {
+                            } else if (preg_match('/^Laboratorium menjunjung tinggi prinsip independensi, ketidakberpihakan, objektivitas, dan pengelolaan (potensi konflik kepentingan, serta berkomitmen pada praktik anti gratifikasi dalam pelaksanaan seluruh kegiatan pengujian, sesuai|terhadap potensi konflik kepentingan dalam seluruh kegiatan pengujian,\s*sesuai) dengan kebijakan dan prosedur yang berlaku\.?$/i', $v)) {
                                 $v = __('QTC.terms_conditions.general.11');
                             } else if (preg_match('/^Data yang diperlukan untuk pelaksanaan pengujian psikologi wajib diterima paling lambat 3 \(tiga\) hari kalender sebelum pelaksanaan sampling\.?$/i', $v)) {
                                 $v = __('QTC.terms_conditions.general.12');

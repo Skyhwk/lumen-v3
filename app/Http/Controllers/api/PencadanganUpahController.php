@@ -76,6 +76,13 @@ class PencadanganUpahController extends Controller
 
     public function store(Request $request)
     {
+        $tipePengembalian = $request->input('tipe_pengembalian');
+        if ($tipePengembalian !== null && !in_array($tipePengembalian, ['setelah_potongan', 'setelah_kontrak'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tipe pengembalian tidak valid.',
+            ], 422);
+        }
         try{
             if (strlen(str_replace(['Rp', '.', ','], '', $request->nominal)) > 10 ) {
                 return response()->json([
@@ -90,6 +97,8 @@ class PencadanganUpahController extends Controller
                 ->toArray();
 
             $pencadanganUpah = new PencadanganUpah();
+            $pencadanganUpah->status = $request->filled('status') ? $request->status : 'ONGOING';
+            $pencadanganUpah->tipe_pengembalian = $tipePengembalian ?? 'setelah_potongan';
             $pencadanganUpah->created_by = $this->karyawan;
             $pencadanganUpah->created_at = DATE('Y-m-d H:i:s');
             $pencadanganUpah->tenor = $request->tenor;
@@ -102,6 +111,7 @@ class PencadanganUpahController extends Controller
 
             if ($request->id && in_array((int) $request->id_karyawan, array_map('intval', $existingKaryawan), true)) {
                 $oldpencadanganUpah = PencadanganUpah::findorFail($request->id);
+                $pencadanganUpah->tipe_pengembalian = $tipePengembalian ?? $oldpencadanganUpah->tipe_pengembalian ?? 'setelah_potongan';
                 $oldpencadanganUpah->updated_at = DATE('Y-m-d H:i:s');
                 $oldpencadanganUpah->updated_by = $this->karyawan;
                 $oldpencadanganUpah->is_active = false;

@@ -14,6 +14,7 @@ class PencadanganUpah extends Sector{
         'nik_karyawan',
         'id_karyawan',
         'tenor',
+        'tipe_pengembalian',
         'nominal',
         'tenor_berjalan',
         'nominal_berjalan',
