@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Helpers\LhpStepSequence;
 use App\Models\OrderDetail;
 use Illuminate\Support\Carbon;
 
@@ -150,6 +151,11 @@ class GroupedCfrByLhp
 
                     $steps['lhp_release']['date'] = $tglSampling ? ($lhps->approved_at ?? null) : null;
 
+                    if (!empty($steps['drafting']['date']) && empty($steps['analisa']['date'])) {
+                        $steps['analisa']['date'] = $steps['sampling']['date'];
+                    }
+
+                    $steps = LhpStepSequence::normalize($steps);
                     $steps['activeStep'] = $this->detectActiveStep($steps);
 
                     $item->steps = $steps;
@@ -179,6 +185,7 @@ class GroupedCfrByLhp
                     }
                 }
 
+                $stepsByCFR = LhpStepSequence::normalize($stepsByCFR);
                 $stepsByCFR['activeStep'] = $this->detectActiveStepByGroup($mappedDetails);
 
                 $orderDetailsArray = $mappedDetails->toArray();

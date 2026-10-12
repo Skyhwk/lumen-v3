@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Helpers\LhpStepSequence;
 use App\Http\Controllers\external\LHPHandleController;
 use Illuminate\Support\Facades\DB;
 
@@ -53,6 +54,7 @@ class CfrDetails
             foreach ($dataOrder[0]['detail'] as $rawDetail) {
                 $value = $rawDetail;
                 $orderDetails = [];
+                $normalizedSteps = LhpStepSequence::normalize($value['steps'] ?? []);
 
                 foreach ($value['sampelNumbers'] as $idx => $sampelNo) {
                     $orderDetails[] = [
@@ -60,7 +62,7 @@ class CfrDetails
                         'periode'      => $periode ?? null,
                         'kategori_3'   => is_array($value['categories'] ?? null) ? ($value['categories'][$idx] ?? '-') : ($value['kategori_3'] ?? '-'),
                         'keterangan_1' => is_array($value['points'] ?? null) ? ($value['points'][$idx] ?? '-') : '-',
-                        'steps'        => $value['steps'] ?? [],
+                        'steps'        => $normalizedSteps,
                     ];
                 }
 
@@ -72,7 +74,7 @@ class CfrDetails
                     'no_sampel'       => $value['sampelNumbers'],
                     'total_no_sampel' => $value['jumlah_sampel'],
                     'order_details'   => $orderDetails,
-                    'steps'           => $value['steps'],
+                    'steps'           => $normalizedSteps,
                     'rekap_pengujian' => $this->rekapBuilder->getRekapPengujianFromOrderBerjalan($rawDetail),
                 ];
 

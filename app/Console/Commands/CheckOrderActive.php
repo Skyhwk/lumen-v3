@@ -9,6 +9,7 @@ use App\Models\DailyQsd;
 use App\Models\TrackingOrder;
 use App\Models\Parameter;
 use App\Models\WsFinalApprovalDetail;
+use App\Helpers\LhpStepSequence;
 use Schema;
 
 use Carbon\Carbon;
@@ -460,13 +461,8 @@ class CheckOrderActive extends Command
             $steps['drafting']['date'] = !empty($lhps['created_at'])
                 ? Carbon::parse($lhps['created_at'])->format('Y-m-d')
                 : null;
-            //TODO: perlu di cek fungsinya
-            if ($steps['drafting']['date'] != null && $steps['analisa']['date'] == null) {
-                $steps['analisa']['date'] = $steps['sampling']['date'];
-            }
 
-            if($steps['analisa']['date'] != null && $steps['drafting']['date'] != null && Carbon::parse($steps['analisa']['date']) > Carbon::parse($steps['drafting']['date']))
-            {
+            if ($steps['drafting']['date'] != null && $steps['analisa']['date'] == null) {
                 $steps['analisa']['date'] = $steps['sampling']['date'];
             }
 
@@ -477,6 +473,8 @@ class CheckOrderActive extends Command
             $steps['lhp_release']['date'] = $tglLhpRilis;
         }
 
+        $steps = LhpStepSequence::normalize($steps);
+        $tglLhpRilis = $steps['lhp_release']['date'] ?? $tglLhpRilis;
         $steps['activeStep'] = $this->detectActiveStep($steps);
 
        $lhpRilis = (($d['status'] ?? null) === 3) || ($steps['activeStep'] === 5);
