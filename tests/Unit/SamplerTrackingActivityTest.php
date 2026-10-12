@@ -32,6 +32,22 @@ class SamplerTrackingActivityTest extends TestCase
         $this->assertSame([2], $activities[1]->activeMembers->first()->activity_member_ids);
     }
 
+    public function testCustomerMatchRequiresSameNonEmptyId(): void
+    {
+        $first = $this->session(1, 'O1');
+        $same = $this->session(2, 'O2');
+        $other = $this->session(3, 'O3');
+        $other->id_pelanggan = 'dsa12';
+
+        $first->id_pelanggan = 'asd12';
+        $same->id_pelanggan = 'asd12';
+        $this->assertTrue(SamplerTrackingActivity::sameCustomer($first, $same));
+        $this->assertFalse(SamplerTrackingActivity::sameCustomer($first, $other));
+
+        $same->id_pelanggan = null;
+        $this->assertFalse(SamplerTrackingActivity::sameCustomer($first, $same));
+    }
+
     public function testSameOrderDateAndTeamConsolidateWithoutChangingSources(): void
     {
         $first = $this->session(1, 'O1');

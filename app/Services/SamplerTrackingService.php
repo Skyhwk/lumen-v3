@@ -1567,6 +1567,16 @@ class SamplerTrackingService
             ->orderBy('id')
             ->get();
 
+        $customerIds = OrderHeader::whereIn('no_order', $sessions->pluck('no_order')->filter()->unique())
+            ->where('is_active', true)
+            ->orderByDesc('id')
+            ->get(['no_order', 'id_pelanggan'])
+            ->unique('no_order')
+            ->pluck('id_pelanggan', 'no_order');
+        foreach ($sessions as $session) {
+            $session->id_pelanggan = $customerIds->get($session->no_order);
+        }
+
         foreach ($sessions as $session) {
             foreach ($session->activeMembers as $member) {
                 if (SamplerTrackingActivity::hasEvent($member, 'departure')) continue;
@@ -2296,8 +2306,8 @@ public function buildTrackingRows($sessions)
                 return !$this->memberHasTrackingEvent($target->id, $eventType);
             });
 
-            if ($eventType === 'checkin' && $members->contains(function ($target) {
-                return $this->hasOpenCheckin($this->appActivities($target), $target);
+            if ($eventType === 'checkin' && $members->contains(function ($target) use ($activity, $member) {
+                return $this->hasOpenCheckin($this->appActivities($target), $target, $activity ?: $member->session);
             })) {
                 throw ValidationException::withMessages([
                     'event_type' => ['Selesaikan check out lokasi yang masih terbuka sebelum check in lokasi lain.'],
@@ -2428,12 +2438,13 @@ public function buildTrackingRows($sessions)
         );
     }
 
-    protected function hasOpenCheckin($sessions, SamplerTrackingMember $member): bool
+    protected function hasOpenCheckin($sessions, SamplerTrackingMember $member, $targetSession = null): bool
     {
-        return $sessions->contains(function ($session) use ($member) {
+        return $sessions->contains(function ($session) use ($member, $targetSession) {
             $sessionMember = $this->sessionMemberForSampler($session, $member);
             return SamplerTrackingActivity::hasEvent($sessionMember, 'checkin')
-                && !SamplerTrackingActivity::hasEvent($sessionMember, 'checkout');
+                && !SamplerTrackingActivity::hasEvent($sessionMember, 'checkout')
+                && !SamplerTrackingActivity::sameCustomer($session, $targetSession);
         });
     }
 
@@ -2455,16 +2466,6 @@ public function buildTrackingRows($sessions)
             if (!SamplerTrackingActivity::hasEvent($this->sessionMemberForSampler($sessions->get($currentIndex), $member), 'checkin')) {
                 throw ValidationException::withMessages(['event_type' => ['Check in harus dilakukan sebelum check out.']]);
             }
-            $firstOpenIndex = $sessions->search(function ($session) use ($member) {
-                $sessionMember = $this->sessionMemberForSampler($session, $member);
-                return SamplerTrackingActivity::hasEvent($sessionMember, 'checkin')
-                    && !SamplerTrackingActivity::hasEvent($sessionMember, 'checkout');
-            });
-            if ($firstOpenIndex !== false && $currentIndex !== $firstOpenIndex) {
-                throw ValidationException::withMessages([
-                    'event_type' => ['Selesaikan check out lokasi yang lebih dulu terbuka sebelum lokasi ini.'],
-                ]);
-            }
             return;
         }
 
@@ -2472,7 +2473,8 @@ public function buildTrackingRows($sessions)
             if (!$this->departureForMember($this->sessionMemberForSampler($sessions->get($currentIndex), $member), $member->session->tanggal_sampling)) {
                 throw ValidationException::withMessages(['event_type' => ['Berangkat sampling harus dilakukan sebelum check in.']]);
             }
-            if ($this->hasOpenCheckin($this->appActivities($member), $member)) {
+            $currentSession = $sessions->get($currentIndex);
+            if ($this->hasOpenCheckin($this->appActivities($member), $member, $currentSession)) {
                 throw ValidationException::withMessages([
                     'event_type' => ['Selesaikan check out lokasi yang masih terbuka sebelum check in lokasi lain.'],
                 ]);
@@ -2488,7 +2490,8 @@ public function buildTrackingRows($sessions)
 
             $previousSession = $sessions->get($currentIndex - 1);
             $previousMember = $this->sessionMemberForSampler($previousSession, $member);
-            if (!SamplerTrackingActivity::hasEvent($previousMember, 'checkout')) {
+            if (!SamplerTrackingActivity::hasEvent($previousMember, 'checkout')
+                && !SamplerTrackingActivity::sameCustomer($previousSession, $currentSession)) {
                 throw ValidationException::withMessages([
                     'event_type' => ['Selesaikan check out lokasi sebelumnya terlebih dahulu sebelum check in lokasi ini.'],
                 ]);
@@ -3005,8 +3008,19 @@ public function buildTrackingRows($sessions)
 
     protected function hasActiveSchedule($session, $member)
     {
+        $latestQuotation = $session->no_order
+            ? OrderHeader::where('no_order', $session->no_order)
+                ->where('is_active', true)
+                ->orderByDesc('id')
+                ->value('no_document')
+            : null;
+
+        if (!$latestQuotation) {
+            return false;
+        }
+
         return Jadwal::where('is_active', true)
-            ->where('no_quotation', $session->no_quotation)
+            ->where('no_quotation', $latestQuotation)
             ->whereDate('tanggal', $session->tanggal_sampling)
             ->when($member->sampler_id, function ($query) use ($member) {
                 $query->where('userid', $member->sampler_id);

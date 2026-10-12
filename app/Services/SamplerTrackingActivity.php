@@ -6,6 +6,14 @@ use Carbon\Carbon;
 
 class SamplerTrackingActivity
 {
+    public static function sameCustomer($first, $second): bool
+    {
+        $firstId = trim((string) ($first->id_pelanggan ?? ''));
+        $secondId = trim((string) ($second->id_pelanggan ?? ''));
+
+        return $firstId !== '' && $firstId === $secondId;
+    }
+
     // A logical stop retains all source sessions/orders and all historical events.
     // No schedule, member or event is deleted by consolidation.
     public static function consolidate($sessions)
