@@ -590,14 +590,7 @@ class AtsInterviewHrdController extends Controller
             'is_rejected_kandidat_at' => Carbon::now(),
         ]);
 
-        RecruitmentInterview::where('new_recruitment_id', $applicant->id)
-            ->where('stage', 'hrd')
-            ->where('is_active', 1)
-            ->update([
-                'status_result' => 'failed',
-                'catatan_interview' => $reason,
-                'updated_by' => $user,
-            ]);
+        $this->markHrdInterviewFailed((int) $applicant->id, $user, $reason);
 
         // Send dignified rejection email & WhatsApp
         try {
@@ -1008,5 +1001,33 @@ class AtsInterviewHrdController extends Controller
                 'histories' => $applicant->hrdInterviewHistories,
             ],
         ], 200);
+    }
+
+    private function markHrdInterviewFailed(int $recruitmentId, string $user, string $reason): void
+    {
+        $payload = [
+            'status_result' => 'failed',
+            'catatan_interview' => $reason,
+            'updated_by' => $user,
+        ];
+
+        $updated = RecruitmentInterview::where('new_recruitment_id', $recruitmentId)
+            ->where('stage', 'hrd')
+            ->where('is_active', 1)
+            ->update($payload);
+
+        if ($updated > 0) {
+            return;
+        }
+
+        $interview = RecruitmentInterview::where('new_recruitment_id', $recruitmentId)
+            ->where('stage', 'hrd')
+            ->whereNotIn('status_result', ['failed', 'gagal', 'passed'])
+            ->orderByDesc('id')
+            ->first();
+
+        if ($interview) {
+            $interview->update($payload);
+        }
     }
 }
