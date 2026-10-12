@@ -6,6 +6,7 @@ use Laravel\Lumen\Routing\Controller as BaseController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Helpers\HelperSatuan;
+use App\Helpers\LhpStepSequence;
 use App\Services\GroupedCfrByLhp;
 
 use App\Models\{
@@ -167,7 +168,7 @@ class LHPHandleController extends BaseController
                         'kategori_3' => $detail['categories'] ?? [$detail['kategori_3'] ?? null],
                         'no_sampel' => $sampleNumbers,
                         'total_no_sampel' => $detail['jumlah_sampel'] ?? count($sampleNumbers),
-                        'steps' => $detail['steps'] ?? $this->initializeStepsFromOrderBerjalan(),
+                        'steps' => LhpStepSequence::normalize($detail['steps'] ?? $this->initializeStepsFromOrderBerjalan()),
                         'rekap_pengujian' => $this->getRekapPengujianFromOrderBerjalan($detail),
                     ];
                 });
