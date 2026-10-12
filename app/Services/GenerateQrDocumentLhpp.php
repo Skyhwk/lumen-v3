@@ -23,8 +23,8 @@ class GenerateQrDocumentLhpp
             if ($cek) {
                 $cek->id_document = $data->id;
                 $cek->data = json_encode([
-                    'Nomor_LHP' => $data->no_lhp,
-                    'Nama_Pelanggan' => $data->nama_pelanggan,
+                    'Nomor_LHP' => $data->no_cfr,
+                    'Nama_Pelanggan' => $data->nama_perusahaan,
                     'Pelanggan_ID' => substr($data->no_order, 0, 6),
                     'Tanggal_Pengesahan' => Carbon::parse($data->tanggal_rilis_lhp)->locale('id')->isoFormat('DD MMMM YYYY'),
                     'Disahkan_Oleh' => $data->nama_karyawan,
@@ -51,7 +51,7 @@ class GenerateQrDocumentLhpp
                 'kode_qr' => $unique,
                 'file' => $filename,
                 'data' => json_encode([
-                    'Nomor_LHP' => $data->no_order,
+                    'Nomor_LHP' => $data->no_cfr,
                     'Nama_Pelanggan' => $data->nama_perusahaan,
                     'Pelanggan_ID' => substr($data->no_order, 0, 6),
                     'Tanggal_Pengesahan' => Carbon::parse($data->tanggal_rilis_lhp)->locale('id')->isoFormat('DD MMMM YYYY'),
@@ -86,8 +86,8 @@ class GenerateQrDocumentLhpp
             $qr = QrDocument::where('id_document', $data->id)->where('type_document', $type_doc)->first();
             if ($qr) {
                 $qr->data = json_encode([
-                    'Nomor_LHP' => $data->no_lhp,
-                    'Nama_Pelanggan' => $data->nama_pelanggan,
+                    'Nomor_LHP' => $data->no_cfr,
+                    'Nama_Pelanggan' => $data->nama_perusahaan,
                     'Pelanggan_ID' => substr($data->no_order, 0, 6),
                     'Tanggal_Pengesahan' => Carbon::parse($data->tanggal_lhp)->locale('id')->isoFormat('YYYY MMMM DD'),
                     'Disahkan_Oleh' => $data->nama_karyawan,
