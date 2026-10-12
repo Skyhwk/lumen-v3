@@ -28,7 +28,9 @@ class PersonnelRequestImageService
     public function appendToJob(object $job): object
     {
         $job->gambar = $job->gambar ?? null;
-        $job->image_url = $this->resolveUrl($job->gambar);
+        $categoryImage = isset($job->jobpost_category_image) ? trim((string) $job->jobpost_category_image) : '';
+        $source = $categoryImage !== '' ? $categoryImage : $job->gambar;
+        $job->image_url = $this->resolveUrl($source);
 
         return $job;
     }
