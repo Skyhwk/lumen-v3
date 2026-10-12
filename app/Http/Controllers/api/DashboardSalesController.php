@@ -37,18 +37,23 @@ class DashboardSalesController extends Controller
 
     public function index(Request $request)
     {
-        
         $karyawan = $request->attributes->get('user')->karyawan;
         $karyawanId = $karyawan->id;
 
-        $date = Carbon::create($request->year, $request->month, 1);
-        $currMonth = $date->month;
-        $prevMonth = $date->copy()->subMonth()->month;
+        $period = $this->resolveSalesDashboardPeriod($request);
+        $startDate = $period['start'];
+        $endDate = $period['end'];
+        $prevStart = $period['prev_start'];
+        $prevEnd = $period['prev_end'];
+        $trendYear = (int) $startDate->year;
 
-        $dailyQsd = $this->loadDailyQsdForSales($karyawanId, (int) $request->year);
-
-        $currQsd = $dailyQsd->filter(fn($qsd) => Carbon::parse($qsd->tanggal_kelompok)->month == $currMonth);
-        $prevQsd = $dailyQsd->filter(fn($qsd) => Carbon::parse($qsd->tanggal_kelompok)->month == $prevMonth);
+        $dailyQsd = $this->loadDailyQsdForDateRange(
+            $karyawanId,
+            $prevStart->lt($startDate) ? $prevStart : $startDate,
+            $endDate
+        );
+        $currQsd = $this->filterQsdByDateRange($dailyQsd, $startDate, $endDate);
+        $prevQsd = $this->filterQsdByDateRange($dailyQsd, $prevStart, $prevEnd);
 
         $currRevenue = $currQsd->sum('total_revenue');
         $prevRevenue = $prevQsd->sum('total_revenue');
@@ -58,11 +63,14 @@ class DashboardSalesController extends Controller
         $targetSales = MasterTargetSales::where([
             'karyawan_id' => $karyawanId,
             'is_active'   => true,
-            'tahun'       => $request->year
+            'tahun'       => $trendYear,
         ])->latest()->first();
 
-        $currCategoryMetrics = $this->buildCategoryTargetMetrics($targetSales, $currQsd, $currMonth);
-        $prevCategoryMetrics = $this->buildCategoryTargetMetrics($targetSales, $prevQsd, $prevMonth);
+        $categoryMonth = (int) $startDate->month;
+        $prevCategoryMonth = (int) $prevStart->month;
+
+        $currCategoryMetrics = $this->buildCategoryTargetMetrics($targetSales, $currQsd, $categoryMonth);
+        $prevCategoryMetrics = $this->buildCategoryTargetMetrics($targetSales, $prevQsd, $prevCategoryMonth);
 
         $currTargetKategori = $currCategoryMetrics['target_kategori'];
         $growthTargetKategori = $this->calculateGrowth(
@@ -80,10 +88,7 @@ class DashboardSalesController extends Controller
 
         $growthExistCustomer = $this->calculateGrowth($currExistCustomer, $prevExistCustomer);
 
-        $period = Carbon::create($request->year, $request->month, 1)->format('Y-m');
-        $target = json_decode(optional($targetSales)->target ?: '[]', true);
-       
-        $targetAmount = isset($target[$period]) ? $target[$period] : 0;
+        $targetAmount = $this->resolveTargetAmount($targetSales, $startDate, $endDate, $period['type']);
 
         $newCustomerRevenue = $currQsd->filter(fn($qsd) => $qsd->status_customer == 'new')->sum('total_revenue');
         $existCustomerRevenue = $currQsd->filter(fn($qsd) => $qsd->status_customer == 'exist')->sum('total_revenue');
@@ -93,25 +98,27 @@ class DashboardSalesController extends Controller
 
         $currentCallMetrics = $this->getCallMetrics(
             $karyawan->nama_lengkap,
-            $date->copy()->startOfMonth(),
-            $date->copy()->endOfMonth()
+            $startDate,
+            $endDate
         );
-        $previousDate = $date->copy()->subMonthNoOverflow();
         $previousCallMetrics = $this->getCallMetrics(
             $karyawan->nama_lengkap,
-            $previousDate->copy()->startOfMonth(),
-            $previousDate->copy()->endOfMonth()
+            $prevStart,
+            $prevEnd
         );
 
+        $yearlyQsd = $this->loadDailyQsdForSales($karyawanId, $trendYear);
         $yearlyRevenueTrend = collect(range(1, 12))
             ->map(fn($month) => [
-                'month' => Carbon::create($request->year, $month, 1)->translatedFormat('M'),
-                'revenue' => $dailyQsd->filter(fn($qsd) => Carbon::parse($qsd->tanggal_kelompok)->month == $month)->sum('total_revenue'),
+                'month' => Carbon::create($trendYear, $month, 1)->translatedFormat('M'),
+                'revenue' => $yearlyQsd->filter(fn($qsd) => Carbon::parse($qsd->tanggal_kelompok)->month == $month)->sum('total_revenue'),
             ]);
 
         return response()->json([
             'message' => 'Data retrieved successfully',
             'data' => [
+                'period_type'                 => $period['type'],
+                'comparison_label'            => $period['comparison_label'],
                 'total_revenue'               => $currRevenue,
                 'percentage_revenue'          => $growthRevenue,
 
@@ -145,7 +152,7 @@ class DashboardSalesController extends Controller
                 'success_rate_change'          => round($currentCallMetrics['success_rate'] - $previousCallMetrics['success_rate'], 1),
 
                 'revenue_trend'               => $yearlyRevenueTrend,
-                'quotation_analytics'         => $this->getQuotationAnalytics($karyawanId, $date),
+                'quotation_analytics'         => $this->getQuotationAnalytics($karyawanId, $startDate, $endDate),
             ],
         ], 200);
     }
@@ -155,16 +162,18 @@ class DashboardSalesController extends Controller
         $karyawan = $request->attributes->get('user')->karyawan;
         $karyawanId = $karyawan->id;
 
-        $date = Carbon::create($request->year, $request->month, 1);
-        $currMonth = $date->month;
+        $period = $this->resolveSalesDashboardPeriod($request);
+        $startDate = $period['start'];
+        $endDate = $period['end'];
+        $currMonth = (int) $startDate->month;
 
-        $dailyQsd = $this->loadDailyQsdForSales($karyawanId, (int) $request->year);
-        $currQsd = $dailyQsd->filter(fn($qsd) => Carbon::parse($qsd->tanggal_kelompok)->month == $currMonth);
+        $dailyQsd = $this->loadDailyQsdForDateRange($karyawanId, $startDate, $endDate);
+        $currQsd = $this->filterQsdByDateRange($dailyQsd, $startDate, $endDate);
 
         $targetSales = MasterTargetSales::where([
             'karyawan_id' => $karyawanId,
             'is_active'   => true,
-            'tahun'       => $request->year,
+            'tahun'       => (int) $startDate->year,
         ])->latest()->first();
 
         $metrics = $this->buildCategoryTargetMetrics($targetSales, $currQsd, $currMonth);
@@ -262,14 +271,14 @@ class DashboardSalesController extends Controller
         return $previous > 0 ? round((($current - $previous) / $previous) * 100, 1) : 0;
     }
 
-    private function getQuotationAnalytics(int $salesId, Carbon $date): array
+    private function getQuotationAnalytics(int $salesId, Carbon $startDate, Carbon $endDate): array
     {
         $quotes = collect([QuotationNonKontrak::class, QuotationKontrakH::class])
-            ->flatMap(function ($model) use ($salesId, $date) {
+            ->flatMap(function ($model) use ($salesId, $startDate, $endDate) {
                 return $model::query()
                     ->where('is_active', 1)
                     ->where('sales_id', $salesId)
-                    ->whereBetween('created_at', [$date->copy()->startOfMonth(), $date->copy()->endOfMonth()])
+                    ->whereBetween('created_at', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()])
                     ->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'kode_promo', 'total_discount_promo', 'biaya_akhir', 'tanggal_penawaran']);
             })
             ->map(function ($quote) {
@@ -324,6 +333,117 @@ class DashboardSalesController extends Controller
         ];
     }
 
+    private function resolveSalesDashboardPeriod(Request $request): array
+    {
+        $periodType = in_array($request->period_type, ['daily', 'yearly', 'range'], true)
+            ? $request->period_type
+            : 'monthly';
+
+        if ($periodType === 'daily') {
+            $start = Carbon::parse($request->date ?: $request->start_date ?: Carbon::now())->startOfDay();
+            $end = $start->copy()->endOfDay();
+            $prevStart = $start->copy()->subDay()->startOfDay();
+            $prevEnd = $prevStart->copy()->endOfDay();
+            $comparisonLabel = $prevStart->translatedFormat('j F Y');
+        } elseif ($periodType === 'yearly') {
+            $year = (int) ($request->year ?: Carbon::now()->year);
+            $start = Carbon::create($year, 1, 1)->startOfDay();
+            $end = $start->copy()->endOfYear();
+            $prevStart = $start->copy()->subYear()->startOfYear();
+            $prevEnd = $prevStart->copy()->endOfYear();
+            $comparisonLabel = (string) ($year - 1);
+        } elseif ($periodType === 'range') {
+            $start = Carbon::parse($request->start_date ?: Carbon::now())->startOfDay();
+            $end = Carbon::parse($request->end_date ?: $request->start_date ?: Carbon::now())->endOfDay();
+            if ($end->lt($start)) {
+                [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
+            }
+            $dayCount = max(1, $start->copy()->startOfDay()->diffInDays($end->copy()->startOfDay()) + 1);
+            $prevEnd = $start->copy()->subDay()->endOfDay();
+            $prevStart = $prevEnd->copy()->subDays($dayCount - 1)->startOfDay();
+            $comparisonLabel = 'periode sebelumnya';
+        } else {
+            $year = (int) ($request->year ?: Carbon::now()->year);
+            $month = (int) ($request->month ?: Carbon::now()->month);
+            $start = Carbon::create($year, $month, 1)->startOfMonth();
+            $end = $start->copy()->endOfMonth();
+            $prevStart = $start->copy()->subMonth()->startOfMonth();
+            $prevEnd = $prevStart->copy()->endOfMonth();
+            $comparisonLabel = $prevStart->translatedFormat('F');
+        }
+
+        return [
+            'type' => $periodType,
+            'start' => $start,
+            'end' => $end,
+            'prev_start' => $prevStart,
+            'prev_end' => $prevEnd,
+            'comparison_label' => $comparisonLabel,
+        ];
+    }
+
+    private function loadDailyQsdForDateRange(int $karyawanId, Carbon $startDate, Carbon $endDate)
+    {
+        $years = range((int) $startDate->year, (int) $endDate->year);
+
+        return collect($years)
+            ->flatMap(fn (int $year) => $this->loadDailyQsdForSales($karyawanId, $year))
+            ->values();
+    }
+
+    private function filterQsdByDateRange($dailyQsd, Carbon $startDate, Carbon $endDate)
+    {
+        $from = $startDate->copy()->startOfDay();
+        $to = $endDate->copy()->endOfDay();
+
+        return $dailyQsd->filter(function ($qsd) use ($from, $to) {
+            $tanggal = Carbon::parse($qsd->tanggal_kelompok);
+
+            return $tanggal->betweenIncluded($from, $to);
+        });
+    }
+
+    private function resolveTargetAmount($targetSales, Carbon $startDate, Carbon $endDate, string $periodType): float
+    {
+        $target = json_decode(optional($targetSales)->target ?: '[]', true);
+        if (!is_array($target)) {
+            return 0;
+        }
+
+        if ($periodType === 'monthly') {
+            return (float) ($target[$startDate->format('Y-m')] ?? 0);
+        }
+
+        if ($periodType === 'daily') {
+            $monthly = (float) ($target[$startDate->format('Y-m')] ?? 0);
+
+            return $monthly > 0 ? round($monthly / $startDate->daysInMonth, 2) : 0;
+        }
+
+        if ($periodType === 'yearly') {
+            $sum = 0;
+            for ($month = 1; $month <= 12; $month++) {
+                $key = Carbon::create($startDate->year, $month, 1)->format('Y-m');
+                $sum += (float) ($target[$key] ?? 0);
+            }
+
+            return $sum;
+        }
+
+        $sum = 0;
+        $cursor = $startDate->copy()->startOfDay();
+        $last = $endDate->copy()->startOfDay();
+        while ($cursor->lte($last)) {
+            $monthly = (float) ($target[$cursor->format('Y-m')] ?? 0);
+            if ($monthly > 0) {
+                $sum += $monthly / $cursor->daysInMonth;
+            }
+            $cursor->addDay();
+        }
+
+        return round($sum, 2);
+    }
+
     private function getCallMetrics($salesName, Carbon $startDate, Carbon $endDate)
     {
         $statusCounts = DFUS::where('sales_penanggung_jawab', $salesName)
@@ -353,10 +473,10 @@ class DashboardSalesController extends Controller
     {
         try {
             $karyawanId = (int) $request->attributes->get('user')->karyawan->id;
-            $date = Carbon::create((int) $request->year, (int) $request->month, 1);
+            $period = $this->resolveSalesDashboardPeriod($request);
             $service = app(DashboardQuotationNoStatusService::class);
-            $startDate = $date->copy()->startOfMonth();
-            $endDate = $date->copy()->endOfMonth();
+            $startDate = $period['start']->copy()->startOfDay();
+            $endDate = $period['end']->copy()->endOfDay();
 
             if ($request->has('draw')) {
                 return response()->json($service->datatable($request, [$karyawanId], $startDate, $endDate));
