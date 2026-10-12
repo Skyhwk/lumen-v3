@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Yajra\Datatables\Datatables;
 
@@ -192,11 +193,6 @@ class AnnouncementController extends Controller
             $announcement->attachments = $this->storeAnnouncementAttachments($request, $announcement->id, $storedAttachments);
             $announcement->save();
             DB::commit();
-            return response()->json([
-                'success' => true,
-                'message' => 'Announcement Berhasil Ditambahkan!',
-                'data' => $announcement,
-            ], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
             if ($storedFile && is_file($storedFile)) {
@@ -213,7 +209,54 @@ class AnnouncementController extends Controller
                 'error' => $th->getMessage(),
             ], 500);
         }
+
+        $this->sendAnnouncementNotification($announcement, $request->input('description'));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Announcement Berhasil Ditambahkan!',
+            'data' => $announcement,
+        ], 200);
     }
+
+    private function sendAnnouncementNotification(Announcement $announcement, $html)
+    {
+        $receiverIds = $announcement->receiver_ids ?: [];
+        if ($receiverIds === []) {
+            return;
+        }
+
+        $body = $this->announcementNotificationBody($html, $announcement->title);
+
+        try {
+            (new \App\Services\Greatday\FirebaseService())->sendNotifications($receiverIds, [
+                'title' => (string) $announcement->title,
+                'body' => $body,
+                'url' => '/notifications',
+                'kind' => 'announcement',
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Announcement FCM gagal dikirim', [
+                'announcement_id' => $announcement->id,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function announcementNotificationBody($html, $title)
+    {
+        $text = html_entity_decode(strip_tags((string) $html), ENT_QUOTES, 'UTF-8');
+        $text = trim(preg_replace('/\s+/u', ' ', $text));
+        if ($text === '') {
+            $text = trim((string) $title);
+        }
+        if (mb_strlen($text) > 180) {
+            $text = rtrim(mb_substr($text, 0, 177)) . '...';
+        }
+
+        return $text;
+    }
+
 
     public function update(Request $request)
     {
@@ -467,7 +510,19 @@ class AnnouncementController extends Controller
             ->values()
             ->all();
 
-        if ($request->receiver_category === 'Divisi') {
+        if ($request->receiver_category === 'All') {
+            $receiverIds = MasterKaryawan::where('is_active', true)
+                ->pluck('id')
+                ->map(function ($id) {
+                    return (string) $id;
+                })
+                ->values()
+                ->all();
+
+            if ($receiverIds === []) {
+                return ['error' => 'Tidak ada karyawan aktif.'];
+            }
+        } elseif ($request->receiver_category === 'Divisi') {
             $names = collect($request->input('receiver_names', []))
                 ->map(function ($name) {
                     return trim((string) $name);
