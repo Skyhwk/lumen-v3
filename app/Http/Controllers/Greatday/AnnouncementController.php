@@ -21,7 +21,7 @@ class AnnouncementController extends Controller
             'created_at as timestamp',
             DB::raw("CASE WHEN JSON_CONTAINS(is_read, '\"{$userId}\"') THEN true ELSE false END as is_read"),
             DB::raw("CASE WHEN JSON_CONTAINS(is_deleted, '\"{$userId}\"') THEN true ELSE false END as is_deleted")
-        )->whereJsonContains('delivery', (string) $userId);
+        )->whereJsonContains('receiver_ids', (string) $userId);
 
         if ($request->has('bulan')) {
             try {
@@ -60,7 +60,7 @@ class AnnouncementController extends Controller
             'description as message',
             'created_at as timestamp'
         )
-            ->whereJsonContains('delivery', (string) $this->user_id)
+            ->whereJsonContains('receiver_ids', (string) $this->user_id)
             ->orderBy('id', 'desc')
             ->first();
 
@@ -96,7 +96,7 @@ class AnnouncementController extends Controller
         DB::beginTransaction();
         try {
             $userId = (string) $this->user_id;
-            $announcements = Announcement::whereJsonContains('delivery', $userId)->get();
+            $announcements = Announcement::whereJsonContains('receiver_ids', $userId)->get();
 
             foreach ($announcements as $announcement) {
                 $readUsers = json_decode($announcement->is_read) ?: [];
@@ -146,7 +146,7 @@ class AnnouncementController extends Controller
         DB::beginTransaction();
         try {
             $userId = (string) $this->user_id;
-            $announcements = Announcement::whereJsonContains('delivery', $userId)->get();
+            $announcements = Announcement::whereJsonContains('receiver_ids', $userId)->get();
 
             foreach ($announcements as $announcement) {
                 $deleteUsers = json_decode($announcement->is_deleted) ?: [];
