@@ -363,6 +363,10 @@ class AtsHiredCandidatesController extends Controller
 
     public function migrateToMasterKaryawan(Request $request)
     {
+        $tipePengembalian = data_get($request, 'payroll.tipe_pengembalian');
+        if ($tipePengembalian !== null && !in_array($tipePengembalian, ['setelah_potongan', 'setelah_kontrak'], true)) {
+            return response()->json(['status' => false, 'message' => 'Tipe pengembalian tidak valid.'], 422);
+        }
         if (!$request->id) {
             return response()->json(['status' => false, 'message' => 'Data kandidat wajib dipilih.'], 422);
         }
@@ -925,6 +929,7 @@ class AtsHiredCandidatesController extends Controller
             $this->upsertPayroll('pencadangan_upah', $karyawan->id, $nikKaryawan, $namaKaryawan, [
                 'nominal' => $pencadangan,
                 'nominal_berjalan' => -$pencadangan,
+                'tipe_pengembalian' => data_get($request, 'payroll.tipe_pengembalian') ?? 'setelah_potongan',
                 'tenor' => $tenor,
                 'tenor_berjalan' => -$tenor,
                 'bulan_efektif' => $effectiveMonth,

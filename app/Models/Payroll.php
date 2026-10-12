@@ -5,6 +5,7 @@ use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
 
 class Payroll extends Sector{
+    protected $casts = ['deduction_snapshot' => 'array'];
     protected $table = 'payroll';
     protected $guard = [];
 

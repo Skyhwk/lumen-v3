@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 use App\Models\{DailyQsd, DFUS, MasterTargetSales, QuotationKontrakH, QuotationNonKontrak};
+use App\Services\DashboardQuotationNoStatusService;
 
 class DashboardSalesController extends Controller
 {
@@ -346,5 +347,32 @@ class DashboardSalesController extends Controller
             'unqualified' => $unqualified,
             'success_rate' => $totalCalls > 0 ? round(($picContacted / $totalCalls) * 100, 1) : 0,
         ];
+    }
+
+    public function quotationNoStatusList(Request $request)
+    {
+        try {
+            $karyawanId = (int) $request->attributes->get('user')->karyawan->id;
+            $date = Carbon::create((int) $request->year, (int) $request->month, 1);
+            $service = app(DashboardQuotationNoStatusService::class);
+            $startDate = $date->copy()->startOfMonth();
+            $endDate = $date->copy()->endOfMonth();
+
+            if ($request->has('draw')) {
+                return response()->json($service->datatable($request, [$karyawanId], $startDate, $endDate));
+            }
+
+            $rows = $service->list([$karyawanId], $startDate, $endDate);
+
+            return response()->json([
+                'message' => 'Data retrieved successfully',
+                'data' => $rows,
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat mengambil daftar quotation tanpa status.',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
     }
 }
