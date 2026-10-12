@@ -11,6 +11,7 @@ use App\Models\QrDocument;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use setasign\Fpdi\Tcpdf\Fpdi;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Yajra\DataTables\Facades\DataTables;
@@ -19,7 +20,11 @@ class LhpManualController extends Controller
 {
     private const DRAW_ORDER = ['watermark', 'cover', 'logo', 'qr'];
     private const MAX_PDF_COUNT = 20;
-    private const ALLOWED_DOC_TYPES = ['LHP_HIGIENE_SANITASI'];
+    // private const ALLOWED_DOC_TYPES = [
+    //     'LHP_HIGIENE_SANITASI',
+    //     'LHP_LINGKUNGAN_HIDUP',
+    //     'LHP_LINGKUNGAN_KERJA',
+    // ];
 
     public function index(Request $request)
     {
@@ -298,10 +303,10 @@ class LhpManualController extends Controller
                 return response()->json(['message' => 'No LHP dan tanggal LHP wajib diisi'], 422);
             }
 
-            if (!in_array($tipeDokumen, self::ALLOWED_DOC_TYPES, true)) {
-                DB::rollBack();
-                return response()->json(['message' => 'Tipe dokumen belum didukung'], 422);
-            }
+            // if (!in_array($tipeDokumen, self::ALLOWED_DOC_TYPES, true)) {
+            //     DB::rollBack();
+            //     return response()->json(['message' => 'Tipe dokumen belum didukung'], 422);
+            // }
 
             $orderDetail = OrderDetail::where('cfr', $noLhp)->where('is_active', 1)->first();
             if (!$orderDetail) {
@@ -378,10 +383,10 @@ class LhpManualController extends Controller
                 return response()->json(['message' => 'No LHP wajib diisi'], 422);
             }
 
-            if (!in_array($tipeDokumen, self::ALLOWED_DOC_TYPES, true)) {
-                DB::rollBack();
-                return response()->json(['message' => 'Tipe dokumen belum didukung'], 422);
-            }
+            // if (!in_array($tipeDokumen, self::ALLOWED_DOC_TYPES, true)) {
+            //     DB::rollBack();
+            //     return response()->json(['message' => 'Tipe dokumen belum didukung'], 422);
+            // }
 
             $pdfFiles = $this->collectPdfFiles($request);
             $qrPath = $this->resolveGeneratedQrPath($qrFileName);
@@ -424,7 +429,7 @@ class LhpManualController extends Controller
             $pdf->Output($targetPath, 'F');
 
             // Simpan file_qr & file_lhp ke lhp_manual hanya di langkah akhir.
-            $this->persistLhpManualFiles($noLhp, $qrFileName, $fileName, $request);
+            $this->persistLhpManualFiles($noLhp, $qrFileName, $fileName, $request, $tipeDokumen);
 
             DB::commit();
 
@@ -648,7 +653,7 @@ class LhpManualController extends Controller
         return $targetDir;
     }
 
-    private function persistLhpManualFiles(string $noLhp, ?string $fileQr, ?string $fileLhp, Request $request): void
+    private function persistLhpManualFiles(string $noLhp, ?string $fileQr, ?string $fileLhp, Request $request, string $tipeDokumen): void
     {
         $manual = LhpManual::query()
             ->where('no_lhp', $noLhp)
@@ -678,7 +683,7 @@ class LhpManualController extends Controller
         if ($fileQr) {
             QrDocument::query()
                 ->where('file', $fileQr)
-                ->where('type_document', 'LHP_HIGIENE_SANITASI')
+                ->where('type_document', $tipeDokumen)
                 ->update(['id_document' => $manual->id]);
         }
     }
@@ -781,10 +786,18 @@ class LhpManualController extends Controller
 
     private function stampDocument(Fpdi $pdf, $sourcePath, array $sorted, $logoPath, $watermarkPath, $qrPath)
     {
-        $normalizedPath = $this->normalizePdfForFpdi($sourcePath);
+        $tempPath = null;
 
         try {
-            $pageCount = $pdf->setSourceFile($normalizedPath);
+            try {
+                $pageCount = $pdf->setSourceFile($sourcePath);
+            } catch (\Throwable $directError) {
+                Log::warning('PDF LHP perlu dinormalisasi sebelum distempel', [
+                    'message' => $directError->getMessage(),
+                ]);
+                $tempPath = $this->normalizePdfForFpdi($sourcePath);
+                $pageCount = $pdf->setSourceFile($tempPath);
+            }
 
             for ($page = 1; $page <= $pageCount; $page++) {
                 $template = $pdf->importPage($page);
@@ -801,33 +814,101 @@ class LhpManualController extends Controller
                 }
             }
         } finally {
-            if ($normalizedPath && is_file($normalizedPath)) {
-                @unlink($normalizedPath);
+            if ($tempPath && is_file($tempPath)) {
+                @unlink($tempPath);
             }
         }
     }
 
     private function normalizePdfForFpdi($sourcePath)
     {
-        $outputPath = sys_get_temp_dir() . '/lhp_fpdi_' . uniqid('', true) . '.pdf';
-        $gs = is_executable('/usr/bin/gs') ? '/usr/bin/gs' : 'gs';
+        $gs = $this->findGhostscriptBinary();
+        if (!$gs) {
+            throw new \RuntimeException(
+                'File PDF tidak dapat diproses. Pastikan file tidak dikunci password dan masih bisa dibuka.'
+            );
+        }
+
+        $outputPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'lhp_fpdi_' . uniqid('', true) . '.pdf';
         $command = sprintf(
             '%s -q -dNOPAUSE -dBATCH -dSAFER -dAutoRotatePages=/None -dUseCropBox -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -sOutputFile=%s %s 2>&1',
-            escapeshellcmd($gs),
+            escapeshellarg($gs),
             escapeshellarg($outputPath),
             escapeshellarg($sourcePath)
         );
 
+        $output = [];
+        $exitCode = 1;
         exec($command, $output, $exitCode);
 
         if ($exitCode !== 0 || !is_file($outputPath) || filesize($outputPath) === 0) {
             @unlink($outputPath);
+            Log::warning('Gagal menormalisasi PDF LHP', [
+                'exit_code' => $exitCode,
+                'output' => trim(implode(' ', $output)),
+            ]);
             throw new \RuntimeException(
-                'PDF terenkripsi atau tidak bisa diproses. ' . trim(implode(' ', $output))
+                'File PDF tidak dapat diproses. Pastikan file tidak dikunci password dan masih bisa dibuka.'
             );
         }
 
         return $outputPath;
+    }
+
+    private function findGhostscriptBinary()
+    {
+        $candidates = array_filter([
+            getenv('GHOSTSCRIPT_BINARY') ?: null,
+            getenv('GS_PROG') ?: null,
+        ]);
+
+        if (DIRECTORY_SEPARATOR === '\\') {
+            foreach (['C:\\Program Files\\gs', 'C:\\Program Files (x86)\\gs'] as $base) {
+                if (!is_dir($base)) {
+                    continue;
+                }
+                foreach (glob($base . '\\gs*', GLOB_ONLYDIR) ?: [] as $dir) {
+                    $candidates[] = $dir . '\\bin\\gswin64c.exe';
+                    $candidates[] = $dir . '\\bin\\gswin32c.exe';
+                }
+            }
+            foreach (['gswin64c', 'gswin32c', 'gs'] as $command) {
+                $resolved = $this->resolveCommandInPath($command);
+                if ($resolved) {
+                    $candidates[] = $resolved;
+                }
+            }
+        } else {
+            $candidates[] = '/usr/bin/gs';
+            $candidates[] = '/usr/local/bin/gs';
+            $resolved = $this->resolveCommandInPath('gs');
+            if ($resolved) {
+                $candidates[] = $resolved;
+            }
+        }
+
+        foreach ($candidates as $candidate) {
+            if (is_file($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveCommandInPath($command)
+    {
+        $finder = DIRECTORY_SEPARATOR === '\\' ? 'where' : 'command -v';
+        $output = [];
+        $code = 1;
+        @exec($finder . ' ' . escapeshellarg($command) . ' 2>&1', $output, $code);
+        if ($code !== 0) {
+            return null;
+        }
+
+        $line = trim((string) ($output[0] ?? ''));
+
+        return ($line !== '' && is_file($line)) ? $line : null;
     }
 
     private function sortOverlays(array $overlays)
@@ -910,5 +991,28 @@ class LhpManualController extends Controller
         $pdf->SetAlpha(max(0.05, min(1, $opacity)));
         $pdf->Image($path, $x, $y, $w, $h, $imageType, '', '', false, 300, '', false, false, 0, 'CM');
         $pdf->SetAlpha(1);
+    }
+
+    public function getDocTypeLabel()
+    {
+        $docTypes = QrDocument::query()
+            ->where('type_document', 'like', '%LHP_%')
+            ->distinct()
+            ->orderBy('type_document')
+            ->pluck('type_document')
+            ->unique()
+            ->sort()
+            ->values()
+            ->map(function ($item) {
+                return [
+                    'value' => $item,
+                    'label' => strtoupper(str_replace('_', ' ', $item)),
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => $docTypes,
+        ]);
     }
 }
