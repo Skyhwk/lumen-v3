@@ -10,6 +10,8 @@ use App\Models\DendaKaryawan;
 use App\Models\MasterKaryawan;
 use App\Models\RekapLiburKalender;
 use App\Http\Controllers\Controller;
+use App\Services\Greatday\RenderSlipGajiService;
+use App\Services\Payroll\PayrollTransferDispatchService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -76,11 +78,28 @@ class PaymentPayrollKaryawanController extends Controller
                 ->update(['tgl_transfer' => $request->tanggal_transfer]);
             
             DB::commit();
+
+            RenderSlipGajiService::invalidateCachedSlipsForHeader((int) $request->id);
+
+            $dispatch = ['dispatched' => false, 'reason' => 'not_attempted'];
+            try {
+                $dispatch = app(PayrollTransferDispatchService::class)->dispatchForHeaderId((int) $request->id);
+            } catch (\Throwable $dispatchError) {
+                $dispatch = [
+                    'dispatched' => false,
+                    'reason' => 'dispatch_exception',
+                    'message' => $dispatchError->getMessage(),
+                ];
+            }
+
             return response()->json([
                 'message' => 'Tanggal Transfer berhasil diatur!',
+                'payroll_disbursement' => $dispatch,
             ], 201);
             
         } catch (\Throwable $e) {
+            DB::rollBack();
+
             return response()->json([
                 'data' => [],
                 'message' => $e->getMessage(),

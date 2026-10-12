@@ -36,6 +36,7 @@ $router->group(['prefix' => 'api', 'middleware' => ['auth.token', 'rate.limit.us
 
 $router->post('/api/cekLHP', 'external\LHPHandleController@cekLHP');
 $router->post('/api/newCheckLhp', 'external\LHPHandleController@newCheckLhp');
+$router->post('/api/payroll-transfer/complete', 'external\PayrollTransferCallbackController@complete');
 
 $router->get('/api/getJadwal', 'external\JadwalHandler@getJadwal');
 $router->get('/api/showDetailJadwal', 'external\JadwalHandler@getDetailJadwalApi');

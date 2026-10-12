@@ -239,6 +239,10 @@ class SlipGajiController extends Controller
 
         $this->invalidateCachedSlipIfStale($pdfPath, $imagePath);
 
+        if (is_file($pdfPath) && RenderSlipGajiService::shouldRefreshSlipPdf($payroll, $pdfPath)) {
+            RenderSlipGajiService::deleteCachedSlipFiles($payroll);
+        }
+
         if (is_file($pdfPath) && is_file($imagePath)) {
             return [
                 'filename' => $pdfFilename,

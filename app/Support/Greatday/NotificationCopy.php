@@ -69,6 +69,24 @@ class NotificationCopy
         ];
     }
 
+    /**
+     * Push/in-app Attendance — gaji periode sudah ditransfer (hanya karyawan dalam payroll).
+     *
+     * @return array{title: string, body: string, url: string, kind: string}
+     */
+    public static function payrollTransferCompleted(string $periodeLabel): array
+    {
+        $periodeLabel = trim($periodeLabel) !== '' ? trim($periodeLabel) : 'periode berjalan';
+
+        return [
+            'title' => 'Good News — Gaji Sudah Ditransfer',
+            'body' => 'Kabar baik! Gaji Anda untuk periode ' . $periodeLabel
+                . ' telah diproses dan ditransfer. Slip gaji tersedia di aplikasi Attendance. Terima kasih atas dedikasi Anda.',
+            'url' => self::pathHome(),
+            'kind' => 'payroll_paid',
+        ];
+    }
+
     private static function formatJamSingkat(?string $time): string
     {
         $time = trim((string) $time);
