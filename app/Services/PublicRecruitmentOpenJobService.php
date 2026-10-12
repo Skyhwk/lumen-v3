@@ -41,6 +41,8 @@ class PublicRecruitmentOpenJobService
             ->leftJoin('master_divisi as md', 'md.id', '=', 'personnel_requests.divisi')
             ->leftJoin('master_cabang as mc', 'mc.id', '=', 'personnel_requests.lokasi_penempatan_cabang');
 
+        $this->applyJobpostCategoryJoin($query);
+
         if (Schema::hasColumn('personnel_requests', 'is_active')) {
             $query->where('personnel_requests.is_active', true);
         }
@@ -88,7 +90,31 @@ class PublicRecruitmentOpenJobService
             $columns[] = 'use_user_assessment';
         }
 
+        if (Schema::hasTable('jobpost_categories') && Schema::hasColumn('jobpost_categories', 'image')) {
+            $columns[] = 'jcp.image as jobpost_category_image';
+        }
+
         return $columns;
+    }
+
+    private function applyJobpostCategoryJoin($query): void
+    {
+        if (!Schema::hasTable('jobpost_categories') || !Schema::hasColumn('jobpost_categories', 'image')) {
+            return;
+        }
+
+        $categoryIdColumn = null;
+        if (Schema::hasColumn('personnel_requests', 'jobpost_category_id')) {
+            $categoryIdColumn = 'personnel_requests.jobpost_category_id';
+        } elseif (Schema::hasColumn('personnel_requests', 'divisi_alias_id')) {
+            $categoryIdColumn = 'personnel_requests.divisi_alias_id';
+        }
+
+        if ($categoryIdColumn === null) {
+            return;
+        }
+
+        $query->leftJoin('jobpost_categories as jcp', 'jcp.id', '=', $categoryIdColumn);
     }
 
     private function detailSelectColumns(): array

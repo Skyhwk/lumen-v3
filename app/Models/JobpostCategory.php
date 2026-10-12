@@ -8,6 +8,7 @@ class JobpostCategory extends Sector
 
     protected $fillable = [
         'name',
+        'image',
         'assigned_user_ids',
         'division_ids',
         'is_active',
