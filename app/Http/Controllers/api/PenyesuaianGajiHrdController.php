@@ -1013,7 +1013,35 @@ class PenyesuaianGajiHrdController extends Controller
                     SalaryAdjustmentWorkflowService::STATUS_WAITING_ASSESSMENT,
                 ], true)
                     && $row->attempt_status !== 'completed'
-                    && empty($row->link_url);
+                    && empty($row->assessment_token);
+            });
+
+            $dt->addColumn('can_takedown_link', function ($row) {
+                if (!EmployeeAdjustmentTypeRegistry::requiresAssessment($row->request_type ?? null)) {
+                    return false;
+                }
+
+                return in_array($row->status, [
+                    SalaryAdjustmentWorkflowService::STATUS_HRD_PROCESSING,
+                    SalaryAdjustmentWorkflowService::STATUS_WAITING_ASSESSMENT,
+                ], true)
+                    && $row->attempt_status !== 'completed'
+                    && !empty($row->assessment_token)
+                    && (bool) $row->is_link_active;
+            });
+
+            $dt->addColumn('can_reopen_link', function ($row) {
+                if (!EmployeeAdjustmentTypeRegistry::requiresAssessment($row->request_type ?? null)) {
+                    return false;
+                }
+
+                return in_array($row->status, [
+                    SalaryAdjustmentWorkflowService::STATUS_HRD_PROCESSING,
+                    SalaryAdjustmentWorkflowService::STATUS_WAITING_ASSESSMENT,
+                ], true)
+                    && $row->attempt_status !== 'completed'
+                    && !empty($row->assessment_token)
+                    && !(bool) $row->is_link_active;
             });
 
             $dt->addColumn('requires_counseling', function ($row) {
