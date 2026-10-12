@@ -53,7 +53,7 @@ class FeeSamplingController extends Controller
     public function getRekening()
     {
         $data = MasterKaryawan::where('id', $this->user_id)->first();
-        $rekening = RekeningKaryawan::where('nik_karyawan', $data->nik_karyawan)
+        $rekening = RekeningKaryawan::where('id_karyawan', $data->id)
             ->select('nik_karyawan', 'no_rekening', 'nama_bank')
             ->where('is_active', true)
             ->first();
