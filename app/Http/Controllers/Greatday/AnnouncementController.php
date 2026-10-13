@@ -18,7 +18,6 @@ class AnnouncementController extends Controller
             DB::raw("COALESCE(title, description) as title"),
             'filename',
             'attachments',
-            'created_by',
             'created_at as timestamp',
             DB::raw("CASE WHEN JSON_CONTAINS(is_read, '\"{$userId}\"') THEN true ELSE false END as is_read"),
             DB::raw("CASE WHEN JSON_CONTAINS(is_deleted, '\"{$userId}\"') THEN true ELSE false END as is_deleted")
@@ -37,12 +36,7 @@ class AnnouncementController extends Controller
         }
 
         $webPublic = rtrim(config('greatday.web_public', ''), '/');
-        $rows = $data->orderBy('id', 'desc')->get();
-        $authorNames = $this->announcementAuthorNames($rows->pluck('created_by'));
-
-        $data = $rows->map(function ($row) use ($webPublic, $authorNames) {
-            $row->created_by = $this->announcementAuthorName($row->created_by ?? null, $authorNames);
-            $row->author = $row->created_by;
+        $data = $data->orderBy('id', 'desc')->get()->map(function ($row) use ($webPublic) {
             $row->reff = $this->announcementBodyFromFilename($row->filename ?? null, $webPublic);
             $row->attachments = $this->announcementAttachments($row->attachments ?? null, $webPublic);
 
@@ -243,39 +237,6 @@ class AnnouncementController extends Controller
         }
 
         return $items;
-    }
-
-    private function announcementAuthorNames($createdByValues)
-    {
-        $ids = collect($createdByValues)
-            ->map(fn ($value) => trim((string) $value))
-            ->filter(fn ($value) => $value !== '' && ctype_digit($value))
-            ->unique()
-            ->values();
-
-        if ($ids->isEmpty()) {
-            return collect();
-        }
-
-        return \App\Models\MasterKaryawan::query()
-            ->whereIn('id', $ids)
-            ->pluck('nama_lengkap', 'id');
-    }
-
-    private function announcementAuthorName($createdBy, $authorNames = null): string
-    {
-        $raw = trim((string) $createdBy);
-        if ($raw === '') {
-            return '';
-        }
-
-        if (!ctype_digit($raw)) {
-            return $raw;
-        }
-
-        $names = $authorNames instanceof \Illuminate\Support\Collection ? $authorNames : collect();
-
-        return (string) ($names[$raw] ?? $names[(int) $raw] ?? $raw);
     }
 
     private function announcementPublicRelativePath(string $file): string
