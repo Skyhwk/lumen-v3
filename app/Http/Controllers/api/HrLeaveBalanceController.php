@@ -28,12 +28,20 @@ class HrLeaveBalanceController extends Controller
             $query->where('status_karyawan', $request->input('status_karyawan'));
         }
 
+        $this->applyRekapSaldoEmployeeFilters($query, $request);
+
         return Datatables::of($query)
+            ->filter(function ($filteredQuery) use ($request) {
+                $this->applyRekapSaldoEmployeeFilters($filteredQuery, $request);
+            })
             ->addColumn('quota_days', function ($row) {
                 return $this->rekapCached($row)['quota_days'];
             })
             ->addColumn('opening_used_days', function ($row) {
                 return $this->rekapCached($row)['opening_used_days'];
+            })
+            ->addColumn('manual_used_days', function ($row) {
+                return $this->rekapCached($row)['manual_used_days'];
             })
             ->addColumn('system_used_days', function ($row) {
                 return $this->rekapCached($row)['system_used_days'];
@@ -66,7 +74,102 @@ class HrLeaveBalanceController extends Controller
                 return $this->rekapCached($row)['eligible'];
             })
             ->orderColumn('nik_karyawan', 'nik_karyawan $1')
+            ->orderColumn('nama_lengkap', 'nama_lengkap $1')
+            ->orderColumn('status_karyawan', 'status_karyawan $1')
+            ->filterColumn('nik_karyawan', function ($query, $keyword) {
+                $query->where('nik_karyawan', 'like', '%' . $keyword . '%');
+            })
+            ->filterColumn('nama_lengkap', function ($query, $keyword) {
+                $query->where('nama_lengkap', 'like', '%' . $keyword . '%');
+            })
+            ->filterColumn('status_karyawan', function ($query, $keyword) {
+                $query->where('status_karyawan', 'like', '%' . $keyword . '%');
+            })
+            ->filterColumn('organization_unit', function ($query, $keyword) {
+                $query->whereHas('department', function ($q) use ($keyword) {
+                    $q->where('nama_divisi', 'like', '%' . $keyword . '%');
+                });
+            })
             ->make(true);
+    }
+
+    /**
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     */
+    private function applyRekapSaldoEmployeeFilters($query, Request $request): void
+    {
+        $nik = $this->resolveFilterKeyword($request, 'filter_nik', 'nik_karyawan', 2);
+        if ($nik !== '') {
+            $query->where('nik_karyawan', 'like', '%' . $nik . '%');
+        }
+
+        $nama = $this->resolveFilterKeyword($request, 'filter_nama', 'nama_lengkap', 3);
+        if ($nama !== '') {
+            $query->where('nama_lengkap', 'like', '%' . $nama . '%');
+        }
+
+        $divisi = $this->resolveFilterKeyword($request, 'filter_divisi', 'organization_unit', 4);
+        if ($divisi !== '') {
+            $query->whereHas('department', function ($q) use ($divisi) {
+                $q->where('nama_divisi', 'like', '%' . $divisi . '%');
+            });
+        }
+
+        $status = $this->resolveFilterKeyword($request, 'filter_status', 'status_karyawan', 5);
+        if ($status !== '') {
+            $query->where('status_karyawan', 'like', '%' . $status . '%');
+        }
+    }
+
+    private function resolveFilterKeyword(Request $request, string $flatKey, string $columnData, int $columnIndex): string
+    {
+        $flat = trim((string) $request->input($flatKey, ''));
+        if ($flat !== '') {
+            return $flat;
+        }
+
+        $byData = $this->columnSearchValue($request, $columnData);
+        if ($byData !== '') {
+            return $byData;
+        }
+
+        return $this->columnSearchValueByIndex($request, $columnIndex);
+    }
+
+    private function columnSearchValue(Request $request, string $columnData): string
+    {
+        $columns = $request->input('columns', []);
+        if (!is_array($columns)) {
+            return '';
+        }
+
+        foreach ($columns as $column) {
+            if (!is_array($column)) {
+                continue;
+            }
+            $data = $column['data'] ?? null;
+            $name = $column['name'] ?? null;
+            if ($data === $columnData || $name === $columnData) {
+                return trim((string) ($column['search']['value'] ?? ''));
+            }
+        }
+
+        return '';
+    }
+
+    private function columnSearchValueByIndex(Request $request, int $columnIndex): string
+    {
+        $columns = $request->input('columns', []);
+        if (!is_array($columns) || !isset($columns[$columnIndex])) {
+            return '';
+        }
+
+        $column = $columns[$columnIndex];
+        if (!is_array($column)) {
+            return '';
+        }
+
+        return trim((string) ($column['search']['value'] ?? ''));
     }
 
     public function show(Request $request)
@@ -132,6 +235,7 @@ class HrLeaveBalanceController extends Controller
             self::$rekapMemo[$key] = [
                 'quota_days' => 0,
                 'opening_used_days' => 0,
+                'manual_used_days' => 0,
                 'system_used_days' => 0,
                 'pending_used_days' => 0,
                 'ledger_used_days' => 0,
@@ -180,6 +284,39 @@ class HrLeaveBalanceController extends Controller
                 'summary' => $service->summary($employee),
             ],
         ], 201);
+    }
+
+    public function reclassifyAlpaLedger(Request $request)
+    {
+        $ledgerId = (int) $request->input('ledger_id', 0);
+        $targetType = trim((string) $request->input('target_type', ''));
+        $notes = trim((string) $request->input('notes', ''));
+        $permissionKind = trim((string) $request->input('permission_kind', 'event'));
+
+        try {
+            $result = app(HrLeaveBalanceLedgerService::class)->reclassifyAlpaEntry(
+                $ledgerId,
+                $targetType,
+                $notes,
+                property_exists($this, 'karyawan') ? $this->karyawan : null,
+                $this->nama_lengkap ?? 'HRD',
+                $permissionKind !== '' ? $permissionKind : 'event'
+            );
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $employee = MasterKaryawan::find($result['voided']->karyawan_id);
+        $summary = $employee ? app(LeaveBalanceService::class)->summary($employee) : null;
+
+        return response()->json([
+            'message' => 'Koreksi alpa berhasil disimpan',
+            'data' => [
+                'summary' => $summary,
+                'target' => $result['target'],
+                'hr_request_id' => $result['hr_request'] ? $result['hr_request']->id : null,
+            ],
+        ], 200);
     }
 
     public function voidLedger(Request $request)
