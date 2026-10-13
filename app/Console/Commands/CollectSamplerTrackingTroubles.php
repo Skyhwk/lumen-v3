@@ -9,11 +9,24 @@ use Illuminate\Console\Command;
 
 class CollectSamplerTrackingTroubles extends Command
 {
-    protected $signature = 'activitysamplertrouble {--date= : Batas akhir deadline (YYYY-MM-DD), default kemarin (WIB)} {--sampler-id=* : Batasi ke sampler ID tertentu} {--sync-today : Sinkron activity hari ini sebelum collect trouble}';
+    protected $signature = 'activitysamplertrouble
+        {--date= : Batas akhir deadline (YYYY-MM-DD), default kemarin (WIB)}
+        {--sampler-id=* : Batasi ke sampler ID tertentu}
+        {--sync-today : Sinkron activity hari ini sebelum collect trouble}
+        {--prune-stale : Tutup trouble terbuka yang sudah tidak relevan (session kosong/hilang/selesai)}';
     protected $description = 'Catat activity belum selesai dengan deadline sampai tanggal target. Batas awal SAMPLER_TRACKING_TROUBLE_START_DATE, paling awal 2026-09-21. Penugasan tanpa nomor quotation dan no order dilewati.';
 
     public function handle(SamplerTrackingTroubleService $service, SamplerTrackingService $trackingService)
     {
+        if ($this->option('prune-stale')) {
+            $cleared = $service->pruneStaleOpenTroubles();
+            $archived = $trackingService->pruneEmptyShellSessions();
+            $this->info("Trouble stale di-clear: {$cleared}");
+            $this->info("Session shell di-archive: {$archived}");
+
+            return 0;
+        }
+
         $now = Carbon::now('Asia/Jakarta');
         if ($this->option('sync-today')) {
             try {

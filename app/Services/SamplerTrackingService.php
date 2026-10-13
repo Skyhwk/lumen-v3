@@ -52,7 +52,10 @@ class SamplerTrackingService
                     return $this->quotationHasActivePersiapanOnDate($row->no_quotation, $row->tanggal);
                 });
 
-            return $this->syncJadwalRows($jadwals, $date, true);
+            $sessions = $this->syncJadwalRows($jadwals, $date, true);
+            $this->pruneEmptyShellSessions($date);
+
+            return $sessions;
         }, 5);
     }
 
@@ -1635,12 +1638,13 @@ class SamplerTrackingService
     public function dataTableByDate($request, $samplerId = null, $samplerName = null)
     {
         $date = $request->input('tanggal') ?: $this->today();
+        $this->pruneEmptyShellSessions($date);
         $rows = $this->releaseUnblockedOverdueRows(
             $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName))
         );
         $trackingStatusCounts = $this->trackingStatusCounts($rows);
 
-        $rows = $this->filterByTrackingStatus($rows, $request->input('tracking_status'));
+        $rows = $this->filterForMonitorTab($rows, $request->input('tracking_status'));
         $recordsTotal = $rows->count();
 
         $rows = $this->filterTrackingRows($rows, $request);
@@ -1666,7 +1670,7 @@ class SamplerTrackingService
     {
         $rows = $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName, $sessionIds));
         $trackingStatusCounts = $this->trackingStatusCounts($rows);
-        $rows = $this->filterByTrackingStatus($rows, $trackingStatus);
+        $rows = $this->filterForMonitorTab($rows, $trackingStatus);
 
         return [
             'data' => $rows->values(),
@@ -1772,7 +1776,8 @@ public function buildTrackingRows($sessions)
         $durations = $this->uniqueValues($row['durations']);
         $statuses = $this->uniqueValues($row['statuses']);
         $movementGroups = $this->uniqueValues($row['movement_groups']);
-        $lastEvent = $this->latestEvent($row['events']);
+        $lastEvent = $this->latestEvent($this->meaningfulTrackingEvents($row['events']));
+        $meaningfulEvents = $this->meaningfulTrackingEvents($row['events']);
 
         return [
             'row_id' => $row['date'] . '-' . md5($row['group_key']),
@@ -1795,7 +1800,7 @@ public function buildTrackingRows($sessions)
             'durasi' => count($durations) > 0 ? implode(', ', $durations) : '-',
             'movement_group' => $this->teamMovementCode($row['date'], $row['group_key']),
             'internal_movement_groups' => $movementGroups,
-            'total_event' => $row['events']->count(),
+            'total_event' => $meaningfulEvents->count(),
             'last_event' => $lastEvent ? (($lastEvent->event_type ?: '-') . ' - ' . ($lastEvent->event_at ?: '-')) : '-',
             'status' => count($statuses) > 0 ? implode(', ', $statuses) : '-',
             'tracking_status' => $this->resolveTrackingStatus(
@@ -1807,9 +1812,154 @@ public function buildTrackingRows($sessions)
             ),
         ];
     })->filter(function ($row) {
-        return strtolower(trim($row['nama_perusahaan'] ?? '')) !== 'cuti';
+        if (strtolower(trim($row['nama_perusahaan'] ?? '')) === 'cuti') {
+            return false;
+        }
+
+        return !$this->isEmptyTrackingShellRow($row);
     })->values();
 }
+
+    /**
+     * Baris session aktif tanpa identitas kunjungan & tanpa event — sisa sync/reschedule.
+     * Quotation/order di DB saja (tanpa perusahaan/sampler/event) tetap dianggap shell.
+     */
+    public function isEmptyTrackingShellRow(array $row): bool
+    {
+        if ($this->meaningfulTrackingEventCount($row) > 0) {
+            return false;
+        }
+
+        return !$this->rowHasMonitorIdentity($row);
+    }
+
+    /**
+     * Baris monitor tanpa perusahaan/order/sampler/durasi yang terisi — tampilan "- - - -".
+     */
+    public function rowHasMonitorIdentity(array $row): bool
+    {
+        foreach ([
+            $row['nama_perusahaan'] ?? null,
+            $row['no_order'] ?? null,
+            $row['sampler'] ?? null,
+            $row['durasi'] ?? null,
+        ] as $value) {
+            if ($this->isFilledTrackingLabel($value)) {
+                return true;
+            }
+        }
+
+        $members = collect($row['members'] ?? []);
+        if ($members->isEmpty() && !empty($row['member'])) {
+            $members = collect([$row['member']]);
+        }
+
+        return $members->contains(function ($member) {
+            $name = is_array($member)
+                ? ($member['sampler_name'] ?? null)
+                : ($member->sampler_name ?? null);
+
+            return $this->isFilledTrackingLabel($name);
+        });
+    }
+
+    public function meaningfulTrackingEventCount(array $row): int
+    {
+        return $this->meaningfulTrackingEvents($row['events'] ?? [])->count();
+    }
+
+    protected function meaningfulTrackingEvents($events)
+    {
+        return collect($events)->reject(function ($event) {
+            return $this->eventIsJourneyReference($event);
+        })->values();
+    }
+
+    protected function eventIsJourneyReference($event): bool
+    {
+        if (is_object($event)) {
+            return !empty($event->is_journey_reference);
+        }
+
+        if (is_array($event)) {
+            return !empty($event['is_journey_reference']);
+        }
+
+        return false;
+    }
+
+    protected function isFilledTrackingLabel($value): bool
+    {
+        $text = trim((string) $value);
+
+        return $text !== '' && $text !== '-';
+    }
+
+    public function archiveEmptyActiveSessionsForDate(string $date): void
+    {
+        $this->pruneEmptyShellSessions($date);
+    }
+
+    public function sessionHasMeaningfulTrackingData(SamplerTrackingSession $session): bool
+    {
+        foreach (['nama_perusahaan', 'no_order'] as $field) {
+            if ($this->isFilledTrackingLabel($session->{$field} ?? null)) {
+                return true;
+            }
+        }
+
+        foreach ($session->activeMembers as $member) {
+            if ($this->isFilledTrackingLabel($member->sampler_name ?? null)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function pruneEmptyShellSessions(?string $date = null): int
+    {
+        $query = SamplerTrackingSession::with('activeMembers')
+            ->where('is_active', true)
+            ->whereDoesntHave('events');
+
+        if ($date) {
+            $query->whereDate('tanggal_sampling', Carbon::parse($date)->toDateString());
+        }
+
+        $archived = 0;
+        $query->get()->each(function (SamplerTrackingSession $session) use (&$archived) {
+            if ($this->sessionHasMeaningfulTrackingData($session)) {
+                return;
+            }
+            $this->archiveTrackingSession($session);
+            $this->clearOpenTroublesForSession((int) $session->id);
+            $archived++;
+        });
+
+        return $archived;
+    }
+
+    protected function clearOpenTroublesForSession(int $sessionId): void
+    {
+        if (!Schema::hasTable(SamplerTrackingTroubleService::TABLE)
+            || !Schema::hasColumn(SamplerTrackingTroubleService::TABLE, 'tracking_session_id')) {
+            return;
+        }
+
+        $update = [
+            'is_clear' => 1,
+            'updated_at' => $this->now(),
+        ];
+        if (Schema::hasColumn(SamplerTrackingTroubleService::TABLE, 'cleared_at')) {
+            $update['cleared_at'] = $this->now();
+        }
+
+        DB::table(SamplerTrackingTroubleService::TABLE)
+            ->where('tracking_session_id', $sessionId)
+            ->where('is_clear', 0)
+            ->update($update);
+    }
 
     public function filterTrackingRows($rows, $request)
     {
@@ -2016,6 +2166,102 @@ public function buildTrackingRows($sessions)
         })->values();
     }
 
+    public function filterForMonitorTab($rows, $trackingStatus)
+    {
+        $status = $this->normalizeTrackingStatus($trackingStatus);
+        if (!$status) {
+            return $rows;
+        }
+
+        return $rows->filter(function ($row) use ($status) {
+            if ($status === 'ongoing') {
+                return $this->rowBelongsInOngoingTab($row);
+            }
+            if ($status === 'completed') {
+                return $this->rowBelongsInCompletedTab($row);
+            }
+            if ($status === 'overdue') {
+                return $this->rowBelongsInBlockedTab($row);
+            }
+
+            return true;
+        })->values();
+    }
+
+    public function rowBelongsInOngoingTab(array $row): bool
+    {
+        if ($this->isEmptyTrackingShellRow($row)) {
+            return false;
+        }
+
+        if (!$this->rowHasMonitorIdentity($row)) {
+            return false;
+        }
+
+        if (($row['tracking_status'] ?? null) !== 'ongoing') {
+            return false;
+        }
+
+        return !$this->rowHasUnresolvedSamplingTrouble($row);
+    }
+
+    public function rowBelongsInBlockedTab(array $row): bool
+    {
+        if ($this->isEmptyTrackingShellRow($row)) {
+            return false;
+        }
+
+        if ($this->rowHasUnresolvedSamplingTrouble($row)) {
+            return true;
+        }
+
+        return ($row['tracking_status'] ?? null) === 'overdue';
+    }
+
+    public function rowBelongsInCompletedTab(array $row): bool
+    {
+        if ($this->isEmptyTrackingShellRow($row)) {
+            return false;
+        }
+
+        return ($row['tracking_status'] ?? null) === 'completed';
+    }
+
+    public function rowHasUnresolvedSamplingTrouble(array $row): bool
+    {
+        if (!empty($row['trouble_id']) && empty($row['trouble']['reopened_at'] ?? null)) {
+            return true;
+        }
+
+        if (!Schema::hasTable(SamplerTrackingTroubleService::TABLE)) {
+            return false;
+        }
+
+        $date = $this->rowActivityDate($row);
+        $samplerIds = $this->rowSamplerIds($row);
+        if (!$date || $samplerIds->isEmpty()) {
+            return false;
+        }
+
+        $sessionId = $row['tracking_session_id'] ?? null;
+        $session = $row['session'] ?? null;
+        if (!$sessionId && $session) {
+            $sessionId = is_object($session) ? ($session->id ?? null) : ($session['id'] ?? null);
+        }
+
+        $query = DB::table(SamplerTrackingTroubleService::TABLE)
+            ->whereIn('sampler_id', $samplerIds->all())
+            ->whereDate('activity_date', $date)
+            ->where('is_clear', 0)
+            ->whereNull('reopened_at');
+
+        if ($sessionId && Schema::hasColumn(SamplerTrackingTroubleService::TABLE, 'tracking_session_id')) {
+            $query->where('tracking_session_id', $sessionId);
+        }
+
+        return $query->exists();
+    }
+
     /**
      * Activity yang sudah di-unblock atasan tidak boleh tetap berstatus overdue.
      * Pindahkan ke ongoing agar hilang dari tab Data Blocked.
@@ -2119,22 +2365,14 @@ public function buildTrackingRows($sessions)
 
     protected function trackingStatusCounts($rows)
     {
-        $counts = [
-            'ongoing' => 0,
-            'completed' => 0,
-            'overdue' => 0,
+        $rows = collect($rows);
+
+        return [
+            'ongoing' => $rows->filter(fn (array $row) => $this->rowBelongsInOngoingTab($row))->count(),
+            'completed' => $rows->filter(fn (array $row) => $this->rowBelongsInCompletedTab($row))->count(),
+            'overdue' => $rows->filter(fn (array $row) => $this->rowBelongsInBlockedTab($row))->count(),
+            'all' => $rows->reject(fn (array $row) => $this->isEmptyTrackingShellRow($row))->count(),
         ];
-
-        foreach ($rows as $row) {
-            $status = $row['tracking_status'] ?? null;
-            if (isset($counts[$status])) {
-                $counts[$status]++;
-            }
-        }
-
-        $counts['all'] = $rows->count();
-
-        return $counts;
     }
 
     protected function resolveTrackingDueAt($events, $tanggalSampling, $jamMulai, $jamSelesai, $durationValue)
