@@ -198,12 +198,20 @@ class AssessmentInternalController extends Controller
     public function publish(Request $request)
     {
         try {
-            if (empty($request->category_question) || !is_array($request->category_question)) {
+            $requiresProfile = filter_var($request->input('is_completed_profile'), FILTER_VALIDATE_BOOLEAN);
+            $categoryQuestion = $request->input('category_question', []);
+            if ($categoryQuestion === null) {
+                $categoryQuestion = [];
+            }
+            if (!is_array($categoryQuestion)) {
+                return response()->json(['message' => 'Kategori soal harus dipilih!'], 400);
+            }
+            if (!$requiresProfile && $categoryQuestion === []) {
                 return response()->json(['message' => 'Kategori soal harus dipilih!'], 400);
             }
 
             $normalizedCategories = [];
-            foreach ($request->category_question as $item) {
+            foreach ($categoryQuestion as $item) {
                 if (is_numeric($item)) {
                     return response()->json([
                         'message' => 'Format kategori tidak valid. Kirim objek berisi id, question_count, duration_minutes, dan has_time_limit.',
@@ -228,7 +236,7 @@ class AssessmentInternalController extends Controller
                 ];
             }
 
-            if (empty($normalizedCategories)) {
+            if (empty($normalizedCategories) && !$requiresProfile) {
                 return response()->json(['message' => 'Minimal pilih 1 kategori soal!'], 400);
             }
 
