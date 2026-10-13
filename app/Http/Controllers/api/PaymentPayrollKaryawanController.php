@@ -11,6 +11,8 @@ use App\Models\MasterKaryawan;
 use App\Models\RekapLiburKalender;
 use App\Http\Controllers\Controller;
 use App\Services\Greatday\RenderSlipGajiService;
+use App\Services\Payroll\PayrollDisbursementPendingQueue;
+use App\Services\Payroll\PayrollTransferCompletionService;
 use App\Services\Payroll\PayrollTransferDispatchService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -81,20 +83,8 @@ class PaymentPayrollKaryawanController extends Controller
 
             RenderSlipGajiService::invalidateCachedSlipsForHeader((int) $request->id);
 
-            $dispatch = ['dispatched' => false, 'reason' => 'not_attempted'];
-            try {
-                $dispatch = app(PayrollTransferDispatchService::class)->dispatchForHeaderId((int) $request->id);
-            } catch (\Throwable $dispatchError) {
-                $dispatch = [
-                    'dispatched' => false,
-                    'reason' => 'dispatch_exception',
-                    'message' => $dispatchError->getMessage(),
-                ];
-            }
-
             return response()->json([
                 'message' => 'Tanggal Transfer berhasil diatur!',
-                'payroll_disbursement' => $dispatch,
             ], 201);
             
         } catch (\Throwable $e) {
@@ -104,6 +94,46 @@ class PaymentPayrollKaryawanController extends Controller
                 'data' => [],
                 'message' => $e->getMessage(),
             ], 400);
+        }
+    }
+
+    /**
+     * Dipanggil via slice (worker Python → /api/route, body kosong).
+     * Memproses satu payroll_header dari antrian pending disbursement.
+     */
+    public function completePayrollDisbursement(Request $request)
+    {
+        $payrollHeaderId = PayrollDisbursementPendingQueue::dequeueNext();
+        if ($payrollHeaderId === null) {
+            return response()->json([
+                'message' => 'Tidak ada payroll header dalam antrian disbursement.',
+                'processed' => false,
+            ], 200);
+        }
+
+        try {
+            $result = app(PayrollTransferCompletionService::class)->complete($payrollHeaderId);
+
+            return response()->json([
+                'message' => 'Payroll disbursement selesai diproses.',
+                'processed' => true,
+                'payroll_header_id' => $payrollHeaderId,
+                'data' => $result,
+            ], 200);
+        } catch (\InvalidArgumentException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'processed' => false,
+                'payroll_header_id' => $payrollHeaderId,
+            ], 404);
+        } catch (\Throwable $exception) {
+            PayrollDisbursementPendingQueue::reenqueue($payrollHeaderId);
+
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'processed' => false,
+                'payroll_header_id' => $payrollHeaderId,
+            ], 500);
         }
     }
 
@@ -117,17 +147,29 @@ class PaymentPayrollKaryawanController extends Controller
                     'transfer_by' => $this->karyawan,
                 ]);
 
-            Payroll::where('payroll_header_id', $request->id)->where('is_actie', true)
-                ->update([
-                    'status' => 'PAID',
-                ]);
-                
             DB::commit();
+
+            RenderSlipGajiService::invalidateCachedSlipsForHeader((int) $request->id);
+
+            $dispatch = ['dispatched' => false, 'reason' => 'not_attempted'];
+            try {
+                $dispatch = app(PayrollTransferDispatchService::class)->dispatchForHeaderId((int) $request->id);
+            } catch (\Throwable $dispatchError) {
+                $dispatch = [
+                    'dispatched' => false,
+                    'reason' => 'dispatch_exception',
+                    'message' => $dispatchError->getMessage(),
+                ];
+            }
+
             return response()->json([
                 'message' => 'Data Berhasil di Approve',
+                'payroll_disbursement' => $dispatch,
             ], 201);
             
         } catch (\Throwable $e) {
+            DB::rollBack();
+
             return response()->json([
                 'data' => [],
                 'message' => $e->getMessage(),
@@ -196,11 +238,14 @@ class PaymentPayrollKaryawanController extends Controller
             $writer->setLineEnding("\r\n");
             $writer->setSheetIndex(0);
 
-            $path = \public_path(). '/dokumen/payroll/payroll_karyawan/';
-            $fileName = \str_replace(['/'], '-', $data[0]->no_document). '.csv';
-            $writer->save($path.$fileName);
+            $path = public_path('dokumen/payroll/payroll_karyawan');
+            if (!is_dir($path)) {
+                mkdir($path, 0755, true);
+            }
+            $fileName = str_replace(['/'], '-', $data[0]->no_document) . '.csv';
+            $writer->save($path . DIRECTORY_SEPARATOR . $fileName);
 
-            $data = PayrollHeader::where('no_document',$data[0]->no_document)->update([
+            PayrollHeader::where('no_document', $data[0]->no_document)->update([
                 'is_download' => 1,
             ]);
 
@@ -281,11 +326,14 @@ class PaymentPayrollKaryawanController extends Controller
             $writer->setLineEnding("\r\n");
             $writer->setSheetIndex(0);
 
-            $path = \public_path(). '/dokumen/payroll/payroll_karyawan/';
-            $fileName = \str_replace(['/'], '-', $data[0]->no_document). '.csv';
-            $writer->save($path.$fileName);
+            $path = public_path('dokumen/payroll/payroll_karyawan');
+            if (!is_dir($path)) {
+                mkdir($path, 0755, true);
+            }
+            $fileName = str_replace(['/'], '-', $data[0]->no_document) . '.csv';
+            $writer->save($path . DIRECTORY_SEPARATOR . $fileName);
 
-            $data = PayrollHeader::where('no_document',$data[0]->no_document)->update([
+            PayrollHeader::where('no_document', $data[0]->no_document)->update([
                 'is_download' => 1,
             ]);
 
