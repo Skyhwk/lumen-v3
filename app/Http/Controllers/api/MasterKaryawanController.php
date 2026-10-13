@@ -31,7 +31,18 @@ class MasterKaryawanController extends Controller
 {
     public function index(Request $request)
     {
-        $data = MasterKaryawan::with(['medical', 'user', 'pengalaman_kerja', 'pendidikan_karyawan', 'sertifikat_karyawan', 'kontak_darurat'])->where('is_active', true);
+        $data = MasterKaryawan::with([
+            'medical',
+            'user',
+            'pengalaman_kerja',
+            'pendidikan_karyawan' => function ($query) {
+                $query->where('is_active', true);
+            },
+            'sertifikat_karyawan',
+            'kontak_darurat' => function ($query) {
+                $query->where('is_active', true);
+            },
+        ])->where('is_active', true);
         return Datatables::of($data)->addColumn('personal', function ($row) {
             $shioElemen = ShioElemenHelper::resolve($row->tanggal_lahir, $row->shio, $row->elemen);
             return [
@@ -85,6 +96,67 @@ class MasterKaryawanController extends Controller
                 'priv_branch' => json_decode($row->privilage_cabang)
             ];
         })
+            ->addColumn('pendidikan', function ($row) {
+                $rows = $row->pendidikan_karyawan
+                    ->filter(function ($item) {
+                        return (int) ($item->is_active ?? 1) !== 0
+                            && (trim((string) $item->jenjang) !== '' || trim((string) $item->institusi) !== '');
+                    })
+                    ->sortByDesc(function ($item) {
+                        return sprintf('%04d-%06d', (int) $item->tahun_lulus, (int) $item->id);
+                    })
+                    ->values()
+                    ->map(function ($item) {
+                        return [
+                            'id' => $item->id,
+                            'jenjang' => $item->jenjang,
+                            'institusi' => $item->institusi,
+                            'jurusan' => $item->jurusan,
+                            'tahun_masuk' => $item->tahun_masuk,
+                            'tahun_lulus' => $item->tahun_lulus,
+                            'kota' => $item->kota,
+                        ];
+                    })
+                    ->all();
+
+                if ($rows) {
+                    return $rows;
+                }
+
+                $decoded = json_decode($row->getOriginal('pendidikan') ?: '[]', true);
+                return is_array($decoded) ? $decoded : [];
+            })
+            ->addColumn('kontak_darurat', function ($row) {
+                $seen = [];
+                return $row->kontak_darurat
+                    ->filter(function ($item) use (&$seen) {
+                        if ((int) ($item->is_active ?? 1) === 0) {
+                            return false;
+                        }
+                        $nama = trim((string) $item->nama_kontak);
+                        $hubungan = trim((string) $item->hubungan);
+                        $nomor = trim((string) $item->nomor_kontak);
+                        if ($nama === '' && $nomor === '') {
+                            return false;
+                        }
+                        $fingerprint = strtolower($nama . '|' . $hubungan . '|' . $nomor);
+                        if (isset($seen[$fingerprint])) {
+                            return false;
+                        }
+                        $seen[$fingerprint] = true;
+                        return true;
+                    })
+                    ->values()
+                    ->map(function ($item) {
+                        return [
+                            'id' => $item->id,
+                            'nama_kontak' => $item->nama_kontak,
+                            'hubungan' => $item->hubungan,
+                            'nomor_kontak' => $item->nomor_kontak,
+                        ];
+                    })
+                    ->all();
+            })
             ->rawColumns(['personal', 'contact', 'employee', 'access'])
             ->make(true);
     }

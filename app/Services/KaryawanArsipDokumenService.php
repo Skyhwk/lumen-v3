@@ -113,7 +113,7 @@ class KaryawanArsipDokumenService
         return $migrated;
     }
 
-    public function storeUploadedFile($karyawanId, UploadedFile $file, $jenisDokumen, $createdBy = null, $catatan = null)
+    public function storeUploadedFile($karyawanId, UploadedFile $file, $jenisDokumen, $createdBy = null, $catatan = null, $sumber = 'upload_manual')
     {
         if (!Schema::hasTable('karyawan_dokumen_arsip')) {
             throw new \RuntimeException('Tabel arsip dokumen karyawan belum tersedia.');
@@ -128,8 +128,10 @@ class KaryawanArsipDokumenService
             throw new \RuntimeException('Ukuran dokumen maksimal 5 MB.');
         }
 
+        $originalName = $file->getClientOriginalName();
+        $mimeType = $file->getClientMimeType();
         $safeType = preg_replace('/[^a-z0-9]+/i', '-', strtolower($jenisDokumen ?: 'dokumen'));
-        $fileName = 'upload-' . $karyawanId . '-' . trim($safeType, '-') . '-' . time() . '-' . substr(md5($file->getClientOriginalName() . microtime(true)), 0, 6) . '.' . $extension;
+        $fileName = 'upload-' . $karyawanId . '-' . trim($safeType, '-') . '-' . time() . '-' . substr(md5($originalName . microtime(true)), 0, 6) . '.' . $extension;
         $directory = $this->ensureArchiveDirectory($karyawanId);
         $file->move($directory, $fileName);
 
@@ -139,11 +141,11 @@ class KaryawanArsipDokumenService
         $id = DB::table('karyawan_dokumen_arsip')->insertGetId([
             'karyawan_id' => $karyawanId,
             'jenis_dokumen' => strtoupper(trim($jenisDokumen)),
-            'nama_file' => $file->getClientOriginalName(),
+            'nama_file' => $originalName,
             'path_file' => $relativePath,
-            'mime_type' => $file->getClientMimeType(),
+            'mime_type' => $mimeType,
             'ukuran_file' => filesize($directory . DIRECTORY_SEPARATOR . $fileName),
-            'sumber' => 'upload_manual',
+            'sumber' => $sumber ?: 'upload_manual',
             'catatan' => $catatan,
             'is_active' => 1,
             'created_by' => $createdBy,
@@ -156,6 +158,45 @@ class KaryawanArsipDokumenService
         $row->is_pdf = $this->isPdfMime($row->mime_type, $row->path_file);
 
         return $row;
+    }
+
+    public function updateLatestCatatan($karyawanId, $jenisDokumen, $catatan)
+    {
+        return $this->updateCatatanByIndex($karyawanId, $jenisDokumen, -1, $catatan);
+    }
+
+    public function updateCatatanByIndex($karyawanId, $jenisDokumen, $index, $catatan)
+    {
+        if (!Schema::hasTable('karyawan_dokumen_arsip')) {
+            return false;
+        }
+
+        $catatan = trim((string) $catatan);
+        if ($catatan === '') {
+            return false;
+        }
+
+        $query = DB::table('karyawan_dokumen_arsip')
+            ->where('karyawan_id', $karyawanId)
+            ->where('is_active', 1)
+            ->where('jenis_dokumen', strtoupper(trim((string) $jenisDokumen)));
+
+        if ((int) $index < 0) {
+            $row = (clone $query)->orderByDesc('id')->first();
+        } else {
+            $row = $query->orderBy('id')->get()->values()->get((int) $index);
+        }
+
+        if (!$row) {
+            return false;
+        }
+
+        DB::table('karyawan_dokumen_arsip')->where('id', $row->id)->update([
+            'catatan' => $catatan,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        return true;
     }
 
     public function deleteDocument($id, $karyawanId = null)
