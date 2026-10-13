@@ -104,10 +104,10 @@ class HrdAssessmentReadinessService
 
     private function isCategoryActive($category, bool $hasIsShow): bool
     {
-        $name = strtoupper(trim((string) ($category->name ?? '')));
-        if (in_array($name, ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK'], true)) {
-            return true;
-        }
+        // $name = strtoupper(trim((string) ($category->name ?? '')));
+        // if (in_array($name, ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK'], true)) {
+        //     return true;
+        // }
 
         if ($hasIsShow) {
             return (int) ($category->is_show ?? 0) === 1;
