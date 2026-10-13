@@ -298,6 +298,53 @@ class SamplerTrackingSyncTest extends TestCase
         }
     }
 
+    public function testMissingReturnFixRecordsNoteWithoutPhotoAndRejectsDuplicate(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-23 10:00:00', 'Asia/Jakarta'));
+        [$session, $member] = $this->troubleAssignment('missing-return');
+        $this->db->getConnection('mysql')->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_tracking_member_id' => $member->id,
+            'event_type' => 'checkout',
+            'event_at' => '2026-09-21 10:00:00',
+        ]);
+
+        $event = $this->service->createMissingReturn(
+            $session->id, 10, '2026-09-21 11:00:00', 'Lupa menekan Pulang', 601, 'Programmer'
+        );
+        $this->assertSame('return', $event->event_type);
+        $this->assertNull($event->photo);
+        $this->assertStringContainsString('Lupa menekan Pulang', $event->note);
+        $this->assertStringContainsString('ID 601', $event->note);
+        $this->assertSame(1, $member->events()->where('event_type', 'return')->count());
+
+        $this->expectException(ValidationException::class);
+        $this->service->createMissingReturn(
+            $session->id, 10, '2026-09-21 11:00:00', 'Duplikat', 601, 'Programmer'
+        );
+    }
+
+    public function testMissingReturnFixRejectsTimeBeforeCheckout(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-23 10:00:00', 'Asia/Jakarta'));
+        [$session, $member] = $this->troubleAssignment('early-return');
+        $this->db->getConnection('mysql')->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_tracking_member_id' => $member->id,
+            'event_type' => 'checkout',
+            'event_at' => '2026-09-21 10:00:00',
+        ]);
+
+        try {
+            $this->service->createMissingReturn(
+                $session->id, 10, '2026-09-21 09:00:00', 'Waktu salah', 601, 'Programmer'
+            );
+            $this->fail('Pulang sebelum check out harus ditolak.');
+        } catch (ValidationException $exception) {
+            $this->assertSame(0, $member->events()->where('event_type', 'return')->count());
+        }
+    }
+
     public function testTwoAssignmentsSameSamplerAndDateCreateIndependentTroublesIdempotently(): void
     {
         \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-23 10:00:00', 'Asia/Jakarta'));
