@@ -18,6 +18,7 @@ class AnnouncementController extends Controller
             DB::raw("COALESCE(title, description) as title"),
             'filename',
             'attachments',
+            'created_by',
             'created_at as timestamp',
             DB::raw("CASE WHEN JSON_CONTAINS(is_read, '\"{$userId}\"') THEN true ELSE false END as is_read"),
             DB::raw("CASE WHEN JSON_CONTAINS(is_deleted, '\"{$userId}\"') THEN true ELSE false END as is_deleted")
@@ -36,7 +37,12 @@ class AnnouncementController extends Controller
         }
 
         $webPublic = rtrim(config('greatday.web_public', ''), '/');
-        $data = $data->orderBy('id', 'desc')->get()->map(function ($row) use ($webPublic) {
+        $rows = $data->orderBy('id', 'desc')->get();
+        $authorNames = $this->announcementAuthorNames($rows->pluck('created_by'));
+
+        $data = $rows->map(function ($row) use ($webPublic, $authorNames) {
+            $row->created_by = $this->announcementAuthorName($row->created_by ?? null, $authorNames);
+            $row->author = $row->created_by;
             $row->reff = $this->announcementBodyFromFilename($row->filename ?? null, $webPublic);
             $row->attachments = $this->announcementAttachments($row->attachments ?? null, $webPublic);
 
@@ -44,6 +50,29 @@ class AnnouncementController extends Controller
         });
 
         return response()->json(['data' => $data], 200);
+    }
+
+    /**
+     * Stream lampiran dari public/announcement/attachments atau public/announcement.
+     */
+    public function file(Request $request)
+    {
+        $path = $this->resolveAnnouncementFilePath((string) $request->query('file', ''));
+        if ($path === null) {
+            return response()->json(['message' => 'File tidak ditemukan'], 404);
+        }
+
+        $download = filter_var(request()->query('download', false), FILTER_VALIDATE_BOOLEAN);
+        $name = basename($path);
+        $mime = @mime_content_type($path) ?: 'application/octet-stream';
+        $disposition = ($download ? 'attachment' : 'inline') . '; filename="' . str_replace('"', '', $name) . '"';
+
+        return response()->make(file_get_contents($path), 200, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => $disposition,
+            'Content-Length' => (string) filesize($path),
+            'Cache-Control' => 'private, max-age=3600',
+        ]);
     }
 
     public function getSingle()
@@ -204,14 +233,83 @@ class AnnouncementController extends Controller
                 continue;
             }
 
+            $relative = $this->announcementPublicRelativePath($file);
+
             $items[] = [
                 'name' => $label !== '' ? basename(str_replace('\\', '/', $label)) : $file,
                 'filename' => $file,
-                'url' => ($webPublic !== '' ? $webPublic : '') . '/announcement/attachments/' . rawurlencode($file),
+                'url' => ($webPublic !== '' ? $webPublic : '') . '/' . $relative,
             ];
         }
 
         return $items;
+    }
+
+    private function announcementAuthorNames($createdByValues)
+    {
+        $ids = collect($createdByValues)
+            ->map(fn ($value) => trim((string) $value))
+            ->filter(fn ($value) => $value !== '' && ctype_digit($value))
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return \App\Models\MasterKaryawan::query()
+            ->whereIn('id', $ids)
+            ->pluck('nama_lengkap', 'id');
+    }
+
+    private function announcementAuthorName($createdBy, $authorNames = null): string
+    {
+        $raw = trim((string) $createdBy);
+        if ($raw === '') {
+            return '';
+        }
+
+        if (!ctype_digit($raw)) {
+            return $raw;
+        }
+
+        $names = $authorNames instanceof \Illuminate\Support\Collection ? $authorNames : collect();
+
+        return (string) ($names[$raw] ?? $names[(int) $raw] ?? $raw);
+    }
+
+    private function announcementPublicRelativePath(string $file): string
+    {
+        $attachments = public_path('announcement' . DIRECTORY_SEPARATOR . 'attachments' . DIRECTORY_SEPARATOR . $file);
+        if (is_file($attachments)) {
+            return 'announcement/attachments/' . rawurlencode($file);
+        }
+
+        $root = public_path('announcement' . DIRECTORY_SEPARATOR . $file);
+        if (is_file($root)) {
+            return 'announcement/' . rawurlencode($file);
+        }
+
+        return 'announcement/attachments/' . rawurlencode($file);
+    }
+
+    private function resolveAnnouncementFilePath(string $file): ?string
+    {
+        $file = basename(str_replace('\\', '/', trim($file)));
+        if ($file === '' || $file === '.' || $file === '..') {
+            return null;
+        }
+
+        foreach ([
+            public_path('announcement' . DIRECTORY_SEPARATOR . 'attachments' . DIRECTORY_SEPARATOR . $file),
+            public_path('announcement' . DIRECTORY_SEPARATOR . $file),
+        ] as $path) {
+            if (is_file($path)) {
+                return $path;
+            }
+        }
+
+        return null;
     }
 
     /**
