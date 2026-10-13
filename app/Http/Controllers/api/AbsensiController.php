@@ -10,11 +10,13 @@ use App\Models\MasterJabatan;
 use App\Models\MasterKaryawan;
 use App\Models\ShiftKaryawan;
 use App\Models\RekapLiburKalender;
+use App\Models\Greatday\AbsensiAndroid;
 use App\Http\Controllers\Controller;
 use App\Services\Hr\HrAttendanceDayExcuseLabels;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -741,6 +743,135 @@ class AbsensiController extends Controller
         return $index;
     }
 
+    private function fetchMonthlyGeoIndex(array $karyawanIds, $startDate, $endDate)
+    {
+        if (empty($karyawanIds)) {
+            return [];
+        }
+
+        try {
+            $connection = (new AbsensiAndroid())->getConnectionName();
+            if (!Schema::connection($connection)->hasTable('absensi_mobile')) {
+                return [];
+            }
+            if (!Schema::connection($connection)->hasColumn('absensi_mobile', 'latitude')
+                || !Schema::connection($connection)->hasColumn('absensi_mobile', 'longitude')) {
+                return [];
+            }
+            $hasSelfie = Schema::connection($connection)->hasColumn('absensi_mobile', 'selfie');
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        $columns = ['karyawan_id', 'tanggal', 'jam', 'latitude', 'longitude'];
+        if ($hasSelfie) {
+            $columns[] = 'selfie';
+        }
+
+        $rows = AbsensiAndroid::query()
+            ->whereIn('karyawan_id', $karyawanIds)
+            ->whereBetween('tanggal', [$startDate, $endDate])
+            ->get($columns);
+
+        $index = [];
+        foreach ($rows as $row) {
+            $hasCoordinate = $row->latitude !== null && $row->longitude !== null && $row->latitude !== '' && $row->longitude !== '';
+            $selfie = $hasSelfie ? trim((string) ($row->selfie ?? '')) : '';
+            if (!$hasCoordinate && $selfie === '') {
+                continue;
+            }
+
+            $jam = self::normalizeAbsensiJam($row->jam);
+            if ($jam === null) {
+                continue;
+            }
+
+            $tanggal = date('Y-m-d', strtotime($row->tanggal));
+            $point = [
+                'jam' => $jam,
+                'ts' => strtotime($jam),
+                'latitude' => $hasCoordinate ? (string) $row->latitude : null,
+                'longitude' => $hasCoordinate ? (string) $row->longitude : null,
+                'selfie' => $selfie !== '' ? $selfie : null,
+            ];
+            $index[(int) $row->karyawan_id][$tanggal]['by_jam'][$jam] = $point;
+            $index[(int) $row->karyawan_id][$tanggal]['points'][] = $point;
+        }
+
+        return $index;
+    }
+
+    private function normalizeAbsensiJam($jam)
+    {
+        if ($jam === null || $jam === '') {
+            return null;
+        }
+
+        $value = str_replace('.', ':', trim((string) $jam));
+        $ts = strtotime($value);
+
+        return $ts ? date('H:i:s', $ts) : null;
+    }
+
+    private function findPunchCoordinate(array $geoIndex, $karyawanId, $tanggal, $jam)
+    {
+        $jamKey = self::normalizeAbsensiJam($jam);
+        if ($jamKey === null || $tanggal === null || $tanggal === '') {
+            return null;
+        }
+
+        $tanggalKey = date('Y-m-d', strtotime($tanggal));
+        $day = $geoIndex[(int) $karyawanId][$tanggalKey] ?? null;
+        if ($day === null) {
+            return null;
+        }
+
+        if (isset($day['by_jam'][$jamKey])) {
+            return $day['by_jam'][$jamKey];
+        }
+
+        $target = strtotime($jamKey);
+        $best = null;
+        $bestDiff = 601;
+        foreach ($day['points'] as $point) {
+            $diff = abs($point['ts'] - $target);
+            if ($diff <= 600 && $diff < $bestDiff) {
+                $best = $point;
+                $bestDiff = $diff;
+            }
+        }
+
+        return $best;
+    }
+
+    private function coordinateMonthlyRow(array $row, $karyawanId, $masukTanggal, $keluarTanggal, array $geoIndex)
+    {
+        $masukGeo = $this->findPunchCoordinate($geoIndex, $karyawanId, $masukTanggal, $row['masuk'] ?? '');
+        $keluarGeo = $this->findPunchCoordinate($geoIndex, $karyawanId, $keluarTanggal, $row['keluar'] ?? '');
+
+        $row['masuk_latitude'] = $masukGeo['latitude'] ?? null;
+        $row['masuk_longitude'] = $masukGeo['longitude'] ?? null;
+        $row['masuk_selfie'] = $this->absensiSelfieFileName($masukGeo['selfie'] ?? null);
+        $row['keluar_latitude'] = $keluarGeo['latitude'] ?? null;
+        $row['keluar_longitude'] = $keluarGeo['longitude'] ?? null;
+        $row['keluar_selfie'] = $this->absensiSelfieFileName($keluarGeo['selfie'] ?? null);
+
+        return $row;
+    }
+
+    private function absensiSelfieFileName($fileName)
+    {
+        $fileName = trim((string) $fileName);
+        if ($fileName === '') {
+            return null;
+        }
+
+        $path = parse_url($fileName, PHP_URL_PATH);
+        $base = basename($path !== null && $path !== '' ? $path : $fileName);
+
+        return $base !== '' ? $base : null;
+    }
+
     private function getMonthlyPunch($punchIndex, $karyawanId, $tanggal)
     {
         return isset($punchIndex[$karyawanId][$tanggal]) ? $punchIndex[$karyawanId][$tanggal] : null;
@@ -928,16 +1059,19 @@ class AbsensiController extends Controller
         ];
     }
 
-    private function resolveMonthlyDayRow($karyawan, $tanggal, $shiftIndex, $punchIndex, $workingDayIndex = null)
+    private function resolveMonthlyDayRow($karyawan, $tanggal, $shiftIndex, $punchIndex, $workingDayIndex = null, array $geoIndex = [])
     {
         $tanggalKey = date('Y-m-d', strtotime($tanggal));
+        $attach = function (array $row, $masukTanggal, $keluarTanggal) use ($karyawan, $geoIndex) {
+            return $this->coordinateMonthlyRow($row, $karyawan->id, $masukTanggal, $keluarTanggal, $geoIndex);
+        };
 
         if ($workingDayIndex === null) {
             $workingDayIndex = $this->fetchWorkingDayIndex(date('Y', strtotime($tanggalKey)));
         }
 
         if (self::shouldApplyCalendarLibur($tanggalKey, $workingDayIndex)) {
-            return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggalKey, 'Libur');
+            return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggalKey, 'Libur'), $tanggalKey, $tanggalKey);
         }
 
         $shiftRow = isset($shiftIndex[$karyawan->id][$tanggal]) ? $shiftIndex[$karyawan->id][$tanggal] : null;
@@ -946,7 +1080,7 @@ class AbsensiController extends Controller
         $nextPunch = self::getMonthlyPunch($punchIndex, $karyawan->id, $nextDate);
 
         if ($shiftRow && $shiftRow->shift === 'off') {
-            return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'OFF');
+            return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'OFF'), $tanggal, $tanggal);
         }
 
         $checkin = ($shiftRow && $shiftRow->time_in) ? $shiftRow->time_in : '08:00:00';
@@ -956,33 +1090,33 @@ class AbsensiController extends Controller
             $masuk = ($punch && $punch->min_jam) ? $punch->min_jam : '';
             $keluar = ($nextPunch && $nextPunch->min_jam && $nextPunch->min_jam < '14:00:00') ? $nextPunch->min_jam : '';
             if ($masuk === '' && $keluar === '') {
-                return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, '24JAM');
+                return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, '24JAM'), $tanggal, $nextDate);
             }
 
-            return self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, '24JAM', $checkin);
+            return $attach(self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, '24JAM', $checkin), $tanggal, $nextDate);
         }
 
         if ($shiftRow && $shiftRow->shift === 'SHSECURITY2') {
             $masuk = ($punch && $punch->max_jam) ? $punch->max_jam : '';
             $keluar = ($nextPunch && $nextPunch->min_jam && $nextPunch->min_jam < '14:00:00') ? $nextPunch->min_jam : '';
             if ($masuk !== '' && $masuk <= '14:00:00') {
-                return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'SHSECURITY2');
+                return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'SHSECURITY2'), $tanggal, $nextDate);
             }
             if ($masuk === '' && $keluar === '') {
-                return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'SHSECURITY2');
+                return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'SHSECURITY2'), $tanggal, $nextDate);
             }
 
-            return self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, 'SHSECURITY2', $checkin);
+            return $attach(self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, 'SHSECURITY2', $checkin), $tanggal, $nextDate);
         }
 
         if ($shiftRow && $shiftRow->shift === 'SHOB2') {
             $masuk = ($punch && $punch->min_jam) ? $punch->min_jam : '';
             $keluar = ($nextPunch && $nextPunch->min_jam && $nextPunch->min_jam < '14:00:00') ? $nextPunch->min_jam : '';
             if ($masuk === '' && $keluar === '') {
-                return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'SHOB2');
+                return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'SHOB2'), $tanggal, $nextDate);
             }
 
-            return self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, 'SHOB2', $checkin);
+            return $attach(self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, 'SHOB2', $checkin), $tanggal, $nextDate);
         }
 
         if ($shiftRow) {
@@ -994,7 +1128,7 @@ class AbsensiController extends Controller
             );
 
             if ($masuk === '' && $keluar === '') {
-                return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $shiftName);
+                return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $shiftName), $tanggal, $tanggal);
             }
 
             $row = self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, $shiftName, $checkin);
@@ -1003,7 +1137,7 @@ class AbsensiController extends Controller
                 $row['jam_kerja'] = '';
             }
 
-            return $row;
+            return $attach($row, $tanggal, $tanggal);
         }
 
         list($masuk, $keluar) = self::extractMasukKeluarByThreshold(
@@ -1013,10 +1147,10 @@ class AbsensiController extends Controller
         );
 
         if ($masuk === '' && $keluar === '') {
-            return self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, '');
+            return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, ''), $tanggal, $tanggal);
         }
 
-        return self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, 'SHREGULAR');
+        return $attach(self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, 'SHREGULAR'), $tanggal, $tanggal);
     }
 
     private function buildMonthlyAbsensiData($karyawanId, $year, $month, $lastDay, $nikKaryawan, $namaLengkap)
@@ -1041,6 +1175,7 @@ class AbsensiController extends Controller
 
         $shiftIndex = self::fetchMonthlyShiftIndex($karyawanIds, $dates['startDate'], $dates['endDate']);
         $punchIndex = self::fetchMonthlyPunchIndex($karyawanIds, $dates['startDate'], $dates['nextDate']);
+        $geoIndex = $this->fetchMonthlyGeoIndex($karyawanIds, $dates['startDate'], $dates['nextDate']);
         $workingDayIndex = $this->fetchWorkingDayIndex($year);
         $labelMap = HrAttendanceDayExcuseLabels::mapForKaryawans($karyawanIds, $dates['startDate'], $dates['endDate']);
 
@@ -1048,7 +1183,7 @@ class AbsensiController extends Controller
         foreach ($karyawans as $karyawan) {
             for ($a = 1; $a <= $lastDay; $a++) {
                 $tanggal = $year . '-' . $dates['monthPadded'] . '-' . sprintf('%02d', $a);
-                $row = self::resolveMonthlyDayRow($karyawan, $tanggal, $shiftIndex, $punchIndex, $workingDayIndex);
+                $row = self::resolveMonthlyDayRow($karyawan, $tanggal, $shiftIndex, $punchIndex, $workingDayIndex, $geoIndex);
                 $data[] = HrAttendanceDayExcuseLabels::attach($row, (int) $karyawan->id, $labelMap);
             }
         }
