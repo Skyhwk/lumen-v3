@@ -20,6 +20,7 @@ use App\Services\Hr\LegacyHrMirror;
 use App\Services\Hr\Portal\HrdLeaveVoidService;
 use App\Services\Hr\Portal\PortalLeaveDatatableQuery;
 use App\Services\Hr\PortalHrSync;
+use App\Services\Hr\RekapLiburKalenderService;
 use App\Services\Hr\WorkflowStatus;
 use App\Services\Notification;
 use Carbon\Carbon;
@@ -123,6 +124,46 @@ class PermohonanCutiController extends Controller
     public function indexUnprocessed(Request $request)
     {
         return $this->indexByOwner($request);
+    }
+
+    /**
+     * Hitung durasi cuti dari rekap_libur_kalender (hari kerja efektif perusahaan).
+     */
+    public function hitungDurasiCuti(Request $request, RekapLiburKalenderService $rekapLiburKalender)
+    {
+        $start = trim((string) ($request->start_date ?? $request->tanggal_mulai ?? ''));
+        $end = trim((string) ($request->end_date ?? $request->tanggal_akhir ?? $start));
+
+        if ($start === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tanggal mulai wajib diisi',
+            ], 422);
+        }
+
+        $mode = strtolower(trim((string) (
+            $request->duration_mode
+            ?? $request->duration_unit
+            ?? 'weekday'
+        )));
+
+        if ($mode === 'calendar') {
+            $days = $rekapLiburKalender->countCalendarDaysBetween($start, $end);
+
+            return response()->json([
+                'success' => true,
+                'days' => $days,
+                'mode' => 'calendar',
+            ], 200);
+        }
+
+        $days = $rekapLiburKalender->countWorkingDaysBetween($start, $end);
+
+        return response()->json([
+            'success' => true,
+            'days' => $days,
+            'mode' => 'weekday',
+        ], 200);
     }
 
     /**
