@@ -8,6 +8,9 @@ use App\Models\OrderDetail;
 use App\Models\OrderHeader;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
+use App\Models\HistoryAppReject;
+use App\Models\LinkLhp;
+use App\Jobs\CombineLHPJob;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -430,6 +433,66 @@ class LhpManualController extends Controller
 
             // Simpan file_qr & file_lhp ke lhp_manual hanya di langkah akhir.
             $this->persistLhpManualFiles($noLhp, $qrFileName, $fileName, $request, $tipeDokumen);
+
+            $data = LhpManual::where('no_lhp', $noLhp)->where('is_active', true)->first();
+
+            if ($data != null) {
+                OrderDetail::where('cfr', $noLhp)
+                    ->where('is_active', true)
+                    ->update([
+                        'is_approve'  => 1,
+                        'status'      => 3,
+                        'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                        'approved_by' => $this->karyawan,
+                    ]);
+
+                $data->is_approved = 1;
+                $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+                $data->approved_by = $this->karyawan;
+
+                $data->save();
+                HistoryAppReject::insert([
+                    'no_lhp'      => $request->no_lhp,
+                    // 'no_sampel'   => $request->noSampel,
+                    'kategori_2'  => $data->id_kategori_2,
+                    'kategori_3'  => $data->id_kategori_3,
+                    'menu'        => 'Draft Udara',
+                    'status'      => 'approved',
+                    'approved_at' => Carbon::now(),
+                    'approved_by' => $this->karyawan,
+                ]);
+
+                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+                    ->where('is_active', true)
+                    ->first();
+
+                $cekLink = LinkLhp::where('no_order', $data->no_order);
+                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                $cekLink = $cekLink->first();
+                // dd($cekLink);
+                if ($cekLink) {
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
+                    $this->dispatch($job);
+                }
+
+                $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
+                    ->first();
+
+                // EmailLhpRilisHelpers::run([
+                //     'cfr'              => $data->no_lhp,
+                //     'no_order'         => $data->no_order,
+                //     'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                //     'nama_perusahaan'  => $data->nama_pelanggan,
+                //     'periode'          => $cekDetail->periode,
+                //     'karyawan'         => $this->karyawan
+                // ]);
+            } else {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Data draft Udara Ambient no LHP ' . $request->no_lhp . ' tidak ditemukan',
+                    'status'  => false,
+                ], 404);
+            }
 
             DB::commit();
 
