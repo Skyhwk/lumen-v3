@@ -36,6 +36,37 @@ class RecruitmentPictureService
         return $filename;
     }
 
+    public function storeUploadedFile($file)
+    {
+        if (!$file || !method_exists($file, 'isValid') || !$file->isValid()) {
+            throw new \InvalidArgumentException('Foto selfie terbaru wajib diunggah.');
+        }
+
+        $allowed = [
+            'image/jpeg' => 'jpg',
+            'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+        ];
+        $mime = strtolower((string) $file->getMimeType());
+        if (!isset($allowed[$mime])) {
+            throw new \InvalidArgumentException('Foto selfie harus berupa gambar JPG, PNG, atau WEBP.');
+        }
+        if ((int) $file->getSize() > 5 * 1024 * 1024) {
+            throw new \InvalidArgumentException('Ukuran foto selfie maksimal 5 MB.');
+        }
+
+        $directory = public_path('recruitment');
+        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+            throw new \RuntimeException('Folder penyimpanan foto rekrutmen tidak dapat dibuat.');
+        }
+
+        $filename = Carbon::now()->format('YmdHisv') . '.' . $allowed[$mime];
+        $file->move($directory, $filename);
+
+        return $filename;
+    }
+
     public function toDataUri($filename)
     {
         if (!$filename) {
@@ -66,9 +97,14 @@ class RecruitmentPictureService
             return;
         }
 
-        $path = public_path('recruitment' . DIRECTORY_SEPARATOR . basename((string) $filename));
-        if (is_file($path)) {
-            @unlink($path);
+        $base = basename((string) $filename);
+        foreach ([
+            public_path('recruitment' . DIRECTORY_SEPARATOR . $base),
+            public_path('recruitment' . DIRECTORY_SEPARATOR . 'foto' . DIRECTORY_SEPARATOR . $base),
+        ] as $path) {
+            if (is_file($path)) {
+                @unlink($path);
+            }
         }
     }
 
