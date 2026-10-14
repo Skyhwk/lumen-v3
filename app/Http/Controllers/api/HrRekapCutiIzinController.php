@@ -118,6 +118,12 @@ class HrRekapCutiIzinController extends Controller
 
             })
 
+            ->addColumn('lembur_count', function ($row) {
+
+                return $this->metricsForRow($row)['lembur_count'];
+
+            })
+
             ->addColumn('alpa_days', function ($row) {
 
                 return $this->metricsForRow($row)['alpa_days'];
