@@ -39,10 +39,9 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
         $today = Carbon::now('Asia/Jakarta')->toDateString();
         $troubleService = new \App\Services\SamplerTrackingTroubleService();
         $troubles = $troubleService->unresolved($samplerId);
-        // The device/legacy request date is not authoritative, including before 07:00 WIB.
-        $recovery = $troubles->first(function ($trouble) {
-            return $trouble->reopened_by && $trouble->reopened_at;
-        });
+        // Pin old date only while the unblocked session still needs check-in/out.
+        // After that, follow the normal journey (longest duration) on today's list.
+        $recovery = $troubleService->activeMobileRecovery($samplerId);
         $date = $recovery ? $recovery->activity_date : $today;
         $data = $this->service->listByDate(
             $date,
@@ -70,6 +69,8 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
             $session->setRelation('activeMembers', $ownMembers);
         });
 
+        $blockingTroubles = $troubleService->troublesBlockingCurrentActivity($samplerId);
+
         return response()->json([
             'success' => true,
             'data' => $data,
@@ -77,8 +78,8 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
             'server_today' => $today,
             'is_recovery' => $date !== $today,
             'troubles' => $troubles,
-            'blocked' => $date === $today && $troubles->isNotEmpty(),
-            'blocked_message' => $troubles->isNotEmpty() ? $troubleService->message($troubles) : null,
+            'blocked' => $blockingTroubles->isNotEmpty(),
+            'blocked_message' => $blockingTroubles->isNotEmpty() ? $troubleService->message($troubles) : null,
             'can_preview_sampler' => (int) $this->user_id === self::PREVIEWER_USER_ID,
             'is_preview' => $isPreview,
             'preview_sampler' => $previewSampler ? [
