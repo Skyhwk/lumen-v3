@@ -30,6 +30,7 @@ class RekapCutiIzinService
      *   izin_sakit_days: int,
      *   izin_kegiatan_days: int,
      *   izin_terlambat_count: int,
+     *   lembur_count: int,
      *   alpa_days: int
      * }
      */
@@ -98,6 +99,19 @@ class RekapCutiIzinService
             }
         }
 
+        $lemburCount = (int) DB::table('hr_overtime_participant as op')
+            ->join('hr_request as hr', 'hr.id', '=', 'op.request_id')
+            ->join('hr_overtime_detail as od', 'od.request_id', '=', 'hr.id')
+            ->where('op.karyawan_id', $employee->id)
+            ->where('op.is_active', true)
+            ->where('hr.request_type', HrRequest::TYPE_OVERTIME)
+            ->where('hr.is_active', true)
+            ->whereIn('hr.status', WorkflowStatus::formsStatApprovedOvertimeStatuses())
+            ->where('od.start_date', '<=', $toYmd)
+            ->where('od.end_date', '>=', $fromYmd)
+            ->distinct()
+            ->count('hr.id');
+
         $alpaDays = 0;
         if (!LeaveAlpaAttendanceScope::isExemptFromAlpaLedger($employee)) {
             $alpaDays = (int) HrLeaveBalanceLedger::query()
@@ -120,6 +134,7 @@ class RekapCutiIzinService
             'izin_sakit_days' => $sakitDays,
             'izin_kegiatan_days' => $kegiatanDays,
             'izin_terlambat_count' => $terlambatCount,
+            'lembur_count' => $lemburCount,
             'alpa_days' => $alpaDays,
         ];
 
