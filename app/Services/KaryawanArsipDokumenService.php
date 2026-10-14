@@ -165,6 +165,60 @@ class KaryawanArsipDokumenService
         return $this->updateCatatanByIndex($karyawanId, $jenisDokumen, -1, $catatan);
     }
 
+    public function upsertLatestCatatan($karyawanId, $jenisDokumen, $catatan, $createdBy = null)
+    {
+        $catatan = trim((string) $catatan);
+        if ($catatan === '') {
+            return false;
+        }
+
+        if ($this->updateLatestCatatan($karyawanId, $jenisDokumen, $catatan)) {
+            return true;
+        }
+
+        if (!Schema::hasTable('karyawan_dokumen_arsip')) {
+            return false;
+        }
+
+        if (preg_match('/SERTIFIKAT|SERTIFIKASI/i', (string) $jenisDokumen)) {
+            $related = DB::table('karyawan_dokumen_arsip')
+                ->where('karyawan_id', $karyawanId)
+                ->where('is_active', 1)
+                ->where(function ($query) {
+                    $query->where('jenis_dokumen', 'like', '%SERTIFIKAT%')
+                        ->orWhere('jenis_dokumen', 'like', '%SERTIFIKASI%');
+                })
+                ->orderByDesc('id')
+                ->first();
+
+            if ($related) {
+                DB::table('karyawan_dokumen_arsip')->where('id', $related->id)->update([
+                    'catatan' => $catatan,
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+                return true;
+            }
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $jenis = strtoupper(trim((string) $jenisDokumen));
+
+        return (bool) DB::table('karyawan_dokumen_arsip')->insert([
+            'karyawan_id' => $karyawanId,
+            'jenis_dokumen' => $jenis,
+            'nama_file' => '',
+            'path_file' => '',
+            'mime_type' => null,
+            'ukuran_file' => null,
+            'sumber' => 'kelengkapan_karyawan',
+            'catatan' => $catatan,
+            'is_active' => 1,
+            'created_by' => $createdBy,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+    }
+
     public function updateCatatanByIndex($karyawanId, $jenisDokumen, $index, $catatan)
     {
         if (!Schema::hasTable('karyawan_dokumen_arsip')) {

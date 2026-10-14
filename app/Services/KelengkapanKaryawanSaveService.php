@@ -26,7 +26,7 @@ class KelengkapanKaryawanSaveService
 
         DB::transaction(function () use ($karyawan, $request, $createdBy, $now, $married, $kontakDarurat, $pendidikan, $sertifikat, $sim) {
             $this->updateKaryawan($karyawan, $request, $married, $now, $createdBy);
-            $this->replaceRows('kontak_darurat_karyawan', $karyawan->id, $createdBy, $now, $kontakDarurat);
+            $this->replaceRows('kontak_darurat_karyawan', $karyawan->id, $createdBy, $now, $kontakDarurat, ['nama_kontak', 'hubungan', 'nomor_kontak']);
             $this->replaceRows('pendidikan_karyawan', $karyawan->id, $createdBy, $now, array_map(function ($row) {
                 return [
                     'jenjang' => trim((string) ($row['jenjang'] ?? '')),
@@ -36,7 +36,7 @@ class KelengkapanKaryawanSaveService
                     'tahun_lulus' => trim((string) ($row['tahun_lulus'] ?? '')) ?: null,
                     'kota' => trim((string) ($row['kota'] ?? '')),
                 ];
-            }, $pendidikan));
+            }, $pendidikan), ['jenjang', 'institusi', 'jurusan', 'tahun_masuk', 'tahun_lulus']);
             $this->syncPendidikanJson($karyawan, $pendidikan);
             $this->replaceRows('sertifikasi_karyawan', $karyawan->id, $createdBy, $now, array_map(function ($row) {
                 return [
@@ -45,7 +45,7 @@ class KelengkapanKaryawanSaveService
                     'tgl_sertifikat' => trim((string) ($row['tgl_sertifikat'] ?? '')) ?: null,
                     'tgl_exp_sertifikat' => trim((string) ($row['tgl_exp_sertifikat'] ?? '')) ?: null,
                 ];
-            }, $sertifikat));
+            }, $sertifikat), ['nama_sertifikat', 'nomor_sertifikat', 'tgl_sertifikat']);
             $this->upsertDrivers($karyawan, $sim, $now, $createdBy);
             $this->upsertMedical($karyawan, $request, $now, $createdBy);
             $this->archiveUploads($karyawan, $request, $sim, $pendidikan, $createdBy);
@@ -144,37 +144,80 @@ class KelengkapanKaryawanSaveService
         ]);
     }
 
-    private function replaceRows($table, $karyawanId, $createdBy, Carbon $now, array $rows)
+    private function replaceRows($table, $karyawanId, $createdBy, Carbon $now, array $rows, array $uniqueKeys = [])
     {
         if (!Schema::hasTable($table)) {
             return;
         }
 
         $columns = Schema::getColumnListing($table);
-        $deactivate = [];
-        if (in_array('is_active', $columns, true)) {
-            $deactivate['is_active'] = 0;
-        }
-        if (in_array('updated_at', $columns, true)) {
-            $deactivate['updated_at'] = $now;
-        }
-        if (in_array('updated_by', $columns, true)) {
-            $deactivate['updated_by'] = $createdBy;
-        }
-        if ($deactivate) {
-            DB::table($table)->where('karyawan_id', $karyawanId)->update($deactivate);
-        }
+        $existing = DB::table($table)
+            ->where('karyawan_id', $karyawanId)
+            ->orderByDesc('is_active')
+            ->orderBy('id')
+            ->get();
+        $used = [];
 
         foreach ($rows as $row) {
-            $values = array_merge($row, [
+            $match = $this->matchExistingRow($existing, $row, $uniqueKeys, $used);
+            $payload = array_intersect_key(array_merge($row, [
                 'karyawan_id' => $karyawanId,
                 'is_active' => 1,
+                'updated_by' => $createdBy,
+                'updated_at' => $now,
+                'deleted_by' => null,
+                'deleted_at' => null,
+            ]), array_flip($columns));
+
+            if ($match) {
+                DB::table($table)->where('id', $match->id)->update($payload);
+                $used[$match->id] = true;
+                continue;
+            }
+
+            $insert = array_merge($payload, [
                 'created_by' => $createdBy,
                 'created_at' => $now,
-                'updated_at' => $now,
             ]);
-            DB::table($table)->insert(array_intersect_key($values, array_flip($columns)));
+            DB::table($table)->insert(array_intersect_key($insert, array_flip($columns)));
         }
+
+        $leftoverIds = $existing->pluck('id')->filter(function ($id) use ($used) {
+            return empty($used[$id]);
+        })->all();
+        if ($leftoverIds && in_array('is_active', $columns, true)) {
+            $deactivate = ['is_active' => 0, 'updated_at' => $now];
+            if (in_array('updated_by', $columns, true)) {
+                $deactivate['updated_by'] = $createdBy;
+            }
+            DB::table($table)->whereIn('id', $leftoverIds)->update($deactivate);
+        }
+    }
+
+    private function matchExistingRow($existing, array $row, array $uniqueKeys, array $used)
+    {
+        if (!$uniqueKeys) {
+            return $existing->first(function ($item) use ($used) {
+                return empty($used[$item->id]);
+            });
+        }
+
+        $wanted = [];
+        foreach ($uniqueKeys as $key) {
+            $wanted[$key] = strtolower(trim((string) ($row[$key] ?? '')));
+        }
+
+        return $existing->first(function ($item) use ($wanted, $used) {
+            if (!empty($used[$item->id])) {
+                return false;
+            }
+            foreach ($wanted as $key => $value) {
+                if (strtolower(trim((string) ($item->{$key} ?? ''))) !== $value) {
+                    return false;
+                }
+            }
+            return true;
+        });
     }
 
     private function upsertDrivers(MasterKaryawan $karyawan, array $sim, Carbon $now, $createdBy)
@@ -275,7 +318,7 @@ class KelengkapanKaryawanSaveService
             'file_npwp' => ['jenis' => 'NPWP', 'catatan' => $this->numberNote('No NPWP', $request->input('no_npwp'))],
             'file_bpjs' => ['jenis' => 'BPJS KESEHATAN', 'catatan' => $this->numberNote('No BPJS', $request->input('no_bpjs'))],
             'file_jamsostek' => ['jenis' => 'BPJS KETENAGAKERJAAN', 'catatan' => $this->numberNote('No Jamsostek', $request->input('no_jamsostek'))],
-            'file_sertifikasi' => ['jenis' => 'SERTIFIKAT', 'catatan' => trim((string) $request->input('nama_sertifikasi')) ?: 'Surat sertifikasi'],
+            'file_sertifikasi' => ['jenis' => 'SERTIFIKAT', 'catatan' => trim((string) $request->input('nama_sertifikasi'))],
         ];
         foreach ($single as $input => $meta) {
             $file = $this->uploaded($request, $input);
@@ -336,13 +379,26 @@ class KelengkapanKaryawanSaveService
 
     private function archiveFileOrCatatan($arsip, $karyawanId, $file, $jenis, $createdBy, $catatan, $index = null)
     {
+        $catatan = trim((string) $catatan);
+
         if ($file instanceof UploadedFile) {
-            $arsip->storeUploadedFile($karyawanId, $file, $jenis, $createdBy, $catatan, 'kelengkapan_karyawan');
+            $arsip->storeUploadedFile(
+                $karyawanId,
+                $file,
+                $jenis,
+                $createdBy,
+                $catatan !== '' ? $catatan : ($jenis === 'SERTIFIKAT' ? 'Surat sertifikasi' : $catatan),
+                'kelengkapan_karyawan'
+            );
+            return;
+        }
+
+        if ($catatan === '') {
             return;
         }
 
         if ($index === null) {
-            $arsip->updateLatestCatatan($karyawanId, $jenis, $catatan);
+            $arsip->upsertLatestCatatan($karyawanId, $jenis, $catatan, $createdBy);
             return;
         }
 

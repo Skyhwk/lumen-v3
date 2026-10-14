@@ -64,7 +64,7 @@ class KelengkapanKaryawanProfileService
         $npwpDoc = $this->latestDoc($documents['npwp']);
         $bpjsDoc = $this->latestDoc($documents['bpjs']);
         $jamsostekDoc = $this->latestDoc($documents['jamsostek']);
-        $sertifikasiDoc = $this->latestDoc($documents['sertifikat']);
+        $sertifikasiDoc = $this->latestSuratDoc($documents['sertifikat']);
 
         $selfie = $this->selfie($documents['selfie']);
 
@@ -113,10 +113,7 @@ class KelengkapanKaryawanProfileService
                 $candidate->no_bpjs_tk ?? null,
                 $this->numberFromCatatan($jamsostekDoc['catatan'] ?? '', 'No Jamsostek'),
             ]),
-            'nama_sertifikasi' => $this->firstFilled([
-                $sertifikat[0]['nama_sertifikat'] ?? null,
-                $sertifikasiDoc['nama_file'] ?? null,
-            ]),
+            'nama_sertifikasi' => $this->suratSertifikasiName($sertifikasiDoc),
             'medical' => $this->medical($karyawan),
             'foto_selfie_url' => $selfie['url'],
             'kontak_darurat' => $kontakDarurat,
@@ -136,7 +133,7 @@ class KelengkapanKaryawanProfileService
                 'file_bpjs_url' => $bpjsDoc['url'] ?? null,
                 'file_jamsostek' => $jamsostekDoc['nama_file'] ?? null,
                 'file_jamsostek_url' => $jamsostekDoc['url'] ?? null,
-                'file_sertifikasi' => $sertifikasiDoc['nama_file'] ?? null,
+                'file_sertifikasi' => trim((string) ($sertifikasiDoc['nama_file'] ?? '')) ?: null,
                 'file_sertifikasi_url' => $sertifikasiDoc['url'] ?? null,
             ],
         ];
@@ -162,6 +159,31 @@ class KelengkapanKaryawanProfileService
         }
 
         return $items[count($items) - 1];
+    }
+
+    private function latestSuratDoc(array $items)
+    {
+        for ($index = count($items) - 1; $index >= 0; $index--) {
+            if (trim((string) ($items[$index]['path_file'] ?? '')) !== '') {
+                return $items[$index];
+            }
+        }
+
+        return $this->latestDoc($items);
+    }
+
+    private function suratSertifikasiName($doc)
+    {
+        if (!is_array($doc)) {
+            return '';
+        }
+
+        $catatan = trim((string) ($doc['catatan'] ?? ''));
+        if ($catatan !== '' && !preg_match('/^surat sertifikasi$/i', $catatan)) {
+            return $catatan;
+        }
+
+        return '';
     }
 
     private function kontakDarurat(MasterKaryawan $karyawan, $candidate)
