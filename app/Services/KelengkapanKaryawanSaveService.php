@@ -86,22 +86,29 @@ class KelengkapanKaryawanSaveService
 
     private function upsertBpjs(MasterKaryawan $karyawan, $table, $column, $number, Carbon $now, $createdBy)
     {
-        $number = trim((string) $number);
-        if ($number === '' || !Schema::hasTable($table) || !Schema::hasColumn($table, $column)) {
+        if (!Schema::hasTable($table) || !Schema::hasColumn($table, $column)) {
             return;
         }
 
+        $number = trim((string) $number);
+        if ($number === '') {
+            return;
+        }
+
+        $columns = Schema::getColumnListing($table);
         $existing = DB::table($table)
             ->where('id_karyawan', $karyawan->id)
             ->where('is_active', 1)
             ->orderByDesc('id')
             ->first();
+
         if ($existing) {
-            DB::table($table)->where('id', $existing->id)->update([
+            $payload = [
                 $column => $number,
                 'updated_by' => $createdBy,
                 'updated_at' => $now,
-            ]);
+            ];
+            DB::table($table)->where('id', $existing->id)->update(array_intersect_key($payload, array_flip($columns)));
             return;
         }
 
@@ -114,10 +121,10 @@ class KelengkapanKaryawanSaveService
             'created_at' => $now,
             'updated_at' => $now,
         ];
-        if (Schema::hasColumn($table, 'karyawan')) {
+        if (in_array('karyawan', $columns, true)) {
             $row['karyawan'] = $karyawan->nama_lengkap;
         }
-        DB::table($table)->insert(array_intersect_key($row, array_flip(Schema::getColumnListing($table))));
+        DB::table($table)->insert(array_intersect_key($row, array_flip($columns)));
     }
 
     private function syncPendidikanJson(MasterKaryawan $karyawan, array $pendidikan)
@@ -337,7 +344,7 @@ class KelengkapanKaryawanSaveService
             $file = $this->uploaded($request, $input);
             $canRemove = in_array($input, ['file_npwp', 'file_bpjs', 'file_jamsostek', 'file_sertifikasi'], true);
             if (!$file && $canRemove && $request->boolean('hapus_' . $input)) {
-                $arsip->deactivateLatest($karyawan->id, $meta['jenis'], $createdBy);
+                $arsip->deactivateExcept($karyawan->id, $meta['jenis'], [], $createdBy);
                 continue;
             }
             $this->archiveFileOrCatatan(
@@ -352,34 +359,17 @@ class KelengkapanKaryawanSaveService
 
         $this->archiveSimUploads($arsip, $karyawan->id, $request, $sim, $createdBy);
 
-        foreach ($pendidikan as $index => $row) {
-            $file = $this->uploaded($request, 'file_ijazah.' . $index);
-            if (!$file && is_array($request->file('file_ijazah'))) {
-                $file = $request->file('file_ijazah')[$index] ?? null;
-            }
-            if (!($file instanceof UploadedFile)) {
-                continue;
-            }
-            $catatan = trim(implode(' | ', array_filter([
-                trim((string) ($row['jenjang'] ?? '')) !== '' ? 'Jenjang: ' . trim((string) $row['jenjang']) : null,
-                trim((string) ($row['institusi'] ?? '')) !== '' ? 'Institusi: ' . trim((string) $row['institusi']) : null,
-            ]))) ?: 'Ijazah';
-            $this->archiveFileOrCatatan(
-                $arsip,
-                $karyawan->id,
-                $file,
-                'IJAZAH',
-                $createdBy,
-                $catatan,
-                $index
-            );
-        }
+        $this->archiveIjazahUploads($arsip, $karyawan->id, $request, $pendidikan, $createdBy);
     }
 
     private function archiveSimUploads($arsip, $karyawanId, Request $request, array $sim, $createdBy)
     {
         $active = $arsip->listActiveByJenis($karyawanId, 'SIM');
         $kept = [];
+        $hapus = $request->input('hapus_file_sim', []);
+        if (!is_array($hapus)) {
+            $hapus = [];
+        }
 
         foreach ($sim as $index => $row) {
             $file = $this->uploaded($request, 'file_sim.' . $index) ?: $this->uploaded($request, 'file_sim.' . $index . '.file');
@@ -387,12 +377,17 @@ class KelengkapanKaryawanSaveService
                 $file = $request->file('file_sim')[$index] ?? null;
             }
             $catatan = $this->simNote($row);
+            $removed = $request->boolean('hapus_file_sim.' . $index) || !empty($hapus[$index]);
 
             if ($file instanceof UploadedFile) {
                 $stored = $arsip->storeUploadedFile($karyawanId, $file, 'SIM', $createdBy, $catatan, 'kelengkapan_karyawan');
                 if ($stored && !empty($stored->id)) {
                     $kept[] = (int) $stored->id;
                 }
+                continue;
+            }
+
+            if ($removed) {
                 continue;
             }
 
@@ -435,12 +430,53 @@ class KelengkapanKaryawanSaveService
         return null;
     }
 
+    private function archiveIjazahUploads($arsip, $karyawanId, Request $request, array $pendidikan, $createdBy)
+    {
+        $active = $arsip->listActiveByJenis($karyawanId, 'IJAZAH');
+        $kept = [];
+        $hapus = $request->input('hapus_file_ijazah', []);
+        if (!is_array($hapus)) {
+            $hapus = [];
+        }
+
+        foreach ($pendidikan as $index => $row) {
+            $file = $this->uploaded($request, 'file_ijazah.' . $index);
+            if (!$file && is_array($request->file('file_ijazah'))) {
+                $file = $request->file('file_ijazah')[$index] ?? null;
+            }
+            $catatan = trim(implode(' | ', array_filter([
+                trim((string) ($row['jenjang'] ?? '')) !== '' ? 'Jenjang: ' . trim((string) $row['jenjang']) : null,
+                trim((string) ($row['institusi'] ?? '')) !== '' ? 'Institusi: ' . trim((string) $row['institusi']) : null,
+            ]))) ?: 'Ijazah';
+            $old = $active->values()->get($index);
+            $removed = $request->boolean('hapus_file_ijazah.' . $index)
+                || !empty($hapus[$index]);
+
+            if ($file instanceof UploadedFile) {
+                $stored = $arsip->storeUploadedFile($karyawanId, $file, 'IJAZAH', $createdBy, $catatan, 'kelengkapan_karyawan');
+                if ($stored && !empty($stored->id)) {
+                    $kept[] = (int) $stored->id;
+                }
+                continue;
+            }
+
+            if ($removed || !$old) {
+                continue;
+            }
+
+            $arsip->updateCatatanById($old->id, $catatan);
+            $kept[] = (int) $old->id;
+        }
+
+        $arsip->deactivateExcept($karyawanId, 'IJAZAH', $kept, $createdBy);
+    }
+
     private function archiveFileOrCatatan($arsip, $karyawanId, $file, $jenis, $createdBy, $catatan, $index = null)
     {
         $catatan = trim((string) $catatan);
 
         if ($file instanceof UploadedFile) {
-            $arsip->storeUploadedFile(
+            $stored = $arsip->storeUploadedFile(
                 $karyawanId,
                 $file,
                 $jenis,
@@ -448,6 +484,9 @@ class KelengkapanKaryawanSaveService
                 $catatan !== '' ? $catatan : ($jenis === 'SERTIFIKAT' ? 'Surat sertifikasi' : $catatan),
                 'kelengkapan_karyawan'
             );
+            if ($stored && !empty($stored->id)) {
+                $arsip->deactivateExcept($karyawanId, $jenis, [(int) $stored->id], $createdBy);
+            }
             return;
         }
 
