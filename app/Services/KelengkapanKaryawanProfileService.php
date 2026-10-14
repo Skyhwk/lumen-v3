@@ -98,21 +98,21 @@ class KelengkapanKaryawanProfileService
                 Schema::hasColumn('master_karyawan', 'nik_kk') ? $karyawan->nik_kk : null,
                 $candidate->no_kk ?? null,
             ]),
-            'no_npwp' => $this->firstFilled([
+            'no_npwp' => $this->optionalDocumentNumber(
                 Schema::hasColumn('master_karyawan', 'no_npwp') ? $karyawan->no_npwp : null,
-                $candidate->no_npwp ?? null,
-                $this->numberFromCatatan($npwpDoc['catatan'] ?? '', 'No NPWP'),
-            ]),
-            'no_bpjs' => $this->firstFilled([
+                true,
+                [$candidate->no_npwp ?? null, $this->numberFromCatatan($npwpDoc['catatan'] ?? '', 'No NPWP')]
+            ),
+            'no_bpjs' => $this->optionalDocumentNumber(
                 $this->bpjsNumber($karyawan->id, 'bpjs_kesehatan', 'no_bpjs'),
-                $candidate->no_bpjs_ks ?? null,
-                $this->numberFromCatatan($bpjsDoc['catatan'] ?? '', 'No BPJS'),
-            ]),
-            'no_jamsostek' => $this->firstFilled([
+                $this->hasBpjsRow($karyawan->id, 'bpjs_kesehatan'),
+                [$candidate->no_bpjs_ks ?? null, $this->numberFromCatatan($bpjsDoc['catatan'] ?? '', 'No BPJS')]
+            ),
+            'no_jamsostek' => $this->optionalDocumentNumber(
                 $this->bpjsNumber($karyawan->id, 'bpjs_tk', 'no_bpjs_tk'),
-                $candidate->no_bpjs_tk ?? null,
-                $this->numberFromCatatan($jamsostekDoc['catatan'] ?? '', 'No Jamsostek'),
-            ]),
+                $this->hasBpjsRow($karyawan->id, 'bpjs_tk'),
+                [$candidate->no_bpjs_tk ?? null, $this->numberFromCatatan($jamsostekDoc['catatan'] ?? '', 'No Jamsostek')]
+            ),
             'nama_sertifikasi' => $this->suratSertifikasiName($sertifikasiDoc),
             'medical' => $this->medical($karyawan),
             'foto_selfie_url' => $selfie['url'],
@@ -646,6 +646,27 @@ class KelengkapanKaryawanProfileService
         }
 
         return false;
+    }
+
+    private function optionalDocumentNumber($stored, $hasCanonical, array $fallbacks)
+    {
+        if ($hasCanonical) {
+            return trim((string) $stored);
+        }
+
+        return $this->firstFilled($fallbacks);
+    }
+
+    private function hasBpjsRow($karyawanId, $table)
+    {
+        if (!Schema::hasTable($table) || !Schema::hasColumn($table, 'id_karyawan')) {
+            return false;
+        }
+
+        return DB::table($table)
+            ->where('id_karyawan', $karyawanId)
+            ->where('is_active', 1)
+            ->exists();
     }
 
     private function bpjsNumber($karyawanId, $table, $column)
