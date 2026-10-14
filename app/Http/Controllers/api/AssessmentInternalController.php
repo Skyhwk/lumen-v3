@@ -9,6 +9,7 @@ use App\Models\MasterKaryawan;
 use App\Models\QuestionCategory;
 use App\Jobs\GenerateInternalAssessmentParticipantPdfJob;
 use App\Jobs\GenerateInternalAssessmentPdfBatchJob;
+use App\Services\HrdAssessmentReadinessService;
 use App\Services\InternalAssessmentExcelExportService;
 use App\Services\InternalAssessmentParticipantPdfService;
 
@@ -156,6 +157,8 @@ class AssessmentInternalController extends Controller
                 ->orderByRaw("CASE WHEN UPPER(name) = 'DISC' THEN 1 WHEN UPPER(name) IN ('KOSTICK PAPI', 'PAPI KOSTICK') THEN 2 ELSE 3 END")
                 ->orderBy('name')
                 ->get();
+
+            app(HrdAssessmentReadinessService::class)->attachPsychometricBankCounts($categories);
 
             return response()->json(['data' => $categories], 200);
         } catch (\Exception $e) {

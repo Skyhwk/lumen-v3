@@ -116,6 +116,27 @@ class HrdAssessmentReadinessService
         return (int) ($category->is_active ?? 0) === 1;
     }
 
+    public function attachPsychometricBankCounts($categories)
+    {
+        if (!Schema::hasTable('soal_psikotes')) {
+            return $categories;
+        }
+
+        $discCount = (int) DB::table('soal_psikotes')->where('kategori_soal', 'DISC')->count();
+        $papiCount = (int) DB::table('soal_psikotes')
+            ->whereIn('kategori_soal', ['KOSTICK PAPI', 'PAPI KOSTICK'])
+            ->count();
+
+        return $categories->each(function ($category) use ($discCount, $papiCount) {
+            $name = strtoupper(trim((string) ($category->name ?? '')));
+            if ($name === 'DISC') {
+                $category->current_question_count = $discCount;
+            } elseif (in_array($name, ['KOSTICK PAPI', 'PAPI KOSTICK'], true)) {
+                $category->current_question_count = $papiCount;
+            }
+        });
+    }
+
     private function notReady(string $message, array $issues = []): array
     {
         return [
