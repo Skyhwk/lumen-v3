@@ -14,6 +14,7 @@ use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\GenerateToken;
 use App\Services\CandidateDocumentAttachmentService;
 use App\Services\GenerateAssessmentDocumentService;
+use App\Services\RecruitmentPictureService;
 use App\Services\RecruitmentStatusService;
 use App\Services\RequesterSalaryApprovalService;
 use App\Services\SallaryOfferService;
@@ -1622,9 +1623,27 @@ class AtsFinalDecisionController extends Controller
             ], 422);
         }
 
+        $pictureService = app(RecruitmentPictureService::class);
+        $newPicture = null;
+        try {
+            $newPicture = $pictureService->storeUploadedFile($request->file('selfie'));
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'status' => 422,
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'status' => 500,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+
         $assessmentService = app(GenerateAssessmentDocumentService::class);
         $documentService = app(CandidateDocumentAttachmentService::class);
         $documents = [];
+        $oldPicture = $applicant->picture;
+        $pictureReplaced = false;
 
         try {
             $tokenService = new GenerateToken();
@@ -1643,8 +1662,13 @@ class AtsFinalDecisionController extends Controller
                 'token_approval' => $token,
                 'status'         => 'management_decision',
                 'is_keep'        => 0,
+                'picture'        => $newPicture,
                 'meta_history'   => json_encode(array_values($history)),
             ]);
+            $pictureReplaced = true;
+            if ($oldPicture && basename((string) $oldPicture) !== $newPicture) {
+                $pictureService->delete($oldPicture);
+            }
             $applicant->meta_history = json_encode(array_values($history));
             $applicant->resubmit_reason = $resubmitReason;
             $applicant->resubmit_by = $this->karyawan ?? 'HRD';
@@ -1689,6 +1713,10 @@ class AtsFinalDecisionController extends Controller
                 'candidate_document_attachment_count' => count($candidateDocumentAttachments),
             ], 200);
         } catch (\Exception $e) {
+            if ($newPicture && !$pictureReplaced) {
+                $pictureService->delete($newPicture);
+            }
+
             return response()->json([
                 'status'  => 500,
                 'message' => 'Gagal mengirim email: ' . $e->getMessage(),
