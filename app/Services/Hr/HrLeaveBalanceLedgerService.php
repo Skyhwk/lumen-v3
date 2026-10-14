@@ -8,6 +8,7 @@ use App\Models\MasterKaryawan;
 use App\Services\Greatday\LeaveAlpaAttendanceScope;
 use App\Services\Greatday\LeaveBalanceService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 class HrLeaveBalanceLedgerService
@@ -25,6 +26,15 @@ class HrLeaveBalanceLedgerService
         return (int) HrLeaveBalanceLedger::query()
             ->where('balance_period_id', $period->id)
             ->where('entry_type', HrLeaveBalanceLedger::TYPE_ALPA)
+            ->where('is_void', false)
+            ->sum('days_delta');
+    }
+
+    public function adjustmentNetDaysForPeriod(HrLeaveBalancePeriod $period): int
+    {
+        return (int) HrLeaveBalanceLedger::query()
+            ->where('balance_period_id', $period->id)
+            ->where('entry_type', HrLeaveBalanceLedger::TYPE_ADJUSTMENT)
             ->where('is_void', false)
             ->sum('days_delta');
     }
@@ -186,12 +196,126 @@ class HrLeaveBalanceLedgerService
         ]);
     }
 
+    /**
+     * Batalkan alpa dan buat permohonan cuti/izin Approved HRD (description = keterangan koreksi).
+     *
+     * @return array{voided: HrLeaveBalanceLedger, hr_request: \App\Models\Hr\HrRequest|null, target: string}
+     */
+    public function reclassifyAlpaEntry(
+        int $ledgerId,
+        string $targetType,
+        string $notes,
+        ?MasterKaryawan $actor = null,
+        ?string $actorName = null,
+        string $permissionKind = 'event'
+    ): array {
+        $target = strtolower(trim($targetType));
+        if (!in_array($target, ['izin', 'cuti'], true)) {
+            throw new InvalidArgumentException('Jenis koreksi harus izin atau cuti.');
+        }
+
+        $notes = trim($notes);
+        if ($notes === '') {
+            throw new InvalidArgumentException('Keterangan koreksi wajib diisi.');
+        }
+
+        $row = HrLeaveBalanceLedger::query()->find($ledgerId);
+        if (!$row || $row->is_void) {
+            throw new InvalidArgumentException('Entri alpa tidak ditemukan atau sudah dibatalkan.');
+        }
+        if ($row->entry_type !== HrLeaveBalanceLedger::TYPE_ALPA) {
+            throw new InvalidArgumentException('Hanya entri alpa yang dapat dikoreksi.');
+        }
+
+        $employee = MasterKaryawan::query()->find((int) $row->karyawan_id);
+        if (!$employee) {
+            throw new InvalidArgumentException('Karyawan tidak ditemukan.');
+        }
+
+        $refYmd = $row->reference_date ? $row->reference_date->format('Y-m-d') : null;
+        if ($refYmd === null) {
+            throw new InvalidArgumentException('Tanggal referensi alpa tidak valid.');
+        }
+
+        $days = (int) $row->days_delta;
+        if ($days <= 0) {
+            throw new InvalidArgumentException('Entri alpa tidak valid.');
+        }
+
+        $leaveService = app(LeaveBalanceService::class);
+        $actorLabel = $actorName ?: ($actor ? $actor->nama_lengkap : 'HRD');
+        $voidReason = sprintf(
+            'HRD reklasifikasi alpa → %s (%s): %s',
+            $target,
+            $refYmd,
+            $notes
+        );
+
+        return DB::transaction(function () use (
+            $row,
+            $employee,
+            $target,
+            $notes,
+            $actor,
+            $actorLabel,
+            $voidReason,
+            $refYmd,
+            $leaveService,
+            $permissionKind
+        ) {
+            $voided = $this->voidEntry((int) $row->id, $voidReason, $actorLabel);
+
+            $hrRequest = null;
+            if ($target === 'cuti') {
+                if ($leaveService->hasApprovedPermissionOnDate($employee, $refYmd)) {
+                    throw new InvalidArgumentException(
+                        'Tanggal tersebut sudah ada izin Approved HRD. Pilih koreksi ke izin, bukan cuti.'
+                    );
+                }
+                if (!$leaveService->hasApprovedAnnualLeaveOnDate($employee, $refYmd)) {
+                    $hrRequest = app(AlpaReclassifyHrRequestService::class)->createApproved(
+                        $employee,
+                        'cuti',
+                        $refYmd,
+                        $notes,
+                        $actor,
+                        $actorLabel
+                    );
+                }
+            } else {
+                if ($leaveService->hasApprovedAnnualLeaveOnDate($employee, $refYmd)) {
+                    throw new InvalidArgumentException(
+                        'Tanggal tersebut sudah ada cuti Approved HRD. Pilih koreksi ke cuti, bukan izin.'
+                    );
+                }
+                if (!$leaveService->hasApprovedPermissionOnDate($employee, $refYmd)) {
+                    $hrRequest = app(AlpaReclassifyHrRequestService::class)->createApproved(
+                        $employee,
+                        'izin',
+                        $refYmd,
+                        $notes,
+                        $actor,
+                        $actorLabel,
+                        $permissionKind
+                    );
+                }
+            }
+
+            return [
+                'voided' => $voided,
+                'hr_request' => $hrRequest,
+                'target' => $target,
+            ];
+        });
+    }
+
     public function recordManualAdjustment(
         MasterKaryawan $employee,
         int $daysDelta,
         string $notes,
         ?MasterKaryawan $actor = null,
-        ?string $actorName = null
+        ?string $actorName = null,
+        ?string $referenceDateYmd = null
     ): HrLeaveBalanceLedger {
         if ($daysDelta === 0) {
             throw new InvalidArgumentException('Koreksi hari tidak boleh nol.');
@@ -206,12 +330,14 @@ class HrLeaveBalanceLedgerService
         $now = Carbon::now();
         $name = $actorName ?: ($actor ? $actor->nama_lengkap : 'HRD');
 
+        $referenceDate = $referenceDateYmd ?: $now->toDateString();
+
         return HrLeaveBalanceLedger::create([
             'karyawan_id' => $employee->id,
             'balance_period_id' => $period->id,
             'entry_type' => HrLeaveBalanceLedger::TYPE_ADJUSTMENT,
             'days_delta' => $daysDelta,
-            'reference_date' => $now->toDateString(),
+            'reference_date' => $referenceDate,
             'source' => HrLeaveBalanceLedger::SOURCE_HRD,
             'external_ref' => null,
             'notes' => $notes,
