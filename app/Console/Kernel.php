@@ -34,6 +34,7 @@ class Kernel extends ConsoleKernel
         Commands\DeactivateExpiredBookings::class,
         // Commands\FixJadwalBookingStatus::class,
         Commands\FixJadwalSystemDeactivated::class,
+        Commands\FixNomorKontakPelangganCommand::class,
         Commands\ScheduleLogTransactionQsd::class,
         Commands\SyncQsdRevenue::class,
         Commands\SyncQsdForecast::class,
