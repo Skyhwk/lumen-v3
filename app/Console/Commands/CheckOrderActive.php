@@ -37,7 +37,8 @@ class CheckOrderActive extends Command
         'lhps_microbiologi' => 'LhpsMicrobiologiHeader',
         'lhps_padatan' => 'LhpsPadatanHeader',
         'lhp_psikologi' => 'LhpUdaraPsikologiHeader',
-        'lhps_hygiene_sanitasi' => 'LhpsHygieneSanitasiHeader'
+        'lhps_hygiene_sanitasi' => 'LhpsHygieneSanitasiHeader',
+        'lhp_manual' => 'LhpManual'
     ];
 
     public function handle()
