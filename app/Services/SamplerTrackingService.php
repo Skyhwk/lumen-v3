@@ -2663,10 +2663,8 @@ public function buildTrackingRows($sessions)
     protected function appActivities(SamplerTrackingMember $member)
     {
         $today = $this->today();
-        $recovery = (new SamplerTrackingTroubleService())->unresolved($member->sampler_id)
-            ->first(function ($trouble) {
-                return $trouble->reopened_by && $trouble->reopened_at;
-            });
+        $troubleService = new SamplerTrackingTroubleService();
+        $recovery = $troubleService->activeMobileRecovery($member->sampler_id);
 
         return $this->listByDate(
             $recovery ? $recovery->activity_date : $today,
