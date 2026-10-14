@@ -1524,6 +1524,7 @@ class RequestQuotationController extends Controller
             $data->tanggal_penawaran = $payload->informasi_pelanggan->tgl_penawaran;
             $data->konsultan = $dataOld->konsultan;
             $data->alamat_kantor = $payload->informasi_pelanggan->alamat_kantor;
+            $data->status_quotation= $dataOld->status_quotation;
 
             $data->no_tlp_perusahaan = str_replace(["-", "(", ")", " ", "_"], "", $payload->informasi_pelanggan->no_tlp_perusahaan);
             $data->nama_pic_order = ucwords($payload->informasi_pelanggan->nama_pic_order);
@@ -4147,7 +4148,7 @@ class RequestQuotationController extends Controller
 
                 $dataH->nama_perusahaan = $dataOld->nama_perusahaan;
                 $dataH->konsultan = $dataOld->konsultan;
-
+                $dataH->status_quotation= $dataOld->status_quotation;
                 $dataH->tanggal_penawaran = $informasi_pelanggan->tgl_penawaran;
 
                 if (isset($informasi_pelanggan->alamat_kantor) && $informasi_pelanggan->alamat_kantor != '')
