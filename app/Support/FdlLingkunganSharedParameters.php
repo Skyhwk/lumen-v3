@@ -64,22 +64,26 @@ class FdlLingkunganSharedParameters
         return array_values(array_unique(array_filter($labels)));
     }
 
+    // penghapusan data parameter dari shift jika sudah ada data di shift tersebut
     public static function getReadingThreshold(string $parameterName): int
     {
+        if (self::isDustfallParameter($parameterName)) {
+            return 2;
+        }
+
         $kateg = self::resolveKategoriFromParameterName($parameterName);
         if ($kateg === null) {
             return 1;
         }
 
-        $lower = strtolower($parameterName);
         if ($kateg === '24 Jam') {
-            return (str_contains($lower, 'pm') || str_contains($lower, 'tsp') || str_contains($lower, 'kelembapan') || str_contains($lower, 'suhu')) ? 25 : 4;
+            return 5;
         }
         if ($kateg === '8 Jam') {
-            return (str_contains($lower, 'pm') || str_contains($lower, 'tsp')) ? 8 : 3;
+            return 3;
         }
         if ($kateg === '6 Jam') {
-            return 6;
+            return 3;
         }
         if ($kateg === '3 Jam') {
             return 3;
@@ -230,8 +234,9 @@ class FdlLingkunganSharedParameters
             }
 
             $kateg = self::resolveKategoriFromParameterName($orderParam);
+            $isDustfall = self::isDustfallParameter($orderParam);
 
-            if ($kateg === null) {
+            if ($kateg === null && !$isDustfall) {
                 if ($shift !== 'L1') {
                     continue;
                 }
@@ -356,6 +361,11 @@ class FdlLingkunganSharedParameters
     public static function parameterHasDurasiInName(string $parameter): bool
     {
         return self::resolveKategoriFromParameterName($parameter) !== null;
+    }
+
+    private static function isDustfallParameter(string $parameterName): bool
+    {
+        return str_contains(strtolower(trim($parameterName)), 'dustfall');
     }
 
     private static function normalizeParameterLabel(string $label): string

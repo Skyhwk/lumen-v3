@@ -202,6 +202,92 @@ class RenderSlipGajiService
         ];
     }
 
+    /**
+     * Sumber tanggal transfer untuk slip: header.tgl_transfer → header.transfer_at → kolom payroll (jika ada).
+     */
+    public static function resolveTransferDateRaw(Payroll $payroll, ?PayrollHeader $header = null): ?string
+    {
+        if (!$header && $payroll->payroll_header_id) {
+            $header = PayrollHeader::find($payroll->payroll_header_id);
+        }
+
+        if ($header) {
+            $fromHeader = trim((string) ($header->tgl_transfer ?? ''));
+            if ($fromHeader !== '' && $fromHeader !== '-') {
+                return $fromHeader;
+            }
+
+            if (!empty($header->transfer_at)) {
+                try {
+                    return Carbon::parse($header->transfer_at)->toDateString();
+                } catch (\Throwable $exception) {
+                    // fall through
+                }
+            }
+        }
+
+        $fromPayroll = trim((string) ($payroll->tgl_transfer ?? ''));
+        if ($fromPayroll !== '' && $fromPayroll !== '-') {
+            return $fromPayroll;
+        }
+
+        return null;
+    }
+
+    public static function invalidateCachedSlipsForHeader(int $payrollHeaderId): void
+    {
+        Payroll::query()
+            ->where('payroll_header_id', $payrollHeaderId)
+            ->orderBy('id')
+            ->get()
+            ->each(function (Payroll $payroll) {
+                self::deleteCachedSlipFiles($payroll);
+            });
+    }
+
+    public static function deleteCachedSlipFiles(Payroll $payroll): void
+    {
+        try {
+            $filenames = self::buildSlipFilenames($payroll);
+        } catch (\Throwable $exception) {
+            return;
+        }
+
+        $pdfPath = public_path('dokumen/payroll/slip_gaji/pdf/' . $filenames['pdf_filename']);
+        $imagePath = public_path('dokumen/payroll/slip_gaji/image/' . $filenames['image_filename']);
+
+        if (is_file($pdfPath)) {
+            @unlink($pdfPath);
+        }
+        if (is_file($imagePath)) {
+            @unlink($imagePath);
+        }
+    }
+
+    /** PDF dibuat sebelum tgl_transfer di header disimpan → perlu generate ulang. */
+    public static function shouldRefreshSlipPdf(Payroll $payroll, string $pdfPath): bool
+    {
+        if (!is_file($pdfPath)) {
+            return true;
+        }
+
+        $header = $payroll->payroll_header_id
+            ? PayrollHeader::find($payroll->payroll_header_id)
+            : null;
+        $transferRaw = self::resolveTransferDateRaw($payroll, $header);
+        if (!$transferRaw) {
+            return false;
+        }
+
+        try {
+            $transferAt = Carbon::parse($transferRaw)->endOfDay()->timestamp;
+        } catch (\Throwable $exception) {
+            return false;
+        }
+
+        return filemtime($pdfPath) < $transferAt;
+    }
+
     public static function convertExistingPayrollPdf(Payroll $payroll, $pdfPath, $verifiedPin = null)
     {
         $karyawan = self::resolvePayrollKaryawan($payroll);
@@ -243,21 +329,27 @@ class RenderSlipGajiService
         ];
     }
 
-    public static function fromPayrollId($payrollId, $verifiedPin = null)
+    public static function fromPayrollId($payrollId, $verifiedPin = null, $allowInactive = false)
     {
-        $payroll = Payroll::with([
+        $payrollQuery = Payroll::with([
             'karyawan.divisi',
             'karyawan.jabatan',
         ])
-            ->where('id', $payrollId)
-            ->where('is_active', true)
-            ->first();
+            ->where('id', $payrollId);
+
+        if (!$allowInactive) {
+            $payrollQuery->where('is_active', true);
+        }
+
+        $payroll = $payrollQuery->first();
 
         if (!$payroll) {
             throw new \Exception('Data payroll tidak ditemukan');
         }
 
-        $header = PayrollHeader::find($payroll->payroll_header_id);
+        $header = $payroll->payroll_header_id
+            ? PayrollHeader::find($payroll->payroll_header_id)
+            : null;
         $karyawan = self::resolvePayrollKaryawan($payroll);
 
         if (!$karyawan) {
@@ -266,10 +358,11 @@ class RenderSlipGajiService
 
         $passwordMeta = self::resolvePdfPasswordForKaryawan($karyawan, $verifiedPin, $karyawan->id);
         $birthDate = self::resolveKaryawanBirthDate($karyawan);
+        $transferRaw = self::resolveTransferDateRaw($payroll, $header);
 
         return self::createBuilder()
             ->where('periode', self::formatPeriode($payroll->periode_payroll))
-            ->where('tgl_transfer', self::formatTglTransfer($header->tgl_transfer ?? null))
+            ->where('tgl_transfer', self::formatTglTransfer($transferRaw))
             ->where('filename', self::buildSlipFilenames($payroll)['pdf_filename'])
             ->where('pdf_access_pin', $passwordMeta['password'])
             ->where('pdf_password_hint', $passwordMeta['hint'])
@@ -389,7 +482,14 @@ class RenderSlipGajiService
             }
 
             if ($pdfPathForImage) {
-                $result = $this->appendImageResult($result, $pdfPathForImage, $userPassword);
+                try {
+                    $result = $this->appendImageResult($result, $pdfPathForImage, $userPassword);
+                } catch (\Throwable $imageException) {
+                    Log::warning('Slip gaji: konversi preview gambar gagal, PDF tetap tersedia.', [
+                        'pdf' => $pdfPathForImage,
+                        'message' => $imageException->getMessage(),
+                    ]);
+                }
             }
 
             if ($tempPdfPath && is_file($tempPdfPath)) {

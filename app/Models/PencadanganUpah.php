@@ -12,9 +12,12 @@ class PencadanganUpah extends Sector{
     protected $fillable = [
         'karyawan',
         'nik_karyawan',
+        'id_karyawan',
         'tenor',
+        'tipe_pengembalian',
         'nominal',
         'tenor_berjalan',
+        'nominal_berjalan',
         'bulan_efektif',
         'status',
         'created_at',
@@ -23,9 +26,14 @@ class PencadanganUpah extends Sector{
         'updated_by',
         'deleted_at',
         'deleted_by',
+        'previous_id',
         'is_active',
     ];
 
     public $timestamps = false;
-    
+
+    public function masterKaryawan()
+    {
+        return $this->belongsTo(MasterKaryawan::class, 'id_karyawan', 'id');
+    }
 }

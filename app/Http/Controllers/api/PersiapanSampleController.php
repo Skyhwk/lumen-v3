@@ -972,15 +972,80 @@ class PersiapanSampleController extends Controller
         }
 
         $wantedSampler = $this->normalizeSamplerList($request->sampler_jadwal);
+        $wantedNoSampel = $this->resolveRequestNoSampelList($request);
 
         return $query->get()
-            ->filter(function ($header) use ($wantedSampler) {
-                return $this->normalizeSamplerList($header->sampler_jadwal) === $wantedSampler;
+            ->filter(function ($header) use ($wantedSampler, $wantedNoSampel) {
+                if ($this->normalizeSamplerList($header->sampler_jadwal) !== $wantedSampler) {
+                    return false;
+                }
+
+                return $this->persiapanNoSampelScopeMatches($header->no_sampel, $wantedNoSampel);
             })
             ->pluck('id')
             ->unique()
             ->values()
             ->all();
+    }
+
+    /** Scope persiapan = set no_sampel dari kategori jadwal / detail (Psikologi vs Ergonomi terpisah). */
+    private function resolveRequestNoSampelList(Request $request): array
+    {
+        if (!empty($request->kategori_jadwal)) {
+            $konversi = strpos($request->kategori_jadwal, ',') !== false
+                ? explode(',', $request->kategori_jadwal)
+                : [$request->kategori_jadwal];
+
+            return array_map(function ($item) use ($request) {
+                $parts = explode(' - ', trim($item));
+                $kode = isset($parts[1]) ? trim($parts[1]) : trim($item);
+
+                return trim((string) $request->no_order) . '/' . $kode;
+            }, $konversi);
+        }
+
+        if (!empty($request->all_category)) {
+            $all = $request->all_category;
+
+            return is_array($all) ? $all : [$all];
+        }
+
+        if (!empty($request->detail) && is_array($request->detail)) {
+            return array_keys($request->detail);
+        }
+
+        return [];
+    }
+
+    private function normalizeNoSampelList($samples): array
+    {
+        if (is_string($samples)) {
+            $decoded = json_decode($samples, true);
+            $samples = is_array($decoded) ? $decoded : [$samples];
+        }
+
+        $samples = array_map(static function ($s) {
+            return trim(str_replace('\\/', '/', (string) $s));
+        }, (array) $samples);
+
+        $samples = array_values(array_unique(array_filter($samples, static function ($s) {
+            return $s !== '';
+        })));
+        sort($samples);
+
+        return $samples;
+    }
+
+    private function persiapanNoSampelScopeMatches($headerNoSampelJson, array $wantedNoSampel): bool
+    {
+        $wanted = $this->normalizeNoSampelList($wantedNoSampel);
+        if ($wanted === []) {
+            return false;
+        }
+
+        $stored = $this->normalizeNoSampelList(json_decode($headerNoSampelJson ?? 'null', true) ?? []);
+
+        return $stored === $wanted;
     }
 
     private function normalizeSamplerList($sampler): array
@@ -1374,32 +1439,19 @@ class PersiapanSampleController extends Controller
         return response()->json(MasterKaryawan::whereIn('id_jabatan', [60, 61, 62, 63])->orderBy('nama_lengkap')->get(), 200);
     }
 
-    private function compareSampleNumber($psHeader, $request)
+    /** @return bool true jika no_sampel request tidak sama persis dengan detail aktif */
+    private function compareSampleNumber($psHeader, $request): bool
     {
-        // $sampelNumbers = $psHeader->psDetail->pluck('no_sampel')->toArray();
-        // $missingSampleNumbers = array_diff($request->no_sampel, $sampelNumbers);
-        // $extraSampleNumbers = array_diff($sampelNumbers, $request->no_sampel);
-        // dd($missingSampleNumbers);
-        // if ($missingSampleNumbers || $extraSampleNumbers)
-        //     return true;
+        $stored = $this->normalizeNoSampelList($psHeader->psDetail->pluck('no_sampel')->all());
+        $requested = $this->normalizeNoSampelList(
+            is_array($request->no_sampel) ? $request->no_sampel : [$request->no_sampel]
+        );
 
-        // return false;
-
-        $sampelNumbers = $psHeader->psDetail->pluck('no_sampel')->toArray();
-
-        // Pengecekan apakah semua no_sampel dari request ada di sampelNumbers
-        $requestSamples = is_array($request->no_sampel) ? $request->no_sampel : [$request->no_sampel];
-        $allSamplesExist = true;
-
-        foreach ($requestSamples as $sample) {
-            if (in_array($sample, $sampelNumbers)) {
-                $allSamplesExist = false;
-                break;
-            }
+        if ($stored === [] && $requested !== []) {
+            $stored = $this->normalizeNoSampelList(json_decode($psHeader->no_sampel ?? 'null', true) ?? []);
         }
 
-        return $allSamplesExist;
-
+        return $stored !== $requested;
     }
 
     private function compareByPersiapan($orderDetail, $psDetail)
@@ -1432,48 +1484,74 @@ class PersiapanSampleController extends Controller
         // return false;
 
         $kategoriKey = explode('-', strtolower($orderDetail->kategori_2))[1];
-        $toArray = json_decode($psDetail->parameters, true);
+        $toArray = json_decode($psDetail->parameters, true) ?: [];
         $preparedParams = isset($toArray[$kategoriKey]) ? array_keys($toArray[$kategoriKey]) : [];
-        $requiredParams = array_map(fn($param) => explode(';', $param)[1], json_decode($orderDetail->parameter, true));
+        $requiredParams = array_map(
+            fn($param) => explode(';', (string) $param)[1] ?? '',
+            json_decode($orderDetail->parameter, true) ?: []
+        );
+        $requiredParams = array_values(array_filter($requiredParams, fn($p) => $p !== ''));
 
-        foreach ($requiredParams as $param) {
-            if (in_array($param, $preparedParams)) {
-                return false;
-            }
-        }
+        $missingParams = array_diff($requiredParams, $preparedParams);
+        $extraParams = array_diff($preparedParams, $requiredParams);
 
-        return true;
+        return !empty($missingParams) || !empty($extraParams);
     }
 
     public function getUpdated(Request $request)
     {
         try {
-            $psHeader = PersiapanSampelHeader::with([
-                'psDetail' => fn($q) => $q->whereIn('no_sampel', $request->no_sampel),
-                'orderHeader.orderDetail'
+            $requestedSamples = is_array($request->no_sampel) ? $request->no_sampel : [$request->no_sampel];
+            $wantedNoSampel = $this->normalizeNoSampelList($requestedSamples);
+
+            $headerQuery = PersiapanSampelHeader::with([
+                'psDetail',
+                'orderHeader.orderDetail',
             ])
                 ->where('no_quotation', $request->no_document)
                 ->where('no_order', $request->no_order)
-                ->where('is_active', 1)
-                ->whereHas('psDetail', fn($q) => $q->whereIn('no_sampel', is_array($request->no_sampel) ? $request->no_sampel : [$request->no_sampel]))
-                ->first();
-            
-            if (!$psHeader || !$psHeader->psDetail)
+                ->where('is_active', 1);
+
+            if (!empty($request->tanggal_sampling)) {
+                $headerQuery->where('tanggal_sampling', $request->tanggal_sampling);
+            }
+
+            $psHeader = $headerQuery->get()->first(function ($header) use ($wantedNoSampel) {
+                return $this->persiapanNoSampelScopeMatches($header->no_sampel, $wantedNoSampel);
+            });
+
+            if (!$psHeader || $psHeader->psDetail->isEmpty()) {
                 return response()->json(['message' => 'Sampel belum disiapkan update'], 404);
+            }
 
             $diffSampleNumbers = $this->compareSampleNumber($psHeader, $request);
-            if ($diffSampleNumbers)
+            if ($diffSampleNumbers) {
                 return response()->json(['message' => 'No Sampel tidak sesuai'], 500);
+            }
+
+            $psHeader->setRelation(
+                'psDetail',
+                $psHeader->psDetail->whereIn('no_sampel', $requestedSamples)->values()
+            );
 
             foreach ($psHeader->psDetail as $psd) {
-                $orderDetail = $psHeader->orderHeader->orderDetail->where('no_sampel', $psd->no_sampel)->first();
+                $orderDetail = $psHeader->orderHeader->orderDetail
+                    ->where('no_sampel', $psd->no_sampel)
+                    ->first();
 
-                $diffParams = $orderDetail->kategori_2 == '1-Air' ? $this->compareByPersiapan($orderDetail, $psd) : $this->compareByParameter($orderDetail, $psd);
+                if (!$orderDetail) {
+                    continue;
+                }
 
-                if ($diffParams)
-                    return response()->json(['message' => "Parameter tidak sesuai"], 500);
+                $diffParams = $orderDetail->kategori_2 == '1-Air'
+                    ? $this->compareByPersiapan($orderDetail, $psd)
+                    : $this->compareByParameter($orderDetail, $psd);
+
+                if ($diffParams) {
+                    return response()->json(['message' => 'Parameter tidak sesuai'], 500);
+                }
             }
-            
+
             return response()->json($psHeader, 200);
         } catch (\Throwable $th) {
             dd($th);

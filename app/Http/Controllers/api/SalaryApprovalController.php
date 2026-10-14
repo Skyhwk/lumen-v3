@@ -11,6 +11,7 @@ use App\Services\SendWhatsapp;
 use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\AtsNotificationService;
 use App\Services\RecruitmentDecisionActionEmailService;
+use App\Services\RecruitmentDecisionActionTelegramService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -152,6 +153,10 @@ class SalaryApprovalController extends Controller
 
             app(AtsNotificationService::class)->directorSalaryDecision($recruitment, $decision);
             app(RecruitmentDecisionActionEmailService::class)->notifySalaryDecision($recruitment, $decision);
+            app(RecruitmentDecisionActionTelegramService::class)->notifySalaryDecision($recruitment, $decision, [
+                'reject_reason' => $rejectReason,
+                'negotiated_amount' => $amount,
+            ]);
 
             return response()->json([
                 'result' => $decision,
@@ -295,18 +300,19 @@ class SalaryApprovalController extends Controller
             }
         }
 
-        if (!empty($recruitment->no_telepon)) {
-            try {
-                $message = (new GenerateMessageAtsWhatsapp((object) [
-                    'nama_lengkap' => $recruitment->nama_lengkap,
-                    'posisi_di_lamar' => $this->positionLabel($recruitment),
-                    'jenis_kelamin' => $recruitment->jenis_kelamin,
-                ]))->RejectedCandidateSelection();
-                (new SendWhatsapp($recruitment->no_telepon, $message))->send();
-            } catch (\Throwable $exception) {
-                \Log::warning('Salary offer rejection WhatsApp failed', ['recruitment_id' => $recruitment->id, 'message' => $exception->getMessage()]);
-            }
-        }
+        // DISABLED: WhatsApp rejection info (kebijakan HRD — notifikasi rejection via email saja)
+        // if (!empty($recruitment->no_telepon)) {
+        //     try {
+        //         $message = (new GenerateMessageAtsWhatsapp((object) [
+        //             'nama_lengkap' => $recruitment->nama_lengkap,
+        //             'posisi_di_lamar' => $this->positionLabel($recruitment),
+        //             'jenis_kelamin' => $recruitment->jenis_kelamin,
+        //         ]))->RejectedCandidateSelection();
+        //         (new SendWhatsapp($recruitment->no_telepon, $message))->send();
+        //     } catch (\Throwable $exception) {
+        //         \Log::warning('Salary offer rejection WhatsApp failed', ['recruitment_id' => $recruitment->id, 'message' => $exception->getMessage()]);
+        //     }
+        // }
     }
 
     private function rejectionEmail($recruitment)

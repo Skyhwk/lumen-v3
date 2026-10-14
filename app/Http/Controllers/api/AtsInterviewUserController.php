@@ -604,8 +604,9 @@ class AtsInterviewUserController extends Controller
 
         // Send Email & WhatsApp Notifications to Candidate and Requesting User
         try {
-            $pr = $applicant->personalRequest;
-            $posisiName = $this->resolvePositionName($applicant);
+            $applicant->loadMissing(['personnelRequest', 'personalRequest']);
+            $pr = $applicant->personalRequest ?? $applicant->personnelRequest;
+            $posisiInternal = GenerateMessageAtsEmail::posisiLabelInternal($applicant);
             $noRequest  = optional($pr)->no_request ?? '-';
 
             $tglFormatted = '-';
@@ -619,21 +620,16 @@ class AtsInterviewUserController extends Controller
             $rawCatatan = $interview->catatan ?? null;
             $catatanClean = !empty($rawCatatan) ? trim(strip_tags(html_entity_decode($rawCatatan))) : null;
 
-            // 1. Email & WhatsApp to Candidate
-            $candidateDataObj = (object) [
-                'nama_kandidat'     => $applicant->nama_lengkap,
-                'nama_lengkap'      => $applicant->nama_lengkap,
-                'jenis_kelamin'     => $applicant->jenis_kelamin,
-                'posisi'            => $posisiName,
-                'tgl_interview'     => $tglFormatted,
-                'jenis_interview'   => $jenisInterview,
-                'link_gmeet'        => $interview->link_gmeet,
-                'ruangan_interview' => $interview->ruangan_interview,
-                'catatan'           => $catatanClean,
-            ];
+            $applicant->nama_kandidat = $applicant->nama_lengkap;
+            $applicant->tgl_interview = $tglFormatted;
+            $applicant->jenis_interview = $jenisInterview;
+            $applicant->link_gmeet = $interview->link_gmeet;
+            $applicant->ruangan_interview = $interview->ruangan_interview;
+            $applicant->catatan = $catatanClean;
 
+            // 1. Email & WhatsApp to Candidate
             if (!empty($applicant->email)) {
-                $candidateEmailBody = GenerateMessageAtsEmail::bodyEmailUserInterviewCandidate($candidateDataObj);
+                $candidateEmailBody = GenerateMessageAtsEmail::bodyEmailUserInterviewCandidate($applicant);
                 SendEmail::where('to', trim($applicant->email))
                     ->where('subject', "Jadwal User Interview — PT Inti Surya Laboratorium")
                     ->where('body', $candidateEmailBody)
@@ -645,7 +641,7 @@ class AtsInterviewUserController extends Controller
 
             $candidatePhone = $applicant->no_telepon ?: ($applicant->no_hp ?: ($applicant->no_whatsapp ?? null));
             if (!empty($candidatePhone)) {
-                $waCandidateGen = new GenerateMessageAtsWhatsapp($candidateDataObj);
+                $waCandidateGen = new GenerateMessageAtsWhatsapp($applicant);
                 $waCandidateMsg = $waCandidateGen->UserInterviewScheduleCandidate();
                 $sendWaCandidate = new SendWhatsapp(trim($candidatePhone), $waCandidateMsg);
                 $sendWaCandidate->send();
@@ -667,22 +663,13 @@ class AtsInterviewUserController extends Controller
             $userEmail = $prUser->email ?? ($pr->email ?? null);
             $userName  = $prUser->nama_lengkap ?? ($prCreatedBy ?: 'User');
 
-            $userDataObj = (object) [
-                'nama_user'         => $userName,
-                'nama_kandidat'     => $applicant->nama_lengkap,
-                'posisi'            => $posisiName,
-                'no_request'        => $noRequest,
-                'tgl_interview'     => $tglFormatted,
-                'jenis_interview'   => $jenisInterview,
-                'link_gmeet'        => $interview->link_gmeet,
-                'ruangan_interview' => $interview->ruangan_interview,
-                'catatan'           => $catatanClean,
-            ];
+            $applicant->nama_user = $userName;
+            $applicant->no_request = $noRequest;
 
             if (!empty($userEmail)) {
-                $userEmailBody = GenerateMessageAtsEmail::bodyEmailUserInterviewUserNotif($userDataObj);
+                $userEmailBody = GenerateMessageAtsEmail::bodyEmailUserInterviewUserNotif($applicant);
                 SendEmail::where('to', trim($userEmail))
-                    ->where('subject', "Pemberitahuan Sesi User Interview — {$applicant->nama_lengkap} ({$posisiName})")
+                    ->where('subject', "Pemberitahuan Sesi User Interview — {$applicant->nama_lengkap} ({$posisiInternal})")
                     ->where('body', $userEmailBody)
                     ->where('karyawan', $user)
                     ->noReply()

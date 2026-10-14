@@ -346,8 +346,6 @@ class RecruitmentController extends Controller{
             $shioElemen = ShioElemenHelper::resolve($request->tanggal_lahir, null, null);
             $token = rtrim(strtr(base64_encode(random_bytes(48)), '+/', '-_'), '=');
 
-            DB::beginTransaction();
-
             $sumberInformasi = trim((string) $request->input('sumber_informasi'));
             if ($sumberInformasi === 'Lainnya') {
                 $sumberInformasi = trim((string) $request->input('sumber_informasi_lainnya'));
@@ -359,6 +357,29 @@ class RecruitmentController extends Controller{
                     'status' => false,
                 ], 422);
             }
+
+            $masalahHukum = $request->input('masalah_hukum', []);
+            if (is_string($masalahHukum)) {
+                $masalahHukum = json_decode($masalahHukum, true);
+            }
+            $masalahHukum = is_array($masalahHukum) ? $masalahHukum : [];
+
+            $pernahTerlibatMasalahHukum = filter_var(
+                $masalahHukum['pernah'] ?? false,
+                FILTER_VALIDATE_BOOLEAN
+            );
+            $keteranganMasalahHukum = $pernahTerlibatMasalahHukum
+                ? trim((string) ($masalahHukum['keterangan'] ?? ''))
+                : null;
+
+            if ($pernahTerlibatMasalahHukum && $keteranganMasalahHukum === '') {
+                return response()->json([
+                    'message' => 'Keterangan masalah kriminal atau hukum wajib diisi jika memilih Ya.',
+                    'status' => false,
+                ], 422);
+            }
+
+            DB::beginTransaction();
 
             $id = DB::table('new_recruitment')->insertGetId([
                 'nama_lengkap' => $namaLengkap,
@@ -373,6 +394,10 @@ class RecruitmentController extends Controller{
                 'pengalaman_kerja' => $json($request->pengalaman_kerja),
                 'referensi' => $json($request->referensi),
                 'rekomendasi' => $json($request->rekomendasi),
+                'masalah_hukum' => json_encode([
+                    'pernah' => $pernahTerlibatMasalahHukum,
+                    'keterangan' => $keteranganMasalahHukum,
+                ]),
                 'sumber_informasi' => $sumberInformasi,
                 'skill' => $json($request->skill),
                 'shio' => $shioElemen['shio'] ?? null,

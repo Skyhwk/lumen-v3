@@ -801,12 +801,13 @@ class InterviewHRDController extends Controller
                 ->noReply()
                 ->send();
 
+            // DISABLED: WhatsApp rejection info (kebijakan HRD — notifikasi rejection via email saja)
+            $SendWhatsapp = true;
             // ============================== BEGIN WHATSAPP KANDIDAT ===================
-            $message = new GenerateMessageWhatsapp($dataArray);
-            $message = $message->RejectedHRD();
-
-            $Send = new SendWhatsapp($data->no_hp, $message);
-            $SendWhatsapp = $Send->send();
+            // $message = new GenerateMessageWhatsapp($dataArray);
+            // $message = $message->RejectedHRD();
+            // $Send = new SendWhatsapp($data->no_hp, $message);
+            // $SendWhatsapp = $Send->send();
             // ============================== END WHATSAPP KANDIDAT ===================
 
             if ($email) {
@@ -915,12 +916,13 @@ class InterviewHRDController extends Controller
                     ->send();
                 // ============================== END EMAIL KANDIDAT ===================
 
+                // DISABLED: WhatsApp rejection info (kebijakan HRD — notifikasi rejection via email saja)
+                $SendWhatsapp = true;
                 // ============================== BEGIN WHATSAPP KANDIDAT ===================
-                $message = new GenerateMessageWhatsapp($dataArray);
-                $message = $message->RejectedHRD();
-
-                $Send = new SendWhatsapp($data->no_hp, $message);
-                $SendWhatsapp = $Send->send();
+                // $message = new GenerateMessageWhatsapp($dataArray);
+                // $message = $message->RejectedHRD();
+                // $Send = new SendWhatsapp($data->no_hp, $message);
+                // $SendWhatsapp = $Send->send();
                 // ============================== END WHATSAPP KANDIDAT ===================
 
                 if ($email && $email1) {

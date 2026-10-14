@@ -413,12 +413,13 @@ class OfferingSalaryController extends Controller
                 ->noReply()
                 ->send();
 
+            // DISABLED: WhatsApp rejection info (kebijakan HRD — notifikasi rejection via email saja)
+            $SendWhatsapp = true;
             // ============================== BEGIN WHATSAPP KANDIDAT ===================
-            $message = new GenerateMessageWhatsapp($dataArray);
-            $message = $message->RejectedHRD(); // Menggunakan method RejectedHRD() karna bodi messagesnya sama persis
-
-            $Send = new SendWhatsapp($data->no_hp, $message);
-            $SendWhatsapp = $Send->send();
+            // $message = new GenerateMessageWhatsapp($dataArray);
+            // $message = $message->RejectedHRD();
+            // $Send = new SendWhatsapp($data->no_hp, $message);
+            // $SendWhatsapp = $Send->send();
             // ============================== END WHATSAPP KANDIDAT ===================
 
             if ($email) {
@@ -495,12 +496,13 @@ class OfferingSalaryController extends Controller
                     ->send();
                 // ============================== END EMAIL KANDIDAT ===================
 
+                // DISABLED: WhatsApp rejection info (kebijakan HRD — notifikasi rejection via email saja)
+                $SendWhatsapp = true;
                 // ============================== BEGIN WHATSAPP KANDIDAT ===================
-                $message = new GenerateMessageWhatsapp($dataArray);
-                $message = $message->RejectedHRD(); // menggunakan method rejected hrd karna bodi messages sama
-
-                $Send = new SendWhatsapp($data->no_hp, $message);
-                $SendWhatsapp = $Send->send();
+                // $message = new GenerateMessageWhatsapp($dataArray);
+                // $message = $message->RejectedHRD();
+                // $Send = new SendWhatsapp($data->no_hp, $message);
+                // $SendWhatsapp = $Send->send();
                 // ============================== END WHATSAPP KANDIDAT ===================
 
                 if ($email && $email1) {

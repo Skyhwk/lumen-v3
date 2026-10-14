@@ -200,19 +200,33 @@ class AtsRejectedCandidatesController extends Controller
                 $q->whereHas('hrdInterview', function ($sub) {
                     $sub->whereIn('status_result', ['failed', 'gagal']);
                 })->orWhere('meta_history', 'like', '%hrd_final_decision_rejected%')
-                    ->orWhereRaw(
-                        "CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(meta_history, 'one', 'rejected', NULL, '$[*].status')), '[', -1), ']', 1) AS SIGNED) > 0
-                        AND JSON_UNQUOTE(JSON_EXTRACT(
-                            meta_history,
-                            CONCAT(
-                                '$[',
-                                CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(meta_history, 'one', 'rejected', NULL, '$[*].status')), '[', -1), ']', 1) AS SIGNED) - 1,
-                                '].status'
-                            )
-                        )) = 'screening'"
-                    );
+                    ->orWhere(function ($sub) {
+                        $this->whereMetaRejectedImmediatelyAfter($sub, 'screening');
+                    })
+                    ->orWhere(function ($sub) {
+                        $this->whereMetaRejectedImmediatelyAfter($sub, 'interview_hrd');
+                    });
             });
         }
+    }
+
+    /**
+     * meta_history: first "rejected" entry is immediately preceded by the given status.
+     */
+    private function whereMetaRejectedImmediatelyAfter($query, string $priorStatus): void
+    {
+        $query->whereRaw(
+            "CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(meta_history, 'one', 'rejected', NULL, '$[*].status')), '[', -1), ']', 1) AS SIGNED) > 0
+            AND JSON_UNQUOTE(JSON_EXTRACT(
+                meta_history,
+                CONCAT(
+                    '$[',
+                    CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(meta_history, 'one', 'rejected', NULL, '$[*].status')), '[', -1), ']', 1) AS SIGNED) - 1,
+                    '].status'
+                )
+            )) = ?",
+            [$priorStatus]
+        );
     }
 
     private function whereAssessmentOverdue($query): void

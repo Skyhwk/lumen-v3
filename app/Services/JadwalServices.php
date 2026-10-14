@@ -1561,66 +1561,61 @@ class JadwalServices
         }
     }
 
-    private function checkIsIdentical(array $dataParse) : bool
-    {
-        $oldArray = $this->normalizeTokenList($dataParse['nosampelOld'] ?? []);
-        $newArray = $this->normalizeTokenList($dataParse['nosampelNew'] ?? []);
-        $oldSampler = $this->normalizeTokenList($dataParse['samplerOld'] ?? []);
-        $newSampler = $this->normalizeTokenList($dataParse['samplerNew'] ?? []);
-
-        return $oldArray === $newArray && $oldSampler === $newSampler;
-    }
-
     private function updatePersiapanHeaderFromSchedule($dataUpdate): void
     {
         if (empty($dataUpdate->kategori)) {
             throw new Exception('Kategori is required', 422);
         }
 
-        $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)
-            ->where('is_active', true)
-            ->first();
-        if (!$orderh) {
+        $noOrder = $this->resolveNoOrderForPersiapanSync($dataUpdate->no_quotation);
+        if (!$noOrder) {
+            Log::channel('sampling')->info('updatePersiapanHeaderFromSchedule skip: order not found', [
+                'no_quotation' => $dataUpdate->no_quotation,
+            ]);
             return;
         }
 
         $arrayNoSamples = [];
-        foreach ($dataUpdate->kategori as $kategori) {
-            $parts = explode(' - ', $kategori);
+        foreach ((array) $dataUpdate->kategori as $kategori) {
+            $parts = explode(' - ', (string) $kategori);
             if (isset($parts[1]) && trim($parts[1]) !== '') {
-                $arrayNoSamples[] = $orderh->no_order . '/' . trim($parts[1]);
+                $arrayNoSamples[] = $noOrder . '/' . trim($parts[1]);
             }
         }
         if (!$arrayNoSamples) {
             return;
         }
 
-        $bySample = PersiapanSampelHeader::where('is_active', 1)
-            ->where(function ($query) use ($arrayNoSamples) {
-                foreach ($arrayNoSamples as $sampel) {
-                    $query->orWhere('no_sampel', 'like', '%"' . $sampel . '"%');
-                }
+        $wantedSamples = $this->normalizeTokenList($arrayNoSamples);
+        $candidates = PersiapanSampelHeader::where('is_active', 1)
+            ->whereDate('tanggal_sampling', $dataUpdate->tanggal_lama)
+            ->where(function ($query) use ($dataUpdate, $noOrder) {
+                $query->where('no_quotation', $dataUpdate->no_quotation)
+                    ->orWhere('no_order', $noOrder);
             })
-            ->where('tanggal_sampling', $dataUpdate->tanggal_lama)
             ->whereNotNull('no_sampel')
             ->orderBy('id')
             ->get();
+
+        $bySample = $candidates->filter(function ($header) use ($wantedSamples) {
+            $stored = $this->normalizeTokenList($this->decodePersiapanNoSampel($header->no_sampel));
+            return count(array_intersect($stored, $wantedSamples)) > 0;
+        })->values();
         if ($bySample->isEmpty()) {
+            Log::channel('sampling')->info('updatePersiapanHeaderFromSchedule skip: no matching header', [
+                'no_quotation' => $dataUpdate->no_quotation,
+                'tanggal_lama' => $dataUpdate->tanggal_lama,
+                'no_sampel' => $arrayNoSamples,
+            ]);
             return;
         }
 
-        $byQuotation = PersiapanSampelHeader::where('is_active', 1)
-            ->where('tanggal_sampling', $dataUpdate->tanggal_lama)
-            ->where('no_quotation', $dataUpdate->no_quotation)
-            ->orderBy('id')
-            ->get();
-        $headers = $bySample->merge($byQuotation)->unique('id')->sortBy('id')->values();
         $sampleIds = $bySample->pluck('id')->map(function ($id) {
             return (int) $id;
         })->all();
 
         $actor = $dataUpdate->karyawan . '(sampling)';
-        $groups = $headers->groupBy(function ($header) {
+        $groups = $candidates->groupBy(function ($header) {
             return $this->persiapanIdentityKey($header);
         });
         $keepers = [];
@@ -1633,7 +1628,7 @@ class JadwalServices
                 continue;
             }
             $keeper = $group->first(function ($header) {
-                return !is_null($header->detail_bas_documents);
+                return !$this->persiapanBasKosong($header);
             }) ?: $group->sortByDesc('id')->first();
             $keepers[$key] = $keeper;
             foreach ($group as $header) {
@@ -1654,58 +1649,61 @@ class JadwalServices
         }
 
         $targetKey = $this->persiapanIdentityKey($bySample->first());
+        if (!isset($keepers[$targetKey])) {
+            Log::channel('sampling')->info('updatePersiapanHeaderFromSchedule skip: keeper not found', [
+                'no_quotation' => $dataUpdate->no_quotation,
+                'target_key' => $targetKey,
+            ]);
+            return;
+        }
+
         $psh = PersiapanSampelHeader::find($keepers[$targetKey]->id);
         if (!$psh || !$psh->is_active) {
             return;
         }
 
-        $newSamplers = [];
-        foreach ((array) $dataUpdate->sampler as $sampler) {
-            $name = trim(explode(',', (string) $sampler)[1] ?? (string) $sampler);
-            if ($name !== '') {
-                $newSamplers[] = $name;
-            }
-        }
-        $newSamplerString = implode(',', $newSamplers);
-        $originalSamples = json_decode($psh->no_sampel, true) ?: [];
-        $originalSampler = $psh->sampler_jadwal;
-        $sameIdentity = $this->checkIsIdentical([
-            'nosampelOld' => $originalSamples,
-            'nosampelNew' => $arrayNoSamples,
-            'samplerOld' => $originalSampler,
-            'samplerNew' => $newSamplerString,
-        ]);
+        $newSamplerString = implode(',', $this->parseScheduleSamplerNames($dataUpdate->sampler));
+        $samplesSame = $this->normalizeTokenList($this->decodePersiapanNoSampel($psh->no_sampel)) === $wantedSamples;
+        $samplersSame = $this->normalizeTokenList($psh->sampler_jadwal) === $this->normalizeTokenList($newSamplerString);
+        $tanggalSame = $this->persiapanDateString($psh->tanggal_sampling) === $this->persiapanDateString($dataUpdate->tanggal);
+        $basKosong = $this->persiapanBasKosong($psh);
+        $changed = [];
 
-        if (is_null($psh->detail_bas_documents)) {
-            $psh->tanggal_sampling = $dataUpdate->tanggal;
-        }
-        if ($sameIdentity && $psh->tanggal_sampling != $dataUpdate->tanggal) {
-            $psh->is_active = false;
-            PersiapanSampelDetail::where('id_persiapan_sampel_header', $psh->id)
-                ->update(['is_active' => false, 'updated_by' => $actor]);
-        }
-        if (!$sameIdentity) {
-            $samplesSame = $this->normalizeTokenList($originalSamples) === $this->normalizeTokenList($arrayNoSamples);
-            $samplersSame = $this->normalizeTokenList($originalSampler) === $this->normalizeTokenList($newSamplerString);
+        if (!$basKosong) {
+            if ($samplesSame && $samplersSame && !$tanggalSame) {
+                $psh->is_active = false;
+                $changed[] = 'is_active';
+                PersiapanSampelDetail::where('id_persiapan_sampel_header', $psh->id)
+                    ->update(['is_active' => false, 'updated_by' => $actor]);
+            }
+        } else {
+            if (!$tanggalSame) {
+                $psh->tanggal_sampling = $dataUpdate->tanggal;
+                $changed[] = 'tanggal_sampling';
+            }
             if (!$samplesSame) {
                 $psh->no_sampel = json_encode(array_values($arrayNoSamples), JSON_UNESCAPED_SLASHES);
+                $changed[] = 'no_sampel';
             }
             if (!$samplersSame) {
                 $psh->sampler_jadwal = $newSamplerString;
+                $changed[] = 'sampler_jadwal';
             }
         }
 
-        Log::channel('sampling')->info('Debug Dirty Check', [
+        Log::channel('sampling')->info('updatePersiapanHeaderFromSchedule', [
             'no_quotation' => $dataUpdate->no_quotation,
-            'no_sampel_old' => $psh->getOriginal('no_sampel'),
-            'no_sampel_new' => $psh->no_sampel,
+            'header_id' => $psh->id,
+            'bas_kosong' => $basKosong,
+            'tanggal_same' => $tanggalSame,
+            'samples_same' => $samplesSame,
+            'samplers_same' => $samplersSame,
+            'changed' => $changed,
             'sampler_old' => $psh->getOriginal('sampler_jadwal'),
             'sampler_new' => $psh->sampler_jadwal,
-            'tanggal_old' => $psh->getOriginal('tanggal_sampling'),
-            'tanggal_new' => $psh->tanggal_sampling,
-            'dirty_fields' => $psh->getDirty(),
         ]);
-        if ($psh->isDirty(['no_sampel', 'sampler_jadwal', 'tanggal_sampling', 'is_active'])) {
+
+        if ($changed) {
             $psh->updated_by = $actor;
             $psh->save();
         }
@@ -1732,6 +1730,66 @@ class JadwalServices
         sort($names);
 
         return $names;
+    }
+
+    private function resolveNoOrderForPersiapanSync($noQuotation): ?string
+    {
+        $order = OrderHeader::where('no_document', $noQuotation)
+            ->where('is_active', true)
+            ->first();
+        if ($order && !empty($order->no_order)) {
+            return $order->no_order;
+        }
+
+        return PersiapanSampelHeader::where('is_active', 1)
+            ->where('no_quotation', $noQuotation)
+            ->whereNotNull('no_order')
+            ->orderByDesc('id')
+            ->value('no_order');
+    }
+
+    private function decodePersiapanNoSampel($value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        $decoded = json_decode((string) $value, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private function parseScheduleSamplerNames($sampler): array
+    {
+        if (is_string($sampler)) {
+            $decoded = json_decode($sampler, true);
+            $sampler = is_array($decoded) ? $decoded : [$sampler];
+        }
+
+        $names = [];
+        foreach ((array) $sampler as $item) {
+            $name = trim(explode(',', (string) $item)[1] ?? (string) $item);
+            if ($name !== '') {
+                $names[] = $name;
+            }
+        }
+
+        return $names;
+    }
+
+    private function persiapanBasKosong($header): bool
+    {
+        $bas = $header->detail_bas_documents ?? null;
+
+        return $bas === null || $bas === '' || $bas === 'null' || $bas === '[]';
+    }
+
+    private function persiapanDateString($value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        return Carbon::parse($value)->toDateString();
     }
 
     private static function emailNotifPerubahanJadwal($noQuotation, $before, $after)

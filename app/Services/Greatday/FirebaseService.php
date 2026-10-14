@@ -16,12 +16,28 @@ class FirebaseService
 
     protected $accessToken;
 
+    public static function resolveCredentialsPath(): string
+    {
+        $candidates = array_filter([
+            config('greatday.firebase_credentials_path'),
+            base_path('storage/app/firebase/google-service.json'),
+        ]);
+
+        foreach ($candidates as $path) {
+            if (is_readable($path)) {
+                return $path;
+            }
+        }
+
+        throw new \RuntimeException(
+            'Firebase Greatday/Attendance belum dikonfigurasi. Pakai google-service.json (project HRIS/Attendance), '
+            . 'bukan service-account FDL. Path: storage/app/firebase/google-service.json atau GREATDAY_FIREBASE_CREDENTIALS_PATH di .env.'
+        );
+    }
+
     public function __construct()
     {
-        $path = base_path('storage/app/firebase/google-service.json');
-        if (!is_readable($path)) {
-            throw new \RuntimeException('Firebase credentials missing at storage/app/firebase/google-service.json');
-        }
+        $path = self::resolveCredentialsPath();
 
         $credentials = json_decode(file_get_contents($path), true);
 

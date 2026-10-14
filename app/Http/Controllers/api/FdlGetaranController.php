@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Support\FdlOrderDetailNoSampelSync;
+
 use App\Models\DataLapanganGetaran;
 use App\Models\OrderDetail;
 use App\Models\MasterSubKategori;
@@ -79,6 +81,9 @@ class FdlGetaranController extends Controller
     }
 
     public function updateNoSampel(Request $request){
+        $request->merge([
+            'no_sampel_baru' => trim((string) $request->input('no_sampel_baru', '')),
+        ]);
         if (isset($request->id) && $request->id != null) {
             DB::beginTransaction();
             try {
@@ -105,20 +110,8 @@ class FdlGetaranController extends Controller
                 $data->updated_by = $this->karyawan;
                 $data->updated_at = Carbon::now();
                 $data->save();
+                FdlOrderDetailNoSampelSync::afterRename($request->no_sampel_lama, $request->no_sampel_baru);
 
-                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
-                    ->first();
-
-                if ($order_detail_lama) {
-                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
-                        ->where('is_active', 1)
-                        ->update([
-                            'tanggal_terima' => $order_detail_lama->tanggal_terima
-                        ]);
-                    
-                    $order_detail_lama->tanggal_terima = NULL;
-                    $order_detail_lama->save();
-                }
 
                 DB::commit();
                 return response()->json([

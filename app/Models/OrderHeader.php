@@ -196,6 +196,13 @@ class OrderHeader extends Sector
     {
         return $this->hasOne(CoverLhp::class, 'no_order', 'no_order')->where('is_active', true);
     }
+
+    public function lhpManuals()
+    {
+        return $this->hasMany(LhpManual::class, 'no_order', 'no_order')
+            ->where('is_active', true)
+            ->whereNull('deleted_at');
+    }
     
     public function holdHp()
     {

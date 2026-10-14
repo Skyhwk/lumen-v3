@@ -12,6 +12,7 @@ class MasterSallary extends Sector{
     protected $fillable = [
         'karyawan',
         'nik_karyawan',
+        'id_karyawan',
         'gaji_pokok',
         'tunjangan_kerja',
         'bulan_efektif',
@@ -27,4 +28,8 @@ class MasterSallary extends Sector{
 
     public $timestamps = false;
 
+    public function masterKaryawan()
+    {
+        return $this->belongsTo(MasterKaryawan::class, 'id_karyawan', 'id');
+    }
 }

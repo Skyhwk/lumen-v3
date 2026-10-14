@@ -12,6 +12,7 @@ class Kasbon extends Sector{
     protected $fillable = [
         'karyawan',
         'nik_karyawan',
+        'id_karyawan',
         'total_kasbon',
         'tenor',
         'bulan_mulai_pemotongan',
@@ -29,8 +30,14 @@ class Kasbon extends Sector{
         'deleted_at',
         'deleted_by',
         'kode_kasbon',
+        'previous_id',
         'is_active',
     ];
 
     public $timestamps = false;
+
+    public function masterKaryawan()
+    {
+        return $this->belongsTo(MasterKaryawan::class, 'id_karyawan', 'id');
+    }
 }

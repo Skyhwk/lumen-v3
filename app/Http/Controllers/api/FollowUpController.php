@@ -264,6 +264,10 @@ class FollowUpController extends Controller
                 'id_pelanggan'  => $row->idPelanggan,
                 'nama_pelanggan' => $row->namaPelanggan,
             ])
+            ->filterColumn('pelanggan.id_pelanggan', function ($query, $keyword) {
+                $query->where('p.id_pelanggan', 'like', "%{$keyword}%");
+            })
+            ->orderColumn('pelanggan.id_pelanggan', 'p.id_pelanggan $1')
             ->filterColumn('pelanggan.nama_pelanggan', function ($query, $keyword) {
                 $query->where('p.nama_pelanggan', 'like', "%{$keyword}%");
             })
@@ -884,9 +888,11 @@ class FollowUpController extends Controller
         $allowedLabels = [
             'Perkenalan Awal & Identifikasi Peluang',
             'Kirim Company Profile',
+            'Tidak melakukan pengujian',
             'Penawaran Masih Dalam Review Management',
             'Penawaran Masih Proses Penyesuaian Kebutuhan (Revisi)',
             'Negosiasi Harga',
+            'Penawaran Tidak Disetujui Management/Void QT',
             'Follow Up PO atau Sign Quote',
             'Arrange Schedule Pengujian',
             'Follow Up Hasil Uji & Next Pengujian',

@@ -55,6 +55,7 @@ class Kernel extends ConsoleKernel
         Commands\SendKeptManagementDecisionReminders::class,
         Commands\SendCandidateActionReminders::class,
         Commands\SendPendingAssessmentInvitations::class,
+        Commands\SendInternalAssessmentNalarLogikaPdfCommand::class,
         Commands\RejectOverdueAssessment::class,
         Commands\RollbackOverdueAssessment::class,
         Commands\ApplyScheduledEmployeeAdjustments::class,
@@ -64,6 +65,9 @@ class Kernel extends ConsoleKernel
         Commands\VerifyHrMigrationCommand::class,
         Commands\VerifyHrStatusParityCommand::class,
         Commands\SmokeHrWorkflowCommand::class,
+        Commands\SendGreatdayTestNotificationCommand::class,
+        // Commands\DetectGreatdayAttendanceRemindersCommand::class,
+        Commands\SendGreatdayAttendanceRemindersCommand::class,
         Commands\MigrateGdAuthFromAppsCommand::class,
         Commands\MigrateGdAppDataFromAppsCommand::class,
         Commands\VerifyGdAuthParityCommand::class,
@@ -77,6 +81,7 @@ class Kernel extends ConsoleKernel
         Commands\QuotationCreateCommand::class,
         Commands\QuotationDispatchCommand::class,
         Commands\QuotationGenerateCommand::class,
+        Commands\GenerateMonthlyAbsensiCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,
@@ -105,6 +110,20 @@ class Kernel extends ConsoleKernel
             ->dailyAt('07:00')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping(30);
+        // $schedule->command('absensi:generate-monthly')
+        //     ->monthlyOn(1, '10:00')
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping(180);
+
+        // Reminder absensi Greatday — aktifkan setelah ops tim infra (bukan bagian dev feature).
+        // $schedule->command('greatday:attendance-reminder-send')
+        //     ->dailyAt('09:00')
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping(45);
+        // $schedule->command('greatday:attendance-reminder-send')
+        //     ->dailyAt('21:00')
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping(45);
     }
 
     protected function commands()

@@ -1114,16 +1114,8 @@ class AtsFinalDecisionController extends Controller
 
             try {
                 if (!empty($applicant->email)) {
-                    $posisiName = $this->resolvePositionName($applicant);
-                    $dataObj = (object) [
-                        'nama_lengkap'    => $applicant->nama_lengkap,
-                        'jenis_kelamin'   => $applicant->jenis_kelamin,
-                        'nama_jabatan'    => $posisiName,
-                        'posisi_di_lamar' => $posisiName,
-                        'alasan_reject'   => $rejectReason,
-                    ];
-
-                    $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataObj);
+                    $applicant->loadMissing(['personnelRequest', 'personalRequest']);
+                    $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($applicant);
                     SendEmail::where('to', $applicant->email)
                         ->where('subject', 'Selection Result Notification - PT Inti Surya Laboratorium')
                         ->where('body', $bodyEmail)
@@ -2032,18 +2024,10 @@ class AtsFinalDecisionController extends Controller
             ]);
 
         try {
-            $posisiName = $this->resolvePositionName($applicant);
-            $dataArray = (object) [
-                'nama_lengkap'    => $applicant->nama_lengkap,
-                'jenis_kelamin'   => $applicant->jenis_kelamin,
-                'posisi_di_lamar' => $posisiName,
-                'nama_jabatan'    => $posisiName,
-                'alasan_reject'   => $reason,
-                'hrd_name'        => $user,
-            ];
+            $applicant->loadMissing(['personnelRequest', 'personalRequest']);
 
             if (!empty($applicant->email)) {
-                $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataArray);
+                $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($applicant);
                 SendEmail::where('to', $applicant->email)
                     ->where('subject', 'Selection Result Notification - PT Inti Surya Laboratorium')
                     ->where('body', $bodyEmail)
@@ -2053,13 +2037,13 @@ class AtsFinalDecisionController extends Controller
                     ->send();
             }
 
-            $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
-            if (!empty($phone)) {
-                $waObj = new GenerateMessageAtsWhatsapp($dataArray);
-                $waMessage = $waObj->RejectedCandidateSelection();
-
-                (new SendWhatsapp($phone, $waMessage))->send();
-            }
+            // DISABLED: WhatsApp rejection info (kebijakan HRD — notifikasi rejection via email saja)
+            // $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
+            // if (!empty($phone)) {
+            //     $waObj = new GenerateMessageAtsWhatsapp($applicant);
+            //     $waMessage = $waObj->RejectedCandidateSelection();
+            //     (new SendWhatsapp($phone, $waMessage))->send();
+            // }
         } catch (\Exception $e) {
             \Log::warning('Final decision HRD reject notification failed', [
                 'recruitment_id' => $id,
@@ -2079,5 +2063,81 @@ class AtsFinalDecisionController extends Controller
             'message' => 'Kandidat berhasil ditolak oleh HRD.',
             'data'    => $applicant->fresh(),
         ], 200);
+    }
+
+    public function void(Request $request)
+    {
+        $id = $request->id;
+        $reason = trim((string) ($request->reason ?? ''));
+
+        if (!$id || $reason === '') {
+            return response()->json([
+                'message' => 'ID dan alasan wajib diisi',
+                'status' => false,
+            ], 400);
+        }
+
+        $by = $this->karyawan;
+        $at = Carbon::now();
+
+        $recruitment = NewRecruitment::find($id);
+        if (!$recruitment) {
+            return response()->json([
+                'message' => 'Data kandidat tidak ditemukan',
+                'status' => false,
+            ], 404);
+        }
+
+        if ((int) ($recruitment->is_active ?? 1) === 0 || strtolower(trim((string) ($recruitment->status ?? ''))) === 'void') {
+            return response()->json([
+                'message' => 'Kandidat sudah divoid sebelumnya',
+                'status' => false,
+            ], 422);
+        }
+
+        if (!RecruitmentStatusService::matchesFinalDecisionStageTab($recruitment, 'salary_offer')) {
+            return response()->json([
+                'message' => 'Void hanya dapat dilakukan untuk kandidat pada tahap Salary Offer',
+                'status' => false,
+            ], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $history = json_decode($recruitment->meta_history ?: '[]', true);
+            $history = is_array($history) ? $history : [];
+            $history[] = [
+                'status' => 'salary_offer_void',
+                'reason' => $reason,
+                'by' => $by,
+                'at' => $at->toDateTimeString(),
+                'previous_status' => $recruitment->status ?? null,
+            ];
+
+            DB::table('new_recruitment')->where('id', $id)->update([
+                'status' => 'void',
+                'is_rejected_kandidat' => true,
+                'is_rejected_kandidat_by' => $by ?: null,
+                'is_rejected_kandidat_at' => $at,
+                'is_rejected_kandidat_reason' => $reason,
+                'meta_history' => json_encode(array_values($history)),
+                'updated_at' => $at,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Kandidat berhasil divoid',
+                'status' => true,
+            ], 200);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Gagal void kandidat: ' . $e->getMessage(),
+                'status' => false,
+            ], 500);
+        }
     }
 }

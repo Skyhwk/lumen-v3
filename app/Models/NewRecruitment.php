@@ -14,6 +14,7 @@ class NewRecruitment extends Model
         'pengalaman_kerja' => 'array',
         'referensi' => 'array',
         'rekomendasi' => 'array',
+        'masalah_hukum' => 'array',
         'bypass' => 'array',
         'tanggal_join_tercepat' => 'date',
         'is_reject_finance' => 'boolean',

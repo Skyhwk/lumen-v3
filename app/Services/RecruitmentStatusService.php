@@ -1395,6 +1395,130 @@ class RecruitmentStatusService
         return false;
     }
 
+    public static function mapRejectionSourceToApprovedCandidateLabel(?string $source): string
+    {
+        $source = trim((string) $source);
+        if ($source === 'Finance') {
+            return 'Rejected - Finance';
+        }
+        if (in_array($source, ['Ibu Direktur', 'Direktur', 'Direktur (Negosiasi)'], true)) {
+            return 'Rejected - Approval';
+        }
+        if (in_array($source, ['Penolakan Gaji', 'Kandidat'], true)) {
+            return 'Rejected - Salary Offering';
+        }
+
+        return 'Rejected';
+    }
+
+    /**
+     * Label status untuk tab Approved Candidate (Personnel Request / User).
+     */
+    public static function resolveApprovedCandidateUserStatusLabel($recruitment): string
+    {
+        if (self::isRejectedKandidat($recruitment)) {
+            $summary = self::getPriorRejectionSummaryForHrd($recruitment);
+            if ($summary && !empty($summary['source'])) {
+                return self::mapRejectionSourceToApprovedCandidateLabel($summary['source']);
+            }
+            if (self::hasHrdFinalDecisionRejected($recruitment)) {
+                return 'Rejected - Approval';
+            }
+
+            return 'Rejected';
+        }
+
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        if (self::isAwaitingCandidateOfferingResubmit($recruitment)) {
+            return 'Rejected - Salary Offering';
+        }
+
+        if (self::isFinanceRejectedOnManagementDecision($recruitment)) {
+            return 'Rejected - Finance';
+        }
+
+        if (self::isAwaitingDirectorManagementDecisionRejectResubmit($recruitment)) {
+            return 'Rejected - Approval';
+        }
+
+        if (Schema::hasColumn('new_recruitment', 'rejected_decision')) {
+            $rejectedDecision = is_object($recruitment)
+                ? (bool) ($recruitment->rejected_decision ?? false)
+                : (bool) ($recruitment['rejected_decision'] ?? false);
+
+            if ($status === 'management_decision' && $rejectedDecision) {
+                return 'Rejected - Approval';
+            }
+        }
+
+        if (self::isAwaitingDirectorSalaryRejectResubmit($recruitment)) {
+            return 'Rejected - Approval';
+        }
+
+        if (Schema::hasColumn('new_recruitment', 'rejected_salary')) {
+            $rejectedSalary = is_object($recruitment)
+                ? (bool) ($recruitment->rejected_salary ?? false)
+                : (bool) ($recruitment['rejected_salary'] ?? false);
+
+            if ($rejectedSalary && $status === 'internal_sallary_offer') {
+                return 'Rejected - Salary Offering';
+            }
+        }
+
+        if (self::isAwaitingFinanceResubmit($recruitment) && $status === 'management_decision') {
+            return 'Rejected - Finance';
+        }
+
+        $prior = self::getPriorRejectionSummaryForHrd($recruitment);
+        if ($prior && !empty($prior['source']) && self::canHrdResubmitRejectedOffering($recruitment)) {
+            return self::mapRejectionSourceToApprovedCandidateLabel($prior['source']);
+        }
+
+        if (self::isKeptCandidate($recruitment)) {
+            return 'Candidate Keep';
+        }
+
+        if (self::isAwaitingIbuDirekturApproval($recruitment)) {
+            return 'Waiting Approval';
+        }
+
+        if (in_array($status, ['finance_review', 'waiting_approve_finance'], true)) {
+            return 'Waiting Finance Approval';
+        }
+
+        if (self::isAwaitingDirectorSalaryApproval($recruitment)) {
+            return 'Waiting Salary Approval';
+        }
+
+        if (in_array($status, ['internal_sallary_offer', 'salary_offer', 'sallary_offer', 'approved'], true)) {
+            return 'Salary Offer';
+        }
+
+        if ($status === 'management_decision' && self::hasManagementDecisionApproved($recruitment)) {
+            return 'Salary Offer';
+        }
+
+        if ($status === 'hired') {
+            return 'Hired';
+        }
+        if ($status === 'training') {
+            return 'Training';
+        }
+        if ($status === 'selesai') {
+            return 'Selesai';
+        }
+
+        $pipeline = self::resolvePipelineStatus($recruitment);
+        if ($pipeline && !empty($pipeline['label'])) {
+            return (string) $pipeline['label'];
+        }
+
+        return ucwords(str_replace('_', ' ', $status));
+    }
+
     public static function matchesFinalDecisionStageTab($recruitment, string $stageTab): bool
     {
         $status = strtolower(trim((string) (is_object($recruitment)

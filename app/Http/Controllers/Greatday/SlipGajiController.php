@@ -239,6 +239,10 @@ class SlipGajiController extends Controller
 
         $this->invalidateCachedSlipIfStale($pdfPath, $imagePath);
 
+        if (is_file($pdfPath) && RenderSlipGajiService::shouldRefreshSlipPdf($payroll, $pdfPath)) {
+            RenderSlipGajiService::deleteCachedSlipFiles($payroll);
+        }
+
         if (is_file($pdfPath) && is_file($imagePath)) {
             return [
                 'filename' => $pdfFilename,
@@ -274,7 +278,7 @@ class SlipGajiController extends Controller
             public_path('isl_logo.png'),
             public_path('logo-watermark.png'),
             resource_path('views/Slip-Gaji.blade.php'),
-            app_path('Services/Greatday/RenderSlipGajiService.php'),
+            base_path('app/Services/Greatday/RenderSlipGajiService.php'),
         ];
 
         foreach ($references as $referencePath) {

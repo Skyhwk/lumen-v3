@@ -36,6 +36,70 @@ class NotificationCopy
         return '/notifications';
     }
 
+    public static function pathAttendance(): string
+    {
+        return '/attendance';
+    }
+
+    /**
+     * @return array{title: string, body: string, url: string, kind: string, reminder_type: string}
+     */
+    public static function attendanceReminderMissingMasuk(string $tanggalYmd, ?string $jadwalMasuk = null): array
+    {
+        return [
+            'title' => 'Pengingat Absen Masuk',
+            'body' => 'Anda belum melakukan absen masuk hari ini. Segera lakukan absensi melalui aplikasi Attendance.',
+            'url' => self::pathAttendance(),
+            'kind' => 'attendance_reminder',
+            'reminder_type' => 'missing_masuk',
+        ];
+    }
+
+    /**
+     * @return array{title: string, body: string, url: string, kind: string, reminder_type: string}
+     */
+    public static function attendanceReminderMissingPulang(string $tanggalYmd, ?string $jadwalPulang = null): array
+    {
+        return [
+            'title' => 'Pengingat Absen Pulang',
+            'body' => 'Anda belum melakukan absen pulang hari ini. Segera lakukan absensi melalui aplikasi Attendance.',
+            'url' => self::pathAttendance(),
+            'kind' => 'attendance_reminder',
+            'reminder_type' => 'missing_pulang',
+        ];
+    }
+
+    /**
+     * Push/in-app Attendance — gaji periode sudah ditransfer (hanya karyawan dalam payroll).
+     *
+     * @return array{title: string, body: string, url: string, kind: string}
+     */
+    public static function payrollTransferCompleted(string $periodeLabel): array
+    {
+        $periodeLabel = trim($periodeLabel) !== '' ? trim($periodeLabel) : 'periode berjalan';
+
+        return [
+            'title' => 'Good News — Gaji Sudah Ditransfer',
+            'body' => 'Kabar baik! Gaji Anda untuk periode ' . $periodeLabel
+                . ' telah diproses dan ditransfer. Slip gaji tersedia di aplikasi Attendance. Terima kasih atas dedikasi Anda.',
+            'url' => self::pathHome(),
+            'kind' => 'payroll_paid',
+        ];
+    }
+
+    private static function formatJamSingkat(?string $time): string
+    {
+        $time = trim((string) $time);
+        if ($time === '') {
+            return '';
+        }
+        if (preg_match('/^(\d{1,2}):(\d{2})/', $time, $m)) {
+            return sprintf('%02d:%02d', (int) $m[1], (int) $m[2]);
+        }
+
+        return '';
+    }
+
     /** Tab hub formulir dari teks notifikasi (untuk URL lama tanpa ?tab=). */
     public static function inferFormsTabFromCopy($title, $body): string
     {

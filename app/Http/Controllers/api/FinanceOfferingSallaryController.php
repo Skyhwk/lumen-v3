@@ -13,6 +13,7 @@ use App\Services\RecruitmentStatusService;
 use App\Services\SallaryOfferService;
 use App\Services\SendEmail;
 use App\Services\AtsNotificationService;
+use App\Services\RecruitmentDecisionActionTelegramService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -227,6 +228,9 @@ class FinanceOfferingSallaryController extends Controller
                 DB::commit();
 
                 app(AtsNotificationService::class)->financeDecisionMade($applicant, 'approve');
+                app(RecruitmentDecisionActionTelegramService::class)->notifySalaryApprovalRequest($applicant, [
+                    'approved_by' => $user ?? 'Finance',
+                ]);
 
                 return response()->json([
                     'status'  => 200,

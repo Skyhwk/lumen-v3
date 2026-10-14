@@ -45,6 +45,11 @@ class MasterKaryawan extends Sector implements AuthenticatableContract
         return $this->hasOne(MedicalCheckup::class, 'karyawan_id');
     }
 
+    public function supportingInfoAnswers()
+    {
+        return $this->hasMany(SupportingInfoAnswer::class, 'karyawan_id');
+    }
+
     public function getSubordinates($id)
     {
         $subordinates = $this->whereJsonContains('atasan_langsung', (string) $id)->where('is_active', true)->get();
@@ -122,11 +127,11 @@ class MasterKaryawan extends Sector implements AuthenticatableContract
     }
     public function sertifikat_karyawan()
     {
-        return $this->hasMany(DataSertifikatKaryawan::class, 'karyawan_id');
+        return $this->hasMany(DataSertifikatKaryawan::class, 'karyawan_id')->where('is_active', true);
     }
     public function pengalaman_kerja()
     {
-        return $this->hasMany(PengalamanKerjaKaryawan::class, 'karyawan_id');
+        return $this->hasMany(PengalamanKerjaKaryawan::class, 'karyawan_id')->where('is_active', true);
     }
     // public function rekap()
     // {
@@ -144,21 +149,21 @@ class MasterKaryawan extends Sector implements AuthenticatableContract
 
     public function salary()
     {
-        return $this->hasOne(MasterSallary::class, 'nik_karyawan', 'nik_karyawan')->where('is_active', true);
+        return $this->hasOne(MasterSallary::class, 'id_karyawan', 'id')->where('is_active', true);
     }
 
     public function bpjsKesehatan()
     {
-        return $this->hasOne(BpjsKesehatan::class, 'nik_karyawan', 'nik_karyawan')
+        return $this->hasOne(BpjsKesehatan::class, 'id_karyawan', 'id')
             ->where('is_active', true)
-            ->select('nominal_potongan_karyawan', 'nik_karyawan');
+            ->select('nominal_potongan_karyawan', 'id_karyawan', 'nik_karyawan');
     }
 
     public function bpjsTk()
     {
-        return $this->hasOne(BpjsTK::class, 'nik_karyawan', 'nik_karyawan')
+        return $this->hasOne(BpjsTK::class, 'id_karyawan', 'id')
             ->where('is_active', true)
-            ->select('nominal_potongan_karyawan', 'nik_karyawan');
+            ->select('nominal_potongan_karyawan', 'id_karyawan', 'nik_karyawan');
     }
 
     public function pph21()
@@ -170,16 +175,21 @@ class MasterKaryawan extends Sector implements AuthenticatableContract
 
     public function loan()
     {
-        return $this->hasMany(Kasbon::class, 'nik_karyawan', 'nik_karyawan')->where('is_active', true);
+        return $this->hasMany(Kasbon::class, 'id_karyawan', 'id')->where('is_active', true);
     }
 
     public function denda()
     {
-        return $this->hasMany(DendaKaryawan::class, 'nik_karyawan', 'nik_karyawan')->where('is_active', true);
+        return $this->hasMany(DendaKaryawan::class, 'id_karyawan', 'id')->where('is_active', true);
     }
 
     public function rekening()
     {
-        return $this->hasOne(RekeningKaryawan::class, 'nik_karyawan', 'nik_karyawan')->where('is_active', true);
+        return $this->hasOne(RekeningKaryawan::class, 'id_karyawan', 'id')->where('is_active', true);
+    }
+
+    public function feeKaryawan()
+    {
+        return $this->hasOne(FeeKaryawan::class, 'id_karyawan', 'id')->where('is_active', true);
     }
 }

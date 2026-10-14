@@ -71,9 +71,14 @@ class JobpostCategoryController extends Controller
             })->exists();
             if (!$valid) return response()->json(['message' => 'Jabatan tidak ditemukan pada divisi yang dipilih.'], 422);
         }
-        DB::transaction(function () use (&$id, $name, $divisionIds, $mappings) {
+        $image = trim((string) $request->input('image', ''));
+
+        DB::transaction(function () use (&$id, $name, $divisionIds, $mappings, $image) {
             $now = Carbon::now();
             $data = ['name' => $name, 'division_ids' => json_encode($divisionIds), 'updated_by' => $this->karyawan, 'updated_at' => $now];
+            if (Schema::hasColumn('jobpost_categories', 'image')) {
+                $data['image'] = $image !== '' ? $image : null;
+            }
             if ($id) DB::table('jobpost_categories')->where('id', $id)->update($data);
             else { $data += ['is_active' => 1, 'created_by' => $this->karyawan, 'created_at' => $now]; $id = DB::table('jobpost_categories')->insertGetId($data); }
             DB::table('jobpost_category_mappings')->where('jobpost_category_id', $id)->delete();

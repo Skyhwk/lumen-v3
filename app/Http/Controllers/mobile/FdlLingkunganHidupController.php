@@ -235,12 +235,12 @@ class FdlLingkunganHidupController extends Controller
                 }
     
                 $satuan = '(L/m)';
-                if (str_contains($pLower, 'tsp') || str_contains($pLower, 'pm 10') || str_contains($pLower, 'pm 2.5')) {
+                if (str_contains($pLower, 'tsp') || str_contains($pLower, 'pm 10') || str_contains($pLower, 'pm 2.5') || str_starts_with($pLower, 'pb')) {
                     $satuan = '(m3/menit)';
                 }
     
                 $type = 6;
-                if (in_array($pLower, ["tsp (24 jam)", "tsp 24j (ua)", "pm 10 (24 jam)", "pm 10 (8 jam)", "pm 2.5 (24 jam)", "pm 2.5 (8 jam)"])) {
+                if (in_array($pLower, ["tsp (24 jam)", "tsp 24j (ua)", "pm 10 (24 jam)", "pm 10 (8 jam)", "pm 2.5 (24 jam)", "pm 2.5 (8 jam)", "pb (24 jam)", "pb (8 jam)"])) {
                     $type = 1;
                 } else if (str_starts_with($pLower, "o3") || $pLower === "ox") {
                     $type = 2;

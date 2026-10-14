@@ -2,6 +2,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Models\DFUS;
 use App\Models\MasterKaryawan;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
@@ -320,6 +321,7 @@ class DashboardSmsController extends Controller
 
                 [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRows($periode);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
+                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, null);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 $years = [
@@ -486,6 +488,7 @@ class DashboardSmsController extends Controller
 
                 [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRows($periode, [$teamRootId]);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
+                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $bawahanIds);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 return response()->json([
@@ -613,6 +616,8 @@ class DashboardSmsController extends Controller
                     ? $this->prepareHierarchyRows($periode, null, [$karyawanId])
                     : $this->prepareHierarchyRows($periode, [$karyawanId]);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
+                $samplingScopeIds              = ($isSalesStaff || $isExecutive) ? [$karyawanId] : $scopeIds;
+                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $samplingScopeIds);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 return response()->json([
@@ -789,20 +794,21 @@ class DashboardSmsController extends Controller
             return $query;
         };
 
-        $revenueExpression = 'SUM(COALESCE(total_revenue, 0))';
+        $revenueExpression = 'SUM(COALESCE(daily_qsd.total_revenue, 0))';
 
         $topCustomers = $baseQuery()
+            ->leftJoin('master_pelanggan as mp', 'mp.id_pelanggan', '=', 'daily_qsd.pelanggan_ID')
             ->select(
-                'pelanggan_ID as id_pelanggan',
-                \DB::raw('MAX(nama_perusahaan) as nama_pelanggan'),
-                \DB::raw('MAX(sales_nama) as sales_nama'),
+                'daily_qsd.pelanggan_ID as id_pelanggan',
+                \DB::raw('MAX(COALESCE(mp.nama_pelanggan, daily_qsd.nama_perusahaan)) as nama_pelanggan'),
+                \DB::raw('MAX(mp.sales_penanggung_jawab) as sales_nama'),
                 \DB::raw($revenueExpression . ' as revenue')
             )
-            ->whereNotNull('pelanggan_ID')
-            ->groupBy('pelanggan_ID')
+            ->whereNotNull('daily_qsd.pelanggan_ID')
+            ->groupBy('daily_qsd.pelanggan_ID')
             ->havingRaw($revenueExpression . ' > 0')
             ->orderByDesc('revenue')
-            ->whereNull('konsultan')
+            ->whereNull('daily_qsd.konsultan')
             ->limit(30)
             ->get();
 
@@ -927,6 +933,314 @@ class DashboardSmsController extends Controller
         return $heading;
     }
 
+    public function fetchCallPerformance(Request $request)
+    {
+        try {
+            $periodType = in_array($request->period_type, ['daily', 'yearly', 'range'], true)
+                ? $request->period_type
+                : 'monthly';
+
+            if ($periodType === 'daily') {
+                $startDate = Carbon::parse($request->date ?: $request->start_date ?: Carbon::now())->startOfDay();
+                $endDate = $startDate->copy()->endOfDay();
+            } elseif ($periodType === 'yearly') {
+                $year = max(2024, (int) ($request->year ?: Carbon::now()->year));
+                $startDate = Carbon::create($year, 1, 1)->startOfDay();
+                $endDate = $startDate->copy()->endOfYear();
+            } elseif ($periodType === 'range') {
+                $startDate = Carbon::parse($request->start_date ?: Carbon::now()->startOfMonth())->startOfDay();
+                $endDate = Carbon::parse($request->end_date ?: Carbon::now())->endOfDay();
+
+                if ($endDate->lt($startDate)) {
+                    return response()->json([
+                        'message' => 'Tanggal selesai harus sama atau setelah tanggal mulai.',
+                    ], 422);
+                }
+            } else {
+                $arr = explode(' ', (string) $request->periode);
+                $periode = count($arr) === 2 && isset($this->bulan[$arr[0]])
+                    ? $arr[1] . '-' . $this->bulan[$arr[0]]
+                    : Carbon::now()->format('Y-m');
+                $startDate = Carbon::createFromFormat('Y-m', $periode)->startOfMonth();
+                $endDate = $startDate->copy()->endOfMonth();
+            }
+
+            $referencePeriode = $startDate->format('Y-m');
+            $hierarchy = app(SalesTeamHierarchyService::class);
+
+            if ($request->mode === 'team' && $request->karyawan_id) {
+                $rootId = (int) str_replace('team_', '', $request->karyawan_id);
+                [$hierarchyRows] = $this->prepareHierarchyRows($referencePeriode, [$rootId]);
+            } elseif ($request->mode === 'single' && $request->karyawan_id) {
+                $karyawanId = (int) $request->karyawan_id;
+                $member = MasterKaryawan::find($karyawanId);
+                $isExecutive = in_array($karyawanId, $hierarchy->salesExecutiveIds(), true);
+                $isSalesStaff = $member && $hierarchy->isSalesStaff($member);
+
+                [$hierarchyRows] = ($isSalesStaff || $isExecutive)
+                    ? $this->prepareHierarchyRows($referencePeriode, null, [$karyawanId])
+                    : $this->prepareHierarchyRows($referencePeriode, [$karyawanId]);
+            } else {
+                [$hierarchyRows] = $this->prepareHierarchyRows($referencePeriode);
+            }
+
+            return response()->json([
+                'period_type' => $periodType,
+                'call_performance' => $this->buildCallPerformanceRowsForRange($startDate, $endDate, $hierarchyRows),
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan pada server',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function fetchQuotationAnalytics(Request $request)
+    {
+        try {
+            [$startDate, $endDate] = $this->resolveQuotationAnalyticsDateRange($request);
+            $salesIds = $this->resolveDashboardSalesIds($request);
+
+            $quotes = collect([QuotationNonKontrak::class, QuotationKontrakH::class])
+                ->flatMap(function ($model) use ($salesIds, $startDate, $endDate) {
+                    return $model::query()
+                        ->where('is_active', 1)
+                        ->whereBetween('created_at', [$startDate, $endDate])
+                        ->when($salesIds !== null, fn($query) => $query->whereIn('sales_id', $salesIds))
+                        ->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'kode_promo', 'promo_id', 'total_discount_promo', 'biaya_akhir', 'tanggal_penawaran']);
+                })
+                ->map(function ($quote) {
+                    $flag = strtolower(trim((string) $quote->flag_status));
+                    $status = strtolower(trim((string) $quote->status_quotation));
+                    $category = $flag === 'ordered' ? 'ordered'
+                        : ($flag === 'void' ? 'void' : (in_array($status, ['cold', 'warm', 'hot'], true) ? $status : 'no_status'));
+
+                    return [
+                        'no_document' => $quote->no_document,
+                        'pelanggan_id' => $quote->pelanggan_ID,
+                        'flag_status' => $flag,
+                        'category' => $category,
+                        'amount' => (float) ($quote->biaya_akhir ?? 0),
+                        'has_promo' => filled($quote->kode_promo) || filled($quote->promo_id) || (float) ($quote->total_discount_promo ?? 0) > 0,
+                        'is_revisi' => (bool) preg_match('/R\d+$/i', (string) $quote->no_document),
+                        'tanggal_penawaran' => $quote->tanggal_penawaran,
+                    ];
+                })
+                ->values();
+
+            $customerIds = $quotes->pluck('pelanggan_id')->filter()->unique()->values();
+            $firstOrders = $customerIds->isEmpty() ? collect() : \DB::table('order_header')
+                ->where('is_active', 1)
+                ->whereIn('id_pelanggan', $customerIds)
+                ->selectRaw('id_pelanggan, MIN(tanggal_order) as first_order_date')
+                ->groupBy('id_pelanggan')
+                ->pluck('first_order_date', 'id_pelanggan');
+
+            $quotes = $quotes->map(function ($quote) use ($firstOrders) {
+                $firstOrder = $firstOrders->get($quote['pelanggan_id']);
+                $quote['customer_type'] = $firstOrder && Carbon::parse($firstOrder)->lt(Carbon::parse($quote['tanggal_penawaran']))
+                    ? 'repeat'
+                    : 'new';
+                return $quote;
+            });
+
+            $summarize = fn($items) => ['qty' => $items->count(), 'amount' => round((float) $items->sum('amount'), 2)];
+            $statusKeys = ['cold', 'warm', 'hot', 'ordered', 'void', 'no_status'];
+            $status = collect($statusKeys)->mapWithKeys(fn($key) => [$key => $summarize($quotes->where('category', $key))])->all();
+            $voidSummary = app(\App\Services\DashboardQuotationVoidService::class)->summary($salesIds, $startDate, $endDate);
+            $status['void'] = [
+                'qty' => $voidSummary['qty'],
+                'amount' => round((float) $voidSummary['amount'], 2),
+            ];
+            $breakdown = function ($items) use ($summarize) {
+                return [
+                    'total' => $summarize($items),
+                    'customer' => ['new' => $summarize($items->where('customer_type', 'new')), 'repeat' => $summarize($items->where('customer_type', 'repeat'))],
+                    'promo' => ['with' => $summarize($items->where('has_promo', true)), 'without' => $summarize($items->where('has_promo', false))],
+                    'revision' => ['with' => $summarize($items->where('is_revisi', true)), 'without' => $summarize($items->where('is_revisi', false))],
+                ];
+            };
+
+            return response()->json([
+                'status' => $status,
+                'total' => $summarize($quotes),
+                'pending' => $breakdown($quotes->whereNotIn('category', ['ordered', 'void'])),
+                'ordered' => $breakdown($quotes->where('category', 'ordered')),
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json(['message' => 'Terjadi kesalahan saat mengambil analytics penawaran.', 'error' => $th->getMessage()], 500);
+        }
+    }
+
+    public function fetchQuotationStatusList(Request $request)
+    {
+        $status = strtolower(trim((string) $request->input('quotation_status', '')));
+        if (!in_array($status, ['cold', 'warm', 'hot', 'ordered'], true)) {
+            return response()->json([
+                'message' => 'Status quotation tidak valid.',
+            ], 422);
+        }
+
+        try {
+            [$startDate, $endDate] = $this->resolveQuotationAnalyticsDateRange($request);
+            $salesIds = $this->resolveDashboardSalesIds($request);
+            $service = app(\App\Services\DashboardQuotationNoStatusService::class);
+
+            if ($request->has('draw')) {
+                return response()->json($service->datatable($request, $salesIds, $startDate, $endDate, $status));
+            }
+
+            return response()->json([
+                'message' => 'Data retrieved successfully',
+                'data' => $service->list($salesIds, $startDate, $endDate, $status),
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat mengambil daftar quotation.',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function fetchQuotationVoidList(Request $request)
+    {
+        try {
+            [$startDate, $endDate] = $this->resolveQuotationAnalyticsDateRange($request);
+            $salesIds = $this->resolveDashboardSalesIds($request);
+            $service = app(\App\Services\DashboardQuotationVoidService::class);
+
+            if ($request->has('draw')) {
+                return response()->json($service->datatable($request, $salesIds, $startDate, $endDate));
+            }
+
+            return response()->json([
+                'message' => 'Data retrieved successfully',
+                'data' => $service->list($salesIds, $startDate, $endDate),
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat mengambil daftar quotation void.',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function fetchQuotationNoStatusList(Request $request)
+    {
+        try {
+            [$startDate, $endDate] = $this->resolveQuotationAnalyticsDateRange($request);
+            $salesIds = $this->resolveDashboardSalesIds($request);
+            $service = app(\App\Services\DashboardQuotationNoStatusService::class);
+
+            if ($request->has('draw')) {
+                return response()->json($service->datatable($request, $salesIds, $startDate, $endDate));
+            }
+
+            $rows = $service->list($salesIds, $startDate, $endDate);
+
+            return response()->json([
+                'message' => 'Data retrieved successfully',
+                'data' => $rows,
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat mengambil daftar quotation tanpa status.',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function resolveQuotationAnalyticsDateRange(Request $request): array
+    {
+        if ($request->period_type === 'daily') {
+            $startDate = Carbon::parse($request->date ?: $request->start_date ?: Carbon::now())->startOfDay();
+            $endDate = $startDate->copy()->endOfDay();
+        } elseif ($request->period_type === 'yearly') {
+            $startDate = Carbon::create((int) ($request->year ?: Carbon::now()->year), 1, 1)->startOfDay();
+            $endDate = $startDate->copy()->endOfYear();
+        } elseif ($request->period_type === 'range') {
+            $startDate = Carbon::parse($request->start_date)->startOfDay();
+            $endDate = Carbon::parse($request->end_date)->endOfDay();
+        } else {
+            $arr = explode(' ', (string) $request->periode);
+            $periode = count($arr) === 2 && isset($this->bulan[$arr[0]]) ? $arr[1] . '-' . $this->bulan[$arr[0]] : Carbon::now()->format('Y-m');
+            $startDate = Carbon::createFromFormat('Y-m', $periode)->startOfMonth();
+            $endDate = $startDate->copy()->endOfMonth();
+        }
+
+        return [$startDate, $endDate];
+    }
+
+    private function resolveDashboardSalesIds(Request $request): ?array
+    {
+        $hierarchy = app(SalesTeamHierarchyService::class);
+
+        if ($request->mode === 'all') {
+            return null;
+        }
+
+        if ($request->mode === 'team' && $request->karyawan_id) {
+            return $hierarchy->resolveDescendantIds((int) str_replace('team_', '', $request->karyawan_id));
+        }
+
+        if ($request->mode === 'single' && $request->karyawan_id) {
+            $karyawanId = (int) $request->karyawan_id;
+            $member = MasterKaryawan::find($karyawanId);
+
+            return (in_array($karyawanId, $hierarchy->salesExecutiveIds(), true) || ($member && $hierarchy->isSalesStaff($member)))
+                ? [$karyawanId]
+                : $hierarchy->resolveDescendantIds($karyawanId);
+        }
+
+        return null;
+    }
+
+    /** Metrik call per sales berdasarkan status akhir follow-up DFUS. */
+    private function buildCallPerformanceRowsForRange(Carbon $startDate, Carbon $endDate, array $hierarchyRows): array
+    {
+        $salesIds = array_values(array_unique(array_filter(array_map(
+            'intval',
+            array_column($hierarchyRows, 'karyawan_id')
+        ))));
+
+        if (empty($salesIds)) {
+            return [];
+        }
+
+        $sales = MasterKaryawan::whereIn('id', $salesIds)
+            ->pluck('nama_lengkap', 'id');
+        $salesNames = $sales->filter()->values()->all();
+
+        $statusRows = empty($salesNames)
+            ? collect()
+            : DFUS::whereIn('sales_penanggung_jawab', $salesNames)
+                ->whereBetween('tanggal', [$startDate->toDateString(), $endDate->toDateString()])
+                ->selectRaw("sales_penanggung_jawab, UPPER(TRIM(COALESCE(keterangan, ''))) as status, COUNT(*) as total")
+                ->groupBy('sales_penanggung_jawab')
+                ->groupByRaw("UPPER(TRIM(COALESCE(keterangan, '')))")
+                ->get();
+
+        $statusesBySales = $statusRows->groupBy('sales_penanggung_jawab');
+
+        return array_map(function (array $row) use ($sales, $statusesBySales) {
+            $salesId = (int) $row['karyawan_id'];
+            $name = $sales->get($salesId, $row['nama_lengkap'] ?? '');
+            $statusCounts = $statusesBySales->get($name, collect())->pluck('total', 'status');
+            $totalCalls = (int) $statusCounts->sum();
+            $picContacted = (int) ($statusCounts->get('PIC', 0));
+
+            return array_merge($row, [
+                'total_call' => $totalCalls,
+                'pic_contacted' => $picContacted,
+                'unreachable' => (int) ($statusCounts->get('NA', 0)) + (int) ($statusCounts->get('D', 0)) + (int) ($statusCounts->get('FO', 0)),
+                'unqualified' => (int) ($statusCounts->get('NI', 0)),
+                'success_rate' => $totalCalls > 0 ? round(($picContacted / $totalCalls) * 100, 1) : 0,
+            ]);
+        }, $hierarchyRows);
+    }
+
     private function karyawanIdsWithKpiActivity(string $periode): array
     {
         return SalesKpi::where('periode', $periode)
@@ -1041,6 +1355,260 @@ class DashboardSmsController extends Controller
             'revenue_non_sp'               => 0,
             'revenue_forecast'             => 0,
         ];
+    }
+
+    private function enrichRevenueHeadingWithSampling(array $heading, ?string $periode, ?array $salesIds): array
+    {
+        $totals = $this->calculateSamplingRevenueTotals($periode, $salesIds);
+        $suffix = "\nBelum Sampling : Rp " . number_format($totals['belum_sampling'], 0, ',', '.')
+            . "\nSudah Sampling : Rp " . number_format($totals['sudah_sampling'], 0, ',', '.');
+
+        foreach ($heading as &$item) {
+            if (($item['title'] ?? '') === 'Revenue') {
+                $item['info'] = ($item['info'] ?? '') . $suffix;
+            }
+        }
+        unset($item);
+
+        return $heading;
+    }
+
+    private function calculateSamplingRevenueTotals(?string $periode, ?array $salesIds): array
+    {
+        $empty = ['belum_sampling' => 0.0, 'sudah_sampling' => 0.0];
+        if (!$periode) {
+            return $empty;
+        }
+
+        [$year, $month] = array_pad(explode('-', $periode, 2), 2, null);
+        if (!$year || !$month) {
+            return $empty;
+        }
+
+        $query = \DB::table('daily_qsd')
+            ->select('no_order', 'no_quotation', 'periode', 'status_sampling', 'total_revenue')
+            ->whereNotNull('no_order')
+            ->where('no_order', '!=', '')
+            ->whereYear('tanggal_kelompok', (int) $year)
+            ->whereMonth('tanggal_kelompok', (int) $month);
+
+        if (is_array($salesIds) && count($salesIds) > 0) {
+            $query->whereIn('sales_id', $salesIds);
+        }
+
+        $rows = $query->get();
+        if ($rows->isEmpty()) {
+            return $empty;
+        }
+
+        $noOrders = $rows->pluck('no_order')->filter()->unique()->values();
+        $samplingCategoryByOrder = $this->mapOrderSamplingCategories($noOrders, $rows);
+        $sSamplingMap = $this->mapOrderTypeSSamplingStatus($noOrders);
+        $sdSamplingMap = $this->mapOrderTypeSdSamplingStatus($rows);
+
+        $belum = 0.0;
+        $sudah = 0.0;
+
+        foreach ($rows as $row) {
+            $revenue = (float) ($row->total_revenue ?? 0);
+            if ($revenue <= 0) {
+                continue;
+            }
+
+            $category = $this->resolveRowSamplingCategory($row, $samplingCategoryByOrder);
+            $isSampled = false;
+
+            if ($category === 'sd') {
+                $isSampled = (bool) ($sdSamplingMap[$this->sdSamplingKey($row)] ?? false);
+            } else {
+                // S / S24 / Non Pengujian / unknown → aturan tanggal_terima (tipe S)
+                $isSampled = (bool) ($sSamplingMap[$row->no_order] ?? false);
+            }
+
+            if ($isSampled) {
+                $sudah += $revenue;
+            } else {
+                $belum += $revenue;
+            }
+        }
+
+        return [
+            'belum_sampling' => $belum,
+            'sudah_sampling' => $sudah,
+        ];
+    }
+
+    private function mapOrderSamplingCategories($noOrders, $rows): array
+    {
+        $map = [];
+
+        if ($noOrders->isNotEmpty()) {
+            $detailTypes = \DB::table('order_detail')
+                ->whereIn('no_order', $noOrders)
+                ->where('is_active', 1)
+                ->selectRaw('no_order, GROUP_CONCAT(DISTINCT UPPER(TRIM(kategori_1)) ORDER BY kategori_1 SEPARATOR ", ") as types')
+                ->groupBy('no_order')
+                ->pluck('types', 'no_order');
+
+            foreach ($detailTypes as $noOrder => $typesRaw) {
+                $map[$noOrder] = $this->classifySamplingTokens($this->tokenizeSamplingStatus($typesRaw));
+            }
+        }
+
+        foreach ($rows as $row) {
+            $noOrder = $row->no_order ?? null;
+            if (!$noOrder || isset($map[$noOrder])) {
+                continue;
+            }
+
+            $map[$noOrder] = $this->classifySamplingTokens(
+                $this->tokenizeSamplingStatus($row->status_sampling ?? '')
+            );
+        }
+
+        return $map;
+    }
+
+    private function resolveRowSamplingCategory($row, array $categoryByOrder): string
+    {
+        $noOrder = $row->no_order ?? null;
+        if ($noOrder && isset($categoryByOrder[$noOrder])) {
+            return $categoryByOrder[$noOrder];
+        }
+
+        return $this->classifySamplingTokens(
+            $this->tokenizeSamplingStatus($row->status_sampling ?? '')
+        );
+    }
+
+    private function tokenizeSamplingStatus($raw): array
+    {
+        $raw = strtoupper(trim((string) $raw));
+        if ($raw === '') {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(function ($part) {
+            return trim($part);
+        }, preg_split('/\s*,\s*/', $raw) ?: [])));
+    }
+
+    /**
+     * @return 'sd'|'s'
+     */
+    private function classifySamplingTokens(array $tokens): string
+    {
+        $sdTokens = ['SD', 'SAR', 'SP'];
+        $sTokens = ['S', 'S24'];
+
+        foreach ($tokens as $token) {
+            if (in_array($token, $sdTokens, true)) {
+                return 'sd';
+            }
+        }
+
+        foreach ($tokens as $token) {
+            if (in_array($token, $sTokens, true)) {
+                return 's';
+            }
+        }
+
+        // Non Pengujian & legacy kosong → ikuti aturan S (tanggal_terima)
+        return 's';
+    }
+
+    private function mapOrderTypeSSamplingStatus($noOrders): array
+    {
+        if ($noOrders->isEmpty()) {
+            return [];
+        }
+
+        $stats = \DB::table('order_detail')
+            ->whereIn('no_order', $noOrders)
+            ->where('is_active', 1)
+            ->selectRaw("
+                no_order,
+                COUNT(*) as detail_count,
+                SUM(CASE
+                    WHEN tanggal_terima IS NOT NULL
+                        AND TRIM(CAST(tanggal_terima AS CHAR)) NOT IN ('', '0000-00-00')
+                    THEN 1 ELSE 0
+                END) as filled_count
+            ")
+            ->groupBy('no_order')
+            ->get();
+
+        $map = [];
+        foreach ($stats as $stat) {
+            $detailCount = (int) ($stat->detail_count ?? 0);
+            $filledCount = (int) ($stat->filled_count ?? 0);
+            $map[$stat->no_order] = $detailCount > 0 && $filledCount === $detailCount;
+        }
+
+        return $map;
+    }
+
+    private function mapOrderTypeSdSamplingStatus($dailyQsdRows): array
+    {
+        $noOrders = $dailyQsdRows->pluck('no_order')->filter()->unique()->values();
+        $noQuotations = $dailyQsdRows->pluck('no_quotation')->filter()->unique()->values();
+
+        if ($noOrders->isEmpty() && $noQuotations->isEmpty()) {
+            return [];
+        }
+
+        if (!\Schema::hasTable('sampel_diantar')) {
+            return [];
+        }
+
+        $sdQuery = \DB::table('sampel_diantar');
+        $sdQuery->where(function ($q) use ($noOrders, $noQuotations) {
+            if ($noOrders->isNotEmpty()) {
+                $q->whereIn('no_order', $noOrders);
+            }
+            if ($noQuotations->isNotEmpty()) {
+                $method = $noOrders->isNotEmpty() ? 'orWhereIn' : 'whereIn';
+                $q->{$method}('no_quotation', $noQuotations);
+            }
+        });
+
+        $sdRows = $sdQuery->get(['no_order', 'no_quotation', 'periode_kontrak']);
+        $map = [];
+        foreach ($sdRows as $sd) {
+            $order = trim((string) ($sd->no_order ?? ''));
+            $qt = trim((string) ($sd->no_quotation ?? ''));
+            $periode = trim((string) ($sd->periode_kontrak ?? ''));
+
+            if ($order !== '') {
+                $map[$order . '|' . $periode] = true;
+                $map[$order . '|'] = true;
+            }
+            if ($qt !== '') {
+                $map['qt:' . $qt . '|' . $periode] = true;
+                $map['qt:' . $qt . '|'] = true;
+            }
+        }
+
+        $result = [];
+        foreach ($dailyQsdRows as $row) {
+            $key = $this->sdSamplingKey($row);
+            $order = trim((string) ($row->no_order ?? ''));
+            $qt = trim((string) ($row->no_quotation ?? ''));
+            $periode = trim((string) ($row->periode ?? ''));
+
+            $result[$key] = ($order !== '' && (
+                isset($map[$order . '|' . $periode]) || isset($map[$order . '|'])
+            )) || ($qt !== '' && (
+                isset($map['qt:' . $qt . '|' . $periode]) || isset($map['qt:' . $qt . '|'])
+            ));
+        }
+
+        return $result;
+    }
+
+    private function sdSamplingKey($row): string
+    {
+        return trim((string) ($row->no_order ?? '')) . '|' . trim((string) ($row->periode ?? ''));
     }
 
 }

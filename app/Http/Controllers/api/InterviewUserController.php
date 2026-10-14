@@ -335,12 +335,13 @@ class InterviewUserController extends Controller
                 ->noReply()
                 ->send();
 
+            // DISABLED: WhatsApp rejection info (kebijakan HRD — notifikasi rejection via email saja)
+            $SendWhatsapp = true;
             // ============================== BEGIN WHATSAPP KANDIDAT ===================
-            $message = new GenerateMessageWhatsapp($dataArray);
-            $message = $message->RejectedHRD(); // pakai reject hrd karna sama persis
-
-            $Send = new SendWhatsapp($data->no_hp, $message);
-            $SendWhatsapp = $Send->send();
+            // $message = new GenerateMessageWhatsapp($dataArray);
+            // $message = $message->RejectedHRD(); // pakai reject hrd karna sama persis
+            // $Send = new SendWhatsapp($data->no_hp, $message);
+            // $SendWhatsapp = $Send->send();
             // ============================== END WHATSAPP KANDIDAT ===================
 
             if ($email) {

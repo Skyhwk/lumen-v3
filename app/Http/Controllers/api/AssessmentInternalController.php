@@ -7,7 +7,11 @@ use Illuminate\Support\Facades\DB;
 use App\Models\AssessmentInternal;
 use App\Models\MasterKaryawan;
 use App\Models\QuestionCategory;
+use App\Jobs\GenerateInternalAssessmentParticipantPdfJob;
+use App\Jobs\GenerateInternalAssessmentPdfBatchJob;
+use App\Services\HrdAssessmentReadinessService;
 use App\Services\InternalAssessmentExcelExportService;
+use App\Services\InternalAssessmentParticipantPdfService;
 
 class AssessmentInternalController extends Controller
 {
@@ -15,6 +19,7 @@ class AssessmentInternalController extends Controller
     public function index(Request $request)
     {
         $data = AssessmentInternal::query()
+            ->whereNull('canceled_at')
             ->select('assessment_internal.*')
             ->selectRaw('(
                 SELECT COUNT(*)
@@ -153,6 +158,8 @@ class AssessmentInternalController extends Controller
                 ->orderBy('name')
                 ->get();
 
+            app(HrdAssessmentReadinessService::class)->attachPsychometricBankCounts($categories);
+
             return response()->json(['data' => $categories], 200);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Terjadi kesalahan sistem: ' . $e->getMessage()], 500);
@@ -180,6 +187,11 @@ class AssessmentInternalController extends Controller
                 })
                 ->values();
 
+            $grades->prepend([
+                'value' => 'ALL',
+                'text' => 'ALL',
+            ]);
+
             return response()->json(['data' => $grades], 200);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Gagal memuat daftar grade: ' . $e->getMessage()], 500);
@@ -189,12 +201,20 @@ class AssessmentInternalController extends Controller
     public function publish(Request $request)
     {
         try {
-            if (empty($request->category_question) || !is_array($request->category_question)) {
+            $requiresProfile = filter_var($request->input('is_completed_profile'), FILTER_VALIDATE_BOOLEAN);
+            $categoryQuestion = $request->input('category_question', []);
+            if ($categoryQuestion === null) {
+                $categoryQuestion = [];
+            }
+            if (!is_array($categoryQuestion)) {
+                return response()->json(['message' => 'Kategori soal harus dipilih!'], 400);
+            }
+            if (!$requiresProfile && $categoryQuestion === []) {
                 return response()->json(['message' => 'Kategori soal harus dipilih!'], 400);
             }
 
             $normalizedCategories = [];
-            foreach ($request->category_question as $item) {
+            foreach ($categoryQuestion as $item) {
                 if (is_numeric($item)) {
                     return response()->json([
                         'message' => 'Format kategori tidak valid. Kirim objek berisi id, question_count, duration_minutes, dan has_time_limit.',
@@ -206,7 +226,8 @@ class AssessmentInternalController extends Controller
                 }
 
                 $category = QuestionCategory::find($item['id']);
-                $isMandatory = $category && in_array(strtoupper(trim($category->name)), ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK'], true);
+                // $isMandatory = $category && in_array(strtoupper(trim($category->name)), ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK'], true);
+                $isMandatory = false;
 
                 $normalizedCategories[] = [
                     'id' => (int) $item['id'],
@@ -218,7 +239,7 @@ class AssessmentInternalController extends Controller
                 ];
             }
 
-            if (empty($normalizedCategories)) {
+            if (empty($normalizedCategories) && !$requiresProfile) {
                 return response()->json(['message' => 'Minimal pilih 1 kategori soal!'], 400);
             }
 
@@ -227,12 +248,14 @@ class AssessmentInternalController extends Controller
                 return response()->json(['message' => 'Grade peserta wajib dipilih!'], 422);
             }
 
-            $gradeExists = MasterKaryawan::query()
-                ->where('is_active', 1)
-                ->whereRaw('TRIM(grade) = ?', [$grade])
-                ->exists();
-            if (!$gradeExists) {
-                return response()->json(['message' => 'Grade yang dipilih tidak ditemukan pada master karyawan aktif.'], 422);
+            if ($grade !== 'ALL') {
+                $gradeExists = MasterKaryawan::query()
+                    ->where('is_active', 1)
+                    ->whereRaw('TRIM(grade) = ?', [$grade])
+                    ->exists();
+                if (!$gradeExists) {
+                    return response()->json(['message' => 'Grade yang dipilih tidak ditemukan pada master karyawan aktif.'], 422);
+                }
             }
 
             $assessment = AssessmentInternal::find($request->id);
@@ -419,16 +442,46 @@ class AssessmentInternalController extends Controller
     {
         try {
             $assessmentId = $request->input('assessment_id') ?? $request->id;
+            $assessment = DB::table('assessment_internal')->where('id', $assessmentId)->first();
+            if (!$assessment) {
+                return response()->json(['success' => false, 'message' => 'Assessment tidak ditemukan.'], 404);
+            }
 
             $attempts = DB::table('assessment_internal_attempts')
                 ->where('assessment_internal_id', $assessmentId)
                 ->orderByDesc('id')
                 ->get();
 
+            $emailList = $attempts->pluck('email')->filter()->map(function ($email) {
+                return strtolower(trim((string) $email));
+            })->unique()->values()->all();
+
+            $karyawanByEmail = [];
+            if (!empty($emailList)) {
+                $karyawanRows = DB::table('master_karyawan as karyawan')
+                    ->leftJoin('master_divisi as divisi', 'divisi.id', '=', 'karyawan.id_department')
+                    ->where(function ($query) use ($emailList) {
+                        foreach ($emailList as $email) {
+                            $query->orWhereRaw('LOWER(TRIM(karyawan.email)) = ?', [$email]);
+                        }
+                    })
+                    ->get(['karyawan.id', 'karyawan.email', 'divisi.nama_divisi']);
+
+                foreach ($karyawanRows as $row) {
+                    $karyawanByEmail[strtolower(trim((string) $row->email))] = [
+                        'id' => (int) $row->id,
+                        'nama_divisi' => $row->nama_divisi,
+                    ];
+                }
+            }
+
             $participantsMap = [];
             foreach ($attempts as $attempt) {
+                $emailKey = strtolower(trim((string) ($attempt->email ?? '')));
                 $participantsMap[$attempt->id] = [
                     'id' => (int) $attempt->id,
+                    'karyawan_id' => $karyawanByEmail[$emailKey]['id'] ?? null,
+                    'nama_divisi' => $karyawanByEmail[$emailKey]['nama_divisi'] ?? null,
                     'nama_lengkap' => $attempt->participant_name ?? 'Unknown',
                     'nik' => $attempt->email ?? '-',
                     'status' => $attempt->status ?? 'in_progress',
@@ -456,9 +509,54 @@ class AssessmentInternalController extends Controller
                 unset($participant);
             }
 
+            // Penilaian terhadap peserta bisa berasal dari batch Staff/SPV lain
+            // pada tahun yang sama. Hanya dua kategori penilaian silang ini yang digabung.
+            $incomingParticipants = [];
+            $participantKaryawanIds = array_values(array_unique(array_filter(array_column($participantsMap, 'karyawan_id'))));
+            $assessmentYear = (int) substr((string) $assessment->created_at, 0, 4);
+            if (!empty($participantKaryawanIds) && $assessmentYear > 0) {
+                $incomingSessions = DB::table('assessment_internal_sessions as session')
+                    ->join('assessment_internal_attempts as attempt', 'attempt.id', '=', 'session.assessment_internal_attempt_id')
+                    ->join('assessment_internal as source', 'source.id', '=', 'attempt.assessment_internal_id')
+                    ->where('source.is_publish', 1)
+                    ->where('source.is_link_active', 1)
+                    ->whereNull('source.canceled_at')
+                    ->where('source.created_at', '>=', $assessmentYear . '-01-01 00:00:00')
+                    ->where('source.created_at', '<', ($assessmentYear + 1) . '-01-01 00:00:00')
+                    ->whereIn('session.evaluation_target_karyawan_id', $participantKaryawanIds)
+                    ->whereRaw('UPPER(TRIM(session.category_name)) IN (?, ?)', [
+                        'SATISFACTION OF LEADER', 'EMPLOYEE EVALUATION',
+                    ])
+                    ->get([
+                        'session.*',
+                        'attempt.id as rater_attempt_id',
+                        'attempt.participant_name as rater_name',
+                    ]);
+
+                foreach ($incomingSessions as $session) {
+                    $raterAttemptId = (int) $session->rater_attempt_id;
+                    if (!isset($incomingParticipants[$raterAttemptId])) {
+                        $incomingParticipants[$raterAttemptId] = [
+                            'id' => $raterAttemptId,
+                            'nama_lengkap' => $session->rater_name ?? '-',
+                            'assessment_data' => ['sessions' => []],
+                        ];
+                    }
+                    $incomingParticipants[$raterAttemptId]['assessment_data']['sessions'][] = [
+                        'id' => (int) $session->id,
+                        'name' => $session->category_name,
+                        'display_name' => $this->internalSessionDisplayName($session),
+                        'evaluation_target_karyawan_id' => (int) $session->evaluation_target_karyawan_id,
+                        'status' => $session->status,
+                        'score_preview' => $this->extractInternalSessionScorePreview($session),
+                    ];
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => array_values($participantsMap),
+                'incoming_participants' => array_values($incomingParticipants),
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -564,6 +662,75 @@ class AssessmentInternalController extends Controller
             return response()->json(['message' => $e->getMessage()], 404);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Gagal export Excel: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /** PDF jawaban per sesi (Logika, Nalar) per peserta. */
+    public function exportParticipantPdf(Request $request)
+    {
+        try {
+            $attemptId = (int) ($request->input('attempt_id') ?? $request->id);
+            if (!$attemptId) {
+                return response()->json(['message' => 'Parameter attempt_id wajib diisi'], 400);
+            }
+
+            $payload = app(InternalAssessmentParticipantPdfService::class)->generateForAttempt($attemptId);
+
+            return response()->json($payload, 200);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 404);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal export PDF: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /** Queue worker: generate PDF semua peserta dalam batch assessment. */
+    public function queueAssessmentParticipantPdfs(Request $request)
+    {
+        try {
+            $assessmentId = (int) ($request->input('assessment_id') ?? $request->id);
+            if (!$assessmentId) {
+                return response()->json(['message' => 'Parameter assessment_id wajib diisi'], 400);
+            }
+
+            $exists = DB::table('assessment_internal')->where('id', $assessmentId)->exists();
+            if (!$exists) {
+                return response()->json(['message' => 'Assessment tidak ditemukan.'], 404);
+            }
+
+            $this->dispatch(new GenerateInternalAssessmentPdfBatchJob($assessmentId));
+
+            return response()->json([
+                'message' => 'Generate PDF Nalar & Logika untuk semua peserta sedang diproses di worker.',
+                'assessment_id' => $assessmentId,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal mengantre PDF: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /** Queue worker: generate PDF satu peserta. */
+    public function queueParticipantPdf(Request $request)
+    {
+        try {
+            $attemptId = (int) ($request->input('attempt_id') ?? $request->id);
+            if (!$attemptId) {
+                return response()->json(['message' => 'Parameter attempt_id wajib diisi'], 400);
+            }
+
+            $exists = DB::table('assessment_internal_attempts')->where('id', $attemptId)->exists();
+            if (!$exists) {
+                return response()->json(['message' => 'Peserta tidak ditemukan.'], 404);
+            }
+
+            $this->dispatch(new GenerateInternalAssessmentParticipantPdfJob($attemptId));
+
+            return response()->json([
+                'message' => 'Generate PDF peserta sedang diproses di worker.',
+                'attempt_id' => $attemptId,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal mengantre PDF: ' . $e->getMessage()], 500);
         }
     }
 }

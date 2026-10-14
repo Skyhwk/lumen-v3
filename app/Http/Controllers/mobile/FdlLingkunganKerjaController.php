@@ -233,7 +233,7 @@ class FdlLingkunganKerjaController extends Controller
                 $satuan = '(L/m)';
                 $type = 6;
     
-                if (in_array($pLower, ["tsp (24 jam)", "tsp 24j (ua)", "pm 10 (24 jam)", "pm 2.5 (24 jam)"])) {
+                if (in_array($pLower, ["tsp (24 jam)", "tsp 24j (ua)", "pm 10 (24 jam)", "pm 2.5 (24 jam)", "pb (24 jam)", "pb (8 jam)"])) {
                     $type = 1;
                 } else if (in_array($pLower, ["o3", "o3 (8 jam)", "ox", "o3 8j (lk-mg)", "o3 8j (lk-pm)", "o3 ss (lk-mg)", "o3 ss (lk-pm)"])) {
                     $type = 2;

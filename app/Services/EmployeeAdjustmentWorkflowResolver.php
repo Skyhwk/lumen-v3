@@ -55,6 +55,10 @@ class EmployeeAdjustmentWorkflowResolver
         $tunj = (float) ($record->adjustment_tunjangan ?? 0);
 
         if ($record->request_type === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI) {
+            if (EmployeeAdjustmentMutasiService::isUnderSameManagerScope($record)) {
+                return abs($gaji) > 0 || abs($tunj) > 0;
+            }
+
             if ($record->receiver_salary_decision === EmployeeAdjustmentMutasiService::SALARY_SAMA) {
                 return false;
             }
