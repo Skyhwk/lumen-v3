@@ -2613,6 +2613,55 @@ public function buildTrackingRows($sessions)
         return $events;
     }
 
+    public function createMissingReturn($sessionId, $samplerId, $eventAt, $reason, $actorId, $actorName)
+    {
+        return DB::transaction(function () use ($sessionId, $samplerId, $eventAt, $reason, $actorId, $actorName) {
+            $member = SamplerTrackingMember::with('session')
+                ->where('sampler_tracking_session_id', $sessionId)
+                ->where('sampler_id', $samplerId)
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (!$member->session || !$member->session->is_active) {
+                throw ValidationException::withMessages(['session_id' => ['Session tracking sudah tidak aktif.']]);
+            }
+
+            $events = SamplerTrackingEvent::where('sampler_tracking_member_id', $member->id)
+                ->lockForUpdate()->get();
+            if ($events->contains('event_type', 'return')) {
+                throw ValidationException::withMessages(['session_id' => ['Event Pulang sudah tercatat untuk sampler ini.']]);
+            }
+
+            $checkout = $events->where('event_type', 'checkout')->sortByDesc('event_at')->first();
+            if (!$checkout) {
+                throw ValidationException::withMessages(['session_id' => ['Check out harus tercatat sebelum memperbaiki event Pulang.']]);
+            }
+
+            $returnAt = Carbon::createFromFormat('Y-m-d H:i:s', $eventAt, 'Asia/Jakarta');
+            if (!$returnAt || $returnAt->lt(Carbon::parse($checkout->event_at, 'Asia/Jakarta'))
+                || $returnAt->gt($this->now())) {
+                throw ValidationException::withMessages(['event_at' => ['Waktu Pulang harus setelah check out dan tidak boleh melebihi waktu sekarang.']]);
+            }
+
+            return SamplerTrackingEvent::create($this->onlyExistingColumns((new SamplerTrackingEvent())->getTable(), [
+                'sampler_tracking_session_id' => $member->sampler_tracking_session_id,
+                'sampler_tracking_member_id' => $member->id,
+                'triggered_by_member_id' => null,
+                'event_type' => 'return',
+                'movement_group' => $member->current_movement_group,
+                'latitude' => null,
+                'longitude' => null,
+                'photo' => null,
+                'photos' => null,
+                'note' => 'Tools Fixing oleh ' . $actorName . ' (ID ' . $actorId . '): ' . trim($reason),
+                'is_auto' => true,
+                'sequence_no' => $this->nextSequence($member->id),
+                'event_at' => $returnAt->toDateTimeString(),
+            ]));
+        }, 5);
+    }
+
     public function consumeTeamLockNotice()
     {
         $notice = $this->teamLockNotice;

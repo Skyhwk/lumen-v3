@@ -45,6 +45,11 @@ class MasterKaryawan extends Sector implements AuthenticatableContract
         return $this->hasOne(MedicalCheckup::class, 'karyawan_id');
     }
 
+    public function supportingInfoAnswers()
+    {
+        return $this->hasMany(SupportingInfoAnswer::class, 'karyawan_id');
+    }
+
     public function getSubordinates($id)
     {
         $subordinates = $this->whereJsonContains('atasan_langsung', (string) $id)->where('is_active', true)->get();
