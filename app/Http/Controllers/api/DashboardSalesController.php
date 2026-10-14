@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 
 use App\Models\{DailyQsd, DFUS, MasterTargetSales, QuotationKontrakH, QuotationNonKontrak};
 use App\Services\DashboardQuotationNoStatusService;
+use App\Services\DashboardQuotationVoidService;
 
 class DashboardSalesController extends Controller
 {
@@ -324,9 +325,19 @@ class DashboardSalesController extends Controller
             ];
         };
 
+        $status = collect(['cold', 'warm', 'hot', 'ordered', 'void', 'no_status'])
+            ->mapWithKeys(fn($key) => [$key => $summarize($quotes->where('status', $key))])
+            ->all();
+
+        // Void menonaktifkan quotation, jadi angka kartu harus sama dengan daftar modal.
+        $status['void'] = app(DashboardQuotationVoidService::class)->summary(
+            [$salesId],
+            $startDate->copy()->startOfDay(),
+            $endDate->copy()->endOfDay()
+        );
+
         return [
-            'status' => collect(['cold', 'warm', 'hot', 'ordered', 'void', 'no_status'])
-                ->mapWithKeys(fn($key) => [$key => $summarize($quotes->where('status', $key))])->all(),
+            'status' => $status,
             'total' => $summarize($quotes),
             'pending' => $breakdown($quotes->where('category', 'pending')),
             'ordered' => $breakdown($quotes->where('category', 'ordered')),
@@ -491,6 +502,68 @@ class DashboardSalesController extends Controller
         } catch (\Throwable $th) {
             return response()->json([
                 'message' => 'Terjadi kesalahan saat mengambil daftar quotation tanpa status.',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function quotationStatusList(Request $request)
+    {
+        $status = strtolower(trim((string) $request->input('quotation_status', '')));
+        if (!in_array($status, ['cold', 'warm', 'hot', 'ordered'], true)) {
+            return response()->json([
+                'message' => 'Status quotation tidak valid.',
+            ], 422);
+        }
+
+        try {
+            $karyawanId = (int) $request->attributes->get('user')->karyawan->id;
+            $period = $this->resolveSalesDashboardPeriod($request);
+            $service = app(DashboardQuotationNoStatusService::class);
+            $startDate = $period['start']->copy()->startOfDay();
+            $endDate = $period['end']->copy()->endOfDay();
+
+            if ($request->has('draw')) {
+                return response()->json($service->datatable($request, [$karyawanId], $startDate, $endDate, $status));
+            }
+
+            $rows = $service->list([$karyawanId], $startDate, $endDate, $status);
+
+            return response()->json([
+                'message' => 'Data retrieved successfully',
+                'data' => $rows,
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat mengambil daftar quotation.',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function quotationVoidList(Request $request)
+    {
+        try {
+            $karyawanId = (int) $request->attributes->get('user')->karyawan->id;
+            $period = $this->resolveSalesDashboardPeriod($request);
+            $service = app(DashboardQuotationVoidService::class);
+            $startDate = $period['start']->copy()->startOfDay();
+            $endDate = $period['end']->copy()->endOfDay();
+
+            if ($request->has('draw')) {
+                return response()->json($service->datatable($request, [$karyawanId], $startDate, $endDate));
+            }
+
+            $rows = $service->list([$karyawanId], $startDate, $endDate);
+
+            return response()->json([
+                'message' => 'Data retrieved successfully',
+                'data' => $rows,
+            ]);
+        }
+        catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat mengambil daftar quotation void.',
                 'error' => $th->getMessage(),
             ], 500);
         }
