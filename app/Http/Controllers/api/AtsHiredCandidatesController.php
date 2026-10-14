@@ -743,6 +743,7 @@ class AtsHiredCandidatesController extends Controller
             'experience' => 0,
             'skill' => 0,
             'languages' => 0,
+            'supporting_info_answers' => 0,
         ];
 
         $medicalData = [
@@ -839,6 +840,12 @@ class AtsHiredCandidatesController extends Controller
             $bahasa->save();
             $savedCounts['languages']++;
         }
+
+        $savedCounts['supporting_info_answers'] = $this->migrateSupportingInfoAnswers(
+            $recruitment->id,
+            $karyawan->id,
+            $timestamp
+        );
 
         $user = new User();
         $user->created_by = $this->karyawan;
@@ -981,6 +988,45 @@ class AtsHiredCandidatesController extends Controller
             'archived_documents' => $archivedDocuments,
             'personnel_request' => $personnelRequestSync,
         ];
+    }
+
+    private function migrateSupportingInfoAnswers($recruitmentId, $karyawanId, $timestamp): int
+    {
+        if (!Schema::hasTable('candidate_supporting_info_answers')
+            || !Schema::hasTable('supporting_info_answers')) {
+            return 0;
+        }
+
+        $answers = DB::table('candidate_supporting_info_answers')
+            ->where('new_recruitment_id', $recruitmentId)
+            ->where('is_active', 1)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($answers as $answer) {
+            DB::table('supporting_info_answers')->updateOrInsert(
+                ['source_candidate_answer_id' => $answer->id],
+                [
+                    'karyawan_id' => $karyawanId,
+                    'new_recruitment_id' => $answer->new_recruitment_id,
+                    'candidate_profile_id' => $answer->candidate_profile_id,
+                    'question_category_id' => $answer->question_category_id,
+                    'question_id' => $answer->question_id,
+                    'category_name' => $answer->category_name,
+                    'question_text' => $answer->question_text,
+                    'question_type' => $answer->question_type,
+                    'answer_text' => $answer->answer_text,
+                    'answer_payload' => $answer->answer_payload,
+                    'is_active' => 1,
+                    'created_by' => $this->karyawan,
+                    'updated_by' => $this->karyawan,
+                    'created_at' => $timestamp,
+                    'updated_at' => $timestamp,
+                ]
+            );
+        }
+
+        return $answers->count();
     }
 
     private function mapCandidateEducations($recruitment)
