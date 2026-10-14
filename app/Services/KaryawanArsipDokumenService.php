@@ -199,6 +199,42 @@ class KaryawanArsipDokumenService
         return true;
     }
 
+    public function deactivateLatest($karyawanId, $jenisDokumen, $deletedBy = null)
+    {
+        if (!Schema::hasTable('karyawan_dokumen_arsip')) {
+            return false;
+        }
+
+        $row = DB::table('karyawan_dokumen_arsip')
+            ->where('karyawan_id', $karyawanId)
+            ->where('is_active', 1)
+            ->where('jenis_dokumen', strtoupper(trim((string) $jenisDokumen)))
+            ->orderByDesc('id')
+            ->first();
+        if (!$row) {
+            return false;
+        }
+
+        $columns = Schema::getColumnListing('karyawan_dokumen_arsip');
+        $data = ['is_active' => 0];
+        if (in_array('updated_at', $columns, true)) {
+            $data['updated_at'] = date('Y-m-d H:i:s');
+        }
+        if (in_array('updated_by', $columns, true) && $deletedBy) {
+            $data['updated_by'] = $deletedBy;
+        }
+        if (in_array('deleted_at', $columns, true)) {
+            $data['deleted_at'] = date('Y-m-d H:i:s');
+        }
+        if (in_array('deleted_by', $columns, true) && $deletedBy) {
+            $data['deleted_by'] = $deletedBy;
+        }
+
+        DB::table('karyawan_dokumen_arsip')->where('id', $row->id)->update($data);
+
+        return true;
+    }
+
     public function deleteDocument($id, $karyawanId = null)
     {
         if (!Schema::hasTable('karyawan_dokumen_arsip')) {

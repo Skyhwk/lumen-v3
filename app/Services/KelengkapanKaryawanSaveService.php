@@ -46,7 +46,7 @@ class KelengkapanKaryawanSaveService
                     'tgl_exp_sertifikat' => trim((string) ($row['tgl_exp_sertifikat'] ?? '')) ?: null,
                 ];
             }, $sertifikat));
-            $this->updateDrivers($karyawan, $sim, $now, $createdBy);
+            $this->upsertDrivers($karyawan, $sim, $now, $createdBy);
             $this->upsertMedical($karyawan, $request, $now, $createdBy);
             $this->archiveUploads($karyawan, $request, $sim, $pendidikan, $createdBy);
         });
@@ -177,27 +177,91 @@ class KelengkapanKaryawanSaveService
         }
     }
 
-    private function updateDrivers(MasterKaryawan $karyawan, array $sim, Carbon $now, $createdBy)
+    private function upsertDrivers(MasterKaryawan $karyawan, array $sim, Carbon $now, $createdBy)
     {
-        if (!$karyawan->user_id || !Schema::hasTable('master_driver')) {
+        if (!Schema::hasTable('master_driver')) {
             return;
         }
 
-        $existing = MasterDriver::where('is_active', true)
-            ->where('user_id', $karyawan->user_id)
-            ->orderBy('id')
-            ->get();
-        foreach ($sim as $index => $row) {
-            if (!isset($existing[$index])) {
-                continue;
+        $rows = array_values(array_filter($sim, function ($row) {
+            return trim((string) ($row['tipe_sim'] ?? '')) !== ''
+                || trim((string) ($row['no_sim'] ?? '')) !== ''
+                || trim((string) ($row['tgl_expired'] ?? '')) !== '';
+        }));
+        if (!$rows) {
+            return;
+        }
+
+        $columns = Schema::getColumnListing('master_driver');
+        $hasKaryawanId = in_array('karyawan_id', $columns, true);
+        $userId = $karyawan->user_id ?: null;
+        if (!$userId && !$hasKaryawanId) {
+            return;
+        }
+
+        $existingQuery = MasterDriver::query();
+        if ($userId && $hasKaryawanId) {
+            $existingQuery->where(function ($inner) use ($userId, $karyawan) {
+                $inner->where('user_id', $userId)->orWhere('karyawan_id', $karyawan->id);
+            });
+        } elseif ($userId) {
+            $existingQuery->where('user_id', $userId);
+        } else {
+            $existingQuery->where('karyawan_id', $karyawan->id);
+        }
+        $existing = $existingQuery->orderByDesc('is_active')->orderBy('id')->get();
+        $used = [];
+
+        foreach ($rows as $index => $row) {
+            $nomor = trim((string) ($row['no_sim'] ?? ''));
+            $tipe = trim((string) ($row['tipe_sim'] ?? ''));
+            $match = $existing->first(function ($driver) use ($nomor, $used) {
+                return $nomor !== '' && empty($used[$driver->id]) && trim((string) $driver->nomor_sim) === $nomor;
+            });
+            if (!$match && $tipe !== '') {
+                $match = $existing->first(function ($driver) use ($tipe, $used) {
+                    return empty($used[$driver->id]) && strcasecmp(trim((string) $driver->tipe_sim), $tipe) === 0;
+                });
             }
-            MasterDriver::where('id', $existing[$index]->id)->update([
-                'nomor_sim' => trim((string) ($row['no_sim'] ?? '')),
-                'tipe_sim' => trim((string) ($row['tipe_sim'] ?? '')),
+            if (!$match && count($rows) === 1) {
+                $match = $existing->first(function ($driver) use ($used) {
+                    return empty($used[$driver->id]);
+                });
+            }
+            if (!$match) {
+                $indexed = $existing->values()->get($index);
+                $match = $indexed && empty($used[$indexed->id]) ? $indexed : null;
+            }
+
+            $payload = [
+                'user_id' => $userId,
+                'karyawan_id' => $karyawan->id,
+                'nama_driver' => $karyawan->nama_lengkap,
+                'tipe_sim' => $tipe,
+                'nomor_sim' => $nomor,
                 'expired' => trim((string) ($row['tgl_expired'] ?? '')) ?: null,
+                'is_active' => 1,
                 'updated_by' => $createdBy,
                 'updated_at' => $now,
+                'deleted_at' => null,
+                'deleted_by' => null,
+            ];
+            $payload = array_intersect_key($payload, array_flip($columns));
+            if (!$userId) {
+                unset($payload['user_id']);
+            }
+
+            if ($match) {
+                MasterDriver::where('id', $match->id)->update($payload);
+                $used[$match->id] = true;
+                continue;
+            }
+
+            $insert = array_merge($payload, [
+                'created_by' => $createdBy,
+                'created_at' => $now,
             ]);
+            MasterDriver::create(array_intersect_key($insert, array_flip($columns)));
         }
     }
 
@@ -214,10 +278,16 @@ class KelengkapanKaryawanSaveService
             'file_sertifikasi' => ['jenis' => 'SERTIFIKAT', 'catatan' => trim((string) $request->input('nama_sertifikasi')) ?: 'Surat sertifikasi'],
         ];
         foreach ($single as $input => $meta) {
+            $file = $this->uploaded($request, $input);
+            $canRemove = in_array($input, ['file_npwp', 'file_bpjs', 'file_jamsostek', 'file_sertifikasi'], true);
+            if (!$file && $canRemove && $request->boolean('hapus_' . $input)) {
+                $arsip->deactivateLatest($karyawan->id, $meta['jenis'], $createdBy);
+                continue;
+            }
             $this->archiveFileOrCatatan(
                 $arsip,
                 $karyawan->id,
-                $this->uploaded($request, $input),
+                $file,
                 $meta['jenis'],
                 $createdBy,
                 $meta['catatan']
