@@ -49,7 +49,8 @@ class GroupedCfrByLhp
                     "wsValueAir",
                     "wsValueUdara",
                     "wsValueEmisiCerobong",
-                    "lhps_hygiene_sanitasi"
+                    "lhps_hygiene_sanitasi",
+                    "lhp_manual"
                 ])
                 ->withAnyDataLapangan()
                 ->where([
@@ -87,6 +88,7 @@ class GroupedCfrByLhp
                         $item->lhps_padatan,
                         $item->lhp_psikologi,
                         $item->lhps_hygiene_sanitasi,
+                        $item->lhp_manual,
                     ])->first(fn($lhps) => $lhps !== null);
 
                     // $tglSampling = optional($track)->ftc_verifier
