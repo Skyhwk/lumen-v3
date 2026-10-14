@@ -16,9 +16,13 @@ class ProfileEmployeeDetailService
             'divisi',
             'cabang',
             'pengalaman_kerja',
-            'pendidikan_karyawan',
+            'pendidikan_karyawan' => function ($query) {
+                $query->where('is_active', true);
+            },
             'sertifikat_karyawan',
-            'kontak_darurat',
+            'kontak_darurat' => function ($query) {
+                $query->where('is_active', true);
+            },
         ])
             ->where('id', $userId)
             ->where('is_active', 1)
@@ -58,7 +62,11 @@ class ProfileEmployeeDetailService
             'sertifikat'        => $row->sertifikat,
             'pengalaman_kerja'  => $row->pengalaman_kerja,
             'sertifikat_karyawan' => $row->sertifikat_karyawan,
-            'kontak_darurat'    => $row->kontak_darurat,
+            'kontak_darurat'    => $row->kontak_darurat
+                ->unique(function ($item) {
+                    return strtolower(trim((string) $item->nama_kontak) . '|' . trim((string) $item->hubungan) . '|' . trim((string) $item->nomor_kontak));
+                })
+                ->values(),
             'personal'          => [
                 'id'             => $row->id,
                 'nama_lengkap'   => $row->nama_lengkap,
@@ -122,22 +130,33 @@ class ProfileEmployeeDetailService
 
     private function resolvePendidikan(MasterKaryawan $row)
     {
-        if (!empty($row->pendidikan)) {
-            return $row->pendidikan;
+        $rows = $row->pendidikan_karyawan
+            ->filter(function ($item) {
+                return (int) ($item->is_active ?? 1) !== 0
+                    && (trim((string) $item->jenjang) !== '' || trim((string) $item->institusi) !== '');
+            })
+            ->sortByDesc(function ($item) {
+                return sprintf('%04d-%06d', (int) $item->tahun_lulus, (int) $item->id);
+            })
+            ->values()
+            ->map(function ($item) {
+                return [
+                    'id'          => $item->id,
+                    'jenjang'     => $item->jenjang,
+                    'institusi'   => $item->institusi,
+                    'jurusan'     => $item->jurusan,
+                    'tahun_masuk' => $item->tahun_masuk,
+                    'tahun_lulus' => $item->tahun_lulus,
+                    'kota'        => $item->kota,
+                ];
+            })
+            ->all();
+
+        if ($rows) {
+            return $rows;
         }
 
-        if ($row->pendidikan_karyawan->isEmpty()) {
-            return [];
-        }
-
-        return $row->pendidikan_karyawan->map(function ($item) {
-            return [
-                'jenjang'     => $item->jenjang,
-                'institusi'   => $item->institusi,
-                'jurusan'     => $item->jurusan,
-                'tahun_masuk' => $item->tahun_masuk,
-                'tahun_lulus' => $item->tahun_lulus,
-            ];
-        })->values()->all();
+        $decoded = json_decode($row->pendidikan ?: '[]', true);
+        return is_array($decoded) ? $decoded : [];
     }
 }

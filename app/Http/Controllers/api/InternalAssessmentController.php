@@ -15,13 +15,29 @@ class InternalAssessmentController extends Controller
     public function entry(Request $request)
     {
         $assessment = $this->assessmentByToken($request->token);
+        $requiresProfile = (bool) ($assessment->is_completed_profile ?? false);
+        $categories = json_decode($assessment->category_question ?: '[]', true) ?: [];
+        $moduleCount = is_array($categories) ? count($categories) : 0;
+        $kelengkapanOnly = $requiresProfile && $moduleCount === 0;
 
         return response()->json([
             'assessment' => [
                 'id' => $assessment->id,
                 'title' => $assessment->nama_assesment,
                 'batch' => $assessment->batch,
+                'grade' => $assessment->grade,
+                'is_completed_profile' => $requiresProfile,
+                'is_publish' => (bool) ($assessment->is_publish ?? false),
+                'is_link_active' => (bool) ($assessment->is_link_active ?? false),
+                'module_count' => $moduleCount,
             ],
+            'token' => [
+                'raw' => trim((string) $request->token),
+                'batch' => $assessment->batch,
+            ],
+            'destination' => $kelengkapanOnly
+                ? 'kelengkapan'
+                : ($requiresProfile ? 'assessment_with_kelengkapan' : 'assessment'),
             'status' => 'email_required',
         ]);
     }
