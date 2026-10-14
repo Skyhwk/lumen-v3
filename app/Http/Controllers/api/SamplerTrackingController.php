@@ -29,12 +29,18 @@ class SamplerTrackingController extends Controller
 
             if ($request->tracking_status === 'overdue') {
                 $this->ensurePastDueTroublesCollected(null);
+                $this->service->pruneEmptyShellSessions();
+                app(\App\Services\SamplerTrackingTroubleService::class)->pruneStaleOpenTroubles();
                 $today = Carbon::now('Asia/Jakarta')->toDateString();
                 $trouble = $this->teamTroubleRows(null, 'trouble');
                 $overdue = $this->service->listTrackingRows($today, $request->sampler_id, $request->sampler_name, 'overdue')['data'];
                 $combined = $this->uniqueTrackingRows(
                     $this->mergeOverdueWithTrouble($overdue, $trouble)->filter(function ($row) {
-                        return strtolower(trim($row['nama_perusahaan'] ?? '')) !== 'cuti';
+                        if (strtolower(trim($row['nama_perusahaan'] ?? '')) === 'cuti') {
+                            return false;
+                        }
+
+                        return $this->service->rowBelongsInBlockedTab($row);
                     })
                 );
                 $combined = $this->excludeUnblockedFromBlockedTab($combined, null);
@@ -95,6 +101,7 @@ class SamplerTrackingController extends Controller
     {
         try {
             $sessions = $this->service->sync($request->tanggal);
+            app(\App\Services\SamplerTrackingTroubleService::class)->pruneStaleOpenTroubles();
         } catch (ValidationException $exception) {
             $errors = $exception->errors();
 
@@ -381,6 +388,13 @@ class SamplerTrackingController extends Controller
         })->values();
 
         if ($trackingRows->isEmpty()) {
+            $troubleService = app(\App\Services\SamplerTrackingTroubleService::class);
+            if ($troubleService->shouldAutoClearOpenTrouble($trouble)) {
+                $troubleService->markTroubleCleared((int) $trouble->id);
+
+                return collect();
+            }
+
             $troubleObj['sampler_name'] = $samplerName;
 
             return collect([$this->syntheticTroubleRow($trouble, $samplerName, $troubleObj)]);

@@ -74,8 +74,8 @@ class SendGreatdayTestNotificationCommand extends Command
             $result = (new FirebaseService())->sendNotifications($userIds, $payload);
         } catch (\Throwable $e) {
             $this->error('Gagal mengirim: ' . $e->getMessage());
-            $this->line('Credential: salin ke lumen-v3/storage/app/firebase/google-service.json');
-            $this->line('Atau set .env FIREBASE_CREDENTIALS_PATH=/var/www/intilab-internal/storage/app/firebase/google-service.json');
+            $this->line('Credential Greatday: storage/app/firebase/google-service.json (bukan service-account FDL).');
+            $this->line('Atau .env GREATDAY_FIREBASE_CREDENTIALS_PATH=...');
 
             return 1;
         }

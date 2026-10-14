@@ -99,4 +99,11 @@ return [
     /** Grade tanpa absensi wajib — tidak di-sync alpa (Manager, SM, Director) */
     'leave_alpa_exempt_grades' => ['MANAGER', 'SENIOR MANAGER', 'DIRECTOR', 'DIREKTUR'],
 
+    /**
+     * FCM Attendance / Greatday (GSA project HRIS).
+     * Dev: intilab-internal/storage/app/firebase/google-service.json
+     * Bukan service-account FDL di lumen-v3/storage/app/firebase/.
+     */
+    'firebase_credentials_path' => env('GREATDAY_FIREBASE_CREDENTIALS_PATH', env('FIREBASE_CREDENTIALS_PATH')),
+
 ];

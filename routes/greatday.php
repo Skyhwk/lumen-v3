@@ -22,6 +22,7 @@ $router->group(['prefix' => 'api/greatday', 'namespace' => 'Greatday'], function
 
     $router->get('foto-karyawan/{image}', 'HomePageController@getFoto');
     $router->get('foto-absen/{image}', 'HomePageController@getFotoAbsen');
+    $router->get('announcement-file', 'AnnouncementController@file');
 
     $router->group([
         'middleware' => ['greatday.auth', 'log.request', 'decrypt.slice'],
