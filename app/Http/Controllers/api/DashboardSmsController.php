@@ -1049,6 +1049,11 @@ class DashboardSmsController extends Controller
             $summarize = fn($items) => ['qty' => $items->count(), 'amount' => round((float) $items->sum('amount'), 2)];
             $statusKeys = ['cold', 'warm', 'hot', 'ordered', 'void', 'no_status'];
             $status = collect($statusKeys)->mapWithKeys(fn($key) => [$key => $summarize($quotes->where('category', $key))])->all();
+            $voidSummary = app(\App\Services\DashboardQuotationVoidService::class)->summary($salesIds, $startDate, $endDate);
+            $status['void'] = [
+                'qty' => $voidSummary['qty'],
+                'amount' => round((float) $voidSummary['amount'], 2),
+            ];
             $breakdown = function ($items) use ($summarize) {
                 return [
                     'total' => $summarize($items),
@@ -1066,6 +1071,59 @@ class DashboardSmsController extends Controller
             ]);
         } catch (\Throwable $th) {
             return response()->json(['message' => 'Terjadi kesalahan saat mengambil analytics penawaran.', 'error' => $th->getMessage()], 500);
+        }
+    }
+
+    public function fetchQuotationStatusList(Request $request)
+    {
+        $status = strtolower(trim((string) $request->input('quotation_status', '')));
+        if (!in_array($status, ['cold', 'warm', 'hot', 'ordered'], true)) {
+            return response()->json([
+                'message' => 'Status quotation tidak valid.',
+            ], 422);
+        }
+
+        try {
+            [$startDate, $endDate] = $this->resolveQuotationAnalyticsDateRange($request);
+            $salesIds = $this->resolveDashboardSalesIds($request);
+            $service = app(\App\Services\DashboardQuotationNoStatusService::class);
+
+            if ($request->has('draw')) {
+                return response()->json($service->datatable($request, $salesIds, $startDate, $endDate, $status));
+            }
+
+            return response()->json([
+                'message' => 'Data retrieved successfully',
+                'data' => $service->list($salesIds, $startDate, $endDate, $status),
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat mengambil daftar quotation.',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function fetchQuotationVoidList(Request $request)
+    {
+        try {
+            [$startDate, $endDate] = $this->resolveQuotationAnalyticsDateRange($request);
+            $salesIds = $this->resolveDashboardSalesIds($request);
+            $service = app(\App\Services\DashboardQuotationVoidService::class);
+
+            if ($request->has('draw')) {
+                return response()->json($service->datatable($request, $salesIds, $startDate, $endDate));
+            }
+
+            return response()->json([
+                'message' => 'Data retrieved successfully',
+                'data' => $service->list($salesIds, $startDate, $endDate),
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat mengambil daftar quotation void.',
+                'error' => $th->getMessage(),
+            ], 500);
         }
     }
 

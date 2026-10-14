@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 
 class DashboardQuotationNoStatusService
 {
+    private const LIST_STATUSES = ['cold', 'warm', 'hot', 'ordered', 'no_status'];
+
     public function resolveStatus($quote): string
     {
         $flag = strtolower(trim((string) $quote->flag_status));
@@ -32,8 +34,10 @@ class DashboardQuotationNoStatusService
     /**
      * @param  int[]|null  $salesIds  null = semua sales (filter SMS mode all)
      */
-    public function list(?array $salesIds, Carbon $startDate, Carbon $endDate): array
+    public function list(?array $salesIds, Carbon $startDate, Carbon $endDate, string $status = 'no_status'): array
     {
+        $status = $this->normalizeListStatus($status);
+
         return collect([QuotationNonKontrak::class, QuotationKontrakH::class])
             ->flatMap(function ($model) use ($salesIds, $startDate, $endDate) {
                 return $model::query()
@@ -46,7 +50,7 @@ class DashboardQuotationNoStatusService
                     ->when($salesIds !== null, fn ($query) => $query->whereIn('sales_id', $salesIds))
                     ->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'sales_id']);
             })
-            ->filter(fn ($quote) => $this->resolveStatus($quote) === 'no_status')
+            ->filter(fn ($quote) => $this->resolveStatus($quote) === $status)
             ->unique('no_document')
             ->sortBy('no_document')
             ->values()
@@ -58,9 +62,9 @@ class DashboardQuotationNoStatusService
             ->all();
     }
 
-    public function datatable(Request $request, ?array $salesIds, Carbon $startDate, Carbon $endDate): array
+    public function datatable(Request $request, ?array $salesIds, Carbon $startDate, Carbon $endDate, string $status = 'no_status'): array
     {
-        $rows = collect($this->list($salesIds, $startDate, $endDate));
+        $rows = collect($this->list($salesIds, $startDate, $endDate, $status));
         $recordsTotal = $rows->count();
 
         $globalSearch = strtolower(trim((string) $request->input('search.value', '')));
@@ -123,6 +127,16 @@ class DashboardQuotationNoStatusService
             'recordsFiltered' => $recordsFiltered,
             'data' => $rows->all(),
         ];
+    }
+
+    private function normalizeListStatus(string $status): string
+    {
+        $status = strtolower(trim($status));
+        if (!in_array($status, self::LIST_STATUSES, true)) {
+            throw new \InvalidArgumentException('Status quotation tidak valid.');
+        }
+
+        return $status;
     }
 
     private function rowMatchesNeedle(array $row, string $needle): bool
