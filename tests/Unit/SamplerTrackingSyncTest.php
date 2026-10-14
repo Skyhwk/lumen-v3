@@ -428,6 +428,35 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertCount(1, $service->unresolved(10));
     }
 
+    public function testMultidayCheckoutAllowedWhileNonBlockingReopenedTroubleExists(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-23 10:00:00', 'Asia/Jakarta'));
+        [$multidaySession, $multidayMember] = $this->troubleAssignment('multiday-5339', '2026-09-21', 3);
+        [$recoverySession, $recoveryMember] = $this->troubleAssignment('recovery-8h', '2026-09-22', 1);
+        $connection = $this->db->getConnection('mysql');
+        foreach (['departure', 'checkin'] as $type) {
+            $connection->table('sampler_tracking_events')->insert([
+                'sampler_tracking_session_id' => $multidaySession->id,
+                'sampler_tracking_member_id' => $multidayMember->id,
+                'event_type' => $type,
+                'event_at' => '2026-09-23 09:00:00',
+            ]);
+        }
+        $service = new \App\Services\SamplerTrackingTroubleService();
+        $service->collect('2026-09-22', [10]);
+        $trouble = $service->unresolved(10)->firstWhere('tracking_session_id', $recoverySession->id);
+        $service->reopen($trouble->id, 601, ['note' => 'Recover 8h']);
+        foreach (['departure', 'checkin', 'checkout'] as $type) {
+            $connection->table('sampler_tracking_events')->insert([
+                'sampler_tracking_session_id' => $recoverySession->id,
+                'sampler_tracking_member_id' => $recoveryMember->id,
+                'event_type' => $type,
+                'event_at' => '2026-09-23 09:30:00',
+            ]);
+        }
+        $service->assertAllowed(10, '2026-09-21', $multidaySession->id);
+    }
+
     public function testAllUnfinishedAssignmentsAreCollectedAfterLongestDeadline(): void
     {
         \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-25 10:00:00', 'Asia/Jakarta'));

@@ -423,7 +423,11 @@ class SamplerTrackingTroubleService
             });
             if ($trouble && $trouble->reopened_by && $trouble->reopened_at) return;
             $progress = $this->progress($samplerId, $activityDate, $sessionId);
-            if (!$trouble && !$progress['complete'] && $progress['due_date'] >= $today && $troubles->isEmpty()) return;
+            // 1x24 / 2x24 may still be actioned after tanggal_sampling while within due_date.
+            if (!$trouble && !$progress['complete'] && $progress['due_date'] >= $today
+                && $this->troublesBlockingCurrentActivity($samplerId)->isEmpty()) {
+                return;
+            }
             throw new HttpException(423, 'Penugasan #' . $sessionId . ' pada tanggal ' . $activityDate . ' terkunci. Silakan lapor kepada atasan.');
         }
         if ($this->troublesBlockingCurrentActivity($samplerId)->isNotEmpty()) {
