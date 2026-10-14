@@ -272,6 +272,11 @@ class MasterPelangganController extends Controller
                         if (!empty($noTlp)) { // Check if not empty
                             $noTlp = preg_replace("/[^0-9]/", "", $noTlp); // bersihin non-angka
 
+                            if ($noTlp !== '' && substr($noTlp, 0, 1) !== '0') {
+                                DB::rollback();
+                                return response()->json(['message' => 'Nomor telepon perusahaan harus diawali 0'], 400);
+                            }
+
                             if (substr($noTlp, 0, 2) === "62") { // convert depannya jadi 0
                                 $noTlp = "0" . substr($noTlp, 2);
                             }
@@ -472,6 +477,11 @@ class MasterPelangganController extends Controller
                     foreach ($request->kontak_pelanggan['no_tlp_perusahaan'] as $index => $noTlp) {
                         if (!empty($noTlp)) { // Check if not empty
                             $noTlp = preg_replace("/[^0-9]/", "", $noTlp); // bersihin non-angka
+
+                            if ($noTlp !== '' && substr($noTlp, 0, 1) !== '0') {
+                                DB::rollback();
+                                return response()->json(['message' => 'Nomor telepon perusahaan harus diawali 0'], 400);
+                            }
 
                             if (substr($noTlp, 0, 2) === "62") { // convert depannya jadi 0
                                 $noTlp = "0" . substr($noTlp, 2);
