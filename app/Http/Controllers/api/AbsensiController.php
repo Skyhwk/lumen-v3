@@ -148,8 +148,11 @@ class AbsensiController extends Controller
 
             if (!$cekKaryawan->isEmpty()) {
                 $tanggalKey = date('Y-m-d', strtotime($tanggal));
+                $nextDate = date('Y-m-d', strtotime($tanggalKey . ' +1 day'));
+                $karyawanIds = $cekKaryawan->pluck('id')->all();
+                $geoIndex = $this->fetchMonthlyGeoIndex($karyawanIds, $tanggalKey, $nextDate);
                 $labelMap = HrAttendanceDayExcuseLabels::mapForKaryawans(
-                    $cekKaryawan->pluck('id')->all(),
+                    $karyawanIds,
                     $tanggalKey,
                     $tanggalKey
                 );
@@ -159,6 +162,7 @@ class AbsensiController extends Controller
 
                     if ($cekShift != null) {
                         $init = self::compareshift($value->id, $tanggal, $cekShift->shift, $cekShift->time_in, $cekShift->time_out, $value->nik_karyawan, $value->nama_lengkap);
+                        $init = $this->attachDailyPunchCoordinates($init, $value->id, $tanggalKey, $geoIndex);
                         $data[] = HrAttendanceDayExcuseLabels::attach($init, (int) $value->id, $labelMap);
                     } else {
                         $gen = Absensi::select(
@@ -191,7 +195,7 @@ class AbsensiController extends Controller
                                 $total_jam_kerja = $kerja->h . 'h ' . $kerja->i . 'm'; // Calculate working hours
                             }
 
-                            $data[] = HrAttendanceDayExcuseLabels::attach($this->applyCalendarLiburShift([
+                            $data[] = HrAttendanceDayExcuseLabels::attach($this->attachDailyPunchCoordinates($this->applyCalendarLiburShift([
                                 'nama' => $gen->nik_karyawan . ' - ' . $gen->nama_lengkap,
                                 'tanggal' => $gen->tanggal,
                                 'hari' => self::hari($gen->tanggal),
@@ -200,9 +204,9 @@ class AbsensiController extends Controller
                                 'selisih' => $masuk,
                                 'jam_kerja' => $total_jam_kerja,
                                 'shift' => 'SHREGULAR'
-                            ]), (int) $value->id, $labelMap);
+                            ]), $value->id, $tanggalKey, $geoIndex), (int) $value->id, $labelMap);
                         } else {
-                            $data[] = HrAttendanceDayExcuseLabels::attach($this->applyCalendarLiburShift([
+                            $data[] = HrAttendanceDayExcuseLabels::attach($this->attachDailyPunchCoordinates($this->applyCalendarLiburShift([
                                 'nama' => $value->nik_karyawan . ' - ' . $value->nama_lengkap,
                                 'tanggal' => $tanggal,
                                 'hari' => self::hari($tanggal),
@@ -211,7 +215,7 @@ class AbsensiController extends Controller
                                 'selisih' => '',
                                 'jam_kerja' => '',
                                 'shift' => ''
-                            ]), (int) $value->id, $labelMap);
+                            ]), $value->id, $tanggalKey, $geoIndex), (int) $value->id, $labelMap);
                         }
                     }
                 }
@@ -857,6 +861,17 @@ class AbsensiController extends Controller
         $row['keluar_selfie'] = $this->absensiSelfieFileName($keluarGeo['selfie'] ?? null);
 
         return $row;
+    }
+
+    private function attachDailyPunchCoordinates(array $row, $karyawanId, $tanggal, array $geoIndex)
+    {
+        $masukTanggal = date('Y-m-d', strtotime($tanggal));
+        $shift = strtoupper(trim((string) ($row['shift'] ?? '')));
+        $keluarTanggal = in_array($shift, ['24JAM', 'SHSECURITY2', 'SHOB2'], true)
+            ? date('Y-m-d', strtotime($masukTanggal . ' +1 day'))
+            : $masukTanggal;
+
+        return $this->coordinateMonthlyRow($row, $karyawanId, $masukTanggal, $keluarTanggal, $geoIndex);
     }
 
     private function absensiSelfieFileName($fileName)
