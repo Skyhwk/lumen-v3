@@ -252,6 +252,22 @@ class HrLeaveBalanceController extends Controller
         return self::$rekapMemo[$key];
     }
 
+    /**
+     * @return array{0: ?MasterKaryawan, 1: string}
+     */
+    private function ledgerActorContext(): array
+    {
+        $actor = $this->user_id
+            ? MasterKaryawan::query()->find($this->user_id)
+            : null;
+        $name = trim((string) ($this->karyawan ?? ''));
+        if ($name === '') {
+            $name = $actor ? $actor->nama_lengkap : 'HRD';
+        }
+
+        return [$actor, $name];
+    }
+
     public function storeLedger(Request $request)
     {
         $karyawanId = (int) $request->input('karyawan_id', 0);
@@ -264,12 +280,13 @@ class HrLeaveBalanceController extends Controller
         }
 
         try {
+            [$actor, $actorName] = $this->ledgerActorContext();
             $entry = app(HrLeaveBalanceLedgerService::class)->recordManualAdjustment(
                 $employee,
                 $daysDelta,
                 $notes,
-                property_exists($this, 'karyawan') ? $this->karyawan : null,
-                $this->nama_lengkap ?? 'HRD'
+                $actor,
+                $actorName
             );
         } catch (InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
@@ -294,12 +311,13 @@ class HrLeaveBalanceController extends Controller
         $permissionKind = trim((string) $request->input('permission_kind', 'event'));
 
         try {
+            [$actor, $actorName] = $this->ledgerActorContext();
             $result = app(HrLeaveBalanceLedgerService::class)->reclassifyAlpaEntry(
                 $ledgerId,
                 $targetType,
                 $notes,
-                property_exists($this, 'karyawan') ? $this->karyawan : null,
-                $this->nama_lengkap ?? 'HRD',
+                $actor,
+                $actorName,
                 $permissionKind !== '' ? $permissionKind : 'event'
             );
         } catch (InvalidArgumentException $e) {
@@ -325,10 +343,11 @@ class HrLeaveBalanceController extends Controller
         $reason = trim((string) $request->input('void_reason', ''));
 
         try {
+            [, $actorName] = $this->ledgerActorContext();
             $row = app(HrLeaveBalanceLedgerService::class)->voidEntry(
                 $ledgerId,
                 $reason,
-                $this->nama_lengkap ?? 'HRD'
+                $actorName
             );
         } catch (InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
