@@ -231,9 +231,6 @@ class KelengkapanKaryawanSaveService
                 || trim((string) ($row['no_sim'] ?? '')) !== ''
                 || trim((string) ($row['tgl_expired'] ?? '')) !== '';
         }));
-        if (!$rows) {
-            return;
-        }
 
         $columns = Schema::getColumnListing('master_driver');
         $hasKaryawanId = in_array('karyawan_id', $columns, true);
@@ -255,7 +252,7 @@ class KelengkapanKaryawanSaveService
         $existing = $existingQuery->orderByDesc('is_active')->orderBy('id')->get();
         $used = [];
 
-        foreach ($rows as $index => $row) {
+        foreach ($rows as $row) {
             $nomor = trim((string) ($row['no_sim'] ?? ''));
             $tipe = trim((string) ($row['tipe_sim'] ?? ''));
             $match = $existing->first(function ($driver) use ($nomor, $used) {
@@ -265,15 +262,6 @@ class KelengkapanKaryawanSaveService
                 $match = $existing->first(function ($driver) use ($tipe, $used) {
                     return empty($used[$driver->id]) && strcasecmp(trim((string) $driver->tipe_sim), $tipe) === 0;
                 });
-            }
-            if (!$match && count($rows) === 1) {
-                $match = $existing->first(function ($driver) use ($used) {
-                    return empty($used[$driver->id]);
-                });
-            }
-            if (!$match) {
-                $indexed = $existing->values()->get($index);
-                $match = $indexed && empty($used[$indexed->id]) ? $indexed : null;
             }
 
             $payload = [
@@ -304,8 +292,33 @@ class KelengkapanKaryawanSaveService
                 'created_by' => $createdBy,
                 'created_at' => $now,
             ]);
-            MasterDriver::create(array_intersect_key($insert, array_flip($columns)));
+            $created = MasterDriver::create(array_intersect_key($insert, array_flip($columns)));
+            if ($created && $created->id) {
+                $used[$created->id] = true;
+            }
         }
+
+        $leftoverIds = $existing->pluck('id')->filter(function ($id) use ($used) {
+            return empty($used[$id]);
+        })->all();
+        if (!$leftoverIds) {
+            return;
+        }
+
+        $deactivate = ['is_active' => 0];
+        if (in_array('updated_at', $columns, true)) {
+            $deactivate['updated_at'] = $now;
+        }
+        if (in_array('updated_by', $columns, true)) {
+            $deactivate['updated_by'] = $createdBy;
+        }
+        if (in_array('deleted_at', $columns, true)) {
+            $deactivate['deleted_at'] = $now;
+        }
+        if (in_array('deleted_by', $columns, true)) {
+            $deactivate['deleted_by'] = $createdBy;
+        }
+        MasterDriver::whereIn('id', $leftoverIds)->update($deactivate);
     }
 
     private function archiveUploads(MasterKaryawan $karyawan, Request $request, array $sim, array $pendidikan, $createdBy)
@@ -337,21 +350,7 @@ class KelengkapanKaryawanSaveService
             );
         }
 
-        foreach ($sim as $index => $row) {
-            $file = $this->uploaded($request, 'file_sim.' . $index) ?: $this->uploaded($request, 'file_sim.' . $index . '.file');
-            if (!$file && is_array($request->file('file_sim'))) {
-                $file = $request->file('file_sim')[$index] ?? null;
-            }
-            $this->archiveFileOrCatatan(
-                $arsip,
-                $karyawan->id,
-                $file instanceof UploadedFile ? $file : null,
-                'SIM',
-                $createdBy,
-                $this->simNote($row),
-                $index
-            );
-        }
+        $this->archiveSimUploads($arsip, $karyawan->id, $request, $sim, $createdBy);
 
         foreach ($pendidikan as $index => $row) {
             $file = $this->uploaded($request, 'file_ijazah.' . $index);
@@ -375,6 +374,65 @@ class KelengkapanKaryawanSaveService
                 $index
             );
         }
+    }
+
+    private function archiveSimUploads($arsip, $karyawanId, Request $request, array $sim, $createdBy)
+    {
+        $active = $arsip->listActiveByJenis($karyawanId, 'SIM');
+        $kept = [];
+
+        foreach ($sim as $index => $row) {
+            $file = $this->uploaded($request, 'file_sim.' . $index) ?: $this->uploaded($request, 'file_sim.' . $index . '.file');
+            if (!$file && is_array($request->file('file_sim'))) {
+                $file = $request->file('file_sim')[$index] ?? null;
+            }
+            $catatan = $this->simNote($row);
+
+            if ($file instanceof UploadedFile) {
+                $stored = $arsip->storeUploadedFile($karyawanId, $file, 'SIM', $createdBy, $catatan, 'kelengkapan_karyawan');
+                if ($stored && !empty($stored->id)) {
+                    $kept[] = (int) $stored->id;
+                }
+                continue;
+            }
+
+            $match = $this->matchSimArchive($active, $row, $kept);
+            if (!$match) {
+                continue;
+            }
+            $arsip->updateCatatanById($match->id, $catatan);
+            $kept[] = (int) $match->id;
+        }
+
+        $arsip->deactivateExcept($karyawanId, 'SIM', $kept, $createdBy);
+    }
+
+    private function matchSimArchive($docs, array $row, array $kept)
+    {
+        $available = $docs->filter(function ($doc) use ($kept) {
+            return !in_array((int) $doc->id, $kept, true);
+        });
+        $nomor = trim((string) ($row['no_sim'] ?? ''));
+        $tipe = trim((string) ($row['tipe_sim'] ?? ''));
+
+        if ($nomor !== '') {
+            $match = $available->first(function ($doc) use ($nomor) {
+                return preg_match('/Nomor:\s*' . preg_quote($nomor, '/') . '(?:\s|\||$)/i', (string) ($doc->catatan ?? ''));
+            });
+            if ($match) {
+                return $match;
+            }
+        }
+        if ($tipe !== '') {
+            $match = $available->first(function ($doc) use ($tipe) {
+                return preg_match('/Tipe SIM:\s*' . preg_quote($tipe, '/') . '(?:\s|\||$)/i', (string) ($doc->catatan ?? ''));
+            });
+            if ($match) {
+                return $match;
+            }
+        }
+
+        return null;
     }
 
     private function archiveFileOrCatatan($arsip, $karyawanId, $file, $jenis, $createdBy, $catatan, $index = null)

@@ -253,6 +253,76 @@ class KaryawanArsipDokumenService
         return true;
     }
 
+    public function listActiveByJenis($karyawanId, $jenisDokumen)
+    {
+        if (!Schema::hasTable('karyawan_dokumen_arsip')) {
+            return collect();
+        }
+
+        return DB::table('karyawan_dokumen_arsip')
+            ->where('karyawan_id', $karyawanId)
+            ->where('is_active', 1)
+            ->where('jenis_dokumen', strtoupper(trim((string) $jenisDokumen)))
+            ->orderBy('id')
+            ->get();
+    }
+
+    public function updateCatatanById($id, $catatan)
+    {
+        if (!Schema::hasTable('karyawan_dokumen_arsip')) {
+            return false;
+        }
+
+        $catatan = trim((string) $catatan);
+        if ($catatan === '' || !$id) {
+            return false;
+        }
+
+        return (bool) DB::table('karyawan_dokumen_arsip')->where('id', $id)->update([
+            'catatan' => $catatan,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    public function deactivateExcept($karyawanId, $jenisDokumen, array $keepIds, $deletedBy = null)
+    {
+        if (!Schema::hasTable('karyawan_dokumen_arsip')) {
+            return false;
+        }
+
+        $query = DB::table('karyawan_dokumen_arsip')
+            ->where('karyawan_id', $karyawanId)
+            ->where('is_active', 1)
+            ->where('jenis_dokumen', strtoupper(trim((string) $jenisDokumen)));
+        if ($keepIds) {
+            $query->whereNotIn('id', $keepIds);
+        }
+
+        $ids = $query->pluck('id')->all();
+        if (!$ids) {
+            return false;
+        }
+
+        $columns = Schema::getColumnListing('karyawan_dokumen_arsip');
+        $data = ['is_active' => 0];
+        if (in_array('updated_at', $columns, true)) {
+            $data['updated_at'] = date('Y-m-d H:i:s');
+        }
+        if (in_array('updated_by', $columns, true) && $deletedBy) {
+            $data['updated_by'] = $deletedBy;
+        }
+        if (in_array('deleted_at', $columns, true)) {
+            $data['deleted_at'] = date('Y-m-d H:i:s');
+        }
+        if (in_array('deleted_by', $columns, true) && $deletedBy) {
+            $data['deleted_by'] = $deletedBy;
+        }
+
+        DB::table('karyawan_dokumen_arsip')->whereIn('id', $ids)->update($data);
+
+        return true;
+    }
+
     public function deactivateLatest($karyawanId, $jenisDokumen, $deletedBy = null)
     {
         if (!Schema::hasTable('karyawan_dokumen_arsip')) {

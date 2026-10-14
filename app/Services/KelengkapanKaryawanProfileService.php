@@ -410,20 +410,18 @@ class KelengkapanKaryawanProfileService
                 ->get();
         }
 
-        $driverList = $drivers->values();
-        $count = max(count($files), $driverList->count());
+        $usedFiles = [];
         $rows = [];
-        for ($index = 0; $index < $count; $index++) {
-            $file = $files[$index] ?? null;
-            $driver = $driverList->get($index);
-            $meta = $this->simMetaFromCatatan($file['catatan'] ?? '');
+        foreach ($drivers->values() as $driver) {
+            $fileIndex = $this->indexOfSimFile($files, $driver, $usedFiles);
+            $file = $fileIndex !== null ? ($files[$fileIndex] ?? null) : null;
+            if ($fileIndex !== null) {
+                $usedFiles[$fileIndex] = true;
+            }
             $row = [
-                'tipe_sim' => $this->firstFilled([$driver->tipe_sim ?? null, $meta['tipe_sim']]),
-                'no_sim' => $this->firstFilled([$driver->nomor_sim ?? null, $meta['no_sim']]),
-                'tgl_expired' => $this->firstFilled([
-                    $driver ? $this->dateOnly($driver->expired) : '',
-                    $meta['tgl_expired'],
-                ]),
+                'tipe_sim' => $driver->tipe_sim,
+                'no_sim' => $driver->nomor_sim,
+                'tgl_expired' => $this->dateOnly($driver->expired),
                 'file' => $file['nama_file'] ?? null,
                 'file_url' => $file['url'] ?? null,
             ];
@@ -433,7 +431,52 @@ class KelengkapanKaryawanProfileService
             $rows[] = $row;
         }
 
+        foreach ($files as $index => $file) {
+            if (!empty($usedFiles[$index])) {
+                continue;
+            }
+            if (trim((string) ($file['path_file'] ?? '')) === '' && trim((string) ($file['nama_file'] ?? '')) === '') {
+                continue;
+            }
+            $meta = $this->simMetaFromCatatan($file['catatan'] ?? '');
+            $rows[] = [
+                'tipe_sim' => $meta['tipe_sim'],
+                'no_sim' => $meta['no_sim'],
+                'tgl_expired' => $meta['tgl_expired'],
+                'file' => $file['nama_file'] ?? null,
+                'file_url' => $file['url'] ?? null,
+            ];
+        }
+
         return $rows;
+    }
+
+    private function indexOfSimFile(array $files, $driver, array $usedFiles)
+    {
+        $nomor = trim((string) ($driver->nomor_sim ?? ''));
+        $tipe = trim((string) ($driver->tipe_sim ?? ''));
+
+        foreach ($files as $index => $file) {
+            if (!empty($usedFiles[$index])) {
+                continue;
+            }
+            $meta = $this->simMetaFromCatatan($file['catatan'] ?? '');
+            if ($nomor !== '' && trim((string) $meta['no_sim']) === $nomor) {
+                return $index;
+            }
+        }
+
+        foreach ($files as $index => $file) {
+            if (!empty($usedFiles[$index])) {
+                continue;
+            }
+            $meta = $this->simMetaFromCatatan($file['catatan'] ?? '');
+            if ($tipe !== '' && strcasecmp(trim((string) $meta['tipe_sim']), $tipe) === 0) {
+                return $index;
+            }
+        }
+
+        return null;
     }
 
     private function matchDocument(array $files, $name, $index)
