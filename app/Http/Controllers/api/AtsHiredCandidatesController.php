@@ -598,6 +598,9 @@ class AtsHiredCandidatesController extends Controller
             'penyakit_bawaan_lahir' => optional($medical)->penyakit_bawaan_lahir,
             'penyakit_kronis' => optional($medical)->penyakit_kronis,
             'riwayat_kecelakaan' => optional($medical)->riwayat_kecelakaan,
+            'obat_rutin' => optional($medical)->obat_rutin,
+            'gangguan_mental' => optional($medical)->gangguan_mental,
+            'alergi' => optional($medical)->alergi,
         ];
 
         $payroll = [
@@ -754,6 +757,9 @@ class AtsHiredCandidatesController extends Controller
             'penyakit_bawaan_lahir' => trim((string) data_get($request, 'medical.penyakit_bawaan_lahir')) ?: null,
             'penyakit_kronis' => trim((string) data_get($request, 'medical.penyakit_kronis')) ?: null,
             'riwayat_kecelakaan' => trim((string) data_get($request, 'medical.riwayat_kecelakaan')) ?: null,
+            'obat_rutin' => trim((string) data_get($request, 'medical.obat_rutin')) ?: null,
+            'gangguan_mental' => trim((string) data_get($request, 'medical.gangguan_mental')) ?: null,
+            'alergi' => trim((string) data_get($request, 'medical.alergi')) ?: null,
             'keterangan_mata' => $this->normalizeKeteranganMata(data_get($request, 'medical.keterangan_mata')),
         ];
 
@@ -767,6 +773,9 @@ class AtsHiredCandidatesController extends Controller
             $medis->penyakit_bawaan_lahir = $medicalData['penyakit_bawaan_lahir'];
             $medis->penyakit_kronis = $medicalData['penyakit_kronis'];
             $medis->riwayat_kecelakaan = $medicalData['riwayat_kecelakaan'];
+            $medis->obat_rutin = $medicalData['obat_rutin'];
+            $medis->gangguan_mental = $medicalData['gangguan_mental'];
+            $medis->alergi = $medicalData['alergi'];
             $medis->keterangan_mata = $medicalData['keterangan_mata'];
             $medis->created_by = $this->karyawan;
             $medis->created_at = $timestamp;
@@ -1356,6 +1365,9 @@ class AtsHiredCandidatesController extends Controller
             'medical.penyakit_bawaan_lahir',
             'medical.penyakit_kronis',
             'medical.riwayat_kecelakaan',
+            'medical.obat_rutin',
+            'medical.gangguan_mental',
+            'medical.alergi',
         ];
 
         foreach ($fields as $field) {
