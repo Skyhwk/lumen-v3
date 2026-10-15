@@ -38,7 +38,7 @@ class DataApplicantsController extends Controller
     public function index(Request $request)
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
-            ->where('status', 'screening')
+            ->where('status', $this->applicantStatus())
             ->where('is_active', 1)
             ->whereNotNull('personnel_request_id')
             ->where('personnel_request_id', '!=', '')
@@ -176,6 +176,11 @@ class DataApplicantsController extends Controller
         }
 
         return $this->applyRecruitmentCoreDataTableOrdering($datatable)->make(true);
+    }
+
+    protected function applicantStatus(): string
+    {
+        return 'screening';
     }
 
     /**
