@@ -364,7 +364,7 @@ class DataApplicantsController extends Controller
             $applicant->loadMissing(['personnelRequest', 'personalRequest']);
 
             if (!empty($applicant->email)) {
-                $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($applicant);
+                $bodyEmail = $this->rejectionEmailBody($applicant);
                 SendEmail::where('to', $applicant->email)
                     ->where('subject', 'Informasi Hasil Seleksi - PT Inti Surya Laboratorium')
                     ->where('body', $bodyEmail)
@@ -398,6 +398,11 @@ class DataApplicantsController extends Controller
             'message' => 'Applicant has been rejected.',
             'data' => $applicant,
         ], 200);
+    }
+
+    protected function rejectionEmailBody($applicant): string
+    {
+        return GenerateMessageAtsEmail::bodyEmailRejectKandidat($applicant);
     }
 
     /**
