@@ -1266,10 +1266,10 @@ class AtsFinalDecisionController extends Controller
                     'message' => 'Alasan pengajuan ulang Salary Approval wajib diisi.',
                 ], 422);
             }
-            if (mb_strlen($resubmitReason) > 1000) {
+            if (mb_strlen($resubmitReason) > 2000) {
                 return response()->json([
                     'status' => 422,
-                    'message' => 'Alasan pengajuan ulang maksimal 1000 karakter.',
+                    'message' => 'Alasan pengajuan ulang maksimal 2000 karakter.',
                 ], 422);
             }
 
@@ -1576,10 +1576,10 @@ class AtsFinalDecisionController extends Controller
                 'message' => 'Alasan pengajuan ulang wajib diisi.',
             ], 422);
         }
-        if (mb_strlen($resubmitReason) > 1000) {
+        if (mb_strlen($resubmitReason) > 2000) {
             return response()->json([
                 'status' => 422,
-                'message' => 'Alasan pengajuan ulang maksimal 1000 karakter.',
+                'message' => 'Alasan pengajuan ulang maksimal 2000 karakter.',
             ], 422);
         }
 
@@ -1737,10 +1737,10 @@ class AtsFinalDecisionController extends Controller
                 'message' => 'Alasan pengajuan ulang Final Decision wajib diisi.',
             ], 422);
         }
-        if (mb_strlen($resubmitReason) > 1000) {
+        if (mb_strlen($resubmitReason) > 2000) {
             return response()->json([
                 'status' => 422,
-                'message' => 'Alasan pengajuan ulang maksimal 1000 karakter.',
+                'message' => 'Alasan pengajuan ulang maksimal 2000 karakter.',
             ], 422);
         }
 
