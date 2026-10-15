@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Models\NewRecruitment;
+use App\Services\GenerateMessageAtsEmail;
 use App\Services\RecruitmentStatusService;
 use App\Services\SendEmail;
 use Carbon\Carbon;
@@ -14,6 +15,11 @@ class DataScreeningController extends DataApplicantsController
     protected function applicantStatus(): string
     {
         return 'review';
+    }
+
+    protected function rejectionEmailBody($applicant): string
+    {
+        return GenerateMessageAtsEmail::bodyEmailRejectKandidat($applicant, true);
     }
 
     public function approve(Request $request, $id = null)

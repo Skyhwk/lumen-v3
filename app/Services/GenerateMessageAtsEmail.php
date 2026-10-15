@@ -1605,10 +1605,13 @@ class GenerateMessageAtsEmail
      * @param object $data
      * @return string
      */
-    public static function bodyEmailRejectKandidat($data)
+    public static function bodyEmailRejectKandidat($data, bool $initialScreening = false)
     {
         $posisi   = htmlspecialchars(self::posisiLabelCandidate($data));
         $greeting = self::candidateGreetingHtml($data, $data->nama_lengkap ?? $data->nama_kandidat ?? 'Kandidat');
+        $resultMessage = $initialScreening
+            ? 'Setelah melakukan peninjauan terhadap data lamaran yang Anda kirimkan, kami informasikan bahwa Anda belum dinyatakan lolos pada tahap seleksi awal dan belum dapat melanjutkan ke tahap berikutnya untuk posisi ini.'
+            : 'Setelah melalui proses evaluasi, kami belum dapat melanjutkan lamaran Anda ke tahap berikutnya. Keputusan ini diambil berdasarkan pertimbangan kebutuhan posisi saat ini.';
 
         return "
         <!DOCTYPE html>
@@ -1632,7 +1635,7 @@ class GenerateMessageAtsEmail
                         </p>
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155;'>
-                            Setelah melalui proses evaluasi, kami belum dapat melanjutkan lamaran Anda ke tahap berikutnya. Keputusan ini diambil berdasarkan pertimbangan kebutuhan posisi saat ini.
+                            {$resultMessage}
                         </p>
 
                         <p style='font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 0;'>
