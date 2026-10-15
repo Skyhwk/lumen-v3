@@ -844,12 +844,19 @@ class AssessmentController extends Controller
                 $nextStatus = $passedAssessment ? 'screening' : 'rejected';
                 (new RecruitmentStatusService())->update($attempt->recruitment_id, $nextStatus, $completedAt);
                 if (!$passedAssessment) {
+                    $rejectionReason = 'Tidak memenuhi nilai minimum pada seluruh tes assessment.';
                     RecruitmentStatusService::markRejectedKandidat(
                         (int) $attempt->recruitment_id,
                         'Assessment System',
-                        'Tidak memenuhi nilai minimum pada seluruh tes assessment.',
+                        $rejectionReason,
                         $completedAt
                     );
+                    DB::table('new_recruitment')->where('id', $attempt->recruitment_id)->update([
+                        'rejected_by' => 'Assessment System',
+                        'rejected_at' => $completedAt,
+                        'alasan_reject' => $rejectionReason,
+                        'updated_at' => $completedAt,
+                    ]);
                 }
                 $recruitment = DB::table('new_recruitment')->where('id', $attempt->recruitment_id)->first();
                 if ($recruitment && $passedAssessment) {
@@ -942,14 +949,17 @@ class AssessmentController extends Controller
             ? json_decode($personnelRequest->assesment_question_category ?: '[]', true)
             : [];
 
-        foreach (is_array($configs) ? $configs : [] as $config) {
-            if (!is_array($config)
-                || strtolower(trim((string) ($config['type'] ?? ''))) !== 'hr'
-                || (int) ($config['id'] ?? 0) !== (int) $session->question_category_id) {
-                continue;
-            }
+        $matchingConfigs = collect(is_array($configs) ? $configs : [])
+            ->filter(function ($config) use ($session) {
+                return is_array($config)
+                    && (int) ($config['id'] ?? 0) === (int) $session->question_category_id;
+            });
+        $minimumConfig = $matchingConfigs->first(function ($config) {
+            return strtolower(trim((string) ($config['type'] ?? ''))) === 'hr';
+        }) ?: $matchingConfigs->first();
 
-            return max(0, (float) ($config['nilai_minimum'] ?? 0));
+        if ($minimumConfig) {
+            return max(0, (float) ($minimumConfig['nilai_minimum'] ?? 0));
         }
 
         return 0.0;
