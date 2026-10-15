@@ -539,6 +539,9 @@ class KelengkapanKaryawanSaveService
             'penyakit_bawaan_lahir' => $this->medicalText($request->input('penyakit_bawaan_lahir'), 'Tidak ada'),
             'penyakit_kronis' => $this->medicalText($request->input('penyakit_kronis'), 'Tidak ada'),
             'riwayat_kecelakaan' => $this->medicalText($request->input('riwayat_kecelakaan'), 'Tidak ada'),
+            'obat_rutin' => $this->medicalText($request->input('obat_rutin'), 'Tidak ada'),
+            'gangguan_mental' => $this->medicalText($request->input('gangguan_mental'), 'Tidak ada'),
+            'alergi' => $this->medicalText($request->input('alergi'), 'Tidak ada'),
             'updated_at' => $now,
             'updated_by' => $createdBy,
         ];
