@@ -278,8 +278,9 @@ class AtsInterviewHrdController extends Controller
     /**
      * Input or update HRD Interview score & evaluation results
      */
-    public function inputHrdResult(Request $request, $id)
+    public function inputHrdResult(Request $request, $id = null)
     {
+        $id = $id ?? $request->header('id') ?? $request->input('id');
         $applicant = NewRecruitment::find($id);
 
         if (!$applicant) {
@@ -287,6 +288,20 @@ class AtsInterviewHrdController extends Controller
                 'status' => 404,
                 'message' => 'Candidate data not found',
             ], 404);
+        }
+
+        try {
+            $this->storeHrdSelfieDocument($request, $applicant);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'status' => 422,
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'status' => 500,
+                'message' => $e->getMessage(),
+            ], 500);
         }
 
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
@@ -318,6 +333,69 @@ class AtsInterviewHrdController extends Controller
             'message' => 'HRD Interview score and evaluation saved successfully.',
             'data' => $interview,
         ], 200);
+    }
+
+    private function storeHrdSelfieDocument(Request $request, NewRecruitment $applicant): void
+    {
+        if (!Schema::hasTable('candidate_documents')) {
+            throw new \RuntimeException('Tabel candidate_documents tidak tersedia.');
+        }
+
+        $file = $request->file('selfie');
+        if (!$file || !method_exists($file, 'isValid') || !$file->isValid()) {
+            throw new \InvalidArgumentException('Foto selfie terbaru wajib diunggah.');
+        }
+
+        $allowed = [
+            'image/jpeg' => 'jpg',
+            'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+        ];
+        $mime = strtolower((string) $file->getMimeType());
+        if (!isset($allowed[$mime])) {
+            throw new \InvalidArgumentException('Foto selfie harus berupa gambar JPG, PNG, atau WEBP.');
+        }
+
+        $fileSize = (int) $file->getSize();
+        if ($fileSize > 5 * 1024 * 1024) {
+            throw new \InvalidArgumentException('Ukuran foto selfie maksimal 5 MB.');
+        }
+
+        $directory = public_path('recruitment/candidate-documents');
+        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+            throw new \RuntimeException('Folder penyimpanan dokumen kandidat tidak dapat dibuat.');
+        }
+
+        $extension = $allowed[$mime];
+        $originalName = trim((string) ($file->getClientOriginalName() ?: ('selfie.' . $extension)));
+        $fileName = 'candidate-' . $applicant->id . '-foto-selfie-' . time() . '-' . substr(md5($originalName . microtime(true)), 0, 6) . '.' . $extension;
+        $file->move($directory, $fileName);
+
+        $now = Carbon::now();
+        $profileId = DB::table('candidate_profiles')
+            ->where('new_recruitment_id', $applicant->id)
+            ->value('id');
+
+        DB::table('candidate_documents')
+            ->where('new_recruitment_id', $applicant->id)
+            ->where('is_active', 1)
+            ->where('jenis_dokumen', 'FOTO SELFIE')
+            ->update(['is_active' => 0, 'updated_at' => $now]);
+
+        DB::table('candidate_documents')->insert([
+            'candidate_profile_id' => $profileId,
+            'new_recruitment_id' => $applicant->id,
+            'jenis_dokumen' => 'FOTO SELFIE',
+            'nama_file' => $originalName,
+            'path_file' => 'recruitment/candidate-documents/' . $fileName,
+            'mime_type' => $mime,
+            'ukuran_file' => $fileSize,
+            'catatan' => 'Selfie terbaru evaluasi HRD',
+            'is_active' => 1,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
     }
 
     /**
