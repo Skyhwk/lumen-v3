@@ -14,7 +14,6 @@ use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\GenerateToken;
 use App\Services\CandidateDocumentAttachmentService;
 use App\Services\GenerateAssessmentDocumentService;
-use App\Services\RecruitmentPictureService;
 use App\Services\RecruitmentStatusService;
 use App\Services\RequesterSalaryApprovalService;
 use App\Services\SallaryOfferService;
@@ -111,6 +110,24 @@ class AtsFinalDecisionController extends Controller
         }
 
         return $pos ?: '-';
+    }
+
+    private function parseMoneyField($val): float
+    {
+        $parsed = RequesterSalaryApprovalService::parseRupiahToInt($val);
+
+        return $parsed !== null ? (float) $parsed : 0.0;
+    }
+
+    private function cleanSalaryString($salary): string
+    {
+        if ($salary === null || $salary === '') {
+            return '';
+        }
+
+        $parsed = RequesterSalaryApprovalService::parseRupiahToInt($salary);
+
+        return $parsed !== null ? (string) $parsed : '';
     }
 
     private function newRecruitmentHasColumn($column)
@@ -1002,8 +1019,7 @@ class AtsFinalDecisionController extends Controller
             $offer = SallaryOfferService::getActive((int) $id);
 
             if ($reqFinalSalary !== null && $reqFinalSalary !== '') {
-                $cleanSalary = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $reqFinalSalary)));
-                $finalSalary = $cleanSalary !== '' ? $cleanSalary : $reqFinalSalary;
+                $finalSalary = $this->cleanSalaryString($reqFinalSalary) ?: $reqFinalSalary;
             } else {
                 $finalSalary = optional($offer)->sallary_offer_direktur ?? optional($offer)->sallary_offer_hrd ?? $applicant->ekspetasi_gaji;
             }
@@ -1014,17 +1030,12 @@ class AtsFinalDecisionController extends Controller
                 $user ?? 'HRD'
             );
 
-            $cleanNumber = function ($val) {
-                if ($val === null || $val === '') return 0;
-                $clean = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', (string)$val)));
-                return $clean !== '' ? (float) $clean : 0;
-            };
-
-            $gajiPokok       = $cleanNumber($request->input('gaji_pokok')) ?: (float)$finalSalary;
-            $potBpjsKes      = $cleanNumber($request->input('potongan_bpjs_kes'));
-            $potBpjsTk       = $cleanNumber($request->input('potongan_bpjs_tk'));
-            $potPph21        = $cleanNumber($request->input('pot_pph21'));
-            $pencadanganUpah = $cleanNumber($request->input('pencadangan_upah'));
+            $gajiPokok       = $this->parseMoneyField($request->input('gaji_pokok')) ?: (float)$finalSalary;
+            $tunjanganKerja  = $this->parseMoneyField($request->input('tunjangan_kerja'));
+            $potBpjsKes      = $this->parseMoneyField($request->input('potongan_bpjs_kes'));
+            $potBpjsTk       = $this->parseMoneyField($request->input('potongan_bpjs_tk'));
+            $potPph21        = $this->parseMoneyField($request->input('pot_pph21'));
+            $pencadanganUpah = $this->parseMoneyField($request->input('pencadangan_upah'));
 
             $startDate = $request->input('start_date');
             if (!empty($startDate)) {
@@ -1038,6 +1049,7 @@ class AtsFinalDecisionController extends Controller
                     ['new_recruitment_id' => $id],
                     [
                         'gaji_pokok'          => $gajiPokok,
+                        'tunjangan_kerja'     => $tunjanganKerja,
                         'potongan_bpjs_kes'   => $potBpjsKes,
                         'potongan_bpjs_tk'    => $potBpjsTk,
                         'pot_pph21'           => $potPph21,
@@ -1065,6 +1077,7 @@ class AtsFinalDecisionController extends Controller
 
                 $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant, [
                     'gaji_pokok'          => $gajiPokok,
+                    'tunjangan_kerja'     => $tunjanganKerja,
                     'potongan_bpjs_kes'   => $potBpjsKes,
                     'potongan_bpjs_tk'    => $potBpjsTk,
                     'pot_pph21'           => $potPph21,
@@ -1147,13 +1160,8 @@ class AtsFinalDecisionController extends Controller
         $expectedSalary = $request->input('expected_salary') ?? $request->input('ekspetasi_gaji');
         $requesterSalaryStatus = null;
 
-        $cleanSalary = function ($salary) {
-            if ($salary === null || $salary === '') return '';
-            return preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', (string)$salary)));
-        };
-
         if ($expectedSalary !== null) {
-            $cleanExpectedSalary = $cleanSalary($expectedSalary);
+            $cleanExpectedSalary = $this->cleanSalaryString($expectedSalary);
             $valueToSave = $cleanExpectedSalary !== '' ? $cleanExpectedSalary : $expectedSalary;
 
             $user = $this->karyawan;
@@ -1171,11 +1179,11 @@ class AtsFinalDecisionController extends Controller
             }
 
             if ($request->has('sallary_offer_direktur')) {
-                $offerData['sallary_offer_direktur'] = $cleanSalary($request->input('sallary_offer_direktur'));
+                $offerData['sallary_offer_direktur'] = $this->cleanSalaryString($request->input('sallary_offer_direktur'));
             }
 
             if ($request->has('final_sallary')) {
-                $offerData['final_sallary'] = $cleanSalary($request->input('final_sallary'));
+                $offerData['final_sallary'] = $this->cleanSalaryString($request->input('final_sallary'));
             }
 
             $forceNewOffer = RecruitmentStatusService::hasFinanceRejected($applicant)
@@ -1188,17 +1196,12 @@ class AtsFinalDecisionController extends Controller
                 $forceNewOffer
             );
 
-            $cleanNumber = function ($val) use ($cleanSalary) {
-                if ($val === null || $val === '') return 0;
-                $clean = $cleanSalary($val);
-                return $clean !== '' ? (float) $clean : 0;
-            };
-
-            $gajiPokok       = $cleanNumber($request->input('gaji_pokok')) ?: (float)$valueToSave;
-            $potBpjsKes      = $cleanNumber($request->input('potongan_bpjs_kes'));
-            $potBpjsTk       = $cleanNumber($request->input('potongan_bpjs_tk'));
-            $potPph21        = $cleanNumber($request->input('pot_pph21'));
-            $pencadanganUpah = $cleanNumber($request->input('pencadangan_upah'));
+            $gajiPokok       = $this->parseMoneyField($request->input('gaji_pokok')) ?: (float)$valueToSave;
+            $tunjanganKerja  = $this->parseMoneyField($request->input('tunjangan_kerja'));
+            $potBpjsKes      = $this->parseMoneyField($request->input('potongan_bpjs_kes'));
+            $potBpjsTk       = $this->parseMoneyField($request->input('potongan_bpjs_tk'));
+            $potPph21        = $this->parseMoneyField($request->input('pot_pph21'));
+            $pencadanganUpah = $this->parseMoneyField($request->input('pencadangan_upah'));
             $startDate       = $request->input('start_date');
 
             $startDateTime = null;
@@ -1214,6 +1217,7 @@ class AtsFinalDecisionController extends Controller
                 ['new_recruitment_id' => $id],
                 [
                     'gaji_pokok'          => $gajiPokok,
+                    'tunjangan_kerja'     => $tunjanganKerja,
                     'potongan_bpjs_kes'   => $potBpjsKes,
                     'potongan_bpjs_tk'    => $potBpjsTk,
                     'pot_pph21'           => $potPph21,
@@ -1623,10 +1627,9 @@ class AtsFinalDecisionController extends Controller
             ], 422);
         }
 
-        $pictureService = app(RecruitmentPictureService::class);
-        $newPicture = null;
+        $selfieDocument = null;
         try {
-            $newPicture = $pictureService->storeUploadedFile($request->file('selfie'));
+            $selfieDocument = $this->storeKeptResubmitSelfieDocument($request, (int) $applicant->id);
         } catch (\InvalidArgumentException $e) {
             return response()->json([
                 'status' => 422,
@@ -1642,8 +1645,7 @@ class AtsFinalDecisionController extends Controller
         $assessmentService = app(GenerateAssessmentDocumentService::class);
         $documentService = app(CandidateDocumentAttachmentService::class);
         $documents = [];
-        $oldPicture = $applicant->picture;
-        $pictureReplaced = false;
+        $applicantUpdated = false;
 
         try {
             $tokenService = new GenerateToken();
@@ -1662,13 +1664,9 @@ class AtsFinalDecisionController extends Controller
                 'token_approval' => $token,
                 'status'         => 'management_decision',
                 'is_keep'        => 0,
-                'picture'        => $newPicture,
                 'meta_history'   => json_encode(array_values($history)),
             ]);
-            $pictureReplaced = true;
-            if ($oldPicture && basename((string) $oldPicture) !== $newPicture) {
-                $pictureService->delete($oldPicture);
-            }
+            $applicantUpdated = true;
             $applicant->meta_history = json_encode(array_values($history));
             $applicant->resubmit_reason = $resubmitReason;
             $applicant->resubmit_by = $this->karyawan ?? 'HRD';
@@ -1713,8 +1711,8 @@ class AtsFinalDecisionController extends Controller
                 'candidate_document_attachment_count' => count($candidateDocumentAttachments),
             ], 200);
         } catch (\Exception $e) {
-            if ($newPicture && !$pictureReplaced) {
-                $pictureService->delete($newPicture);
+            if ($selfieDocument && !$applicantUpdated) {
+                $this->deleteKeptResubmitSelfieDocument($selfieDocument);
             }
 
             return response()->json([
@@ -1723,6 +1721,94 @@ class AtsFinalDecisionController extends Controller
             ], 500);
         } finally {
             $assessmentService->cleanupDocuments($documents);
+        }
+    }
+
+    private function storeKeptResubmitSelfieDocument(Request $request, int $recruitmentId): array
+    {
+        $file = $request->file('selfie');
+        if (!$file || !method_exists($file, 'isValid') || !$file->isValid()) {
+            throw new \InvalidArgumentException('Foto selfie terbaru wajib diunggah.');
+        }
+
+        $allowed = [
+            'image/jpeg' => 'jpg',
+            'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+        ];
+        $mime = strtolower((string) $file->getMimeType());
+        if (!isset($allowed[$mime])) {
+            throw new \InvalidArgumentException('Foto selfie harus berupa gambar JPG, PNG, atau WEBP.');
+        }
+        if ((int) $file->getSize() > 5 * 1024 * 1024) {
+            throw new \InvalidArgumentException('Ukuran foto selfie maksimal 5 MB.');
+        }
+        if (!Schema::hasTable('candidate_documents') || !Schema::hasTable('candidate_profiles')) {
+            throw new \RuntimeException('Tabel dokumen kandidat belum tersedia.');
+        }
+
+        $profileId = DB::table('candidate_profiles')
+            ->where('new_recruitment_id', $recruitmentId)
+            ->orderByDesc('id')
+            ->value('id');
+        if (!$profileId) {
+            throw new \InvalidArgumentException('Profil kandidat tidak ditemukan. Foto selfie tidak dapat disimpan.');
+        }
+
+        $directory = public_path('recruitment/candidate-documents');
+        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+            throw new \RuntimeException('Folder dokumen kandidat tidak dapat dibuat.');
+        }
+
+        $size = (int) $file->getSize();
+        $originalName = trim((string) $file->getClientOriginalName());
+        $fileName = 'candidate-' . $recruitmentId . '-foto-selfie-' . Carbon::now()->format('YmdHisv') . '.' . $allowed[$mime];
+        $file->move($directory, $fileName);
+
+        $now = Carbon::now();
+        try {
+            $documentId = DB::table('candidate_documents')->insertGetId([
+                'candidate_profile_id' => (int) $profileId,
+                'new_recruitment_id' => $recruitmentId,
+                'jenis_dokumen' => 'FOTO SELFIE',
+                'nama_file' => $originalName !== '' ? $originalName : $fileName,
+                'path_file' => 'recruitment/candidate-documents/' . $fileName,
+                'mime_type' => $mime,
+                'ukuran_file' => $size,
+                'catatan' => 'Selfie terbaru pengajuan ulang kandidat di-keep',
+                'is_active' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        } catch (\Exception $e) {
+            $storedPath = $directory . DIRECTORY_SEPARATOR . $fileName;
+            if (is_file($storedPath)) {
+                @unlink($storedPath);
+            }
+            throw new \RuntimeException('Foto selfie tidak dapat disimpan ke dokumen kandidat.');
+        }
+
+        return [
+            'id' => (int) $documentId,
+            'file_name' => $fileName,
+        ];
+    }
+
+    private function deleteKeptResubmitSelfieDocument(array $document): void
+    {
+        if (!empty($document['id']) && Schema::hasTable('candidate_documents')) {
+            DB::table('candidate_documents')->where('id', $document['id'])->delete();
+        }
+
+        $fileName = basename((string) ($document['file_name'] ?? ''));
+        if ($fileName === '') {
+            return;
+        }
+
+        $path = public_path('recruitment/candidate-documents/' . $fileName);
+        if (is_file($path)) {
+            @unlink($path);
         }
     }
 
@@ -1890,17 +1976,12 @@ class AtsFinalDecisionController extends Controller
             ], 422);
         }
 
-        $cleanNumber = function ($val) {
-            if ($val === null || $val === '') return 0;
-            $clean = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', (string)$val)));
-            return $clean !== '' ? (float) $clean : 0;
-        };
-
-        $gajiPokok       = $cleanNumber($request->input('gaji_pokok'));
-        $potBpjsKes      = $cleanNumber($request->input('potongan_bpjs_kes'));
-        $potBpjsTk       = $cleanNumber($request->input('potongan_bpjs_tk'));
-        $potPph21        = $cleanNumber($request->input('pot_pph21'));
-        $pencadanganUpah = $cleanNumber($request->input('pencadangan_upah'));
+        $gajiPokok       = $this->parseMoneyField($request->input('gaji_pokok'));
+        $tunjanganKerja  = $this->parseMoneyField($request->input('tunjangan_kerja'));
+        $potBpjsKes      = $this->parseMoneyField($request->input('potongan_bpjs_kes'));
+        $potBpjsTk       = $this->parseMoneyField($request->input('potongan_bpjs_tk'));
+        $potPph21        = $this->parseMoneyField($request->input('pot_pph21'));
+        $pencadanganUpah = $this->parseMoneyField($request->input('pencadangan_upah'));
 
         $user = $this->karyawan;
         $now = Carbon::now();
@@ -1915,6 +1996,7 @@ class AtsFinalDecisionController extends Controller
             ['new_recruitment_id' => $id],
             [
                 'gaji_pokok'          => $gajiPokok,
+                'tunjangan_kerja'     => $tunjanganKerja,
                 'potongan_bpjs_kes'   => $potBpjsKes,
                 'potongan_bpjs_tk'    => $potBpjsTk,
                 'pot_pph21'           => $potPph21,
@@ -1948,6 +2030,7 @@ class AtsFinalDecisionController extends Controller
 
             $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant, [
                 'gaji_pokok'          => $gajiPokok,
+                'tunjangan_kerja'     => $tunjanganKerja,
                 'potongan_bpjs_kes'   => $potBpjsKes,
                 'potongan_bpjs_tk'    => $potBpjsTk,
                 'pot_pph21'           => $potPph21,

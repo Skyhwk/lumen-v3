@@ -14,6 +14,7 @@ use App\Services\SallaryOfferService;
 use App\Services\SendEmail;
 use App\Services\AtsNotificationService;
 use App\Services\RecruitmentDecisionActionTelegramService;
+use App\Services\OfferingSalaryEmail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -102,7 +103,18 @@ class FinanceOfferingSallaryController extends Controller
                 return $row->candidateDataOffer;
             })
             ->addColumn('expected_salary', function ($row) {
-                return optional($row->sallaryOffer)->sallary_offer_hrd ?? $row->ekspetasi_gaji ?? 0;
+                $cdo = $row->candidateDataOffer;
+                if ($cdo) {
+                    $total = (float) ($cdo->gaji_pokok ?? 0) + (float) ($cdo->tunjangan_kerja ?? 0);
+                    if ($total > 0) {
+                        return $total;
+                    }
+                }
+
+                return OfferingSalaryEmail::getSalaryOfferHrd($row)
+                    ?? optional($row->sallaryOffer)->sallary_offer_hrd
+                    ?? $row->ekspetasi_gaji
+                    ?? 0;
             })
             ->addColumn('sallary_offer_user', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_user ?? 0;
@@ -304,6 +316,19 @@ class FinanceOfferingSallaryController extends Controller
 
     private function sendDirectorApprovalEmail(NewRecruitment $applicant, string $sender = 'Finance'): bool
     {
+        $applicant->loadMissing([
+            'candidateDataOffer',
+            'sallaryOffer',
+            'personalRequest.masterJabatan',
+            'personnelRequest.masterJabatan',
+            'candidateProfile',
+            'candidateEducations',
+            'candidateWorkExperiences',
+            'candidateMedicalInformation',
+            'hrdInterview',
+            'userInterview',
+        ]);
+
         if (empty($applicant->token_approval)) {
             $tokenService = new GenerateToken();
             $tokenKey = $applicant->id . ($applicant->nama_lengkap ?? '') . 'salary_approval' . str_replace('.', '', microtime(true));
@@ -370,10 +395,13 @@ class FinanceOfferingSallaryController extends Controller
         $applicant = NewRecruitment::with([
             'personalRequest.masterJabatan',
             'sallaryOffer',
+            'candidateDataOffer',
             'candidateProfile',
             'candidateEducations',
             'candidateWorkExperiences',
             'candidateMedicalInformation',
+            'hrdInterview',
+            'userInterview',
         ])->find($recruitmentId);
 
         if (!$applicant) {

@@ -413,7 +413,7 @@ class RecruitmentController extends Controller{
                 'created_at' => DATE('Y-m-d H:i:s'),
                 'updated_at' => DATE('Y-m-d H:i:s'),
             ]);
-            (new RecruitmentStatusService())->update($id, 'assessment');
+            (new RecruitmentStatusService())->update($id, 'review');
 
             DB::commit();
 
@@ -559,7 +559,7 @@ class RecruitmentController extends Controller{
             ->get();
 
         $activeRecruitmentStatuses = [
-            'assessment', 'screening', 'approved', 'interview_hrd', 'profile_completion',
+            'review', 'assessment', 'screening', 'approved', 'interview_hrd', 'profile_completion',
             'interview_user', 'management_decision', 'internal_sallary_offer', 'salary_offer',
         ];
 
