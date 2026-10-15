@@ -259,6 +259,7 @@ class CompleteProfileController extends Controller
             'has_riwayat_kecelakaan' => 'riwayat_kecelakaan',
             'has_obat_rutin' => 'obat_rutin',
             'has_gangguan_mental' => 'gangguan_mental',
+            'has_alergi' => 'alergi',
         ] as $flagField => $detailField) {
             $flagValue = $request->input($flagField);
             if (!in_array($flagValue, ['yes', 'no'], true)) {
@@ -715,6 +716,9 @@ class CompleteProfileController extends Controller
                 : null,
             'gangguan_mental' => $request->input('has_gangguan_mental') === 'yes'
                 ? (trim((string) $request->input('gangguan_mental')) ?: null)
+                : null,
+            'alergi' => $request->input('has_alergi') === 'yes'
+                ? (trim((string) $request->input('alergi')) ?: null)
                 : null,
             'is_active' => 1,
             'created_by' => 'Candidate Profile Portal',
