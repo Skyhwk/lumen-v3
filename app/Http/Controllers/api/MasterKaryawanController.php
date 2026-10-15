@@ -43,6 +43,11 @@ class MasterKaryawanController extends Controller
                 $query->where('is_active', true);
             },
         ])->where('is_active', true);
+
+        if ($request->filled('id_cabang') && $request->id_cabang !== 'all') {
+            $data->where('id_cabang', (int) $request->id_cabang);
+        }
+
         return Datatables::of($data)->addColumn('personal', function ($row) {
             $shioElemen = ShioElemenHelper::resolve($row->tanggal_lahir, $row->shio, $row->elemen);
             return [
@@ -801,5 +806,11 @@ class MasterKaryawanController extends Controller
 
         $job = new NonaktifKaryawanJob($karyawan);
         $this->dispatch($job);
+    }
+
+    public function getCabang(Request $request)
+    {
+        $data = MasterCabang::where('is_active', true)->select('id', 'nama_cabang')->get();
+        return response()->json(['message' => 'Data hasbeen show', 'data' => $data], 200);
     }
 }

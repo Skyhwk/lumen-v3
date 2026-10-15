@@ -325,6 +325,9 @@ class KelengkapanKaryawanProfileService
             'penyakit_bawaan_lahir' => $this->attr($row, ['penyakit_bawaan_lahir', 'penyakit_lahir']),
             'penyakit_kronis' => $this->attr($row, ['penyakit_kronis']),
             'riwayat_kecelakaan' => $this->attr($row, ['riwayat_kecelakaan']),
+            'obat_rutin' => $this->attr($row, ['obat_rutin']),
+            'gangguan_mental' => $this->attr($row, ['gangguan_mental']),
+            'alergi' => $this->attr($row, ['alergi']),
         ];
     }
 
