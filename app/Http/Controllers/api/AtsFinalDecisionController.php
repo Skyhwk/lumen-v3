@@ -113,6 +113,24 @@ class AtsFinalDecisionController extends Controller
         return $pos ?: '-';
     }
 
+    private function parseMoneyField($val): float
+    {
+        $parsed = RequesterSalaryApprovalService::parseRupiahToInt($val);
+
+        return $parsed !== null ? (float) $parsed : 0.0;
+    }
+
+    private function cleanSalaryString($salary): string
+    {
+        if ($salary === null || $salary === '') {
+            return '';
+        }
+
+        $parsed = RequesterSalaryApprovalService::parseRupiahToInt($salary);
+
+        return $parsed !== null ? (string) $parsed : '';
+    }
+
     private function newRecruitmentHasColumn($column)
     {
         static $columns = null;
@@ -1002,8 +1020,7 @@ class AtsFinalDecisionController extends Controller
             $offer = SallaryOfferService::getActive((int) $id);
 
             if ($reqFinalSalary !== null && $reqFinalSalary !== '') {
-                $cleanSalary = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $reqFinalSalary)));
-                $finalSalary = $cleanSalary !== '' ? $cleanSalary : $reqFinalSalary;
+                $finalSalary = $this->cleanSalaryString($reqFinalSalary) ?: $reqFinalSalary;
             } else {
                 $finalSalary = optional($offer)->sallary_offer_direktur ?? optional($offer)->sallary_offer_hrd ?? $applicant->ekspetasi_gaji;
             }
@@ -1014,17 +1031,12 @@ class AtsFinalDecisionController extends Controller
                 $user ?? 'HRD'
             );
 
-            $cleanNumber = function ($val) {
-                if ($val === null || $val === '') return 0;
-                $clean = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', (string)$val)));
-                return $clean !== '' ? (float) $clean : 0;
-            };
-
-            $gajiPokok       = $cleanNumber($request->input('gaji_pokok')) ?: (float)$finalSalary;
-            $potBpjsKes      = $cleanNumber($request->input('potongan_bpjs_kes'));
-            $potBpjsTk       = $cleanNumber($request->input('potongan_bpjs_tk'));
-            $potPph21        = $cleanNumber($request->input('pot_pph21'));
-            $pencadanganUpah = $cleanNumber($request->input('pencadangan_upah'));
+            $gajiPokok       = $this->parseMoneyField($request->input('gaji_pokok')) ?: (float)$finalSalary;
+            $tunjanganKerja  = $this->parseMoneyField($request->input('tunjangan_kerja'));
+            $potBpjsKes      = $this->parseMoneyField($request->input('potongan_bpjs_kes'));
+            $potBpjsTk       = $this->parseMoneyField($request->input('potongan_bpjs_tk'));
+            $potPph21        = $this->parseMoneyField($request->input('pot_pph21'));
+            $pencadanganUpah = $this->parseMoneyField($request->input('pencadangan_upah'));
 
             $startDate = $request->input('start_date');
             if (!empty($startDate)) {
@@ -1038,6 +1050,7 @@ class AtsFinalDecisionController extends Controller
                     ['new_recruitment_id' => $id],
                     [
                         'gaji_pokok'          => $gajiPokok,
+                        'tunjangan_kerja'     => $tunjanganKerja,
                         'potongan_bpjs_kes'   => $potBpjsKes,
                         'potongan_bpjs_tk'    => $potBpjsTk,
                         'pot_pph21'           => $potPph21,
@@ -1065,6 +1078,7 @@ class AtsFinalDecisionController extends Controller
 
                 $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant, [
                     'gaji_pokok'          => $gajiPokok,
+                    'tunjangan_kerja'     => $tunjanganKerja,
                     'potongan_bpjs_kes'   => $potBpjsKes,
                     'potongan_bpjs_tk'    => $potBpjsTk,
                     'pot_pph21'           => $potPph21,
@@ -1147,13 +1161,8 @@ class AtsFinalDecisionController extends Controller
         $expectedSalary = $request->input('expected_salary') ?? $request->input('ekspetasi_gaji');
         $requesterSalaryStatus = null;
 
-        $cleanSalary = function ($salary) {
-            if ($salary === null || $salary === '') return '';
-            return preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', (string)$salary)));
-        };
-
         if ($expectedSalary !== null) {
-            $cleanExpectedSalary = $cleanSalary($expectedSalary);
+            $cleanExpectedSalary = $this->cleanSalaryString($expectedSalary);
             $valueToSave = $cleanExpectedSalary !== '' ? $cleanExpectedSalary : $expectedSalary;
 
             $user = $this->karyawan;
@@ -1171,11 +1180,11 @@ class AtsFinalDecisionController extends Controller
             }
 
             if ($request->has('sallary_offer_direktur')) {
-                $offerData['sallary_offer_direktur'] = $cleanSalary($request->input('sallary_offer_direktur'));
+                $offerData['sallary_offer_direktur'] = $this->cleanSalaryString($request->input('sallary_offer_direktur'));
             }
 
             if ($request->has('final_sallary')) {
-                $offerData['final_sallary'] = $cleanSalary($request->input('final_sallary'));
+                $offerData['final_sallary'] = $this->cleanSalaryString($request->input('final_sallary'));
             }
 
             $forceNewOffer = RecruitmentStatusService::hasFinanceRejected($applicant)
@@ -1188,17 +1197,12 @@ class AtsFinalDecisionController extends Controller
                 $forceNewOffer
             );
 
-            $cleanNumber = function ($val) use ($cleanSalary) {
-                if ($val === null || $val === '') return 0;
-                $clean = $cleanSalary($val);
-                return $clean !== '' ? (float) $clean : 0;
-            };
-
-            $gajiPokok       = $cleanNumber($request->input('gaji_pokok')) ?: (float)$valueToSave;
-            $potBpjsKes      = $cleanNumber($request->input('potongan_bpjs_kes'));
-            $potBpjsTk       = $cleanNumber($request->input('potongan_bpjs_tk'));
-            $potPph21        = $cleanNumber($request->input('pot_pph21'));
-            $pencadanganUpah = $cleanNumber($request->input('pencadangan_upah'));
+            $gajiPokok       = $this->parseMoneyField($request->input('gaji_pokok')) ?: (float)$valueToSave;
+            $tunjanganKerja  = $this->parseMoneyField($request->input('tunjangan_kerja'));
+            $potBpjsKes      = $this->parseMoneyField($request->input('potongan_bpjs_kes'));
+            $potBpjsTk       = $this->parseMoneyField($request->input('potongan_bpjs_tk'));
+            $potPph21        = $this->parseMoneyField($request->input('pot_pph21'));
+            $pencadanganUpah = $this->parseMoneyField($request->input('pencadangan_upah'));
             $startDate       = $request->input('start_date');
 
             $startDateTime = null;
@@ -1214,6 +1218,7 @@ class AtsFinalDecisionController extends Controller
                 ['new_recruitment_id' => $id],
                 [
                     'gaji_pokok'          => $gajiPokok,
+                    'tunjangan_kerja'     => $tunjanganKerja,
                     'potongan_bpjs_kes'   => $potBpjsKes,
                     'potongan_bpjs_tk'    => $potBpjsTk,
                     'pot_pph21'           => $potPph21,
@@ -1890,17 +1895,12 @@ class AtsFinalDecisionController extends Controller
             ], 422);
         }
 
-        $cleanNumber = function ($val) {
-            if ($val === null || $val === '') return 0;
-            $clean = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', (string)$val)));
-            return $clean !== '' ? (float) $clean : 0;
-        };
-
-        $gajiPokok       = $cleanNumber($request->input('gaji_pokok'));
-        $potBpjsKes      = $cleanNumber($request->input('potongan_bpjs_kes'));
-        $potBpjsTk       = $cleanNumber($request->input('potongan_bpjs_tk'));
-        $potPph21        = $cleanNumber($request->input('pot_pph21'));
-        $pencadanganUpah = $cleanNumber($request->input('pencadangan_upah'));
+        $gajiPokok       = $this->parseMoneyField($request->input('gaji_pokok'));
+        $tunjanganKerja  = $this->parseMoneyField($request->input('tunjangan_kerja'));
+        $potBpjsKes      = $this->parseMoneyField($request->input('potongan_bpjs_kes'));
+        $potBpjsTk       = $this->parseMoneyField($request->input('potongan_bpjs_tk'));
+        $potPph21        = $this->parseMoneyField($request->input('pot_pph21'));
+        $pencadanganUpah = $this->parseMoneyField($request->input('pencadangan_upah'));
 
         $user = $this->karyawan;
         $now = Carbon::now();
@@ -1915,6 +1915,7 @@ class AtsFinalDecisionController extends Controller
             ['new_recruitment_id' => $id],
             [
                 'gaji_pokok'          => $gajiPokok,
+                'tunjangan_kerja'     => $tunjanganKerja,
                 'potongan_bpjs_kes'   => $potBpjsKes,
                 'potongan_bpjs_tk'    => $potBpjsTk,
                 'pot_pph21'           => $potPph21,
@@ -1948,6 +1949,7 @@ class AtsFinalDecisionController extends Controller
 
             $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant, [
                 'gaji_pokok'          => $gajiPokok,
+                'tunjangan_kerja'     => $tunjanganKerja,
                 'potongan_bpjs_kes'   => $potBpjsKes,
                 'potongan_bpjs_tk'    => $potBpjsTk,
                 'pot_pph21'           => $potPph21,

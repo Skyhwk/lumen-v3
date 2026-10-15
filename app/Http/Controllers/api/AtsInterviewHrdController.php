@@ -343,7 +343,7 @@ class AtsInterviewHrdController extends Controller
 
         $file = $request->file('selfie');
         if (!$file || !method_exists($file, 'isValid') || !$file->isValid()) {
-            throw new \InvalidArgumentException('Foto selfie terbaru wajib diunggah.');
+            return;
         }
 
         $allowed = [

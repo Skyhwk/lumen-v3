@@ -307,9 +307,14 @@ class GenerateMessageAtsWhatsapp
             $msg .= " ke email: *" . $email . "*";
         }
         $msg .= ".\n\n";
+        $tunjangan = max(0, (float) ($this->data->tunjangan_kerja ?? 0));
         $msg .= "*Ringkasan Penawaran:*\n";
         $msg .= "• Posisi: " . $posisi . "\n";
-        $msg .= "• Penawaran Gaji: " . $gaji . "\n\n";
+        $msg .= "• Gaji Pokok: " . $gaji . "\n";
+        if ($tunjangan > 0) {
+            $msg .= "• Tunjangan Kerja: " . HrdEmailViewData::formatRupiah($tunjangan) . "\n";
+        }
+        $msg .= "\n";
         $msg .= "Mohon periksa email Anda (termasuk folder spam) dan pelajari dokumen PDF yang kami lampirkan.\n";
         $msg .= "Catatan: surat ini *bukan keputusan penerimaan kerja resmi* — keputusan final akan diberikan setelah tahapan administrasi berikutnya selesai.\n\n";
         $msg .= "Apabila ada pertanyaan, silakan hubungi tim HRD kami.\n\n";
@@ -340,9 +345,13 @@ class GenerateMessageAtsWhatsapp
 
         $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
         $msg .= "Selamat! Berdasarkan hasil seleksi rekrutmen, Anda *diterima* untuk bergabung di *PT Inti Surya Laboratorium* pada posisi *" . $posisi . "*.\n\n";
+        $tunjangan = max(0, (float) ($this->data->tunjangan_kerja ?? 0));
         $msg .= "*Ringkasan Keputusan:*\n";
         $msg .= "• Posisi: " . $posisi . "\n";
         $msg .= "• Gaji Pokok: " . $gaji . "\n";
+        if ($tunjangan > 0) {
+            $msg .= "• Tunjangan Kerja: " . HrdEmailViewData::formatRupiah($tunjangan) . "\n";
+        }
         $msg .= "• Tanggal Mulai Kerja: " . $tglMulai . "\n\n";
         $msg .= "Surat Keputusan Penerimaan Kerja (Hiring Letter) PDF telah kami kirimkan";
         if ($email !== '') {

@@ -28,17 +28,41 @@ class RequesterSalaryApprovalService
             return null;
         }
 
-        if (is_string($value)) {
-            $digits = preg_replace('/[^0-9]/', '', $value);
-            if ($digits === null || $digits === '') {
-                return null;
-            }
-            $value = $digits;
+        $parsed = self::parseRupiahToInt($value);
+        if ($parsed === null) {
+            return null;
         }
 
-        $amount = (int) round((float) $value);
+        return $parsed > 0 || ($allowZero && $parsed === 0) ? $parsed : null;
+    }
 
-        return $amount > 0 || ($allowZero && $amount === 0) ? $amount : null;
+    /** API decimal (500000.00), format ID (500.000), atau angka. */
+    public static function parseRupiahToInt($value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (int) round((float) $value);
+        }
+
+        $str = trim((string) $value);
+        if ($str === '') {
+            return null;
+        }
+
+        if (preg_match('/^\d{1,3}(\.\d{3})+$/', $str)) {
+            return (int) str_replace('.', '', $str);
+        }
+
+        if (preg_match('/^\d+\.\d{1,2}$/', $str)) {
+            return (int) round((float) $str);
+        }
+
+        $digits = preg_replace('/[^0-9]/', '', $str);
+
+        return ($digits === null || $digits === '') ? null : (int) $digits;
     }
 
     public static function amountsMatch($a, $b): bool
@@ -53,6 +77,7 @@ class RequesterSalaryApprovalService
         return $left === $right;
     }
 
+    /** Nominal gaji pokok HRD yang dibandingkan dengan Salary Offer User (bukan GP + tunjangan). */
     public static function resolveHrdComparableAmount(NewRecruitment $applicant, $fallbackHrdAmount = null): ?int
     {
         $fromFallback = self::normalizeAmount($fallbackHrdAmount);
@@ -203,6 +228,15 @@ class RequesterSalaryApprovalService
             ];
         }
 
+        $userAmount = self::resolveUserAmount($applicant);
+        if ($userAmount === null || $userAmount === 0) {
+            return [
+                'allowed' => true,
+                'status' => self::STATUS_NOT_REQUIRED,
+                'message' => null,
+            ];
+        }
+
         $status = $offer->requester_salary_status ?: self::STATUS_NOT_REQUIRED;
 
         if ($status === self::STATUS_NOT_REQUIRED || $status === self::STATUS_APPROVED) {
@@ -213,10 +247,9 @@ class RequesterSalaryApprovalService
             ];
         }
 
-        $userAmount = self::resolveUserAmount($applicant);
         $hrdAmount = self::resolveHrdComparableAmount($applicant);
 
-        if ($userAmount !== null && $hrdAmount !== null && $userAmount === $hrdAmount) {
+        if ($hrdAmount !== null && $userAmount === $hrdAmount) {
             return [
                 'allowed' => true,
                 'status' => self::STATUS_NOT_REQUIRED,

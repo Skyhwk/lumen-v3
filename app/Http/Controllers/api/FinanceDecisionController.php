@@ -97,7 +97,18 @@ class FinanceDecisionController extends Controller
                 return $row->candidateDataOffer;
             })
             ->addColumn('expected_salary', function ($row) {
-                return optional($row->sallaryOffer)->sallary_offer_hrd ?? $row->ekspetasi_gaji ?? 0;
+                $cdo = $row->candidateDataOffer;
+                if ($cdo) {
+                    $total = (float) ($cdo->gaji_pokok ?? 0) + (float) ($cdo->tunjangan_kerja ?? 0);
+                    if ($total > 0) {
+                        return $total;
+                    }
+                }
+
+                return \App\Services\OfferingSalaryEmail::getSalaryOfferHrd($row)
+                    ?? optional($row->sallaryOffer)->sallary_offer_hrd
+                    ?? $row->ekspetasi_gaji
+                    ?? 0;
             })
             ->addColumn('sallary_offer_user', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_user ?? 0;

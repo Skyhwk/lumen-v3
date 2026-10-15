@@ -145,6 +145,7 @@ class GenerateMessageAtsEmail
             ?? $data->ekspetasi_gaji
             ?? null;
         $offerFormatted = htmlspecialchars(HrdEmailViewData::formatRupiah($offerAmount));
+        $tunjanganRowsHtml = $letterData ? self::buildSalaryTunjanganEmailRow($letterData) : '';
         $deductionRowsHtml = $letterData ? self::buildSalaryDeductionEmailRows($letterData) : '';
         $pencadanganNoteHtml = $letterData ? self::buildPencadanganNoteEmail($letterData) : '';
         $greeting = self::candidateGreetingHtml($data, $data->nama_lengkap ?? 'Kandidat');
@@ -194,6 +195,7 @@ class GenerateMessageAtsEmail
                                         {$offerFormatted} <span style='font-size: 12px; font-weight: 500; color: #64748b;'>/ bulan</span>
                                     </td>
                                 </tr>
+                                {$tunjanganRowsHtml}
                                 {$deductionRowsHtml}
                             </table>
                         </div>
@@ -322,6 +324,7 @@ class GenerateMessageAtsEmail
         $posisi = htmlspecialchars(self::posisiLabelCandidate($data));
         $gajiFormatted = htmlspecialchars(HrdEmailViewData::formatRupiah($letter->gaji_pokok ?? 0));
         $tglMulaiKerja = htmlspecialchars($letter->tanggal_mulai_kerja ?? '-');
+        $tunjanganRowsHtml = $letterData ? self::buildSalaryTunjanganEmailRow($letterData) : '';
         $deductionRowsHtml = $letterData ? self::buildSalaryDeductionEmailRows($letterData) : '';
         $pencadanganNoteHtml = $letterData ? self::buildPencadanganNoteEmail($letterData) : '';
         $greeting = self::candidateGreetingHtml($data, $data->nama_lengkap ?? 'Kandidat');
@@ -367,6 +370,7 @@ class GenerateMessageAtsEmail
                                         {$gajiFormatted} <span style='font-size: 12px; font-weight: 500; color: #64748b;'>/ bulan</span>
                                     </td>
                                 </tr>
+                                {$tunjanganRowsHtml}
                                 <tr>
                                     <td style='padding: 12px 18px; color: #64748b; font-weight: 600; border-top: 1px solid #e2e8f0;'>Tanggal Mulai Bekerja</td>
                                     <td style='padding: 12px 18px; color: #0284c7; font-weight: 700; border-top: 1px solid #e2e8f0;'>{$tglMulaiKerja}</td>
@@ -624,6 +628,7 @@ class GenerateMessageAtsEmail
                 optional($offer)->sallary_offer_hrd,
                 $applicant->ekspetasi_gaji ?? null,
             ]),
+            'tunjangan_kerja'     => $resolveAmount('tunjangan_kerja', [optional($cOffer)->tunjangan_kerja]),
             'potongan_bpjs_kes'   => $resolveAmount('potongan_bpjs_kes', [optional($cOffer)->potongan_bpjs_kes]),
             'potongan_bpjs_tk'    => $resolveAmount('potongan_bpjs_tk', [optional($cOffer)->potongan_bpjs_tk]),
             'pot_pph21'           => $resolveAmount('pot_pph21', [optional($cOffer)->pot_pph21]),
@@ -830,6 +835,40 @@ class GenerateMessageAtsEmail
         }
 
         return $items;
+    }
+
+    private static function buildSalaryTunjanganPdfRow(object $data): string
+    {
+        $amount = self::positiveAmount($data->tunjangan_kerja ?? 0);
+        if ($amount <= 0) {
+            return '';
+        }
+
+        $formatted = self::formatLetterRupiah($amount);
+
+        return "
+                    <tr>
+                        <td class='label-col'>Tunjangan Kerja</td>
+                        <td class='value-col' style='color: #0f2942; font-size: 14px;'>Rp {$formatted} <span style='font-weight: 400; font-size: 12px; color: #64748b;'>/ bulan (gross)</span></td>
+                    </tr>";
+    }
+
+    private static function buildSalaryTunjanganEmailRow(object $data): string
+    {
+        $amount = self::positiveAmount($data->tunjangan_kerja ?? 0);
+        if ($amount <= 0) {
+            return '';
+        }
+
+        $formatted = htmlspecialchars(HrdEmailViewData::formatRupiah($amount));
+
+        return "
+                                <tr>
+                                    <td style='padding: 12px 18px; color: #64748b; font-weight: 600; border-top: 1px solid #e2e8f0;'>Tunjangan Kerja (Gross)</td>
+                                    <td style='padding: 12px 18px; color: #0f172a; font-weight: 700; font-size: 15px; border-top: 1px solid #e2e8f0;'>
+                                        {$formatted} <span style='font-size: 12px; font-weight: 500; color: #64748b;'>/ bulan</span>
+                                    </td>
+                                </tr>";
     }
 
     private static function buildSalaryDeductionPdfRows(object $data): string
@@ -1098,6 +1137,7 @@ class GenerateMessageAtsEmail
             $data->tanggal_surat ?? \Carbon\Carbon::now()->locale('id')->translatedFormat('d F Y')
         );
         $lokasiSurat = htmlspecialchars(self::letterIssueLocation());
+        $tunjanganRowHtml = self::buildSalaryTunjanganPdfRow($data);
         $deductionRowsHtml = self::buildSalaryDeductionPdfRows($data);
         $pencadanganNoteHtml = self::buildPencadanganNotePdf($data);
 
@@ -1272,6 +1312,7 @@ class GenerateMessageAtsEmail
                         <td class='label-col'>Penawaran Gaji Pokok</td>
                         <td class='value-col' style='color: #0f2942; font-size: 14px;'>Rp {$gajiPokok} <span style='font-weight: 400; font-size: 12px; color: #64748b;'>/ bulan (gross)</span></td>
                     </tr>
+                    {$tunjanganRowHtml}
                     {$deductionRowsHtml}
                 </table>
 
@@ -1329,6 +1370,7 @@ class GenerateMessageAtsEmail
             $data->tanggal_surat ?? \Carbon\Carbon::now()->locale('id')->translatedFormat('d F Y')
         );
         $lokasiSurat = htmlspecialchars(self::letterIssueLocation());
+        $tunjanganRowHtml = self::buildSalaryTunjanganPdfRow($data);
         $deductionRowsHtml = self::buildSalaryDeductionPdfRows($data);
         $pencadanganNoteHtml = self::buildPencadanganNotePdf($data);
 
@@ -1507,6 +1549,7 @@ class GenerateMessageAtsEmail
                         <td class='label-col'>Gaji Pokok</td>
                         <td class='value-col' style='color: #0f2942; font-size: 14px;'>Rp {$gajiPokok} <span style='font-weight: 400; font-size: 12px; color: #64748b;'>/ bulan (gross)</span></td>
                     </tr>
+                    {$tunjanganRowHtml}
                     {$deductionRowsHtml}
                     <tr>
                         <td class='label-col'>Tanggal Mulai Bekerja</td>
