@@ -35,6 +35,7 @@ class AttendanceCorrectionsController extends Controller
                 'approved_atasan' => AttendanceCorrections::where('status', WorkflowStatus::APPROVED_ATASAN)->count(),
                 'pending' => AttendanceCorrections::where('status', WorkflowStatus::PENDING)->count(),
                 'approved_hrd' => AttendanceCorrections::where('status', WorkflowStatus::APPROVED_HRD)->count(),
+                'rejected_hrd' => AttendanceCorrections::where('status', WorkflowStatus::REJECTED_HRD)->count(),
             ],
         ]);
     }
