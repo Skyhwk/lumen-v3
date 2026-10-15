@@ -113,8 +113,11 @@ class PortalHrSync
 
         $hr = $this->resolveOrCreateHrHeader('overtime_requests', HrRequest::TYPE_OVERTIME, $legacyId, $row);
 
-        $hr->fill([
-            'id_department' => $row->department_id,
+        $karyawanId = $this->resolveOvertimeSubmitterKaryawanId($row);
+        $karyawan = $karyawanId ? MasterKaryawan::find($karyawanId) : null;
+
+        $headerFill = [
+            'id_department' => $row->department_id ?? ($karyawan->id_department ?? null),
             'no_document' => $row->no_document,
             'status' => $row->status,
             'description' => $row->description,
@@ -122,7 +125,17 @@ class PortalHrSync
             'updated_by_name' => $row->updated_by,
             'updated_at' => $row->updated_at,
             'is_active' => (bool) $row->is_active,
-        ]);
+        ];
+
+        if ($karyawanId) {
+            $headerFill['karyawan_id'] = $karyawanId;
+            $headerFill['id_cabang'] = $karyawan->id_cabang ?? null;
+            if (!$hr->created_by_karyawan_id || (int) $hr->karyawan_id === 0) {
+                $headerFill['created_by_karyawan_id'] = $karyawanId;
+            }
+        }
+
+        $hr->fill($headerFill);
         $hr->save();
 
         HrOvertimeDetail::updateOrCreate(
@@ -140,8 +153,13 @@ class PortalHrSync
             ->get();
 
         foreach ($members as $member) {
+            $participantId = (int) $member->employee_id;
+            if ($participantId <= 0) {
+                continue;
+            }
+
             HrOvertimeParticipant::updateOrCreate(
-                ['request_id' => $hr->id, 'karyawan_id' => $member->employee_id],
+                ['request_id' => $hr->id, 'karyawan_id' => $participantId],
                 [
                     'is_active' => (bool) $member->is_active,
                     'created_at' => $member->created_at,
@@ -169,13 +187,21 @@ class PortalHrSync
         $karyawanId = (int) ($row->employee_id ?? 0);
         if ($requestType === HrRequest::TYPE_PERMISSION) {
             $karyawanId = $this->resolvePermissionKaryawanId($row) ?: 0;
+        } elseif ($requestType === HrRequest::TYPE_OVERTIME) {
+            $karyawanId = $this->resolveOvertimeSubmitterKaryawanId($row) ?: 0;
         }
+
+        $karyawan = $karyawanId ? MasterKaryawan::find($karyawanId) : null;
 
         $header = HrRequest::create([
             'uuid' => (string) Str::uuid(),
             'request_type' => $requestType,
             'no_document' => $row->no_document,
             'karyawan_id' => $karyawanId,
+            'id_cabang' => $karyawan->id_cabang ?? null,
+            'id_department' => $requestType === HrRequest::TYPE_OVERTIME
+                ? ($row->department_id ?? ($karyawan->id_department ?? null))
+                : ($karyawan->id_department ?? null),
             'status' => $row->status,
             'workflow_code' => $requestType === HrRequest::TYPE_OVERTIME ? 'overtime_3_step_finance' : 'default_2_step',
             'description' => $row->description ?? null,
@@ -258,6 +284,32 @@ class PortalHrSync
         $byUserId = MasterKaryawan::where('user_id', (int) $row->employee_id)->value('id');
 
         return $byUserId ? (int) $byUserId : null;
+    }
+
+    /**
+     * Legacy overtime_requests menyimpan pengaju di created_by (nama), bukan employee_id.
+     */
+    private function resolveOvertimeSubmitterKaryawanId($row): ?int
+    {
+        $name = trim((string) ($row->created_by ?? ''));
+        if ($name === '') {
+            return null;
+        }
+
+        $query = MasterKaryawan::query()->where('nama_lengkap', $name);
+        if (!empty($row->department_id)) {
+            $byDept = (clone $query)
+                ->where('id_department', (int) $row->department_id)
+                ->orderByDesc('is_active')
+                ->value('id');
+            if ($byDept) {
+                return (int) $byDept;
+            }
+        }
+
+        $id = (clone $query)->orderByDesc('is_active')->value('id');
+
+        return $id ? (int) $id : null;
     }
 
     private function hrSpecialLeaveIdFromLegacy($legacyId): ?int
