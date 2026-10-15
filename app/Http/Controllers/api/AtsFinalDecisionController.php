@@ -14,7 +14,6 @@ use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\GenerateToken;
 use App\Services\CandidateDocumentAttachmentService;
 use App\Services\GenerateAssessmentDocumentService;
-use App\Services\RecruitmentPictureService;
 use App\Services\RecruitmentStatusService;
 use App\Services\RequesterSalaryApprovalService;
 use App\Services\SallaryOfferService;
@@ -1623,10 +1622,9 @@ class AtsFinalDecisionController extends Controller
             ], 422);
         }
 
-        $pictureService = app(RecruitmentPictureService::class);
-        $newPicture = null;
+        $selfieDocument = null;
         try {
-            $newPicture = $pictureService->storeUploadedFile($request->file('selfie'));
+            $selfieDocument = $this->storeKeptResubmitSelfieDocument($request, (int) $applicant->id);
         } catch (\InvalidArgumentException $e) {
             return response()->json([
                 'status' => 422,
@@ -1642,8 +1640,7 @@ class AtsFinalDecisionController extends Controller
         $assessmentService = app(GenerateAssessmentDocumentService::class);
         $documentService = app(CandidateDocumentAttachmentService::class);
         $documents = [];
-        $oldPicture = $applicant->picture;
-        $pictureReplaced = false;
+        $applicantUpdated = false;
 
         try {
             $tokenService = new GenerateToken();
@@ -1662,13 +1659,9 @@ class AtsFinalDecisionController extends Controller
                 'token_approval' => $token,
                 'status'         => 'management_decision',
                 'is_keep'        => 0,
-                'picture'        => $newPicture,
                 'meta_history'   => json_encode(array_values($history)),
             ]);
-            $pictureReplaced = true;
-            if ($oldPicture && basename((string) $oldPicture) !== $newPicture) {
-                $pictureService->delete($oldPicture);
-            }
+            $applicantUpdated = true;
             $applicant->meta_history = json_encode(array_values($history));
             $applicant->resubmit_reason = $resubmitReason;
             $applicant->resubmit_by = $this->karyawan ?? 'HRD';
@@ -1713,8 +1706,8 @@ class AtsFinalDecisionController extends Controller
                 'candidate_document_attachment_count' => count($candidateDocumentAttachments),
             ], 200);
         } catch (\Exception $e) {
-            if ($newPicture && !$pictureReplaced) {
-                $pictureService->delete($newPicture);
+            if ($selfieDocument && !$applicantUpdated) {
+                $this->deleteKeptResubmitSelfieDocument($selfieDocument);
             }
 
             return response()->json([
@@ -1723,6 +1716,94 @@ class AtsFinalDecisionController extends Controller
             ], 500);
         } finally {
             $assessmentService->cleanupDocuments($documents);
+        }
+    }
+
+    private function storeKeptResubmitSelfieDocument(Request $request, int $recruitmentId): array
+    {
+        $file = $request->file('selfie');
+        if (!$file || !method_exists($file, 'isValid') || !$file->isValid()) {
+            throw new \InvalidArgumentException('Foto selfie terbaru wajib diunggah.');
+        }
+
+        $allowed = [
+            'image/jpeg' => 'jpg',
+            'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+        ];
+        $mime = strtolower((string) $file->getMimeType());
+        if (!isset($allowed[$mime])) {
+            throw new \InvalidArgumentException('Foto selfie harus berupa gambar JPG, PNG, atau WEBP.');
+        }
+        if ((int) $file->getSize() > 5 * 1024 * 1024) {
+            throw new \InvalidArgumentException('Ukuran foto selfie maksimal 5 MB.');
+        }
+        if (!Schema::hasTable('candidate_documents') || !Schema::hasTable('candidate_profiles')) {
+            throw new \RuntimeException('Tabel dokumen kandidat belum tersedia.');
+        }
+
+        $profileId = DB::table('candidate_profiles')
+            ->where('new_recruitment_id', $recruitmentId)
+            ->orderByDesc('id')
+            ->value('id');
+        if (!$profileId) {
+            throw new \InvalidArgumentException('Profil kandidat tidak ditemukan. Foto selfie tidak dapat disimpan.');
+        }
+
+        $directory = public_path('recruitment/candidate-documents');
+        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+            throw new \RuntimeException('Folder dokumen kandidat tidak dapat dibuat.');
+        }
+
+        $size = (int) $file->getSize();
+        $originalName = trim((string) $file->getClientOriginalName());
+        $fileName = 'candidate-' . $recruitmentId . '-foto-selfie-' . Carbon::now()->format('YmdHisv') . '.' . $allowed[$mime];
+        $file->move($directory, $fileName);
+
+        $now = Carbon::now();
+        try {
+            $documentId = DB::table('candidate_documents')->insertGetId([
+                'candidate_profile_id' => (int) $profileId,
+                'new_recruitment_id' => $recruitmentId,
+                'jenis_dokumen' => 'FOTO SELFIE',
+                'nama_file' => $originalName !== '' ? $originalName : $fileName,
+                'path_file' => 'recruitment/candidate-documents/' . $fileName,
+                'mime_type' => $mime,
+                'ukuran_file' => $size,
+                'catatan' => 'Selfie terbaru pengajuan ulang kandidat di-keep',
+                'is_active' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        } catch (\Exception $e) {
+            $storedPath = $directory . DIRECTORY_SEPARATOR . $fileName;
+            if (is_file($storedPath)) {
+                @unlink($storedPath);
+            }
+            throw new \RuntimeException('Foto selfie tidak dapat disimpan ke dokumen kandidat.');
+        }
+
+        return [
+            'id' => (int) $documentId,
+            'file_name' => $fileName,
+        ];
+    }
+
+    private function deleteKeptResubmitSelfieDocument(array $document): void
+    {
+        if (!empty($document['id']) && Schema::hasTable('candidate_documents')) {
+            DB::table('candidate_documents')->where('id', $document['id'])->delete();
+        }
+
+        $fileName = basename((string) ($document['file_name'] ?? ''));
+        if ($fileName === '') {
+            return;
+        }
+
+        $path = public_path('recruitment/candidate-documents/' . $fileName);
+        if (is_file($path)) {
+            @unlink($path);
         }
     }
 
