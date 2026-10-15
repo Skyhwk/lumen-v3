@@ -89,12 +89,12 @@ class SallaryOfferService
         $recruitmentId = (int) $applicant->id;
 
         $active = self::getActive($recruitmentId);
-        if ($active && $active->sallary_offer_user !== null && $active->sallary_offer_user !== '') {
+        if ($active && self::hasStoredSalaryOfferUser($active->sallary_offer_user)) {
             return (float) $active->sallary_offer_user;
         }
 
         $latest = self::getLatest($recruitmentId);
-        if ($latest && $latest->sallary_offer_user !== null && $latest->sallary_offer_user !== '') {
+        if ($latest && self::hasStoredSalaryOfferUser($latest->sallary_offer_user)) {
             return (float) $latest->sallary_offer_user;
         }
 
@@ -125,5 +125,15 @@ class SallaryOfferService
         $reason = trim((string) $offer->keterangan_reject);
 
         return $reason !== '' ? $reason : null;
+    }
+
+    /** Termasuk 0 — beda dengan null/kosong (belum diisi User). */
+    public static function hasStoredSalaryOfferUser($value): bool
+    {
+        if ($value === null || $value === '') {
+            return false;
+        }
+
+        return is_numeric($value);
     }
 }

@@ -207,6 +207,13 @@ return [
             'days' => 30,
         ],
 
+        'deactivate_expired_bookings' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/deactivate_expired_bookings/log.log'),
+            'level' => 'info',
+            'days' => 90,
+        ],
+
         'send_mqtt' => [
             'driver' => 'daily',
             'path' => storage_path('logs/send_mqtt/logs.log'),

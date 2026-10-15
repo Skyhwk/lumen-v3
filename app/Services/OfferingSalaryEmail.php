@@ -64,10 +64,23 @@ class OfferingSalaryEmail
         return 'Rp ' . number_format((float) $value, 0, ',', '.');
     }
 
+    /** Total penawaran HRD = gaji_pokok + tunjangan_kerja (candidate_data_offers), fallback sallary_offer_hrd. */
     public static function getSalaryOfferHrd($data): ?float
     {
         if (empty($data)) {
             return null;
+        }
+
+        $cdo = $data->candidateDataOffer
+            ?? $data->candidate_data_offer
+            ?? null;
+
+        if ($cdo) {
+            $gajiPokok = (float) ($cdo->gaji_pokok ?? 0);
+            $tunjangan = (float) ($cdo->tunjangan_kerja ?? 0);
+            if ($gajiPokok > 0 || $tunjangan > 0) {
+                return $gajiPokok + $tunjangan;
+            }
         }
 
         $offer = $data->sallaryOffer
