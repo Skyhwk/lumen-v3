@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Models\{LiburPerusahaan, RekapLiburKalender};
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
@@ -246,6 +247,58 @@ class KalenderPerusahaanController extends Controller
             return response()->json([
                 'message' => $e->getMessage(),
             ], 401);
+        }
+    }
+
+    public function recordExport(Request $request)
+    {
+        $year = (int) $request->input('tahun');
+        if ($year < 2000 || $year > 2100) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tahun kalender tidak valid.',
+            ], 422);
+        }
+
+        if (!Schema::hasTable('calendar_export_histories')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tabel riwayat export belum tersedia. Jalankan migration terlebih dahulu.',
+            ], 503);
+        }
+
+        DB::beginTransaction();
+        try {
+            $lastExport = DB::table('calendar_export_histories')
+                ->where('year', $year)
+                ->orderByDesc('revision')
+                ->lockForUpdate()
+                ->first();
+            $revision = $lastExport ? ((int) $lastExport->revision + 1) : 0;
+            $exportedAt = Carbon::now();
+
+            DB::table('calendar_export_histories')->insert([
+                'year' => $year,
+                'revision' => $revision,
+                'exported_by' => $this->karyawan,
+                'exported_at' => $exportedAt->format('Y-m-d H:i:s'),
+            ]);
+
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'year' => $year,
+                    'revision' => $revision,
+                    'exported_at' => $exportedAt->toIso8601String(),
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mencatat riwayat export: ' . $e->getMessage(),
+            ], 500);
         }
     }
 }
