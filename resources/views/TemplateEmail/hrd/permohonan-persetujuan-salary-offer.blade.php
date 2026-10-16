@@ -71,7 +71,7 @@
             <div style="font-size:14px;color:#0f172a;font-weight:600;">{{ $tunjanganHrd }}</div>
         </td>
         <td style="width:33.33%;padding:10px 16px 14px 16px;vertical-align:top;">
-            <div style="font-size:12px;color:#64748b;margin:0 0 6px 0;">Total Penawaran</div>
+            <div style="font-size:12px;color:#64748b;margin:0 0 6px 0;">Total Perstejuan Gaji</div>
             <div style="font-size:15px;color:#1e40af;font-weight:700;">{{ $penawaranGajiHrd }}</div>
         </td>
     </tr>
