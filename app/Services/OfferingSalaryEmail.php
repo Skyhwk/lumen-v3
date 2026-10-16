@@ -97,6 +97,30 @@ class OfferingSalaryEmail
         return (float) $amount;
     }
 
+    /** Rincian gaji HRD: gaji pokok + tunjangan kerja. */
+    public static function getSalaryOfferHrdBreakdown($data): array
+    {
+        $cdo = $data->candidateDataOffer
+            ?? $data->candidate_data_offer
+            ?? null;
+
+        $gajiPokok = 0.0;
+        $tunjangan = 0.0;
+        if ($cdo) {
+            $gajiPokok = (float) ($cdo->gaji_pokok ?? 0);
+            $tunjangan = (float) ($cdo->tunjangan_kerja ?? 0);
+        }
+
+        $hasBreakdown = $gajiPokok > 0 || $tunjangan > 0;
+
+        return [
+            'gaji_pokok' => $gajiPokok,
+            'tunjangan_kerja' => $tunjangan,
+            'total' => self::getSalaryOfferHrd($data),
+            'has_breakdown' => $hasBreakdown,
+        ];
+    }
+
     public static function getNamaJabatan($data): string
     {
         if (empty($data)) {
