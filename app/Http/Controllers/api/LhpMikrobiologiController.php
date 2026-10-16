@@ -17,8 +17,6 @@ use Yajra\Datatables\Datatables;
 
 use App\Helpers\DraftLhpRejectHelper;
 
-use App\Helpers\DraftLhpRejectHelper;
-
 
 class LhpMikrobiologiController extends Controller
 {
