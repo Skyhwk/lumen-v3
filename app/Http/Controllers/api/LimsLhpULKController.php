@@ -21,6 +21,8 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
+use App\Helpers\DraftLhpRejectHelper;
+
 class LimsLhpULKController extends Controller
 {
     // public function index(Request $request){
@@ -190,6 +192,9 @@ class LimsLhpULKController extends Controller
 }
 
     public function handleReject(Request $request) {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();

@@ -26,6 +26,9 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
+use App\Helpers\DraftLhpRejectHelper;
+
+
 class LimsLhpEmisiSumberBergerakController extends Controller
 {
     // public function index(Request $request)
@@ -94,6 +97,9 @@ class LimsLhpEmisiSumberBergerakController extends Controller
 
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $header = LhpsEmisiHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();

@@ -10,6 +10,9 @@ use Yajra\Datatables\Datatables;
 
 use App\Models\{DraftErgonomiFile,OrderDetail};
 use App\Services\PrintLhp;
+
+use App\Helpers\DraftLhpRejectHelper;
+
 class LhpErgonomiController extends Controller
 {
     public function index(Request $request){
@@ -101,6 +104,9 @@ class LhpErgonomiController extends Controller
     }
 
     public function handleReject(Request $request) {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $header = DraftErgonomiFile::where('no_sampel', $request->no_sampel)->first();

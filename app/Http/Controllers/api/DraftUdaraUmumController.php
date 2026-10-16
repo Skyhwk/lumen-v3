@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\api;
+use App\Helpers\DraftLhpRejectHelper;
 
 use App\Models\HistoryAppReject;
 
@@ -703,6 +704,9 @@ class DraftUdaraUmumController extends Controller
     // Amang
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $noSampel = array_map('trim', explode(',', $request->noSampel));
