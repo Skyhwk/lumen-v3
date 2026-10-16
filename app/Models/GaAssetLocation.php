@@ -11,4 +11,9 @@ class GaAssetLocation extends Sector
     protected $casts = [
         'is_active' => 'boolean',
     ];
+
+    public function cabang()
+    {
+        return $this->belongsTo(MasterCabang::class, 'branch_id');
+    }
 }
