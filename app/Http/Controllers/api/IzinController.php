@@ -11,6 +11,7 @@ use App\Services\Hr\ApprovalService;
 use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\HrTableMode;
 use App\Services\Hr\LegacyHrMirror;
+use App\Services\Hr\Portal\HrdPermissionVoidService;
 use App\Services\Hr\Portal\PortalHrdIzinDatatableQuery;
 use App\Services\Hr\PortalHrSync;
 use App\Services\Hr\WorkflowStatus;
@@ -73,6 +74,7 @@ class IzinController extends Controller
             ->whereNull('pr.rejected_atasan_by')
             ->whereNull('pr.rejected_hrd_by')
             ->where('pr.status', 'Approved Atasan')
+            ->where('pr.is_active', 1)
             ->where(function ($query) {
                  $query->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
                        ->orWhereNull('u.atasan_langsung');
@@ -139,6 +141,7 @@ class IzinController extends Controller
             ->whereNotNull('pr.approved_hrd_at')
             ->whereNull('pr.rejected_atasan_by')
             ->whereNull('pr.rejected_hrd_by')
+            ->where('pr.is_active', 1)
             ->whereYear('pr.created_at', $request->periode)
             ->whereNotNull('pr.approved_atasan_by');
 
@@ -169,6 +172,7 @@ class IzinController extends Controller
             ->whereNull('pr.rejected_atasan_by')
             ->whereNull('pr.rejected_hrd_by')
             ->where('pr.status', 'Approved Atasan')
+            ->where('pr.is_active', 1)
             ->where(function ($query) {
                 $query->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
                     ->orWhereNull('u.atasan_langsung');
@@ -184,6 +188,7 @@ class IzinController extends Controller
             ->whereNotNull('pr.approved_hrd_at')
             ->whereNull('pr.rejected_atasan_by')
             ->whereNull('pr.rejected_hrd_by')
+            ->where('pr.is_active', 1)
             ->whereYear('pr.created_at', $periode)
             ->whereNotNull('pr.approved_atasan_by')
             ->count();
@@ -257,6 +262,58 @@ class IzinController extends Controller
                 'success' => false,
                 'message' => 'Terjadi kesalahan sistem',
                 'error' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Void / batalkan permohonan izin oleh HRD (antrian portal).
+     */
+    public function voidIzin(Request $request)
+    {
+        $reason = trim((string) ($request->keterangan ?? $request->void_reason ?? ''));
+        if ($reason === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Alasan void wajib diisi',
+            ], 422);
+        }
+
+        $actor = MasterKaryawan::find($this->user_id);
+        if (!$actor) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data karyawan tidak ditemukan',
+            ], 403);
+        }
+
+        DB::beginTransaction();
+        try {
+            app(HrdPermissionVoidService::class)->void(
+                $this->resolvePermissionPortalApiId($request->id),
+                $this->karyawan,
+                $reason
+            );
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Permohonan izin berhasil divoid',
+            ], 200);
+        } catch (\InvalidArgumentException $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan sistem',
+                'error' => 'Error: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -448,5 +505,16 @@ class IzinController extends Controller
         }
 
         return null;
+    }
+
+    /** ID datatable portal: legacy id, hr_request.id, atau PR-{id}. */
+    private function resolvePermissionPortalApiId($raw): int
+    {
+        $s = trim((string) $raw);
+        if (str_starts_with($s, 'PR-')) {
+            return (int) substr($s, 3);
+        }
+
+        return (int) $s;
     }
 }

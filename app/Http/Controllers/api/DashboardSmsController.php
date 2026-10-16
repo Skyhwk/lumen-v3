@@ -18,6 +18,8 @@ Carbon::setLocale('id');
 
 class DashboardSmsController extends Controller
 {
+    private ?MasterKaryawan $dashboardViewer = null;
+
     public function index(Request $request)
     {
         $startDate = Carbon::now()->startOfDay();
@@ -99,11 +101,14 @@ class DashboardSmsController extends Controller
 
     public function getSales(Request $request)
     {
-        $payload = app(SalesTeamHierarchyService::class)->getSelectPayload();
+        $viewer  = $this->dashboardViewer();
+        $service = app(SalesTeamHierarchyService::class);
+        $payload = $service->getSelectPayloadForViewer($viewer);
 
         return response()->json([
             'executives' => $payload['executives'],
             'branches'   => $payload['branches'],
+            'viewer'     => $service->getViewerMeta($viewer),
             'message'    => 'Sales data retrieved successfully',
         ], 200);
     }
@@ -111,6 +116,8 @@ class DashboardSmsController extends Controller
     public function fetchAll(Request $request)
     {
         try {
+            $this->assertDashboardSelectionAllowed($request);
+
             $bulan = [
                 'Januari'   => '01', 'Februari' => '02', 'Maret'    => '03', 'April'    => '04',
                 'Mei'       => '05', 'Juni'     => '06', 'Juli'     => '07', 'Agustus'  => '08',
@@ -201,6 +208,8 @@ class DashboardSmsController extends Controller
 
             if ($request->mode == "all") {
                 $tahun = explode('-', $periode)[0];
+                $scopeIds = app(SalesTeamHierarchyService::class)
+                    ->resolveViewerScopeMemberIds($this->dashboardViewer());
 
                 $cek = \DB::table('sales_kpi_monthly')
                     ->selectRaw("
@@ -235,6 +244,7 @@ class DashboardSmsController extends Controller
                         SUM(revenue_forecast_kontrak_exist) as revenue_forecast_kontrak_exist
                     ")
                     ->where('periode', $periode)
+                    ->whereIn('karyawan_id', $scopeIds)
                     ->first();
 
                 $daily_qsd = \DB::table('daily_qsd')
@@ -255,6 +265,7 @@ class DashboardSmsController extends Controller
                             WHEN DATE_FORMAT(tanggal_sampling_min, '%Y-%m') < ?
                             THEN biaya_akhir ELSE 0 END) AS total_ordered_exist
                     ", [$periode, $periode, $periode, $periode])
+                    ->whereIn('sales_id', $scopeIds)
                     ->first();
 
                 // dd($cek, $daily_qsd);
@@ -280,6 +291,7 @@ class DashboardSmsController extends Controller
                         SUM(revenue_order_kontrak_new) as revenue_order_kontrak_new,
                         SUM(revenue_order_kontrak_exist) as revenue_order_kontrak_exist
                     ')
+                    ->whereIn('karyawan_id', $scopeIds)
                     ->groupBy('periode')
                     ->get()
                     ->keyBy(function ($item) {
@@ -311,6 +323,7 @@ class DashboardSmsController extends Controller
                         SUM(revenue_order_kontrak_new) as revenue_order_kontrak_new,
                         SUM(revenue_order_kontrak_exist) as revenue_order_kontrak_exist
                     ')
+                    ->whereIn('karyawan_id', $scopeIds)
                     ->first();
 
                 $piechart = [
@@ -319,8 +332,9 @@ class DashboardSmsController extends Controller
                     'exist' => $sumall->revenue_order_nonkontrak_exist + $sumall->revenue_order_kontrak_exist,
                 ];
 
-                [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRows($periode);
+                [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRows($periode, null, $scopeIds);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
+                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $scopeIds);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 $years = [
@@ -339,6 +353,7 @@ class DashboardSmsController extends Controller
                         SUM(revenue_order_kontrak_new) as revenue_order_kontrak_new,
                         SUM(revenue_order_kontrak_exist) as revenue_order_kontrak_exist
                     ')
+                    ->whereIn('karyawan_id', $scopeIds)
                     ->groupBy('periode')
                     ->get()
                     ->keyBy('periode');
@@ -374,7 +389,7 @@ class DashboardSmsController extends Controller
                 return response()->json([
                     'heading'  => $return,
                     'table'    => $table,
-                    'rankings' => $this->buildDailyQsdRankings($periode),
+                    'rankings' => $this->buildDailyQsdRankings($periode, $scopeIds),
                     'chart'    => $chart,
                     'piechart' => $piechart,
                     'chartBar' => $result
@@ -485,8 +500,9 @@ class DashboardSmsController extends Controller
                     'exist' => $sumall->revenue_order_nonkontrak_exist + $sumall->revenue_order_kontrak_exist,
                 ];
 
-                [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRows($periode, [$teamRootId]);
+                [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRowsForKaryawanScope($periode, $teamRootId);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
+                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $bawahanIds);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 return response()->json([
@@ -610,10 +626,10 @@ class DashboardSmsController extends Controller
                     'exist' => $sumall->revenue_order_nonkontrak_exist + $sumall->revenue_order_kontrak_exist,
                 ];
 
-                [$hierarchyRows, $hierarchyIds] = ($isSalesStaff || $isExecutive)
-                    ? $this->prepareHierarchyRows($periode, null, [$karyawanId])
-                    : $this->prepareHierarchyRows($periode, [$karyawanId]);
+                [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRowsForKaryawanScope($periode, $karyawanId);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
+                $samplingScopeIds              = ($isSalesStaff || $isExecutive) ? [$karyawanId] : $scopeIds;
+                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $samplingScopeIds);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 return response()->json([
@@ -692,6 +708,8 @@ class DashboardSmsController extends Controller
     public function fetchRankings(Request $request)
     {
         try {
+            $this->assertDashboardSelectionAllowed($request);
+
             $periodType = $request->period_type === 'yearly' ? 'yearly' : 'monthly';
             $periode = null;
 
@@ -711,21 +729,7 @@ class DashboardSmsController extends Controller
                     $periode = sprintf('%04d-%02d', $year, $month);
                 }
             }
-            $salesIds = null;
-
-            $hierarchy = app(SalesTeamHierarchyService::class);
-
-            if ($request->mode === 'team' && $request->karyawan_id) {
-                $salesIds = $hierarchy->resolveDescendantIds((int) str_replace('team_', '', $request->karyawan_id));
-            } elseif ($request->mode === 'single' && $request->karyawan_id) {
-                $karyawanId  = (int) $request->karyawan_id;
-                $member      = MasterKaryawan::find($karyawanId);
-                $isExecutive = in_array($karyawanId, $hierarchy->salesExecutiveIds(), true);
-
-                $salesIds = ($isExecutive || ($member && $hierarchy->isSalesStaff($member)))
-                    ? [$karyawanId]
-                    : $hierarchy->resolveDescendantIds($karyawanId);
-            }
+            $salesIds = $this->resolveDashboardSalesIds($request);
 
             return response()->json([
                 'periode' => $periode,
@@ -784,26 +788,27 @@ class DashboardSmsController extends Controller
             }
 
             if (is_array($salesIds) && count($salesIds) > 0) {
-                $query->whereIn('sales_id', $salesIds);
+                $query->whereIn('daily_qsd.sales_id', $salesIds);
             }
 
             return $query;
         };
 
-        $revenueExpression = 'SUM(COALESCE(total_revenue, 0))';
+        $revenueExpression = 'SUM(COALESCE(daily_qsd.total_revenue, 0))';
 
         $topCustomers = $baseQuery()
+            ->leftJoin('master_pelanggan as mp', 'mp.id_pelanggan', '=', 'daily_qsd.pelanggan_ID')
             ->select(
-                'pelanggan_ID as id_pelanggan',
-                \DB::raw('MAX(nama_perusahaan) as nama_pelanggan'),
-                \DB::raw('MAX(sales_nama) as sales_nama'),
+                'daily_qsd.pelanggan_ID as id_pelanggan',
+                \DB::raw('MAX(COALESCE(mp.nama_pelanggan, daily_qsd.nama_perusahaan)) as nama_pelanggan'),
+                \DB::raw('MAX(mp.sales_penanggung_jawab) as sales_nama'),
                 \DB::raw($revenueExpression . ' as revenue')
             )
-            ->whereNotNull('pelanggan_ID')
-            ->groupBy('pelanggan_ID')
+            ->whereNotNull('daily_qsd.pelanggan_ID')
+            ->groupBy('daily_qsd.pelanggan_ID')
             ->havingRaw($revenueExpression . ' > 0')
             ->orderByDesc('revenue')
-            ->whereNull('konsultan')
+            ->whereNull('daily_qsd.konsultan')
             ->limit(30)
             ->get();
 
@@ -892,6 +897,28 @@ class DashboardSmsController extends Controller
         return [$hierarchyRows, $hierarchyIds];
     }
 
+    /**
+     * Baris hierarki untuk filter tim / SPV / manager / sales individu.
+     * SPV & tim non-root memakai scope member (descendant), bukan scope root cabang manager.
+     */
+    private function prepareHierarchyRowsForKaryawanScope(string $periode, int $karyawanId): array
+    {
+        $hierarchy   = app(SalesTeamHierarchyService::class);
+        $member      = MasterKaryawan::find($karyawanId);
+        $isExecutive = in_array($karyawanId, $hierarchy->salesExecutiveIds(), true);
+        $isSalesStaff = $member && $hierarchy->isSalesStaff($member);
+
+        if ($isExecutive || $isSalesStaff) {
+            return $this->prepareHierarchyRows($periode, null, [$karyawanId]);
+        }
+
+        return $this->prepareHierarchyRows(
+            $periode,
+            null,
+            $hierarchy->resolveDescendantIds($karyawanId)
+        );
+    }
+
     private function applyForecastHeading(array $heading, string $periode, array $salesIds, $cek): array
     {
         $forecast = ForecastSpAggregate::totalsForPeriode(
@@ -931,6 +958,8 @@ class DashboardSmsController extends Controller
     public function fetchCallPerformance(Request $request)
     {
         try {
+            $this->assertDashboardSelectionAllowed($request);
+
             $periodType = in_array($request->period_type, ['daily', 'yearly', 'range'], true)
                 ? $request->period_type
                 : 'monthly';
@@ -965,18 +994,14 @@ class DashboardSmsController extends Controller
 
             if ($request->mode === 'team' && $request->karyawan_id) {
                 $rootId = (int) str_replace('team_', '', $request->karyawan_id);
-                [$hierarchyRows] = $this->prepareHierarchyRows($referencePeriode, [$rootId]);
+                [$hierarchyRows] = $this->prepareHierarchyRowsForKaryawanScope($referencePeriode, $rootId);
             } elseif ($request->mode === 'single' && $request->karyawan_id) {
                 $karyawanId = (int) $request->karyawan_id;
-                $member = MasterKaryawan::find($karyawanId);
-                $isExecutive = in_array($karyawanId, $hierarchy->salesExecutiveIds(), true);
-                $isSalesStaff = $member && $hierarchy->isSalesStaff($member);
-
-                [$hierarchyRows] = ($isSalesStaff || $isExecutive)
-                    ? $this->prepareHierarchyRows($referencePeriode, null, [$karyawanId])
-                    : $this->prepareHierarchyRows($referencePeriode, [$karyawanId]);
+                [$hierarchyRows] = $this->prepareHierarchyRowsForKaryawanScope($referencePeriode, $karyawanId);
             } else {
-                [$hierarchyRows] = $this->prepareHierarchyRows($referencePeriode);
+                $scopeIds = app(SalesTeamHierarchyService::class)
+                    ->resolveViewerScopeMemberIds($this->dashboardViewer());
+                [$hierarchyRows] = $this->prepareHierarchyRows($referencePeriode, null, $scopeIds);
             }
 
             return response()->json([
@@ -995,21 +1020,9 @@ class DashboardSmsController extends Controller
     public function fetchQuotationAnalytics(Request $request)
     {
         try {
-            if ($request->period_type === 'daily') {
-                $startDate = Carbon::parse($request->date ?: $request->start_date ?: Carbon::now())->startOfDay();
-                $endDate = $startDate->copy()->endOfDay();
-            } elseif ($request->period_type === 'yearly') {
-                $startDate = Carbon::create((int) ($request->year ?: Carbon::now()->year), 1, 1)->startOfDay();
-                $endDate = $startDate->copy()->endOfYear();
-            } elseif ($request->period_type === 'range') {
-                $startDate = Carbon::parse($request->start_date)->startOfDay();
-                $endDate = Carbon::parse($request->end_date)->endOfDay();
-            } else {
-                $arr = explode(' ', (string) $request->periode);
-                $periode = count($arr) === 2 && isset($this->bulan[$arr[0]]) ? $arr[1] . '-' . $this->bulan[$arr[0]] : Carbon::now()->format('Y-m');
-                $startDate = Carbon::createFromFormat('Y-m', $periode)->startOfMonth();
-                $endDate = $startDate->copy()->endOfMonth();
-            }
+            $this->assertDashboardSelectionAllowed($request);
+
+            [$startDate, $endDate] = $this->resolveQuotationAnalyticsDateRange($request);
             $salesIds = $this->resolveDashboardSalesIds($request);
 
             $quotes = collect([QuotationNonKontrak::class, QuotationKontrakH::class])
@@ -1058,6 +1071,11 @@ class DashboardSmsController extends Controller
             $summarize = fn($items) => ['qty' => $items->count(), 'amount' => round((float) $items->sum('amount'), 2)];
             $statusKeys = ['cold', 'warm', 'hot', 'ordered', 'void', 'no_status'];
             $status = collect($statusKeys)->mapWithKeys(fn($key) => [$key => $summarize($quotes->where('category', $key))])->all();
+            $voidSummary = app(\App\Services\DashboardQuotationVoidService::class)->summary($salesIds, $startDate, $endDate);
+            $status['void'] = [
+                'qty' => $voidSummary['qty'],
+                'amount' => round((float) $voidSummary['amount'], 2),
+            ];
             $breakdown = function ($items) use ($summarize) {
                 return [
                     'total' => $summarize($items),
@@ -1078,19 +1096,120 @@ class DashboardSmsController extends Controller
         }
     }
 
+    public function fetchQuotationStatusList(Request $request)
+    {
+        $status = strtolower(trim((string) $request->input('quotation_status', '')));
+        if (!in_array($status, ['cold', 'warm', 'hot', 'ordered'], true)) {
+            return response()->json([
+                'message' => 'Status quotation tidak valid.',
+            ], 422);
+        }
+
+        try {
+            [$startDate, $endDate] = $this->resolveQuotationAnalyticsDateRange($request);
+            $salesIds = $this->resolveDashboardSalesIds($request);
+            $service = app(\App\Services\DashboardQuotationNoStatusService::class);
+
+            if ($request->has('draw')) {
+                return response()->json($service->datatable($request, $salesIds, $startDate, $endDate, $status));
+            }
+
+            return response()->json([
+                'message' => 'Data retrieved successfully',
+                'data' => $service->list($salesIds, $startDate, $endDate, $status),
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat mengambil daftar quotation.',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function fetchQuotationVoidList(Request $request)
+    {
+        try {
+            [$startDate, $endDate] = $this->resolveQuotationAnalyticsDateRange($request);
+            $salesIds = $this->resolveDashboardSalesIds($request);
+            $service = app(\App\Services\DashboardQuotationVoidService::class);
+
+            if ($request->has('draw')) {
+                return response()->json($service->datatable($request, $salesIds, $startDate, $endDate));
+            }
+
+            return response()->json([
+                'message' => 'Data retrieved successfully',
+                'data' => $service->list($salesIds, $startDate, $endDate),
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat mengambil daftar quotation void.',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function fetchQuotationNoStatusList(Request $request)
+    {
+        try {
+            [$startDate, $endDate] = $this->resolveQuotationAnalyticsDateRange($request);
+            $salesIds = $this->resolveDashboardSalesIds($request);
+            $service = app(\App\Services\DashboardQuotationNoStatusService::class);
+
+            if ($request->has('draw')) {
+                return response()->json($service->datatable($request, $salesIds, $startDate, $endDate));
+            }
+
+            $rows = $service->list($salesIds, $startDate, $endDate);
+
+            return response()->json([
+                'message' => 'Data retrieved successfully',
+                'data' => $rows,
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat mengambil daftar quotation tanpa status.',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function resolveQuotationAnalyticsDateRange(Request $request): array
+    {
+        if ($request->period_type === 'daily') {
+            $startDate = Carbon::parse($request->date ?: $request->start_date ?: Carbon::now())->startOfDay();
+            $endDate = $startDate->copy()->endOfDay();
+        } elseif ($request->period_type === 'yearly') {
+            $startDate = Carbon::create((int) ($request->year ?: Carbon::now()->year), 1, 1)->startOfDay();
+            $endDate = $startDate->copy()->endOfYear();
+        } elseif ($request->period_type === 'range') {
+            $startDate = Carbon::parse($request->start_date)->startOfDay();
+            $endDate = Carbon::parse($request->end_date)->endOfDay();
+        } else {
+            $arr = explode(' ', (string) $request->periode);
+            $periode = count($arr) === 2 && isset($this->bulan[$arr[0]]) ? $arr[1] . '-' . $this->bulan[$arr[0]] : Carbon::now()->format('Y-m');
+            $startDate = Carbon::createFromFormat('Y-m', $periode)->startOfMonth();
+            $endDate = $startDate->copy()->endOfMonth();
+        }
+
+        return [$startDate, $endDate];
+    }
+
     private function resolveDashboardSalesIds(Request $request): ?array
     {
         $hierarchy = app(SalesTeamHierarchyService::class);
+        $viewer    = $this->dashboardViewer();
+        $mode      = (string) ($request->mode ?: 'all');
 
-        if ($request->mode === 'all') {
-            return null;
+        if ($mode === 'all') {
+            return $hierarchy->resolveViewerScopeMemberIds($viewer);
         }
 
-        if ($request->mode === 'team' && $request->karyawan_id) {
+        if ($mode === 'team' && $request->karyawan_id) {
             return $hierarchy->resolveDescendantIds((int) str_replace('team_', '', $request->karyawan_id));
         }
 
-        if ($request->mode === 'single' && $request->karyawan_id) {
+        if ($mode === 'single' && $request->karyawan_id) {
             $karyawanId = (int) $request->karyawan_id;
             $member = MasterKaryawan::find($karyawanId);
 
@@ -1099,7 +1218,31 @@ class DashboardSmsController extends Controller
                 : $hierarchy->resolveDescendantIds($karyawanId);
         }
 
-        return null;
+        return $hierarchy->resolveViewerScopeMemberIds($viewer);
+    }
+
+    private function assertDashboardSelectionAllowed(Request $request): void
+    {
+        $viewer = $this->dashboardViewer();
+        if (!$viewer) {
+            abort(403, 'Unauthorized');
+        }
+
+        $mode = (string) ($request->mode ?: 'all');
+        $service = app(SalesTeamHierarchyService::class);
+
+        if (!$service->viewerCanUseSelection($viewer, $mode, $request->karyawan_id)) {
+            abort(403, 'Anda tidak memiliki akses ke data tersebut.');
+        }
+    }
+
+    private function dashboardViewer(): ?MasterKaryawan
+    {
+        if ($this->dashboardViewer === null) {
+            $this->dashboardViewer = MasterKaryawan::with('divisi')->find($this->user_id);
+        }
+
+        return $this->dashboardViewer;
     }
 
     /** Metrik call per sales berdasarkan status akhir follow-up DFUS. */
@@ -1260,6 +1403,260 @@ class DashboardSmsController extends Controller
             'revenue_non_sp'               => 0,
             'revenue_forecast'             => 0,
         ];
+    }
+
+    private function enrichRevenueHeadingWithSampling(array $heading, ?string $periode, ?array $salesIds): array
+    {
+        $totals = $this->calculateSamplingRevenueTotals($periode, $salesIds);
+        $suffix = "\nBelum Sampling : Rp " . number_format($totals['belum_sampling'], 0, ',', '.')
+            . "\nSudah Sampling : Rp " . number_format($totals['sudah_sampling'], 0, ',', '.');
+
+        foreach ($heading as &$item) {
+            if (($item['title'] ?? '') === 'Revenue') {
+                $item['info'] = ($item['info'] ?? '') . $suffix;
+            }
+        }
+        unset($item);
+
+        return $heading;
+    }
+
+    private function calculateSamplingRevenueTotals(?string $periode, ?array $salesIds): array
+    {
+        $empty = ['belum_sampling' => 0.0, 'sudah_sampling' => 0.0];
+        if (!$periode) {
+            return $empty;
+        }
+
+        [$year, $month] = array_pad(explode('-', $periode, 2), 2, null);
+        if (!$year || !$month) {
+            return $empty;
+        }
+
+        $query = \DB::table('daily_qsd')
+            ->select('no_order', 'no_quotation', 'periode', 'status_sampling', 'total_revenue')
+            ->whereNotNull('no_order')
+            ->where('no_order', '!=', '')
+            ->whereYear('tanggal_kelompok', (int) $year)
+            ->whereMonth('tanggal_kelompok', (int) $month);
+
+        if (is_array($salesIds) && count($salesIds) > 0) {
+            $query->whereIn('sales_id', $salesIds);
+        }
+
+        $rows = $query->get();
+        if ($rows->isEmpty()) {
+            return $empty;
+        }
+
+        $noOrders = $rows->pluck('no_order')->filter()->unique()->values();
+        $samplingCategoryByOrder = $this->mapOrderSamplingCategories($noOrders, $rows);
+        $sSamplingMap = $this->mapOrderTypeSSamplingStatus($noOrders);
+        $sdSamplingMap = $this->mapOrderTypeSdSamplingStatus($rows);
+
+        $belum = 0.0;
+        $sudah = 0.0;
+
+        foreach ($rows as $row) {
+            $revenue = (float) ($row->total_revenue ?? 0);
+            if ($revenue <= 0) {
+                continue;
+            }
+
+            $category = $this->resolveRowSamplingCategory($row, $samplingCategoryByOrder);
+            $isSampled = false;
+
+            if ($category === 'sd') {
+                $isSampled = (bool) ($sdSamplingMap[$this->sdSamplingKey($row)] ?? false);
+            } else {
+                // S / S24 / Non Pengujian / unknown → aturan tanggal_terima (tipe S)
+                $isSampled = (bool) ($sSamplingMap[$row->no_order] ?? false);
+            }
+
+            if ($isSampled) {
+                $sudah += $revenue;
+            } else {
+                $belum += $revenue;
+            }
+        }
+
+        return [
+            'belum_sampling' => $belum,
+            'sudah_sampling' => $sudah,
+        ];
+    }
+
+    private function mapOrderSamplingCategories($noOrders, $rows): array
+    {
+        $map = [];
+
+        if ($noOrders->isNotEmpty()) {
+            $detailTypes = \DB::table('order_detail')
+                ->whereIn('no_order', $noOrders)
+                ->where('is_active', 1)
+                ->selectRaw('no_order, GROUP_CONCAT(DISTINCT UPPER(TRIM(kategori_1)) ORDER BY kategori_1 SEPARATOR ", ") as types')
+                ->groupBy('no_order')
+                ->pluck('types', 'no_order');
+
+            foreach ($detailTypes as $noOrder => $typesRaw) {
+                $map[$noOrder] = $this->classifySamplingTokens($this->tokenizeSamplingStatus($typesRaw));
+            }
+        }
+
+        foreach ($rows as $row) {
+            $noOrder = $row->no_order ?? null;
+            if (!$noOrder || isset($map[$noOrder])) {
+                continue;
+            }
+
+            $map[$noOrder] = $this->classifySamplingTokens(
+                $this->tokenizeSamplingStatus($row->status_sampling ?? '')
+            );
+        }
+
+        return $map;
+    }
+
+    private function resolveRowSamplingCategory($row, array $categoryByOrder): string
+    {
+        $noOrder = $row->no_order ?? null;
+        if ($noOrder && isset($categoryByOrder[$noOrder])) {
+            return $categoryByOrder[$noOrder];
+        }
+
+        return $this->classifySamplingTokens(
+            $this->tokenizeSamplingStatus($row->status_sampling ?? '')
+        );
+    }
+
+    private function tokenizeSamplingStatus($raw): array
+    {
+        $raw = strtoupper(trim((string) $raw));
+        if ($raw === '') {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(function ($part) {
+            return trim($part);
+        }, preg_split('/\s*,\s*/', $raw) ?: [])));
+    }
+
+    /**
+     * @return 'sd'|'s'
+     */
+    private function classifySamplingTokens(array $tokens): string
+    {
+        $sdTokens = ['SD', 'SAR', 'SP'];
+        $sTokens = ['S', 'S24'];
+
+        foreach ($tokens as $token) {
+            if (in_array($token, $sdTokens, true)) {
+                return 'sd';
+            }
+        }
+
+        foreach ($tokens as $token) {
+            if (in_array($token, $sTokens, true)) {
+                return 's';
+            }
+        }
+
+        // Non Pengujian & legacy kosong → ikuti aturan S (tanggal_terima)
+        return 's';
+    }
+
+    private function mapOrderTypeSSamplingStatus($noOrders): array
+    {
+        if ($noOrders->isEmpty()) {
+            return [];
+        }
+
+        $stats = \DB::table('order_detail')
+            ->whereIn('no_order', $noOrders)
+            ->where('is_active', 1)
+            ->selectRaw("
+                no_order,
+                COUNT(*) as detail_count,
+                SUM(CASE
+                    WHEN tanggal_terima IS NOT NULL
+                        AND TRIM(CAST(tanggal_terima AS CHAR)) NOT IN ('', '0000-00-00')
+                    THEN 1 ELSE 0
+                END) as filled_count
+            ")
+            ->groupBy('no_order')
+            ->get();
+
+        $map = [];
+        foreach ($stats as $stat) {
+            $detailCount = (int) ($stat->detail_count ?? 0);
+            $filledCount = (int) ($stat->filled_count ?? 0);
+            $map[$stat->no_order] = $detailCount > 0 && $filledCount === $detailCount;
+        }
+
+        return $map;
+    }
+
+    private function mapOrderTypeSdSamplingStatus($dailyQsdRows): array
+    {
+        $noOrders = $dailyQsdRows->pluck('no_order')->filter()->unique()->values();
+        $noQuotations = $dailyQsdRows->pluck('no_quotation')->filter()->unique()->values();
+
+        if ($noOrders->isEmpty() && $noQuotations->isEmpty()) {
+            return [];
+        }
+
+        if (!\Schema::hasTable('sampel_diantar')) {
+            return [];
+        }
+
+        $sdQuery = \DB::table('sampel_diantar');
+        $sdQuery->where(function ($q) use ($noOrders, $noQuotations) {
+            if ($noOrders->isNotEmpty()) {
+                $q->whereIn('no_order', $noOrders);
+            }
+            if ($noQuotations->isNotEmpty()) {
+                $method = $noOrders->isNotEmpty() ? 'orWhereIn' : 'whereIn';
+                $q->{$method}('no_quotation', $noQuotations);
+            }
+        });
+
+        $sdRows = $sdQuery->get(['no_order', 'no_quotation', 'periode_kontrak']);
+        $map = [];
+        foreach ($sdRows as $sd) {
+            $order = trim((string) ($sd->no_order ?? ''));
+            $qt = trim((string) ($sd->no_quotation ?? ''));
+            $periode = trim((string) ($sd->periode_kontrak ?? ''));
+
+            if ($order !== '') {
+                $map[$order . '|' . $periode] = true;
+                $map[$order . '|'] = true;
+            }
+            if ($qt !== '') {
+                $map['qt:' . $qt . '|' . $periode] = true;
+                $map['qt:' . $qt . '|'] = true;
+            }
+        }
+
+        $result = [];
+        foreach ($dailyQsdRows as $row) {
+            $key = $this->sdSamplingKey($row);
+            $order = trim((string) ($row->no_order ?? ''));
+            $qt = trim((string) ($row->no_quotation ?? ''));
+            $periode = trim((string) ($row->periode ?? ''));
+
+            $result[$key] = ($order !== '' && (
+                isset($map[$order . '|' . $periode]) || isset($map[$order . '|'])
+            )) || ($qt !== '' && (
+                isset($map['qt:' . $qt . '|' . $periode]) || isset($map['qt:' . $qt . '|'])
+            ));
+        }
+
+        return $result;
+    }
+
+    private function sdSamplingKey($row): string
+    {
+        return trim((string) ($row->no_order ?? '')) . '|' . trim((string) ($row->periode ?? ''));
     }
 
 }

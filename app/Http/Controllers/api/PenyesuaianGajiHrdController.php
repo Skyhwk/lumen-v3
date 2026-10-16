@@ -411,58 +411,7 @@ class PenyesuaianGajiHrdController extends Controller
 
     public function rejectFinalEvaluation(Request $request)
     {
-        $reason = trim((string) ($request->reject_reason ?? $request->keterangan ?? ''));
-        if ($reason === '') {
-            return response()->json(['success' => false, 'message' => 'Alasan penolakan wajib diisi'], 422);
-        }
-
-        $record = SalaryAdjustmentRequest::find((int) $request->id);
-        if (!$record || !$record->is_active) {
-            return response()->json(['success' => false, 'message' => 'Data tidak ditemukan'], 404);
-        }
-
-        if ($record->status !== SalaryAdjustmentWorkflowService::STATUS_FINAL_EVALUATION) {
-            return response()->json(['success' => false, 'message' => 'Permohonan tidak dapat ditolak pada status ini'], 400);
-        }
-
-        DB::connection('mysql')->beginTransaction();
-        try {
-            $from = $record->status;
-
-            $record->status = SalaryAdjustmentWorkflowService::STATUS_REJECTED;
-            $record->rejected_stage = SalaryAdjustmentWorkflowService::STATUS_FINAL_EVALUATION;
-            $record->reject_reason = $reason;
-            $record->final_eval_rejected_by = $this->karyawan;
-            $record->final_eval_rejected_at = Carbon::now();
-            $record->rejected_by = $this->karyawan;
-            $record->rejected_at = Carbon::now();
-            $record->updated_by = $this->karyawan;
-            $record->save();
-
-            SalaryAdjustmentLogService::log(
-                $record->id,
-                $from,
-                $record->status,
-                'final_eval_reject',
-                $this->user_id,
-                $this->karyawan,
-                $reason
-            );
-
-            DB::connection('mysql')->commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Permohonan berhasil ditolak',
-            ]);
-        } catch (\Throwable $e) {
-            DB::connection('mysql')->rollBack();
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-            ], 500);
-        }
+        return $this->reject($request);
     }
 
     public function approveFinanceAppeal(Request $request)
@@ -552,56 +501,7 @@ class PenyesuaianGajiHrdController extends Controller
 
     public function rejectFinanceAppeal(Request $request)
     {
-        $reason = trim((string) ($request->reject_reason ?? $request->keterangan ?? ''));
-        if ($reason === '') {
-            return response()->json(['success' => false, 'message' => 'Alasan penolakan wajib diisi'], 422);
-        }
-
-        $record = SalaryAdjustmentRequest::find((int) $request->id);
-        if (!$record || !$record->is_active) {
-            return response()->json(['success' => false, 'message' => 'Data tidak ditemukan'], 404);
-        }
-
-        if ($record->status !== SalaryAdjustmentWorkflowService::STATUS_FINANCE_RETURNED) {
-            return response()->json(['success' => false, 'message' => 'Permohonan tidak dapat ditolak pada status ini'], 400);
-        }
-
-        DB::connection('mysql')->beginTransaction();
-        try {
-            $from = $record->status;
-
-            $record->status = SalaryAdjustmentWorkflowService::STATUS_REJECTED;
-            $record->rejected_stage = SalaryAdjustmentWorkflowService::STATUS_FINANCE_RETURNED;
-            $record->reject_reason = $reason;
-            $record->rejected_by = $this->karyawan;
-            $record->rejected_at = Carbon::now();
-            $record->updated_by = $this->karyawan;
-            $record->save();
-
-            SalaryAdjustmentLogService::log(
-                $record->id,
-                $from,
-                $record->status,
-                'hrd_appeal_reject',
-                $this->user_id,
-                $this->karyawan,
-                $reason
-            );
-
-            DB::connection('mysql')->commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Banding ditolak HRD — proses permohonan selesai',
-            ]);
-        } catch (\Throwable $e) {
-            DB::connection('mysql')->rollBack();
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-            ], 500);
-        }
+        return $this->reject($request);
     }
 
     public function indexCounselingSchedule(Request $request)
@@ -1113,7 +1013,35 @@ class PenyesuaianGajiHrdController extends Controller
                     SalaryAdjustmentWorkflowService::STATUS_WAITING_ASSESSMENT,
                 ], true)
                     && $row->attempt_status !== 'completed'
-                    && empty($row->link_url);
+                    && empty($row->assessment_token);
+            });
+
+            $dt->addColumn('can_takedown_link', function ($row) {
+                if (!EmployeeAdjustmentTypeRegistry::requiresAssessment($row->request_type ?? null)) {
+                    return false;
+                }
+
+                return in_array($row->status, [
+                    SalaryAdjustmentWorkflowService::STATUS_HRD_PROCESSING,
+                    SalaryAdjustmentWorkflowService::STATUS_WAITING_ASSESSMENT,
+                ], true)
+                    && $row->attempt_status !== 'completed'
+                    && !empty($row->assessment_token)
+                    && (bool) $row->is_link_active;
+            });
+
+            $dt->addColumn('can_reopen_link', function ($row) {
+                if (!EmployeeAdjustmentTypeRegistry::requiresAssessment($row->request_type ?? null)) {
+                    return false;
+                }
+
+                return in_array($row->status, [
+                    SalaryAdjustmentWorkflowService::STATUS_HRD_PROCESSING,
+                    SalaryAdjustmentWorkflowService::STATUS_WAITING_ASSESSMENT,
+                ], true)
+                    && $row->attempt_status !== 'completed'
+                    && !empty($row->assessment_token)
+                    && !(bool) $row->is_link_active;
             });
 
             $dt->addColumn('requires_counseling', function ($row) {
@@ -1326,18 +1254,43 @@ class PenyesuaianGajiHrdController extends Controller
             return response()->json(['success' => false, 'message' => 'Data tidak ditemukan'], 404);
         }
 
-        if (!in_array($record->status, SalaryAdjustmentWorkflowService::hrdProcessableStatuses(), true)) {
+        if (!in_array($record->status, SalaryAdjustmentWorkflowService::hrdRejectableStatuses(), true)) {
             return response()->json(['success' => false, 'message' => 'Permohonan tidak dapat ditolak pada status ini'], 400);
+        }
+
+        $isWaitingProcessReject = in_array(
+            $record->status,
+            SalaryAdjustmentWorkflowService::hrdProcessableStatuses(),
+            true
+        );
+        if (!$isWaitingProcessReject && !SalaryAdjustmentWorkflowService::isManagerGrade($this->grade)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hanya Manager / Senior Manager yang dapat menolak permohonan pada tahap ini',
+            ], 403);
         }
 
         DB::connection('mysql')->beginTransaction();
         try {
             $from = $record->status;
+            $now = Carbon::now();
+            $logAction = 'reject';
+            $message = 'Permohonan berhasil ditolak';
+
+            if ($from === SalaryAdjustmentWorkflowService::STATUS_FINAL_EVALUATION) {
+                $record->final_eval_rejected_by = $this->karyawan;
+                $record->final_eval_rejected_at = $now;
+                $logAction = 'final_eval_reject';
+            } elseif ($from === SalaryAdjustmentWorkflowService::STATUS_FINANCE_RETURNED) {
+                $logAction = 'hrd_appeal_reject';
+                $message = 'Banding ditolak HRD — proses permohonan selesai';
+            }
+
             $record->status = SalaryAdjustmentWorkflowService::STATUS_REJECTED;
             $record->rejected_stage = $from;
             $record->reject_reason = $reason;
             $record->rejected_by = $this->karyawan;
-            $record->rejected_at = Carbon::now();
+            $record->rejected_at = $now;
             $record->updated_by = $this->karyawan;
             $record->save();
 
@@ -1345,7 +1298,7 @@ class PenyesuaianGajiHrdController extends Controller
                 $record->id,
                 $from,
                 $record->status,
-                'reject',
+                $logAction,
                 $this->user_id,
                 $this->karyawan,
                 $reason
@@ -1355,7 +1308,7 @@ class PenyesuaianGajiHrdController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Permohonan berhasil ditolak',
+                'message' => $message,
             ]);
         } catch (\Throwable $e) {
             DB::connection('mysql')->rollBack();
@@ -1363,6 +1316,74 @@ class PenyesuaianGajiHrdController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function previewApprovalEmail(Request $request)
+    {
+        $id = (int) ($request->input('id') ?? 0);
+        if ($id <= 0) {
+            return response()->json(['success' => false, 'message' => 'id wajib diisi'], 422);
+        }
+
+        $roleInput = strtolower(trim((string) $request->input('role', SalaryAdjustmentEmailService::ROLE_IBU)));
+        $role = $roleInput === SalaryAdjustmentEmailService::ROLE_BAPAK
+            ? SalaryAdjustmentEmailService::ROLE_BAPAK
+            : SalaryAdjustmentEmailService::ROLE_IBU;
+
+        $format = strtolower((string) $request->input('format', 'html')) === 'json' ? 'json' : 'html';
+        $send = filter_var($request->input('send', false), FILTER_VALIDATE_BOOLEAN);
+        $persistToken = filter_var($request->input('persist_token', false), FILTER_VALIDATE_BOOLEAN);
+        $targetEmail = trim((string) $request->input('target_email', ''));
+        $sender = trim((string) ($request->input('sender') ?: ($this->karyawan ?? 'HRD')));
+
+        $record = SalaryAdjustmentRequest::find($id);
+        if (!$record || !$record->is_active) {
+            return response()->json(['success' => false, 'message' => 'Data tidak ditemukan'], 404);
+        }
+
+        try {
+            $emailService = new SalaryAdjustmentEmailService();
+            $html = $emailService->previewApprovalHtml($record, $role);
+            $sent = false;
+            $sentTo = $targetEmail !== '' ? $targetEmail : $emailService->resolveRecipient($role);
+
+            if ($send) {
+                $sent = $emailService->sendForRole($record, $role, $sender, [
+                    'email' => $sentTo,
+                    'persist_token' => $persistToken,
+                    'throw' => true,
+                ]);
+            }
+
+            $meta = [
+                'id' => $record->id,
+                'no_document' => $record->no_document,
+                'request_type' => $record->request_type,
+                'request_type_label' => EmployeeAdjustmentTypeRegistry::label($record->request_type),
+                'role' => $role,
+                'approver_label' => SalaryAdjustmentEmailService::actorLabel($role),
+                'finance_approved_at' => $record->finance_approved_at,
+                'sent' => $sent,
+                'target_email' => $send ? $sentTo : null,
+                'persist_token' => $persistToken,
+            ];
+
+            if ($format === 'html' && !$send) {
+                return response($html)->header('Content-Type', 'text/html; charset=UTF-8');
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => array_merge($meta, ['html' => $html]),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
             ], 500);
         }
     }

@@ -38,7 +38,7 @@ class DataApplicantsController extends Controller
     public function index(Request $request)
     {
         $query = NewRecruitment::with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview'])
-            ->where('status', 'screening')
+            ->where('status', $this->applicantStatus())
             ->where('is_active', 1)
             ->whereNotNull('personnel_request_id')
             ->where('personnel_request_id', '!=', '')
@@ -176,6 +176,11 @@ class DataApplicantsController extends Controller
         }
 
         return $this->applyRecruitmentCoreDataTableOrdering($datatable)->make(true);
+    }
+
+    protected function applicantStatus(): string
+    {
+        return 'screening';
     }
 
     /**
@@ -359,7 +364,7 @@ class DataApplicantsController extends Controller
             $applicant->loadMissing(['personnelRequest', 'personalRequest']);
 
             if (!empty($applicant->email)) {
-                $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($applicant);
+                $bodyEmail = $this->rejectionEmailBody($applicant);
                 SendEmail::where('to', $applicant->email)
                     ->where('subject', 'Informasi Hasil Seleksi - PT Inti Surya Laboratorium')
                     ->where('body', $bodyEmail)
@@ -393,6 +398,11 @@ class DataApplicantsController extends Controller
             'message' => 'Applicant has been rejected.',
             'data' => $applicant,
         ], 200);
+    }
+
+    protected function rejectionEmailBody($applicant): string
+    {
+        return GenerateMessageAtsEmail::bodyEmailRejectKandidat($applicant);
     }
 
     /**

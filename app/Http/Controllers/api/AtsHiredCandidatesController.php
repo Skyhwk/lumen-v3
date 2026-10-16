@@ -363,6 +363,10 @@ class AtsHiredCandidatesController extends Controller
 
     public function migrateToMasterKaryawan(Request $request)
     {
+        $tipePengembalian = data_get($request, 'payroll.tipe_pengembalian');
+        if ($tipePengembalian !== null && !in_array($tipePengembalian, ['setelah_potongan', 'setelah_kontrak'], true)) {
+            return response()->json(['status' => false, 'message' => 'Tipe pengembalian tidak valid.'], 422);
+        }
         if (!$request->id) {
             return response()->json(['status' => false, 'message' => 'Data kandidat wajib dipilih.'], 422);
         }
@@ -594,6 +598,9 @@ class AtsHiredCandidatesController extends Controller
             'penyakit_bawaan_lahir' => optional($medical)->penyakit_bawaan_lahir,
             'penyakit_kronis' => optional($medical)->penyakit_kronis,
             'riwayat_kecelakaan' => optional($medical)->riwayat_kecelakaan,
+            'obat_rutin' => optional($medical)->obat_rutin,
+            'gangguan_mental' => optional($medical)->gangguan_mental,
+            'alergi' => optional($medical)->alergi,
         ];
 
         $payroll = [
@@ -739,6 +746,7 @@ class AtsHiredCandidatesController extends Controller
             'experience' => 0,
             'skill' => 0,
             'languages' => 0,
+            'supporting_info_answers' => 0,
         ];
 
         $medicalData = [
@@ -749,6 +757,9 @@ class AtsHiredCandidatesController extends Controller
             'penyakit_bawaan_lahir' => trim((string) data_get($request, 'medical.penyakit_bawaan_lahir')) ?: null,
             'penyakit_kronis' => trim((string) data_get($request, 'medical.penyakit_kronis')) ?: null,
             'riwayat_kecelakaan' => trim((string) data_get($request, 'medical.riwayat_kecelakaan')) ?: null,
+            'obat_rutin' => trim((string) data_get($request, 'medical.obat_rutin')) ?: null,
+            'gangguan_mental' => trim((string) data_get($request, 'medical.gangguan_mental')) ?: null,
+            'alergi' => trim((string) data_get($request, 'medical.alergi')) ?: null,
             'keterangan_mata' => $this->normalizeKeteranganMata(data_get($request, 'medical.keterangan_mata')),
         ];
 
@@ -762,6 +773,9 @@ class AtsHiredCandidatesController extends Controller
             $medis->penyakit_bawaan_lahir = $medicalData['penyakit_bawaan_lahir'];
             $medis->penyakit_kronis = $medicalData['penyakit_kronis'];
             $medis->riwayat_kecelakaan = $medicalData['riwayat_kecelakaan'];
+            $medis->obat_rutin = $medicalData['obat_rutin'];
+            $medis->gangguan_mental = $medicalData['gangguan_mental'];
+            $medis->alergi = $medicalData['alergi'];
             $medis->keterangan_mata = $medicalData['keterangan_mata'];
             $medis->created_by = $this->karyawan;
             $medis->created_at = $timestamp;
@@ -835,6 +849,12 @@ class AtsHiredCandidatesController extends Controller
             $bahasa->save();
             $savedCounts['languages']++;
         }
+
+        $savedCounts['supporting_info_answers'] = $this->migrateSupportingInfoAnswers(
+            $recruitment->id,
+            $karyawan->id,
+            $timestamp
+        );
 
         $user = new User();
         $user->created_by = $this->karyawan;
@@ -925,6 +945,7 @@ class AtsHiredCandidatesController extends Controller
             $this->upsertPayroll('pencadangan_upah', $karyawan->id, $nikKaryawan, $namaKaryawan, [
                 'nominal' => $pencadangan,
                 'nominal_berjalan' => -$pencadangan,
+                'tipe_pengembalian' => data_get($request, 'payroll.tipe_pengembalian') ?? 'setelah_potongan',
                 'tenor' => $tenor,
                 'tenor_berjalan' => -$tenor,
                 'bulan_efektif' => $effectiveMonth,
@@ -976,6 +997,45 @@ class AtsHiredCandidatesController extends Controller
             'archived_documents' => $archivedDocuments,
             'personnel_request' => $personnelRequestSync,
         ];
+    }
+
+    private function migrateSupportingInfoAnswers($recruitmentId, $karyawanId, $timestamp): int
+    {
+        if (!Schema::hasTable('candidate_supporting_info_answers')
+            || !Schema::hasTable('supporting_info_answers')) {
+            return 0;
+        }
+
+        $answers = DB::table('candidate_supporting_info_answers')
+            ->where('new_recruitment_id', $recruitmentId)
+            ->where('is_active', 1)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($answers as $answer) {
+            DB::table('supporting_info_answers')->updateOrInsert(
+                ['source_candidate_answer_id' => $answer->id],
+                [
+                    'karyawan_id' => $karyawanId,
+                    'new_recruitment_id' => $answer->new_recruitment_id,
+                    'candidate_profile_id' => $answer->candidate_profile_id,
+                    'question_category_id' => $answer->question_category_id,
+                    'question_id' => $answer->question_id,
+                    'category_name' => $answer->category_name,
+                    'question_text' => $answer->question_text,
+                    'question_type' => $answer->question_type,
+                    'answer_text' => $answer->answer_text,
+                    'answer_payload' => $answer->answer_payload,
+                    'is_active' => 1,
+                    'created_by' => $this->karyawan,
+                    'updated_by' => $this->karyawan,
+                    'created_at' => $timestamp,
+                    'updated_at' => $timestamp,
+                ]
+            );
+        }
+
+        return $answers->count();
     }
 
     private function mapCandidateEducations($recruitment)
@@ -1305,6 +1365,9 @@ class AtsHiredCandidatesController extends Controller
             'medical.penyakit_bawaan_lahir',
             'medical.penyakit_kronis',
             'medical.riwayat_kecelakaan',
+            'medical.obat_rutin',
+            'medical.gangguan_mental',
+            'medical.alergi',
         ];
 
         foreach ($fields as $field) {

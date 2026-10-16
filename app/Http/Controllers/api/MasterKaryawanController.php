@@ -31,8 +31,28 @@ class MasterKaryawanController extends Controller
 {
     public function index(Request $request)
     {
-        $data = MasterKaryawan::with(['medical', 'user', 'pengalaman_kerja', 'pendidikan_karyawan', 'sertifikat_karyawan', 'kontak_darurat'])->where('is_active', true);
-        return Datatables::of($data)->addColumn('personal', function ($row) {
+        $data = MasterKaryawan::with([
+            'medical',
+            'user',
+            'pengalaman_kerja',
+            'pendidikan_karyawan' => function ($query) {
+                $query->where('is_active', true);
+            },
+            'sertifikat_karyawan',
+            'kontak_darurat' => function ($query) {
+                $query->where('is_active', true);
+            },
+        ])->where('is_active', true);
+
+        if ($request->filled('id_cabang') && $request->id_cabang !== 'all') {
+            $data->where('id_cabang', (int) $request->id_cabang);
+        }
+
+        return Datatables::of($data)
+        ->addColumn('count', function ($row) {
+            return $row->count();
+        })
+        ->addColumn('personal', function ($row) {
             $shioElemen = ShioElemenHelper::resolve($row->tanggal_lahir, $row->shio, $row->elemen);
             return [
                 'nama_lengkap' => $row->nama_lengkap,
@@ -85,6 +105,67 @@ class MasterKaryawanController extends Controller
                 'priv_branch' => json_decode($row->privilage_cabang)
             ];
         })
+            ->addColumn('pendidikan', function ($row) {
+                $rows = $row->pendidikan_karyawan
+                    ->filter(function ($item) {
+                        return (int) ($item->is_active ?? 1) !== 0
+                            && (trim((string) $item->jenjang) !== '' || trim((string) $item->institusi) !== '');
+                    })
+                    ->sortByDesc(function ($item) {
+                        return sprintf('%04d-%06d', (int) $item->tahun_lulus, (int) $item->id);
+                    })
+                    ->values()
+                    ->map(function ($item) {
+                        return [
+                            'id' => $item->id,
+                            'jenjang' => $item->jenjang,
+                            'institusi' => $item->institusi,
+                            'jurusan' => $item->jurusan,
+                            'tahun_masuk' => $item->tahun_masuk,
+                            'tahun_lulus' => $item->tahun_lulus,
+                            'kota' => $item->kota,
+                        ];
+                    })
+                    ->all();
+
+                if ($rows) {
+                    return $rows;
+                }
+
+                $decoded = json_decode($row->getOriginal('pendidikan') ?: '[]', true);
+                return is_array($decoded) ? $decoded : [];
+            })
+            ->addColumn('kontak_darurat', function ($row) {
+                $seen = [];
+                return $row->kontak_darurat
+                    ->filter(function ($item) use (&$seen) {
+                        if ((int) ($item->is_active ?? 1) === 0) {
+                            return false;
+                        }
+                        $nama = trim((string) $item->nama_kontak);
+                        $hubungan = trim((string) $item->hubungan);
+                        $nomor = trim((string) $item->nomor_kontak);
+                        if ($nama === '' && $nomor === '') {
+                            return false;
+                        }
+                        $fingerprint = strtolower($nama . '|' . $hubungan . '|' . $nomor);
+                        if (isset($seen[$fingerprint])) {
+                            return false;
+                        }
+                        $seen[$fingerprint] = true;
+                        return true;
+                    })
+                    ->values()
+                    ->map(function ($item) {
+                        return [
+                            'id' => $item->id,
+                            'nama_kontak' => $item->nama_kontak,
+                            'hubungan' => $item->hubungan,
+                            'nomor_kontak' => $item->nomor_kontak,
+                        ];
+                    })
+                    ->all();
+            })
             ->rawColumns(['personal', 'contact', 'employee', 'access'])
             ->make(true);
     }
@@ -729,5 +810,59 @@ class MasterKaryawanController extends Controller
 
         $job = new NonaktifKaryawanJob($karyawan);
         $this->dispatch($job);
+    }
+
+    public function getCabang(Request $request)
+    {
+        $base = MasterKaryawan::query()->where('is_active', true);
+        $this->applyKaryawanColumnSearch($base, $request);
+
+        $counts = (clone $base)
+            ->select('id_cabang', DB::raw('COUNT(*) as total'))
+            ->groupBy('id_cabang')
+            ->pluck('total', 'id_cabang');
+
+        $data = MasterCabang::where('is_active', true)
+            ->select('id', 'nama_cabang')
+            ->get()
+            ->map(function ($cabang) use ($counts) {
+                $cabang->total = (int) ($counts[$cabang->id] ?? 0);
+                return $cabang;
+            });
+
+        return response()->json([
+            'message' => 'Data hasbeen show',
+            'data' => $data,
+            'total' => (clone $base)->count(),
+        ], 200);
+    }
+
+    private function applyKaryawanColumnSearch($query, Request $request): void
+    {
+        $columns = [
+            '2' => 'nik_karyawan',
+            '3' => 'nama_lengkap',
+            '4' => 'department',
+            '5' => 'jabatan',
+            '6' => 'jenis_kelamin',
+            '7' => 'status_pernikahan',
+            '8' => 'status_karyawan',
+            '9' => 'tgl_mulai_kerja',
+            '10' => 'tgl_berakhir_kontrak',
+        ];
+
+        $search = $request->input('column_search', []);
+        if (!is_array($search)) {
+            return;
+        }
+
+        foreach ($columns as $index => $column) {
+            $value = trim((string) ($search[$index] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+
+            $query->where($column, 'like', '%' . addcslashes($value, '%_\\') . '%');
+        }
     }
 }

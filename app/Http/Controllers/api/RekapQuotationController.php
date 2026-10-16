@@ -18,6 +18,10 @@ class RekapQuotationController extends Controller
     public function index(Request $request)
     {
         try {
+            $tableName = $request->mode === 'kontrak'
+                ? 'request_quotation_kontrak_H'
+                : 'request_quotation';
+
             if ($request->mode == 'non_kontrak') {
                 $data = QuotationNonKontrak::with([
                     'sales',
@@ -26,13 +30,13 @@ class RekapQuotationController extends Controller
                     },
                     'alasanVoidQt'
                 ])
-                    ->where('id_cabang', $request->cabang)
+                    ->where($tableName . '.id_cabang', $request->cabang)
                     // ->where('flag_status', '!=', 'ordered')
                     // ->where('is_active', true)
-                    ->where('is_approved', true)
-                    ->where('is_emailed', true)
-                    ->whereYear('tanggal_penawaran', $request->year)
-                    ->orderBy('tanggal_penawaran', 'desc');
+                    ->where($tableName . '.is_approved', true)
+                    ->where($tableName . '.is_emailed', true)
+                    ->whereYear($tableName . '.tanggal_penawaran', $request->year)
+                    ->orderBy($tableName . '.tanggal_penawaran', 'desc');
             } else if ($request->mode == 'kontrak') {
                 $data = QuotationKontrakH::with([
                     'sales',
@@ -42,32 +46,30 @@ class RekapQuotationController extends Controller
                     },
                     'alasanVoidQt'
                 ])
-                    ->where('id_cabang', $request->cabang)
+                    ->where($tableName . '.id_cabang', $request->cabang)
                     // ->where('flag_status', '!=', 'ordered')
                     // ->where('is_active', true)
-                    ->where('is_approved', true)
-                    ->where('is_emailed', true)
-                    ->whereYear('tanggal_penawaran', $request->year)
-                    ->orderBy('tanggal_penawaran', 'desc');
+                    ->where($tableName . '.is_approved', true)
+                    ->where($tableName . '.is_emailed', true)
+                    ->whereYear($tableName . '.tanggal_penawaran', $request->year)
+                    ->orderBy($tableName . '.tanggal_penawaran', 'desc');
             }
 
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
             switch ($jabatan) {
                 case 24: // Sales Staff
-                    $data->where('sales_id', $this->user_id);
+                    $data->where($tableName . '.sales_id', $this->user_id);
                     break;
                 case 21: // Sales Supervisor
                     $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)
                         ->pluck('id')
                         ->toArray();
                     array_push($bawahan, $this->user_id);
-                    $data->whereIn('sales_id', $bawahan);
+                    $data->whereIn($tableName . '.sales_id', $bawahan);
                     break;
             }
 
-            $tableName = $request->mode === 'kontrak'
-                ? 'request_quotation_kontrak_H'
-                : 'request_quotation';
+            $data->select($tableName . '.*');
 
             return DataTables::of($data)
                 ->addColumn('count_jadwal', function ($row) {
@@ -84,6 +86,15 @@ class RekapQuotationController extends Controller
                         return;
                     }
                     $query->where($tableName . '.status_quotation', 'like', '%' . $keyword . '%');
+                })
+                ->filterColumn('sales.nama_lengkap', function ($query, $keyword) {
+                    $keyword = trim((string) $keyword);
+                    if ($keyword === '') {
+                        return;
+                    }
+                    $query->whereHas('sales', function ($sales) use ($keyword) {
+                        $sales->where('nama_lengkap', 'like', '%' . $keyword . '%');
+                    });
                 })
                 ->make(true);
         } catch (Exception $e) {

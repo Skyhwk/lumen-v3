@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Helpers\LhpStepSequence;
 use App\Models\OrderDetail;
 use Illuminate\Support\Carbon;
 
@@ -48,7 +49,8 @@ class GroupedCfrByLhp
                     "wsValueAir",
                     "wsValueUdara",
                     "wsValueEmisiCerobong",
-                    "lhps_hygiene_sanitasi"
+                    "lhps_hygiene_sanitasi",
+                    "lhp_manual"
                 ])
                 ->withAnyDataLapangan()
                 ->where([
@@ -86,6 +88,7 @@ class GroupedCfrByLhp
                         $item->lhps_padatan,
                         $item->lhp_psikologi,
                         $item->lhps_hygiene_sanitasi,
+                        $item->lhp_manual,
                     ])->first(fn($lhps) => $lhps !== null);
 
                     // $tglSampling = optional($track)->ftc_verifier
@@ -150,6 +153,11 @@ class GroupedCfrByLhp
 
                     $steps['lhp_release']['date'] = $tglSampling ? ($lhps->approved_at ?? null) : null;
 
+                    if (!empty($steps['drafting']['date']) && empty($steps['analisa']['date'])) {
+                        $steps['analisa']['date'] = $steps['sampling']['date'];
+                    }
+
+                    $steps = LhpStepSequence::normalize($steps);
                     $steps['activeStep'] = $this->detectActiveStep($steps);
 
                     $item->steps = $steps;
@@ -179,6 +187,7 @@ class GroupedCfrByLhp
                     }
                 }
 
+                $stepsByCFR = LhpStepSequence::normalize($stepsByCFR);
                 $stepsByCFR['activeStep'] = $this->detectActiveStepByGroup($mappedDetails);
 
                 $orderDetailsArray = $mappedDetails->toArray();

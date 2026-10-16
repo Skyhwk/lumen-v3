@@ -457,6 +457,10 @@ class EmployeeAdjustmentApplyOrchestrator
         string $source,
         array $before
     ): void {
+        if (EmployeeAdjustmentMutasiService::isUnderSameManagerScope($record)) {
+            return;
+        }
+
         if (!$record->receiver_manager_id) {
             throw new \RuntimeException('Manager penerima mutasi belum ditentukan');
         }

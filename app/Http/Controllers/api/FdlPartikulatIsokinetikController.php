@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Support\FdlOrderDetailNoSampelSync;
+
 use App\Models\DataLapanganIsokinetikBeratMolekul;
 use App\Models\DataLapanganIsokinetikHasil;
 use App\Models\DataLapanganIsokinetikKadarAir;
@@ -1495,22 +1497,7 @@ class FdlPartikulatIsokinetikController extends Controller
     {
         // Validasi input wajib
         if (!$request->filled(['no_sampel_lama', 'no_sampel_baru'])) {
-            
-                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
-                    ->first();
-
-                if ($order_detail_lama) {
-                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
-                        ->where('is_active', 1)
-                        ->update([
-                            'tanggal_terima' => $order_detail_lama->tanggal_terima
-                        ]);
-                    
-                    $order_detail_lama->tanggal_terima = NULL;
-                    $order_detail_lama->save();
-                }
-
-                return response()->json([
+            return response()->json([
                 'message' => 'Data input (lama atau baru) tidak boleh kosong'
             ], 400);
         }
@@ -1570,16 +1557,7 @@ class FdlPartikulatIsokinetikController extends Controller
                     WsValueEmisiCerobong::whereIn('id_subkontrak', $subKontrakIds)->update($updateData);
                 }
 
-                // 5. Update Tanggal Terima di OrderDetail
-                $orderDetailLama = OrderDetail::where('no_sampel', $request->no_sampel_lama)->first();
-                $orderDetailBaru = OrderDetail::where('no_sampel', $request->no_sampel_baru)->first();
-
-                if ($orderDetailLama && $orderDetailBaru) {
-                    OrderDetail::where('id', $orderDetailBaru->id)
-                        ->update([
-                            'tanggal_terima' => $orderDetailLama->tanggal_terima,
-                        ]);
-                }
+                FdlOrderDetailNoSampelSync::afterRename($request->no_sampel_lama, $request->no_sampel_baru);
             });
 
             return response()->json([

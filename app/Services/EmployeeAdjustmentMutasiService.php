@@ -4,9 +4,12 @@ namespace App\Services;
 
 use App\Models\SalaryAdjustmentRequest;
 use Illuminate\Http\Request;
+use Carbon\Carbon;
 
 class EmployeeAdjustmentMutasiService
 {
+    public const META_UNDER_SAME_MANAGER = 'mutasi_under_same_manager';
+
     public const DECISION_ACCEPT = 'accept';
     public const DECISION_REJECT = 'reject';
 
@@ -23,8 +26,26 @@ class EmployeeAdjustmentMutasiService
         ];
     }
 
+    public static function isUnderSameManagerScope(SalaryAdjustmentRequest $record): bool
+    {
+        if ($record->request_type !== EmployeeAdjustmentTypeRegistry::TYPE_MUTASI) {
+            return false;
+        }
+
+        $meta = $record->type_metadata;
+        if (is_string($meta)) {
+            $meta = json_decode($meta, true);
+        }
+
+        return is_array($meta) && !empty($meta[self::META_UNDER_SAME_MANAGER]);
+    }
+
     public function isReceiver(SalaryAdjustmentRequest $record, int $userId): bool
     {
+        if (self::isUnderSameManagerScope($record)) {
+            return false;
+        }
+
         return (int) $record->receiver_manager_id === $userId
             && $record->request_type === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI;
     }
@@ -151,7 +172,7 @@ class EmployeeAdjustmentMutasiService
         }
 
         $record->status = SalaryAdjustmentWorkflowService::STATUS_RECEIVER_RESPONDED;
-        $record->receiver_responded_at = now();
+        $record->receiver_responded_at = Carbon::now();
     }
 
     public function formatReceiverFields(SalaryAdjustmentRequest $record): array

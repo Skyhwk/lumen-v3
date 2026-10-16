@@ -20,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use App\Services\Greatday\FirebaseService;
+use App\Services\Greatday\GreatdayOvertimeAccess;
 use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Border;
@@ -515,8 +516,24 @@ class LemburController extends Controller
         ]);
     }
 
+    public function overtimeSubmitAccess(Request $request)
+    {
+        $employee = $this->user_id ? MasterKaryawan::find($this->user_id) : null;
+        $canCreate = $employee && GreatdayOvertimeAccess::canCreate($employee);
+
+        return response()->json([
+            'success' => true,
+            'can_create' => $canCreate,
+            'message' => $canCreate ? null : GreatdayOvertimeAccess::denyCreateMessage(),
+        ], 200);
+    }
+
     public function getListKaryawan(Request $request)
     {
+        if ($deny = $this->denyUnlessOvertimeCreator()) {
+            return $deny;
+        }
+
         $getBawahan = GetBawahan::where('id', $this->user_id)->get();
         $getAtasan = GetAtasan::where('id', $this->user_id)->get();
         $allKaryawan = collect([$getBawahan, $getAtasan])
@@ -541,6 +558,10 @@ class LemburController extends Controller
 
     public function updateLembur(Request $request)
     {
+        if ($deny = $this->denyUnlessOvertimeCreator()) {
+            return $deny;
+        }
+
         DB::beginTransaction();
         try {
             $header = OvertimeRequest::on('intilab_apps')->find($request->id);
@@ -552,10 +573,26 @@ class LemburController extends Controller
                 ], 404);
             }
 
+            $memberIds = collect($request->data ?? [])
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn ($id) => $id > 0)
+                ->unique()
+                ->values()
+                ->all();
+
+            if ($memberIds === []) {
+                DB::rollback();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pilih minimal satu anggota lembur',
+                ], 422);
+            }
+
             $exist = OvertimeRequestMembers::on('intilab_apps')
                 ->leftJoin('intilab_apps.overtime_requests as h', 'h.no_document', '=', 'overtime_request_members.no_document')
                 ->where('h.start_date', $request->tanggal_lembur)
-                ->whereIn('overtime_request_members.employee_id', $request->data)
+                ->whereIn('overtime_request_members.employee_id', $memberIds)
                 ->whereNull('h.rejected_atasan_by')
                 ->where('h.no_document', '!=', $header->no_document)
                 ->get();
@@ -582,7 +619,7 @@ class LemburController extends Controller
             OvertimeRequestMembers::on('intilab_apps')->where('no_document', $header->no_document)->delete();
 
             $details = [];
-            foreach ($request->data as $detail) {
+            foreach ($memberIds as $detail) {
                 $details[] = [
                     'overtime_request_id' => $header->id,
                     'no_document' => $header->no_document,
@@ -625,12 +662,30 @@ class LemburController extends Controller
 
     public function createLembur(Request $request)
     {
+        if ($deny = $this->denyUnlessOvertimeCreator()) {
+            return $deny;
+        }
+
+        $memberIds = collect($request->data ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($memberIds === []) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pilih minimal satu anggota lembur',
+            ], 422);
+        }
+
         DB::beginTransaction();
         try {
             $exist = OvertimeRequestMembers::on('intilab_apps')
                 ->leftJoin('intilab_apps.overtime_requests as h', 'h.no_document', '=', 'overtime_request_members.no_document')
                 ->where('h.start_date', $request->tanggal_lembur)
-                ->whereIn('overtime_request_members.employee_id', $request->data)
+                ->whereIn('overtime_request_members.employee_id', $memberIds)
                 ->whereNull('h.rejected_atasan_by')
                 ->get();
 
@@ -663,7 +718,7 @@ class LemburController extends Controller
             ]);
 
             $details = [];
-            foreach ($request->data as $detail) {
+            foreach ($memberIds as $detail) {
                 $details[] = [
                     'overtime_request_id' => $header->id,
                     'no_document' => $no_document,
@@ -703,7 +758,7 @@ class LemburController extends Controller
                     ->send();
             }
 
-            $users = collect($request->data)
+            $users = collect($memberIds)
                 ->filter(fn($id) => (int) $id !== (int) $this->user_id)
                 ->values()
                 ->toArray();
@@ -1079,6 +1134,26 @@ class LemburController extends Controller
                 'message' => $e->getMessage(),
             ]);
         }
+    }
+
+    private function denyUnlessOvertimeCreator()
+    {
+        if (!$this->user_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akun tidak terhubung ke data karyawan.',
+            ], 403);
+        }
+
+        $employee = MasterKaryawan::find($this->user_id);
+        if (!$employee || !GreatdayOvertimeAccess::canCreate($employee)) {
+            return response()->json([
+                'success' => false,
+                'message' => GreatdayOvertimeAccess::denyCreateMessage(),
+            ], 403);
+        }
+
+        return null;
     }
 
     private function ensureOvertimeGroupConcatLimit(): void

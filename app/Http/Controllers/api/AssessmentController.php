@@ -513,7 +513,9 @@ class AssessmentController extends Controller
         }
 
         return collect(is_array($value) ? $value : [$value])
-            ->filter(fn ($config) => is_array($config) && (int) ($config['id'] ?? 0) > 0)
+            ->filter(fn ($config) => is_array($config)
+                && (int) ($config['id'] ?? 0) > 0
+                && ($config['type'] ?? '') !== 'hr')
             ->map(function ($config) {
                 return [
                     'id' => (int) $config['id'],
@@ -838,9 +840,26 @@ class AssessmentController extends Controller
                     'completed_at' => $completedAt,
                     'updated_at' => $completedAt,
                 ]);
-                (new RecruitmentStatusService())->update($attempt->recruitment_id, 'screening', $completedAt);
+                $passedAssessment = $this->hasAnyPassedAssessmentSession($attempt->id);
+                $nextStatus = $passedAssessment ? 'screening' : 'rejected';
+                (new RecruitmentStatusService())->update($attempt->recruitment_id, $nextStatus, $completedAt);
+                if (!$passedAssessment) {
+                    $rejectionReason = 'Tidak memenuhi nilai minimum pada seluruh tes assessment.';
+                    RecruitmentStatusService::markRejectedKandidat(
+                        (int) $attempt->recruitment_id,
+                        'Assessment System',
+                        $rejectionReason,
+                        $completedAt
+                    );
+                    DB::table('new_recruitment')->where('id', $attempt->recruitment_id)->update([
+                        'rejected_by' => 'Assessment System',
+                        'rejected_at' => $completedAt,
+                        'alasan_reject' => $rejectionReason,
+                        'updated_at' => $completedAt,
+                    ]);
+                }
                 $recruitment = DB::table('new_recruitment')->where('id', $attempt->recruitment_id)->first();
-                if ($recruitment) {
+                if ($recruitment && $passedAssessment) {
                     app(AtsNotificationService::class)->assessmentCompleted($recruitment);
                 }
             }
@@ -872,11 +891,39 @@ class AssessmentController extends Controller
         return ['status' => 'in_progress', 'session' => ['id' => $session->id, 'name' => $session->category_name, 'order' => $session->session_order, 'duration_minutes' => $session->duration_minutes, 'has_time_limit' => $this->sessionHasTimeLimit($session), 'expires_at' => $session->expires_at], 'question' => array_merge($question, ['total' => $session->question_count])];
     }
 
+    private function hasAnyPassedAssessmentSession(int $attemptId): bool
+    {
+        $sessions = DB::table('assessment_sessions')
+            ->where('assessment_attempt_id', $attemptId)
+            ->whereIn('status', ['completed', 'expired'])
+            ->get(['category_name', 'question_category_id', 'result_json']);
+        $applicableSessions = $sessions->filter(fn ($session) => $this->isQualificationSession($session));
+
+        if ($applicableSessions->isEmpty()) {
+            return true;
+        }
+
+        return $applicableSessions->contains(function ($session) {
+            $result = json_decode($session->result_json ?: '{}', true) ?: [];
+            if (array_key_exists('passed', $result)) {
+                return (bool) $result['passed'];
+            }
+
+            return (float) ($result['score'] ?? 0) >= (float) ($result['minimum_score'] ?? 0);
+        });
+    }
+
     private function finishSession($session, array $answers, $status)
     {
         $result = $this->scoreSession($session, $answers);
         $result['status'] = $status;
         $result['scored_at'] = Carbon::now()->toDateTimeString();
+        if ($this->isQualificationSession($session)) {
+            $minimumScore = $this->sessionMinimumScore($session);
+            $score = (float) ($result['score'] ?? 0);
+            $result['minimum_score'] = $minimumScore;
+            $result['passed'] = $score >= $minimumScore;
+        }
 
         DB::table('assessment_sessions')->where('id', $session->id)->update([
             'answers_json' => json_encode($answers),
@@ -885,6 +932,52 @@ class AssessmentController extends Controller
             'completed_at' => Carbon::now(),
             'updated_at' => Carbon::now(),
         ]);
+    }
+
+    private function sessionMinimumScore($session): float
+    {
+        $attempt = DB::table('assessment_attempts')->where('id', $session->assessment_attempt_id)->first();
+        if (!$attempt) {
+            return 0.0;
+        }
+
+        $recruitment = DB::table('new_recruitment')->where('id', $attempt->recruitment_id)->first();
+        $personnelRequest = $recruitment
+            ? DB::table('personnel_requests')->where('id', $recruitment->personnel_request_id)->first()
+            : null;
+        $configs = $personnelRequest
+            ? json_decode($personnelRequest->assesment_question_category ?: '[]', true)
+            : [];
+
+        $matchingConfigs = collect(is_array($configs) ? $configs : [])
+            ->filter(function ($config) use ($session) {
+                return is_array($config)
+                    && (int) ($config['id'] ?? 0) === (int) $session->question_category_id;
+            });
+        $minimumConfig = $matchingConfigs->first(function ($config) {
+            return strtolower(trim((string) ($config['type'] ?? ''))) === 'hr';
+        }) ?: $matchingConfigs->first();
+
+        if ($minimumConfig) {
+            return max(0, (float) ($minimumConfig['nilai_minimum'] ?? 0));
+        }
+
+        return 0.0;
+    }
+
+    private function isPersonalitySession($session): bool
+    {
+        return in_array(strtoupper(trim((string) ($session->category_name ?? ''))), [
+            'DISC',
+            'KOSTICK PAPI',
+            'PAPI KOSTICK',
+        ], true);
+    }
+
+    private function isQualificationSession($session): bool
+    {
+        return (int) ($session->question_category_id ?? 0) > 0
+            && !$this->isPersonalitySession($session);
     }
 
     private function scoreSession($session, array $answers)

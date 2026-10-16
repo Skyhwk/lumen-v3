@@ -15,13 +15,29 @@ class InternalAssessmentController extends Controller
     public function entry(Request $request)
     {
         $assessment = $this->assessmentByToken($request->token);
+        $requiresProfile = (bool) ($assessment->is_completed_profile ?? false);
+        $categories = json_decode($assessment->category_question ?: '[]', true) ?: [];
+        $moduleCount = is_array($categories) ? count($categories) : 0;
+        $kelengkapanOnly = $requiresProfile && $moduleCount === 0;
 
         return response()->json([
             'assessment' => [
                 'id' => $assessment->id,
                 'title' => $assessment->nama_assesment,
                 'batch' => $assessment->batch,
+                'grade' => $assessment->grade,
+                'is_completed_profile' => $requiresProfile,
+                'is_publish' => (bool) ($assessment->is_publish ?? false),
+                'is_link_active' => (bool) ($assessment->is_link_active ?? false),
+                'module_count' => $moduleCount,
             ],
+            'token' => [
+                'raw' => trim((string) $request->token),
+                'batch' => $assessment->batch,
+            ],
+            'destination' => $kelengkapanOnly
+                ? 'kelengkapan'
+                : ($requiresProfile ? 'assessment_with_kelengkapan' : 'assessment'),
             'status' => 'email_required',
         ]);
     }
@@ -39,12 +55,14 @@ class InternalAssessmentController extends Controller
             return response()->json(['message' => 'Email tidak terdaftar sebagai karyawan.'], 422);
         }
 
-        $requiredGrade = trim((string) ($assessment->grade ?? ''));
-        $employeeGrade = trim((string) ($employee->grade ?? ''));
-        if ($requiredGrade !== '' && strcasecmp($requiredGrade, $employeeGrade) !== 0) {
-            return response()->json([
-                'message' => 'Link assessment ini khusus untuk grade ' . $requiredGrade . '. Grade Anda: ' . ($employeeGrade !== '' ? $employeeGrade : '-'),
-            ], 403);
+        if ($assessment->grade !== 'ALL') {
+            $requiredGrade = trim((string) ($assessment->grade ?? ''));
+            $employeeGrade = trim((string) ($employee->grade ?? ''));
+            if ($requiredGrade !== '' && strcasecmp($requiredGrade, $employeeGrade) !== 0) {
+                return response()->json([
+                    'message' => 'Link assessment ini khusus untuk grade ' . $requiredGrade . '. Grade Anda: ' . ($employeeGrade !== '' ? $employeeGrade : '-'),
+                ], 403);
+            }
         }
 
         $result = DB::transaction(function () use ($assessment, $employee, $email) {

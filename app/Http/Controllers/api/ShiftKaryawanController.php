@@ -8,6 +8,7 @@ use App\Models\Rfid;
 use App\Models\MasterDivisi;
 use App\Models\MasterJabatan;
 use App\Models\MasterKaryawan;
+use App\Models\MasterShiftKaryawan;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -93,6 +94,13 @@ class ShiftKaryawanController extends Controller{
 
         return response()->json([
             'data' => $data
+        ], 200);
+    }
+
+    public function getMasterShift(Request $request)
+    {
+        return response()->json([
+            'data' => MasterShiftKaryawan::dropdownOptions(),
         ], 200);
     }
     public function SelectUserbyDivisi(Request $request)

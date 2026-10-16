@@ -149,13 +149,18 @@ class PersonnelRequestController extends Controller
         foreach ($raw as $item) {
             if (is_array($item) && isset($item['id'])) {
                 $hasTimeLimit = $this->parseFormBoolean($item['has_time_limit'] ?? false);
-                $configs[] = [
+                $config = [
                     'id' => (int) $item['id'],
                     'name' => trim((string) ($item['name'] ?? '')),
                     'question_count' => max(1, (int) ($item['question_count'] ?? 1)),
                     'duration_minutes' => $hasTimeLimit ? max(1, (int) ($item['duration_minutes'] ?? 30)) : 0,
                     'has_time_limit' => $hasTimeLimit,
+                    'nilai_minimum' => max(0, (int) ($item['nilai_minimum'] ?? 0)),
                 ];
+                if (($item['type'] ?? $item['question_scope'] ?? '') === 'hr') {
+                    $config['type'] = 'hr';
+                }
+                $configs[] = $config;
             } elseif (is_numeric($item)) {
                 $configs[] = [
                     'id' => (int) $item,
@@ -163,6 +168,7 @@ class PersonnelRequestController extends Controller
                     'question_count' => 10,
                     'duration_minutes' => 0,
                     'has_time_limit' => false,
+                    'nilai_minimum' => 0,
                 ];
             }
         }
@@ -223,6 +229,64 @@ class PersonnelRequestController extends Controller
         $configs = $this->normalizeAssessmentCategoryConfigs($value);
 
         return empty($configs) ? null : $this->enrichAssessmentCategoryConfigs($configs);
+    }
+
+    private function validatedHrAssessmentCategoryPayload(Request $request): ?array
+    {
+        $configs = array_values(array_filter(
+            $this->normalizeAssessmentCategoryConfigs($request->input('assesment_question_category')),
+            fn ($config) => ($config['type'] ?? '') === 'hr'
+        ));
+        if (!$configs) {
+            return [];
+        }
+
+        foreach ($configs as $config) {
+            $category = \App\Models\QuestionCategory::query()
+                ->where('id', $config['id'])
+                ->where('category_scope', 'hr')
+                ->where('is_active', true)
+                ->where('is_show', 1)
+                ->first();
+
+            if (!$category) {
+                abort(422, 'Kategori soal HR tidak valid.');
+            }
+
+            $availableQuestions = \App\Models\Question::query()
+                ->where('question_category_id', $category->id)
+                ->where('question_scope', 'hr')
+                ->where('status', '!=', 'retired')
+                ->where('is_active', 1)
+                ->count();
+
+            if ($availableQuestions < 1) {
+                abort(422, 'Kategori "' . $category->name . '" belum memiliki soal HR aktif.');
+            }
+
+            if ((int) $config['question_count'] > $availableQuestions) {
+                abort(422, 'Jumlah soal kategori "' . $category->name . '" tidak boleh melebihi soal tersedia (' . $availableQuestions . ' soal).');
+            }
+
+            if (!empty($config['has_time_limit']) && (int) $config['duration_minutes'] < 1) {
+                abort(422, 'Durasi test HR kategori "' . $category->name . '" wajib diisi minimal 1 menit apabila batas waktu aktif.');
+            }
+        }
+
+        return $configs;
+    }
+
+    private function combinedAssessmentCategoryPayload(Request $request): array
+    {
+        $userConfigs = array_values(array_filter(
+            $this->normalizeAssessmentCategoryConfigs($request->input('assesment_question_category')),
+            fn ($config) => ($config['type'] ?? '') !== 'hr'
+        ));
+
+        return array_merge(
+            $this->enrichAssessmentCategoryConfigs($userConfigs),
+            $this->enrichAssessmentCategoryConfigs($this->validatedHrAssessmentCategoryPayload($request))
+        );
     }
 
     private function ownedPersonnelRequestQuery()
@@ -319,7 +383,10 @@ class PersonnelRequestController extends Controller
             return;
         }
 
-        $configs = $this->normalizeAssessmentCategoryConfigs($request->input('assesment_question_category'));
+        $configs = array_values(array_filter(
+            $this->normalizeAssessmentCategoryConfigs($request->input('assesment_question_category')),
+            fn ($config) => ($config['type'] ?? '') !== 'hr'
+        ));
         if (empty($configs)) {
             abort(422, 'Kategori soal wajib dipilih apabila tes teknis diaktifkan.');
         }
@@ -571,6 +638,7 @@ class PersonnelRequestController extends Controller
                 'candidateProfile',
             ])
             ->where('is_active', 1)
+            ->where('is_rejected_kandidat', 0)
             ->whereIn('personnel_request_id', $ownedRequestIds->isEmpty() ? [-1] : $ownedRequestIds);
     }
 
@@ -814,6 +882,7 @@ class PersonnelRequestController extends Controller
                     'pendingDecisionSalary',
                     'openDecisionSalary',
                 ])
+                ->where('is_rejected_kandidat', 0)
                 ->whereIn('id', $ids ?: [-1]);
 
             if ($category === 'approved_candidate') {
@@ -1315,8 +1384,13 @@ class PersonnelRequestController extends Controller
 
             $useUserAssessment = $this->validatedUserAssessmentFlag($request);
             $this->syncUserAssessmentCategoryConfig($request);
-            $assessmentCategoryConfigs = $this->assessmentCategoryPayload($request->assesment_question_category) ?? [];
-            $legacyAssessmentFields = $this->legacyUserAssessmentFieldsFromConfigs($assessmentCategoryConfigs);
+            $assessmentCategoryConfigs = $this->combinedAssessmentCategoryPayload($request);
+            $legacyAssessmentFields = $this->legacyUserAssessmentFieldsFromConfigs(
+                array_values(array_filter(
+                    $assessmentCategoryConfigs,
+                    fn ($config) => ($config['type'] ?? '') !== 'hr'
+                ))
+            );
 
             // === DEV MODE: Otomatis membaca konfigurasi dari .env ===
             // Menggunakan helper agar logic impersonasi lebih tersentralisasi
@@ -1392,8 +1466,13 @@ class PersonnelRequestController extends Controller
 
             $useUserAssessment = $this->validatedUserAssessmentFlag($request);
             $this->syncUserAssessmentCategoryConfig($request);
-            $assessmentCategoryConfigs = $this->assessmentCategoryPayload($request->assesment_question_category) ?? [];
-            $legacyAssessmentFields = $this->legacyUserAssessmentFieldsFromConfigs($assessmentCategoryConfigs);
+            $assessmentCategoryConfigs = $this->combinedAssessmentCategoryPayload($request);
+            $legacyAssessmentFields = $this->legacyUserAssessmentFieldsFromConfigs(
+                array_values(array_filter(
+                    $assessmentCategoryConfigs,
+                    fn ($config) => ($config['type'] ?? '') !== 'hr'
+                ))
+            );
 
             $data->update([
                 'request_type'              => $request->request_type,

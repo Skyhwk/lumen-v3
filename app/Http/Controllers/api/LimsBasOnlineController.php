@@ -323,9 +323,8 @@ class LimsBasOnlineController extends Controller
         try {
 
             $existingWork = DB::table('persiapan_sampel_header')
-                ->select('no_order', 'tanggal_sampling', 'sampler_jadwal', 'is_downloaded', 'is_printed')
+                ->select('no_order', 'tanggal_sampling', 'no_sampel', 'is_downloaded', 'is_printed', 'detail_bas_documents')
                 ->where('is_active', true)
-
                 ->whereNotNull('detail_bas_documents')
                 ->whereBetween('tanggal_sampling', [
                     $request->periode_awal,
@@ -333,26 +332,24 @@ class LimsBasOnlineController extends Controller
                 ])
                 ->get();
             $doneList = [];
-            // LOOPING PERTAMA: Membangun Daftar Orang yang Sudah Selesai
             foreach ($existingWork as $row) {
-                // PENTING: Pecah nama di sini juga! 
-                $headerSamplers = explode(',', $row->sampler_jadwal ?? '');
-                foreach ($headerSamplers as $name) {
-                    $cleanName = strtolower(trim($name));
-                    if (empty($cleanName)) continue;
-                    // Kuncinya: Order + Tanggal + Nama Orang
-                    $key = sprintf(
-                        '%s|%s|%s',
-                        trim($row->no_order),
-                        trim($row->tanggal_sampling),
-                        $cleanName
-                    );
-                    $doneList[$key] = [
-                        'is_proccess' => true,
-                        'is_downloaded' => $row->is_downloaded,
-                        'is_printed' => $row->is_printed
-                    ];
+                if (!$this->basDocumentIsFilled($row->detail_bas_documents)) {
+                    continue;
                 }
+                $samples = $this->normalizePersiapanNoSampelList($row->no_sampel);
+                if (!$samples) {
+                    continue;
+                }
+                $bucket = sprintf(
+                    '%s|%s',
+                    trim($row->no_order),
+                    $this->normalizePersiapanDate($row->tanggal_sampling)
+                );
+                $doneList[$bucket][] = [
+                    'samples' => $samples,
+                    'is_downloaded' => $row->is_downloaded,
+                    'is_printed' => $row->is_printed,
+                ];
             }
             // 1. Ambil Data (Eager Loading Optimized)
             $myPrivileges = $this->privilageCabang; // Contoh: ["1", "4"] atau ["4"]
@@ -462,44 +459,31 @@ class LimsBasOnlineController extends Controller
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
                     }
-                    // LOGIKA FILTER DETIL (ATOMIC CHECK)
-                    // 2. Cek Satu Per Satu (ABSENSI)
-                    $currentSamplers = explode(',', $schedule->sampler ?? '');
-                    $pendingSamplers = [];
-                    // Variabel untuk menandai status baris ini
-                    $statusRow = [
-                        "is_process" => 0,
-                        "is_downloaded" => 0,
-                        'is_printed' => 0
-                    ];
-                    foreach ($currentSamplers as $singleSampler) {
-                        $cleanTargetName = strtolower(trim($singleSampler));
-                        if (empty($cleanTargetName)) continue;
 
-                        $checkKey = sprintf(
-                            '%s|%s|%s',
-                            trim($item->no_order),
-                            trim($schedule->tanggal),
-                            $cleanTargetName
-                        );
-
-                        // CEK STATUS
-                        if (isset($doneList[$checkKey])) {
-                            $pendingSamplers[] = trim($singleSampler);
-                            $dataDb = $doneList[$checkKey];
-                            $statusRow['is_downloaded']    = $dataDb['is_downloaded'];
-                            $statusRow['is_printed'] = $dataDb['is_printed'];
+                    $jadwalSamples = $this->noSampelListFromKategoriJadwal($item->no_order, $schedule->kategori);
+                    if (!$jadwalSamples) {
+                        continue;
+                    }
+                    $bucket = sprintf(
+                        '%s|%s',
+                        trim($item->no_order),
+                        $this->normalizePersiapanDate($schedule->tanggal)
+                    );
+                    $matchedBas = null;
+                    foreach ($doneList[$bucket] ?? [] as $done) {
+                        if ($this->jadwalSamplesCoveredByHeader($jadwalSamples, $done['samples'])) {
+                            $matchedBas = $done;
+                            break;
                         }
                     }
-
-                    if (empty($pendingSamplers)) {
+                    if (!$matchedBas) {
                         continue;
                     }
 
-                    // 4. Update Tampilan Sampler
-                    // Jika aslinya 3 orang, tapi "Adji" sudah selesai, maka implode ulang sisa 2 orang saja.
-                    // Sehingga nanti pas di Grouping, yang muncul hanya yang belum selesai.
-                    $schedule->sampler = implode(',', $pendingSamplers);
+                    $statusRow = [
+                        'is_downloaded' => $matchedBas['is_downloaded'],
+                        'is_printed' => $matchedBas['is_printed'],
+                    ];
 
                     $kategori = implode(',', json_decode($schedule->kategori, true) ?? []);
                     $namaCabang = $cabangMap[$schedule->id_cabang] ?? 'HEAD OFFICE (Default)';
@@ -555,6 +539,71 @@ class LimsBasOnlineController extends Controller
                 'line' => $ex->getLine()
             ], 500);
         }
+    }
+
+    private function basDocumentIsFilled($value): bool
+    {
+        if ($value === null || $value === '' || $value === 'null' || $value === '[]') {
+            return false;
+        }
+        $decoded = json_decode($value, true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            return is_array($decoded) ? $decoded !== [] : (bool) $decoded;
+        }
+
+        return true;
+    }
+
+    private function normalizePersiapanDate($value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+        try {
+            return Carbon::parse($value)->toDateString();
+        } catch (\Throwable $e) {
+            return substr(trim((string) $value), 0, 10);
+        }
+    }
+
+    private function normalizePersiapanNoSampelList($value): array
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : [];
+        }
+        $samples = array_map(function ($sample) {
+            return strtolower(trim(str_replace('\\/', '/', (string) $sample)));
+        }, is_array($value) ? $value : []);
+        $samples = array_values(array_unique(array_filter($samples)));
+        sort($samples);
+
+        return $samples;
+    }
+
+    private function noSampelListFromKategoriJadwal($noOrder, $kategori): array
+    {
+        $items = is_array($kategori) ? $kategori : (json_decode((string) $kategori, true) ?: []);
+        $samples = [];
+        foreach ((array) $items as $item) {
+            $parts = explode(' - ', trim((string) $item));
+            $kode = isset($parts[1]) ? trim($parts[1]) : '';
+            if ($kode === '') {
+                continue;
+            }
+            $samples[] = trim((string) $noOrder) . '/' . $kode;
+        }
+
+        return $this->normalizePersiapanNoSampelList($samples);
+    }
+
+    private function jadwalSamplesCoveredByHeader(array $jadwalSamples, array $headerSamples): bool
+    {
+        if (!$jadwalSamples || !$headerSamples) {
+            return false;
+        }
+
+        return count(array_intersect($jadwalSamples, $headerSamples)) === count($jadwalSamples);
     }
 
     public function preview(Request $request)

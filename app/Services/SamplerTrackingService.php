@@ -52,7 +52,10 @@ class SamplerTrackingService
                     return $this->quotationHasActivePersiapanOnDate($row->no_quotation, $row->tanggal);
                 });
 
-            return $this->syncJadwalRows($jadwals, $date, true);
+            $sessions = $this->syncJadwalRows($jadwals, $date, true);
+            $this->pruneEmptyShellSessions($date);
+
+            return $sessions;
         }, 5);
     }
 
@@ -1563,7 +1566,19 @@ class SamplerTrackingService
             ->orderBy('tanggal_sampling')
             ->orderBy('jam_mulai')
             ->orderBy('nama_perusahaan')
+            ->orderBy('no_order')
+            ->orderBy('id')
             ->get();
+
+        $customerIds = OrderHeader::whereIn('no_order', $sessions->pluck('no_order')->filter()->unique())
+            ->where('is_active', true)
+            ->orderByDesc('id')
+            ->get(['no_order', 'id_pelanggan'])
+            ->unique('no_order')
+            ->pluck('id_pelanggan', 'no_order');
+        foreach ($sessions as $session) {
+            $session->id_pelanggan = $customerIds->get($session->no_order);
+        }
 
         foreach ($sessions as $session) {
             foreach ($session->activeMembers as $member) {
@@ -1623,12 +1638,13 @@ class SamplerTrackingService
     public function dataTableByDate($request, $samplerId = null, $samplerName = null)
     {
         $date = $request->input('tanggal') ?: $this->today();
+        $this->pruneEmptyShellSessions($date);
         $rows = $this->releaseUnblockedOverdueRows(
             $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName))
         );
         $trackingStatusCounts = $this->trackingStatusCounts($rows);
 
-        $rows = $this->filterByTrackingStatus($rows, $request->input('tracking_status'));
+        $rows = $this->filterForMonitorTab($rows, $request->input('tracking_status'));
         $recordsTotal = $rows->count();
 
         $rows = $this->filterTrackingRows($rows, $request);
@@ -1654,7 +1670,7 @@ class SamplerTrackingService
     {
         $rows = $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName, $sessionIds));
         $trackingStatusCounts = $this->trackingStatusCounts($rows);
-        $rows = $this->filterByTrackingStatus($rows, $trackingStatus);
+        $rows = $this->filterForMonitorTab($rows, $trackingStatus);
 
         return [
             'data' => $rows->values(),
@@ -1760,7 +1776,8 @@ public function buildTrackingRows($sessions)
         $durations = $this->uniqueValues($row['durations']);
         $statuses = $this->uniqueValues($row['statuses']);
         $movementGroups = $this->uniqueValues($row['movement_groups']);
-        $lastEvent = $this->latestEvent($row['events']);
+        $lastEvent = $this->latestEvent($this->meaningfulTrackingEvents($row['events']));
+        $meaningfulEvents = $this->meaningfulTrackingEvents($row['events']);
 
         return [
             'row_id' => $row['date'] . '-' . md5($row['group_key']),
@@ -1783,7 +1800,7 @@ public function buildTrackingRows($sessions)
             'durasi' => count($durations) > 0 ? implode(', ', $durations) : '-',
             'movement_group' => $this->teamMovementCode($row['date'], $row['group_key']),
             'internal_movement_groups' => $movementGroups,
-            'total_event' => $row['events']->count(),
+            'total_event' => $meaningfulEvents->count(),
             'last_event' => $lastEvent ? (($lastEvent->event_type ?: '-') . ' - ' . ($lastEvent->event_at ?: '-')) : '-',
             'status' => count($statuses) > 0 ? implode(', ', $statuses) : '-',
             'tracking_status' => $this->resolveTrackingStatus(
@@ -1795,9 +1812,154 @@ public function buildTrackingRows($sessions)
             ),
         ];
     })->filter(function ($row) {
-        return strtolower(trim($row['nama_perusahaan'] ?? '')) !== 'cuti';
+        if (strtolower(trim($row['nama_perusahaan'] ?? '')) === 'cuti') {
+            return false;
+        }
+
+        return !$this->isEmptyTrackingShellRow($row);
     })->values();
 }
+
+    /**
+     * Baris session aktif tanpa identitas kunjungan & tanpa event — sisa sync/reschedule.
+     * Quotation/order di DB saja (tanpa perusahaan/sampler/event) tetap dianggap shell.
+     */
+    public function isEmptyTrackingShellRow(array $row): bool
+    {
+        if ($this->meaningfulTrackingEventCount($row) > 0) {
+            return false;
+        }
+
+        return !$this->rowHasMonitorIdentity($row);
+    }
+
+    /**
+     * Baris monitor tanpa perusahaan/order/sampler/durasi yang terisi — tampilan "- - - -".
+     */
+    public function rowHasMonitorIdentity(array $row): bool
+    {
+        foreach ([
+            $row['nama_perusahaan'] ?? null,
+            $row['no_order'] ?? null,
+            $row['sampler'] ?? null,
+            $row['durasi'] ?? null,
+        ] as $value) {
+            if ($this->isFilledTrackingLabel($value)) {
+                return true;
+            }
+        }
+
+        $members = collect($row['members'] ?? []);
+        if ($members->isEmpty() && !empty($row['member'])) {
+            $members = collect([$row['member']]);
+        }
+
+        return $members->contains(function ($member) {
+            $name = is_array($member)
+                ? ($member['sampler_name'] ?? null)
+                : ($member->sampler_name ?? null);
+
+            return $this->isFilledTrackingLabel($name);
+        });
+    }
+
+    public function meaningfulTrackingEventCount(array $row): int
+    {
+        return $this->meaningfulTrackingEvents($row['events'] ?? [])->count();
+    }
+
+    protected function meaningfulTrackingEvents($events)
+    {
+        return collect($events)->reject(function ($event) {
+            return $this->eventIsJourneyReference($event);
+        })->values();
+    }
+
+    protected function eventIsJourneyReference($event): bool
+    {
+        if (is_object($event)) {
+            return !empty($event->is_journey_reference);
+        }
+
+        if (is_array($event)) {
+            return !empty($event['is_journey_reference']);
+        }
+
+        return false;
+    }
+
+    protected function isFilledTrackingLabel($value): bool
+    {
+        $text = trim((string) $value);
+
+        return $text !== '' && $text !== '-';
+    }
+
+    public function archiveEmptyActiveSessionsForDate(string $date): void
+    {
+        $this->pruneEmptyShellSessions($date);
+    }
+
+    public function sessionHasMeaningfulTrackingData(SamplerTrackingSession $session): bool
+    {
+        foreach (['nama_perusahaan', 'no_order'] as $field) {
+            if ($this->isFilledTrackingLabel($session->{$field} ?? null)) {
+                return true;
+            }
+        }
+
+        foreach ($session->activeMembers as $member) {
+            if ($this->isFilledTrackingLabel($member->sampler_name ?? null)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function pruneEmptyShellSessions(?string $date = null): int
+    {
+        $query = SamplerTrackingSession::with('activeMembers')
+            ->where('is_active', true)
+            ->whereDoesntHave('events');
+
+        if ($date) {
+            $query->whereDate('tanggal_sampling', Carbon::parse($date)->toDateString());
+        }
+
+        $archived = 0;
+        $query->get()->each(function (SamplerTrackingSession $session) use (&$archived) {
+            if ($this->sessionHasMeaningfulTrackingData($session)) {
+                return;
+            }
+            $this->archiveTrackingSession($session);
+            $this->clearOpenTroublesForSession((int) $session->id);
+            $archived++;
+        });
+
+        return $archived;
+    }
+
+    protected function clearOpenTroublesForSession(int $sessionId): void
+    {
+        if (!Schema::hasTable(SamplerTrackingTroubleService::TABLE)
+            || !Schema::hasColumn(SamplerTrackingTroubleService::TABLE, 'tracking_session_id')) {
+            return;
+        }
+
+        $update = [
+            'is_clear' => 1,
+            'updated_at' => $this->now(),
+        ];
+        if (Schema::hasColumn(SamplerTrackingTroubleService::TABLE, 'cleared_at')) {
+            $update['cleared_at'] = $this->now();
+        }
+
+        DB::table(SamplerTrackingTroubleService::TABLE)
+            ->where('tracking_session_id', $sessionId)
+            ->where('is_clear', 0)
+            ->update($update);
+    }
 
     public function filterTrackingRows($rows, $request)
     {
@@ -2004,6 +2166,102 @@ public function buildTrackingRows($sessions)
         })->values();
     }
 
+    public function filterForMonitorTab($rows, $trackingStatus)
+    {
+        $status = $this->normalizeTrackingStatus($trackingStatus);
+        if (!$status) {
+            return $rows;
+        }
+
+        return $rows->filter(function ($row) use ($status) {
+            if ($status === 'ongoing') {
+                return $this->rowBelongsInOngoingTab($row);
+            }
+            if ($status === 'completed') {
+                return $this->rowBelongsInCompletedTab($row);
+            }
+            if ($status === 'overdue') {
+                return $this->rowBelongsInBlockedTab($row);
+            }
+
+            return true;
+        })->values();
+    }
+
+    public function rowBelongsInOngoingTab(array $row): bool
+    {
+        if ($this->isEmptyTrackingShellRow($row)) {
+            return false;
+        }
+
+        if (!$this->rowHasMonitorIdentity($row)) {
+            return false;
+        }
+
+        if (($row['tracking_status'] ?? null) !== 'ongoing') {
+            return false;
+        }
+
+        return !$this->rowHasUnresolvedSamplingTrouble($row);
+    }
+
+    public function rowBelongsInBlockedTab(array $row): bool
+    {
+        if ($this->isEmptyTrackingShellRow($row)) {
+            return false;
+        }
+
+        if ($this->rowHasUnresolvedSamplingTrouble($row)) {
+            return true;
+        }
+
+        return ($row['tracking_status'] ?? null) === 'overdue';
+    }
+
+    public function rowBelongsInCompletedTab(array $row): bool
+    {
+        if ($this->isEmptyTrackingShellRow($row)) {
+            return false;
+        }
+
+        return ($row['tracking_status'] ?? null) === 'completed';
+    }
+
+    public function rowHasUnresolvedSamplingTrouble(array $row): bool
+    {
+        if (!empty($row['trouble_id']) && empty($row['trouble']['reopened_at'] ?? null)) {
+            return true;
+        }
+
+        if (!Schema::hasTable(SamplerTrackingTroubleService::TABLE)) {
+            return false;
+        }
+
+        $date = $this->rowActivityDate($row);
+        $samplerIds = $this->rowSamplerIds($row);
+        if (!$date || $samplerIds->isEmpty()) {
+            return false;
+        }
+
+        $sessionId = $row['tracking_session_id'] ?? null;
+        $session = $row['session'] ?? null;
+        if (!$sessionId && $session) {
+            $sessionId = is_object($session) ? ($session->id ?? null) : ($session['id'] ?? null);
+        }
+
+        $query = DB::table(SamplerTrackingTroubleService::TABLE)
+            ->whereIn('sampler_id', $samplerIds->all())
+            ->whereDate('activity_date', $date)
+            ->where('is_clear', 0)
+            ->whereNull('reopened_at');
+
+        if ($sessionId && Schema::hasColumn(SamplerTrackingTroubleService::TABLE, 'tracking_session_id')) {
+            $query->where('tracking_session_id', $sessionId);
+        }
+
+        return $query->exists();
+    }
+
     /**
      * Activity yang sudah di-unblock atasan tidak boleh tetap berstatus overdue.
      * Pindahkan ke ongoing agar hilang dari tab Data Blocked.
@@ -2107,22 +2365,14 @@ public function buildTrackingRows($sessions)
 
     protected function trackingStatusCounts($rows)
     {
-        $counts = [
-            'ongoing' => 0,
-            'completed' => 0,
-            'overdue' => 0,
+        $rows = collect($rows);
+
+        return [
+            'ongoing' => $rows->filter(fn (array $row) => $this->rowBelongsInOngoingTab($row))->count(),
+            'completed' => $rows->filter(fn (array $row) => $this->rowBelongsInCompletedTab($row))->count(),
+            'overdue' => $rows->filter(fn (array $row) => $this->rowBelongsInBlockedTab($row))->count(),
+            'all' => $rows->reject(fn (array $row) => $this->isEmptyTrackingShellRow($row))->count(),
         ];
-
-        foreach ($rows as $row) {
-            $status = $row['tracking_status'] ?? null;
-            if (isset($counts[$status])) {
-                $counts[$status]++;
-            }
-        }
-
-        $counts['all'] = $rows->count();
-
-        return $counts;
     }
 
     protected function resolveTrackingDueAt($events, $tanggalSampling, $jamMulai, $jamSelesai, $durationValue)
@@ -2294,6 +2544,14 @@ public function buildTrackingRows($sessions)
                 return !$this->memberHasTrackingEvent($target->id, $eventType);
             });
 
+            if ($eventType === 'checkin' && $members->contains(function ($target) use ($activity, $member) {
+                return $this->hasOpenCheckin($this->appActivities($target), $target, $activity ?: $member->session);
+            })) {
+                throw ValidationException::withMessages([
+                    'event_type' => ['Selesaikan check out lokasi yang masih terbuka sebelum check in lokasi lain.'],
+                ]);
+            }
+
             $basWarning = $eventType === 'checkout' ? $this->checkoutBasWarning($member->id) : null;
             if ($basWarning) {
                 throw ValidationException::withMessages([
@@ -2355,6 +2613,55 @@ public function buildTrackingRows($sessions)
         return $events;
     }
 
+    public function createMissingReturn($sessionId, $samplerId, $eventAt, $reason, $actorId, $actorName)
+    {
+        return DB::transaction(function () use ($sessionId, $samplerId, $eventAt, $reason, $actorId, $actorName) {
+            $member = SamplerTrackingMember::with('session')
+                ->where('sampler_tracking_session_id', $sessionId)
+                ->where('sampler_id', $samplerId)
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (!$member->session || !$member->session->is_active) {
+                throw ValidationException::withMessages(['session_id' => ['Session tracking sudah tidak aktif.']]);
+            }
+
+            $events = SamplerTrackingEvent::where('sampler_tracking_member_id', $member->id)
+                ->lockForUpdate()->get();
+            if ($events->contains('event_type', 'return')) {
+                throw ValidationException::withMessages(['session_id' => ['Event Pulang sudah tercatat untuk sampler ini.']]);
+            }
+
+            $checkout = $events->where('event_type', 'checkout')->sortByDesc('event_at')->first();
+            if (!$checkout) {
+                throw ValidationException::withMessages(['session_id' => ['Check out harus tercatat sebelum memperbaiki event Pulang.']]);
+            }
+
+            $returnAt = Carbon::createFromFormat('Y-m-d H:i:s', $eventAt, 'Asia/Jakarta');
+            if (!$returnAt || $returnAt->lt(Carbon::parse($checkout->event_at, 'Asia/Jakarta'))
+                || $returnAt->gt($this->now())) {
+                throw ValidationException::withMessages(['event_at' => ['Waktu Pulang harus setelah check out dan tidak boleh melebihi waktu sekarang.']]);
+            }
+
+            return SamplerTrackingEvent::create($this->onlyExistingColumns((new SamplerTrackingEvent())->getTable(), [
+                'sampler_tracking_session_id' => $member->sampler_tracking_session_id,
+                'sampler_tracking_member_id' => $member->id,
+                'triggered_by_member_id' => null,
+                'event_type' => 'return',
+                'movement_group' => $member->current_movement_group,
+                'latitude' => null,
+                'longitude' => null,
+                'photo' => null,
+                'photos' => null,
+                'note' => 'Tools Fixing oleh ' . $actorName . ' (ID ' . $actorId . '): ' . trim($reason),
+                'is_auto' => true,
+                'sequence_no' => $this->nextSequence($member->id),
+                'event_at' => $returnAt->toDateTimeString(),
+            ]));
+        }, 5);
+    }
+
     public function consumeTeamLockNotice()
     {
         $notice = $this->teamLockNotice;
@@ -2402,6 +2709,30 @@ public function buildTrackingRows($sessions)
             $recovery ? [$member->sampler_tracking_session_id] : null);
     }
 
+    protected function appActivities(SamplerTrackingMember $member)
+    {
+        $today = $this->today();
+        $troubleService = new SamplerTrackingTroubleService();
+        $recovery = $troubleService->activeMobileRecovery($member->sampler_id);
+
+        return $this->listByDate(
+            $recovery ? $recovery->activity_date : $today,
+            $member->sampler_id,
+            $member->sampler_name,
+            $recovery ? [$recovery->tracking_session_id] : null
+        );
+    }
+
+    protected function hasOpenCheckin($sessions, SamplerTrackingMember $member, $targetSession = null): bool
+    {
+        return $sessions->contains(function ($session) use ($member, $targetSession) {
+            $sessionMember = $this->sessionMemberForSampler($session, $member);
+            return SamplerTrackingActivity::hasEvent($sessionMember, 'checkin')
+                && !SamplerTrackingActivity::hasEvent($sessionMember, 'checkout')
+                && !SamplerTrackingActivity::sameCustomer($session, $targetSession);
+        });
+    }
+
     protected function ensureEventSequence(SamplerTrackingMember $member, string $eventType): void
     {
         if (!$member->session || !in_array($eventType, ['checkin', 'checkout', 'return'], true)) {
@@ -2427,6 +2758,12 @@ public function buildTrackingRows($sessions)
             if (!$this->departureForMember($this->sessionMemberForSampler($sessions->get($currentIndex), $member), $member->session->tanggal_sampling)) {
                 throw ValidationException::withMessages(['event_type' => ['Berangkat sampling harus dilakukan sebelum check in.']]);
             }
+            $currentSession = $sessions->get($currentIndex);
+            if ($this->hasOpenCheckin($this->appActivities($member), $member, $currentSession)) {
+                throw ValidationException::withMessages([
+                    'event_type' => ['Selesaikan check out lokasi yang masih terbuka sebelum check in lokasi lain.'],
+                ]);
+            }
             if ($currentIndex === 0) {
                 if (!SamplerTrackingActivity::hasEvent($this->sessionMemberForSampler($sessions->first(), $member), 'departure')) {
                     throw ValidationException::withMessages([
@@ -2438,7 +2775,8 @@ public function buildTrackingRows($sessions)
 
             $previousSession = $sessions->get($currentIndex - 1);
             $previousMember = $this->sessionMemberForSampler($previousSession, $member);
-            if (!SamplerTrackingActivity::hasEvent($previousMember, 'checkout')) {
+            if (!SamplerTrackingActivity::hasEvent($previousMember, 'checkout')
+                && !SamplerTrackingActivity::sameCustomer($previousSession, $currentSession)) {
                 throw ValidationException::withMessages([
                     'event_type' => ['Selesaikan check out lokasi sebelumnya terlebih dahulu sebelum check in lokasi ini.'],
                 ]);
@@ -2686,84 +3024,133 @@ public function buildTrackingRows($sessions)
         return $movementGroup;
     }
 
-    public function updateRouteOrder(array $payload, $actorName = null)
+    public function updateRouteOrder(array $payload, $actorName = null, $isFixingOverride = false, $dateOverride = null)
     {
         $table = 'sampler_tracking_route_overrides';
         if (!Schema::hasTable($table)) {
             throw new \Exception('Tabel sampler_tracking_route_overrides belum ada.');
         }
 
-        $date = $this->today();
+        $date = $dateOverride ?: $this->today();
         $samplerId = $payload['sampler_id'] ?? null;
         $samplerName = $payload['sampler_name'] ?? $actorName;
         $samplerKey = $this->samplerRouteKey($samplerId, $samplerName);
         $reason = trim($payload['reason'] ?? '');
-        $items = collect($payload['items'] ?? [])->values();
+        $items = collect($payload['items'] ?? [])->sortBy(function ($item, $index) {
+            return (int) ($item['route_order'] ?? ($index + 1));
+        })->values();
         $now = $this->now();
 
         if (!$samplerKey || $items->isEmpty() || $reason === '') {
             throw new \Exception('Urutan tujuan dan keterangan wajib diisi.');
         }
 
-        DB::transaction(function () use ($table, $date, $samplerKey, $samplerId, $samplerName, $reason, $items, $now, $actorName) {
+        DB::transaction(function () use ($table, $date, $samplerKey, $samplerId, $samplerName, $reason, $items, $now, $actorName, $isFixingOverride) {
             // Lock the same member rows used by storeEvent before checking the route.
             $sessions = $this->listByDate($date, $samplerId, $samplerName);
-            $memberIds = $sessions->flatMap(function ($session) use ($samplerId, $samplerName) {
-                return $session->activeMembers->filter(function ($member) use ($samplerId, $samplerName) {
-                    return $samplerId ? (string) $member->sampler_id === (string) $samplerId
-                        : $member->sampler_name === $samplerName;
-                })->flatMap(function ($member) {
-                    return $member->activity_member_ids ?? [$member->id];
+            $expectedIds = $sessions->pluck('id')->map(function ($id) { return (int) $id; })->sort()->values()->all();
+            $submittedIds = $items->pluck('session_id')->map(function ($id) { return (int) $id; })->values()->all();
+            $sortedSubmittedIds = $submittedIds;
+            sort($sortedSubmittedIds);
+            if ($expectedIds !== $sortedSubmittedIds || count($submittedIds) !== count(array_unique($submittedIds))) {
+                throw ValidationException::withMessages([
+                    'items' => ['Daftar tujuan sudah berubah. Muat ulang urutan sebelum menyimpan.'],
+                ]);
+            }
+
+            // One route change applies to samplers who share every stop in this route.
+            // A teammate's additional stops keep their existing positions.
+            $teamSamplerIds = $sessions->reduce(function ($sharedIds, $session) {
+                $sessionIds = $session->activeMembers->pluck('sampler_id')->filter()
+                    ->map(function ($id) { return (int) $id; })->unique()->values()->all();
+                return $sharedIds === null ? $sessionIds : array_values(array_intersect($sharedIds, $sessionIds));
+            }, null);
+            $targetSamplerIds = $samplerId && !empty($teamSamplerIds)
+                ? array_values(array_unique(array_merge([(int) $samplerId], $teamSamplerIds)))
+                : [$samplerId];
+            $routes = collect($targetSamplerIds)->map(function ($targetSamplerId) use ($sessions, $samplerId, $samplerName, $samplerKey, $date, $submittedIds) {
+                $targetMember = $sessions->flatMap(function ($session) { return $session->activeMembers; })
+                    ->first(function ($member) use ($targetSamplerId) {
+                        return $targetSamplerId && (int) $member->sampler_id === (int) $targetSamplerId;
+                    });
+                $targetName = $targetMember ? $targetMember->sampler_name : $samplerName;
+                $targetSessions = (string) $targetSamplerId === (string) $samplerId
+                    ? $sessions : $this->listByDate($date, $targetSamplerId, $targetName);
+                $routeIds = $targetSessions->pluck('id')->map(function ($id) { return (int) $id; })->values();
+                if (count(array_intersect($submittedIds, $routeIds->all())) !== count($submittedIds)) {
+                    throw ValidationException::withMessages([
+                        'items' => ['Rute anggota tim sudah berubah. Muat ulang urutan sebelum menyimpan.'],
+                    ]);
+                }
+                $nextSharedIndex = 0;
+                $orderedIds = $routeIds->map(function ($id) use ($submittedIds, &$nextSharedIndex) {
+                    if (!in_array($id, $submittedIds, true)) return $id;
+                    return $submittedIds[$nextSharedIndex++];
+                })->all();
+
+                return [
+                    'sampler_id' => $targetSamplerId,
+                    'sampler_name' => $targetName,
+                    'sampler_key' => $this->samplerRouteKey($targetSamplerId, $targetName) ?: $samplerKey,
+                    'sessions' => $targetSessions,
+                    'ordered_ids' => $orderedIds,
+                ];
+            });
+            $memberIds = $routes->flatMap(function ($route) {
+                return $route['sessions']->flatMap(function ($session) use ($route) {
+                    return $session->activeMembers->filter(function ($member) use ($route) {
+                        return $route['sampler_id']
+                            ? (int) $member->sampler_id === (int) $route['sampler_id']
+                            : $member->sampler_name === $route['sampler_name'];
+                    })->flatMap(function ($member) {
+                        return $member->activity_member_ids ?? [$member->id];
+                    });
                 });
             })->unique()->values();
             SamplerTrackingMember::whereIn('id', $memberIds)->orderBy('id')->lockForUpdate()->get();
-            if (SamplerTrackingEvent::whereIn('sampler_tracking_member_id', $memberIds)
+            if (!$isFixingOverride && SamplerTrackingEvent::whereIn('sampler_tracking_member_id', $memberIds)
                 ->whereIn('event_type', ['departure', 'checkin'])->exists()) {
                 throw ValidationException::withMessages([
                     'items' => ['Urutan tujuan tidak dapat diubah setelah berangkat atau check in.'],
                 ]);
             }
-            DB::table($table)
-                ->where('tanggal_sampling', $date)
-                ->where('sampler_key', $samplerKey)
-                ->update([
-                    'is_active' => 0,
-                    'updated_by' => $actorName,
-                    'updated_at' => $now,
-                ]);
+            foreach ($routes as $route) {
+                DB::table($table)
+                    ->where('tanggal_sampling', $date)
+                    ->where('sampler_key', $route['sampler_key'])
+                    ->update([
+                        'is_active' => 0,
+                        'updated_by' => $actorName,
+                        'updated_at' => $now,
+                    ]);
 
-            foreach ($items as $index => $item) {
-                $sessionId = $item['session_id'] ?? null;
-                if (!$sessionId) {
-                    continue;
+                foreach ($route['ordered_ids'] as $index => $sessionId) {
+                    $keys = [
+                        'tanggal_sampling' => $date,
+                        'sampler_key' => $route['sampler_key'],
+                        'sampler_tracking_session_id' => $sessionId,
+                    ];
+                    $values = [
+                        'sampler_id' => $route['sampler_id'],
+                        'sampler_name' => $route['sampler_name'],
+                        'route_order' => $index + 1,
+                        'reason' => $reason,
+                        'is_active' => 1,
+                        'updated_by' => $actorName,
+                        'updated_at' => $now,
+                    ];
+
+                    $existing = DB::table($table)->where($keys)->first();
+                    if ($existing) {
+                        DB::table($table)->where('id', $existing->id)->update($values);
+                        continue;
+                    }
+
+                    DB::table($table)->insert(array_merge($keys, $values, [
+                        'created_by' => $actorName,
+                        'created_at' => $now,
+                    ]));
                 }
-
-                $keys = [
-                    'tanggal_sampling' => $date,
-                    'sampler_key' => $samplerKey,
-                    'sampler_tracking_session_id' => $sessionId,
-                ];
-
-                $values = [
-                    'sampler_id' => $samplerId,
-                    'sampler_name' => $samplerName,
-                    'route_order' => (int) ($item['route_order'] ?? ($index + 1)),
-                    'reason' => $reason,
-                    'is_active' => 1,
-                    'updated_by' => $actorName,
-                    'updated_at' => $now,
-                ];
-
-                $existing = DB::table($table)->where($keys)->first();
-                if ($existing) {
-                    DB::table($table)->where('id', $existing->id)->update($values);
-                    continue;
-                }
-
-                DB::table($table)->insert(array_merge($keys, $values, [
-                    'created_by' => $actorName,
-                    'created_at' => $now,
-                ]));
             }
         }, 5);
 
@@ -2795,6 +3182,7 @@ public function buildTrackingRows($sessions)
             return str_pad($order, 6, '0', STR_PAD_LEFT)
                 . '|' . ($session->jam_mulai ?: '')
                 . '|' . ($session->nama_perusahaan ?: '')
+                . '|' . ($session->no_order ?: '')
                 . '|' . str_pad($session->id, 10, '0', STR_PAD_LEFT);
         })->values();
     }
@@ -2905,8 +3293,19 @@ public function buildTrackingRows($sessions)
 
     protected function hasActiveSchedule($session, $member)
     {
+        $latestQuotation = $session->no_order
+            ? OrderHeader::where('no_order', $session->no_order)
+                ->where('is_active', true)
+                ->orderByDesc('id')
+                ->value('no_document')
+            : null;
+
+        if (!$latestQuotation) {
+            return false;
+        }
+
         return Jadwal::where('is_active', true)
-            ->where('no_quotation', $session->no_quotation)
+            ->where('no_quotation', $latestQuotation)
             ->whereDate('tanggal', $session->tanggal_sampling)
             ->when($member->sampler_id, function ($query) use ($member) {
                 $query->where('userid', $member->sampler_id);

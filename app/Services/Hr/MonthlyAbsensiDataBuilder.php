@@ -50,7 +50,7 @@ class MonthlyAbsensiDataBuilder
 
         $year = $nilai[0];
         $month = $nilai[1];
-        $lastDay = cal_days_in_month(CAL_GREGORIAN, (int) $month, (int) $year);
+        $lastDay = (int) date('t', mktime(0, 0, 0, (int) $month, 1, (int) $year));
 
         $startDate = sprintf('%s-%s-01', $year, $month);
         $endDate = sprintf('%s-%s-%02d', $year, $month, $lastDay);

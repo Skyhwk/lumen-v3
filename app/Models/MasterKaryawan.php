@@ -45,6 +45,11 @@ class MasterKaryawan extends Sector implements AuthenticatableContract
         return $this->hasOne(MedicalCheckup::class, 'karyawan_id');
     }
 
+    public function supportingInfoAnswers()
+    {
+        return $this->hasMany(SupportingInfoAnswer::class, 'karyawan_id');
+    }
+
     public function getSubordinates($id)
     {
         $subordinates = $this->whereJsonContains('atasan_langsung', (string) $id)->where('is_active', true)->get();
@@ -122,11 +127,11 @@ class MasterKaryawan extends Sector implements AuthenticatableContract
     }
     public function sertifikat_karyawan()
     {
-        return $this->hasMany(DataSertifikatKaryawan::class, 'karyawan_id');
+        return $this->hasMany(DataSertifikatKaryawan::class, 'karyawan_id')->where('is_active', true);
     }
     public function pengalaman_kerja()
     {
-        return $this->hasMany(PengalamanKerjaKaryawan::class, 'karyawan_id');
+        return $this->hasMany(PengalamanKerjaKaryawan::class, 'karyawan_id')->where('is_active', true);
     }
     // public function rekap()
     // {
