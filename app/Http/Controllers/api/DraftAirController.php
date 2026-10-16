@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\api;
+use App\Helpers\DraftLhpRejectHelper;
 
 use App\Models\HistoryAppReject;
 use App\Models\LhpsAirHeader;
@@ -1172,9 +1173,20 @@ class DraftAirController extends Controller
 
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
+
         DB::beginTransaction();
         try {
             $data = OrderDetail::where('id', $request->id)->first();
+            if (!$data) {
+                DB::rollBack();
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Data draft tidak ditemukan.',
+                ], 404);
+            }
             // if ($data) {
 
             // Kode Lama

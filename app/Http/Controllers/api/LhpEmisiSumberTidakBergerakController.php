@@ -13,6 +13,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 
+use App\Helpers\DraftLhpRejectHelper;
+
 class LhpEmisiSumberTidakBergerakController extends Controller
 {
     // public function index(Request $request)
@@ -89,6 +91,9 @@ class LhpEmisiSumberTidakBergerakController extends Controller
 
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $header = LhpsEmisiCHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();

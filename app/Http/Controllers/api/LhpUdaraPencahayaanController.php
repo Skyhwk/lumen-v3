@@ -10,6 +10,9 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
+use App\Helpers\DraftLhpRejectHelper;
+
+
 class LhpUdaraPencahayaanController extends Controller
 {
     public function index(Request $request){
@@ -28,6 +31,9 @@ class LhpUdaraPencahayaanController extends Controller
     }
 
     public function handleReject(Request $request) {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $header = LhpsPencahayaanHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();

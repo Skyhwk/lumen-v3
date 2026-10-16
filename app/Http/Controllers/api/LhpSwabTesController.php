@@ -13,6 +13,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 
+use App\Helpers\DraftLhpRejectHelper;
+
 class LhpSwabTesController extends Controller
 {
     public function index(Request $request)
@@ -50,6 +52,9 @@ class LhpSwabTesController extends Controller
 
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $header = LhpsSwabTesHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();

@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\api;
+use App\Helpers\DraftLhpRejectHelper;
 
 use App\Helpers\EmailLhpRilisHelpers;
 use App\Models\HistoryAppReject;
@@ -786,6 +787,9 @@ class DraftUlkSinarUvController extends Controller
     // Amang
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $lhps = LhpsSinarUVHeader::where('id', $request->id)

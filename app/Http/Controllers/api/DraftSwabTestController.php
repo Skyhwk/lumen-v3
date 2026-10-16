@@ -2,6 +2,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Helpers\EmailLhpRilisHelpers;
+use App\Helpers\DraftLhpRejectHelper;
 use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
 use App\Jobs\CombineLHPJob;
@@ -899,6 +900,9 @@ class DraftSwabTestController extends Controller
 
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
 
