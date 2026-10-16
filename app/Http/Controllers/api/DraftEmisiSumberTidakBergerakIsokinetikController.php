@@ -39,6 +39,7 @@ use Yajra\Datatables\Datatables;
 
 //Helper
 use App\Helpers\EmailLhpRilisHelpers;
+use App\Helpers\DraftLhpRejectHelper;
 use App\Models\MdlEmisi;
 use App\Models\OrderHeader;
 
@@ -933,6 +934,9 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
 
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
 

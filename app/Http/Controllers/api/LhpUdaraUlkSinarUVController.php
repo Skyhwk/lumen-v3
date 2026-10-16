@@ -15,6 +15,8 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
+use App\Helpers\DraftLhpRejectHelper;
+
 class LhpUdaraUlkSinarUVController extends Controller
 {
     public function index(Request $request)
@@ -41,6 +43,9 @@ class LhpUdaraUlkSinarUVController extends Controller
 
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $header = LhpsSinarUVHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();

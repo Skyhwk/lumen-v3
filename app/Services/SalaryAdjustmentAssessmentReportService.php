@@ -29,6 +29,14 @@ class SalaryAdjustmentAssessmentReportService
         $assessment->loadMissing('sessions');
         $sessions = [];
 
+        $employee = null;
+        if ($assessment->request_id) {
+            $request = \App\Models\SalaryAdjustmentRequest::find($assessment->request_id);
+            if ($request) {
+                $employee = app(SixteenPfScoringService::class)->employeeForRequest((int) $request->employee_id);
+            }
+        }
+
         foreach ($assessment->sessions->sortBy('session_order') as $session) {
             $questions = is_array($session->questions_json) ? $session->questions_json : [];
             $answers = is_array($session->answers_json) ? $session->answers_json : [];
@@ -37,7 +45,8 @@ class SalaryAdjustmentAssessmentReportService
 
             $result = $storedResult;
             if (!empty($questions) && !empty($answers)) {
-                $result = $this->scoring->scoreSession($categoryName, $questions, $answers);
+                $scoringEmployee = $categoryName === '16PF' ? $employee : null;
+                $result = $this->scoring->scoreSession($categoryName, $questions, $answers, $scoringEmployee);
                 if (!empty($storedResult['scored_at'])) {
                     $result['scored_at'] = $storedResult['scored_at'];
                 } elseif ($session->completed_at) {

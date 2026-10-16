@@ -1,5 +1,6 @@
 <?php
 namespace App\Http\Controllers\api;
+use App\Helpers\DraftLhpRejectHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use \App\Services\MpdfService as PDF;
@@ -1619,6 +1620,9 @@ class DraftUlkErgonomiController extends Controller
     // Amang
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         
         DB::beginTransaction();
         $categoryLingkunganKerja = [11, 27, 53];

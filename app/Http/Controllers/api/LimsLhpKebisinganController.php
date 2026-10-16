@@ -17,6 +17,8 @@ use Carbon\Carbon;
 use Exception;
 use Yajra\Datatables\Datatables;
 
+use App\Helpers\DraftLhpRejectHelper;
+
 class LimsLhpKebisinganController extends Controller
 {
     public function index(Request $request){
@@ -71,6 +73,9 @@ class LimsLhpKebisinganController extends Controller
 
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
 
         try {

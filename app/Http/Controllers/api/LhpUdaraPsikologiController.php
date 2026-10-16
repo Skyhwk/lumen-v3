@@ -21,6 +21,8 @@ use Yajra\Datatables\Datatables;
 
 use App\Models\OrderDetail;
 
+use App\Helpers\DraftLhpRejectHelper;
+
 
 class LhpUdaraPsikologiController extends Controller
 {
@@ -51,6 +53,9 @@ class LhpUdaraPsikologiController extends Controller
 
 	public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $lhps = LhpUdaraPsikologiHeader::where('id', $request->id)

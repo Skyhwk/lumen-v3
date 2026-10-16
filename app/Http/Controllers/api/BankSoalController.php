@@ -9,6 +9,7 @@ use App\Models\QuestionOption;
 use App\Models\ScaleType;
 use App\Services\BankSoalImageService;
 use App\Services\GetBawahan;
+use App\Services\HrdAssessmentReadinessService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -52,12 +53,16 @@ class BankSoalController extends Controller
                 $builder->whereIn('category_scope', ['hr', 'default'])->orWhereNull('category_scope');
             });
 
+        $categories = $query
+            ->orderByRaw("CASE WHEN UPPER(name) = 'DISC' THEN 1 WHEN UPPER(name) IN ('KOSTICK PAPI', 'PAPI KOSTICK') THEN 2 WHEN UPPER(name) = '16PF' THEN 3 ELSE 4 END")
+            ->orderBy('name')
+            ->get();
+
+        app(HrdAssessmentReadinessService::class)->attachPsychometricBankCounts($categories);
+
         return response()->json([
             'success' => true,
-            'data'    => $query
-                ->orderByRaw("CASE WHEN UPPER(name) = 'DISC' THEN 1 WHEN UPPER(name) IN ('KOSTICK PAPI', 'PAPI KOSTICK') THEN 2 ELSE 3 END")
-                ->orderBy('name')
-                ->get(),
+            'data'    => $categories,
         ]);
     }
 

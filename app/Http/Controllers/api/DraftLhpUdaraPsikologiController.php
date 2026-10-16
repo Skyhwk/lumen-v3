@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\api;
+use App\Helpers\DraftLhpRejectHelper;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\RenderLhpp;
@@ -532,6 +533,9 @@ class DraftLhpUdaraPsikologiController extends Controller
 
 	public function handleReject(Request $request)
 	{
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
 		DB::beginTransaction();
 		try {
 			$data = LhpUdaraPsikologiHeader::where('no_cfr', $request->cfr)->first();
