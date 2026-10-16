@@ -231,6 +231,12 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(LhpsAirHeader::class, 'no_sampel', 'no_sampel')->with('lhpsAirDetail', 'lhpsAirCustom')->where('is_active', true);
     }
+
+    public function lhp_manual()
+    {
+        return $this->belongsTo(LhpManual::class, 'cfr', 'no_lhp')->where('is_active', true);
+    }
+
     public function lhps_padatan()
     {
         return $this->belongsTo(LhpsPadatanHeader::class, 'no_sampel', 'no_sampel')->with('lhpsPadatanDetail', 'lhpsPadatanCustom')->where('is_active', true);

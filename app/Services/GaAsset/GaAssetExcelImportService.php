@@ -138,10 +138,12 @@ class GaAssetExcelImportService
                             $payload['sub_kategori_aset_id']
                         );
                         $existing->update($payload);
+                        $this->syncSequenceFromPayload($payload, $existing);
                         $stats['rows_updated']++;
                     } else {
                         $payload['created_by'] = $actorName;
-                        GaAsset::create($payload);
+                        $created = GaAsset::create($payload);
+                        $this->syncSequenceFromPayload($payload, $created);
                         $stats['rows_imported']++;
                     }
                 } catch (\Throwable $e) {
@@ -403,6 +405,20 @@ class GaAssetExcelImportService
     private function flagIsSet($sheet, int $row, int $col): bool
     {
         return strtoupper($this->cellString($sheet, $row, $col)) === 'V';
+    }
+
+    private function syncSequenceFromPayload(array $payload, GaAsset $asset): void
+    {
+        $subCategoryId = (int) ($asset->sub_kategori_aset_id ?: ($payload['sub_kategori_aset_id'] ?? 0));
+        $subCategory = $subCategoryId
+            ? MasterSubKategoriAset::find($subCategoryId)
+            : null;
+
+        app(GaAssetSequenceService::class)->syncFromCsCode(
+            (string) ($payload['cs_code'] ?? $asset->cs_code),
+            $subCategoryId ?: null,
+            $subCategory->nama_sub_kategori ?? null
+        );
     }
 
     private function nextCsSequence(int $subKategoriId): int

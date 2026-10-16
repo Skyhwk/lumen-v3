@@ -719,6 +719,7 @@ class PersonnelRequesthrdController extends Controller
     {
         try {
             $steps = [
+                'review' => 0,
                 'assessment' => 0,
                 'screening' => 0,
                 'interview_hrd' => 0,
@@ -990,6 +991,7 @@ class PersonnelRequesthrdController extends Controller
     private function pipelineStepStatuses()
     {
         return [
+            'review' => ['review'],
             'screening' => ['screening'],
             'interview_hrd' => ['interview_hrd'],
             'profile_completion' => ['profile_completion'],

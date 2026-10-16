@@ -36,4 +36,9 @@ class GaAsset extends Sector
     {
         return $this->belongsTo(MasterSubKategoriAset::class, 'sub_kategori_aset_id');
     }
+
+    public function pic()
+    {
+        return $this->belongsTo(MasterKaryawan::class, 'pic_employee_id');
+    }
 }

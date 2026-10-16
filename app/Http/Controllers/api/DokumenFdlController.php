@@ -265,15 +265,23 @@ class DokumenFdlController extends Controller
                     $jadwals->each(function ($jadwal) use (&$orderDetail, &$flatData, $loggedInUser, $isProgrammer) {
                         if ($jadwal->tanggal == $orderDetail->tanggal_sampling) {
                             $allowPush = false;
+                            $titikMilikSampler = [];
 
                             if ($isProgrammer) {
                                 // Programmer bisa lihat semua
                                 $allowPush = true;
                             } else {
-                                // Non-programmer hanya kalau termasuk dalam sampler
                                 $samplerList = array_map('trim', explode(',', $jadwal->sampler));
                                 if (in_array($loggedInUser, $samplerList)) {
                                     $allowPush = true;
+                                    $titikMilikSampler = $this->extractTitikFromKategoriJadwal($jadwal->kategori);
+                                }
+                            }
+
+                            if ($allowPush && !$isProgrammer && !empty($titikMilikSampler)) {
+                                $titikSampel = $this->extractTitikFromNoSampel($orderDetail->no_sampel);
+                                if ($titikSampel === null || !in_array($titikSampel, $titikMilikSampler, true)) {
+                                    $allowPush = false;
                                 }
                             }
 
@@ -1188,6 +1196,34 @@ class DokumenFdlController extends Controller
         ];
 
         return $map[$parameter] ?? 1;
+    }
+
+    private function extractTitikFromKategoriJadwal($kategoriRaw)
+    {
+        $decoded = json_decode(html_entity_decode((string) $kategoriRaw), true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        $titik = [];
+        foreach ($decoded as $item) {
+            if (preg_match('/(\d+)\s*$/', (string) $item, $m)) {
+                $titik[] = str_pad($m[1], 3, '0', STR_PAD_LEFT);
+            }
+        }
+
+        return $titik;
+    }
+
+    private function extractTitikFromNoSampel($noSampel)
+    {
+        $parts = explode('/', (string) $noSampel);
+        $code = trim((string) end($parts));
+        if ($code === '' || !preg_match('/^\d+$/', $code)) {
+            return null;
+        }
+
+        return str_pad($code, 3, '0', STR_PAD_LEFT);
     }
 }
 

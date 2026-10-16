@@ -441,6 +441,7 @@ class DokumenFdlController extends Controller
 
                 $allowPush = false;
                 $samplerTerpilih = $loggedInUser;
+                $titikMilikSampler = [];
 
                 if ($isProgrammer) {
                     // LOGIKA PROGRAMMER: Loloskan, dan ambil sampler pertama sebagai display
@@ -454,22 +455,34 @@ class DokumenFdlController extends Controller
                         }
                     }
                 } else {
-                    // LOGIKA SAMPLER BIASA: Wajib tercantum di jadwal pada tanggal tersebut
+                    // Sampler biasa: nama harus ada di jadwal, titik harus ada di jadwal.kategori
                     foreach ($orderDetail->orderHeader->samplingPlan as $samplingPlan) {
                         foreach ($samplingPlan->jadwal ?? [] as $jadwal) {
                             if ($jadwal->tanggal == $orderDetail->tanggal_sampling) {
                                 $samplerList = array_map('trim', explode(',', $jadwal->sampler));
                                 if (in_array($loggedInUser, $samplerList)) {
                                     $allowPush = true;
-                                    break 2; // Jurus yang sangat bagus! Keluar dari 2 loop sekaligus.
+                                    $titikMilikSampler = array_merge(
+                                        $titikMilikSampler,
+                                        $this->extractTitikFromKategoriJadwal($jadwal->kategori)
+                                    );
                                 }
                             }
                         }
                     }
+                    $titikMilikSampler = array_values(array_unique($titikMilikSampler));
                 }
 
                 // Jika diizinkan melihat
                 if ($allowPush) {
+                    $titikSampel = $this->extractTitikFromNoSampel($orderDetail->no_sampel);
+                    if (
+                        !$isProgrammer
+                        && !empty($titikMilikSampler)
+                        && ($titikSampel === null || !in_array($titikSampel, $titikMilikSampler, true))
+                    ) {
+                        continue;
+                    }
                     $crf = explode("-", $orderDetail->kategori_3);
                     $nama_kategori = explode("/", $orderDetail->no_sampel ?? '');
 
@@ -1410,6 +1423,34 @@ class DokumenFdlController extends Controller
         ];
 
         return $map[$parameter] ?? 1;
+    }
+
+    private function extractTitikFromKategoriJadwal($kategoriRaw)
+    {
+        $decoded = json_decode(html_entity_decode((string) $kategoriRaw), true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        $titik = [];
+        foreach ($decoded as $item) {
+            if (preg_match('/(\d+)\s*$/', (string) $item, $m)) {
+                $titik[] = str_pad($m[1], 3, '0', STR_PAD_LEFT);
+            }
+        }
+
+        return $titik;
+    }
+
+    private function extractTitikFromNoSampel($noSampel)
+    {
+        $parts = explode('/', (string) $noSampel);
+        $code = trim((string) end($parts));
+        if ($code === '' || !preg_match('/^\d+$/', $code)) {
+            return null;
+        }
+
+        return str_pad($code, 3, '0', STR_PAD_LEFT);
     }
 }
 
