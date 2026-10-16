@@ -941,6 +941,9 @@ class PersonnelRequestController extends Controller
                         ?? optional($row->sallaryOffer)->sallary_offer_user
                         ?? 0;
                 })
+                ->addColumn('tunjangan_gaji_user', function ($row) {
+                    return optional($row->sallaryOffer)->tunjangan_gaji_user ?? 0;
+                })
                 ->addColumn('hrd_amount', function ($row) {
                     return optional($row->openDecisionSalary)->hrd_amount
                         ?? optional($row->pendingDecisionSalary)->hrd_amount
@@ -1140,12 +1143,50 @@ class PersonnelRequestController extends Controller
                 return response()->json(['message' => 'Tidak ada pengajuan gaji yang menunggu approval.'], 404);
             }
 
+            if ($request->exists('tunjangan_gaji_user') && SallaryOfferService::hasTunjanganGajiUserColumn()) {
+                $tunjanganNormalized = RequesterSalaryApprovalService::normalizeAmount(
+                    $request->input('tunjangan_gaji_user'),
+                    true
+                );
+                if ($tunjanganNormalized === null) {
+                    $tunjanganNormalized = 0;
+                }
+
+                $activeOffer = SallaryOfferService::getActive((int) $recruitment->id);
+                if ($activeOffer) {
+                    $activeOffer->update([
+                        'tunjangan_gaji_user' => $tunjanganNormalized,
+                        'updated_by' => $this->karyawan,
+                    ]);
+                }
+            }
+
             $saved = RequesterSalaryApprovalService::recordDecision(
                 $row,
                 $normalized,
                 $this->karyawan,
                 $request->input('reason')
             );
+
+            if ($request->exists('sallary_offer_user')) {
+                $pokokNormalized = RequesterSalaryApprovalService::normalizeAmount(
+                    $request->input('sallary_offer_user')
+                );
+                if ($pokokNormalized === null) {
+                    DB::rollBack();
+                    return response()->json([
+                        'message' => 'Gaji Pokok User wajib diisi.',
+                    ], 422);
+                }
+
+                $activeOffer = SallaryOfferService::getActive((int) $recruitment->id);
+                if ($activeOffer) {
+                    $activeOffer->update([
+                        'sallary_offer_user' => $pokokNormalized,
+                        'updated_by' => $this->karyawan,
+                    ]);
+                }
+            }
 
             DB::commit();
 
@@ -2070,6 +2111,14 @@ class PersonnelRequestController extends Controller
                     ], 422);
                 }
 
+                $tunjanganNormalized = RequesterSalaryApprovalService::normalizeAmount(
+                    $request->input('tunjangan_gaji_user'),
+                    true
+                );
+                if ($tunjanganNormalized === null) {
+                    $tunjanganNormalized = 0;
+                }
+
                 $tokenService = new GenerateToken();
                 $tokenKey = $pr->id . $recruitment->nama_lengkap. 'approval' . str_replace('.', '', microtime(true));
                 $token = $tokenService->encrypt(md5($tokenKey) . '|' . $tokenService->encrypt(DATE('Y-m-d')));
@@ -2082,12 +2131,17 @@ class PersonnelRequestController extends Controller
                     'status' => 'management_decision'
                 ]);
 
+                $offerPayload = [
+                    'sallary_offer_user' => $salaryNormalized,
+                    'requester_salary_status' => RequesterSalaryApprovalService::STATUS_NOT_REQUIRED,
+                ];
+                if (SallaryOfferService::hasTunjanganGajiUserColumn()) {
+                    $offerPayload['tunjangan_gaji_user'] = $tunjanganNormalized;
+                }
+
                 SallaryOfferService::upsertActive(
                     (int) $recruitment->id,
-                    [
-                        'sallary_offer_user' => $salaryNormalized,
-                        'requester_salary_status' => RequesterSalaryApprovalService::STATUS_NOT_REQUIRED,
-                    ],
+                    $offerPayload,
                     $this->karyawan
                 );
             } else {

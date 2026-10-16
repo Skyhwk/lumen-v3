@@ -18,7 +18,10 @@
 @php
     $gajiTerakhir = !empty($data->gaji_terakhir) ? 'Rp ' . number_format($data->gaji_terakhir, 0, ',', '.') : '-';
     $ekspektasiGaji = !empty($data->ekspetasi_gaji) ? 'Rp ' . number_format($data->ekspetasi_gaji, 0, ',', '.') : '-';
-    $penawaranGajiHrd = \App\Services\OfferingSalaryEmail::formatRupiah(\App\Services\OfferingSalaryEmail::getSalaryOfferHrd($data));
+    $hrdBreakdown = \App\Services\OfferingSalaryEmail::getSalaryOfferHrdBreakdown($data);
+    $penawaranGajiHrd = \App\Services\OfferingSalaryEmail::formatRupiah($hrdBreakdown['total'] ?? null);
+    $gajiPokokHrd = \App\Services\OfferingSalaryEmail::formatRupiah(($hrdBreakdown['has_breakdown'] ?? false) ? ($hrdBreakdown['gaji_pokok'] ?? 0) : null);
+    $tunjanganHrd = \App\Services\OfferingSalaryEmail::formatRupiah(($hrdBreakdown['has_breakdown'] ?? false) ? ($hrdBreakdown['tunjangan_kerja'] ?? 0) : null);
 @endphp
 
    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:0;background:linear-gradient(180deg,#eff6ff 0%,#f8fafc 100%);border:1px solid #bfdbfe;border-radius:14px;overflow:hidden;margin:0 0 16px 0;">
@@ -39,21 +42,46 @@
     @endforeach
 </table>
 
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:0;background:#f8fafc;border:1px solid #bfdbfe;border-radius:14px;overflow:hidden;margin:0 0 24px 0;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:0;background:#f8fafc;border:1px solid #bfdbfe;border-radius:14px;overflow:hidden;margin:0 0 16px 0;">
     <tr>
-        <td style="width:33.33%;padding:14px 16px;vertical-align:top;border-right:1px solid #dbeafe;">
+        <td style="width:50%;padding:14px 16px;vertical-align:top;border-right:1px solid #dbeafe;">
             <div style="font-size:12px;color:#64748b;margin:0 0 6px 0;">Gaji Terakhir</div>
             <div style="font-size:14px;color:#0f172a;font-weight:600;">{{ $gajiTerakhir }}</div>
         </td>
-        <td style="width:33.33%;padding:14px 16px;vertical-align:top;border-right:1px solid #dbeafe;">
+        <td style="width:50%;padding:14px 16px;vertical-align:top;">
             <div style="font-size:12px;color:#64748b;margin:0 0 6px 0;">Ekspektasi Gaji</div>
             <div style="font-size:14px;color:#0f172a;font-weight:600;">{{ $ekspektasiGaji }}</div>
         </td>
-        <td style="width:33.33%;padding:14px 16px;vertical-align:top;">
-            <div style="font-size:12px;color:#64748b;margin:0 0 6px 0;">Persetujuan Gaji</div>
-            <div style="font-size:14px;color:#1e40af;font-weight:700;">{{ $penawaranGajiHrd }}</div>
+    </tr>
+</table>
+
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:0;background:#eff6ff;border:1px solid #93c5fd;border-radius:14px;overflow:hidden;margin:0 0 24px 0;">
+    <tr>
+        <td colspan="3" style="padding:12px 16px 4px 16px;font-size:12px;color:#1e40af;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">
+        Persetujuan Gaji
         </td>
     </tr>
+    <tr>
+        <td style="width:33.33%;padding:10px 16px 14px 16px;vertical-align:top;border-right:1px solid #bfdbfe;">
+            <div style="font-size:12px;color:#64748b;margin:0 0 6px 0;">Gaji Pokok</div>
+            <div style="font-size:14px;color:#0f172a;font-weight:600;">{{ $gajiPokokHrd }}</div>
+        </td>
+        <td style="width:33.33%;padding:10px 16px 14px 16px;vertical-align:top;border-right:1px solid #bfdbfe;">
+            <div style="font-size:12px;color:#64748b;margin:0 0 6px 0;">Tunjangan Kerja</div>
+            <div style="font-size:14px;color:#0f172a;font-weight:600;">{{ $tunjanganHrd }}</div>
+        </td>
+        <td style="width:33.33%;padding:10px 16px 14px 16px;vertical-align:top;">
+            <div style="font-size:12px;color:#64748b;margin:0 0 6px 0;">Total Penawaran</div>
+            <div style="font-size:15px;color:#1e40af;font-weight:700;">{{ $penawaranGajiHrd }}</div>
+        </td>
+    </tr>
+    @if(empty($hrdBreakdown['has_breakdown']))
+    <tr>
+        <td colspan="3" style="padding:0 16px 14px 16px;font-size:12px;color:#64748b;line-height:1.5;">
+            Rincian gaji pokok dan tunjangan belum tersedia. Total memakai nilai Gaji HRD yang tercatat.
+        </td>
+    </tr>
+    @endif
 </table>
 
 @if(!empty($data->resubmit_reason))

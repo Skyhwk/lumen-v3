@@ -59,7 +59,7 @@ class RequesterSalaryApprovalServiceTest extends TestCase
         });
         $schema->create('sallary_offer', function (Blueprint $t) {
             $t->increments('id'); $t->integer('new_recruitment_id'); $t->boolean('is_active');
-            $t->float('sallary_offer_user'); $t->float('sallary_offer_hrd');
+            $t->float('sallary_offer_user'); $t->float('tunjangan_gaji_user')->nullable(); $t->float('sallary_offer_hrd');
             $t->string('requester_salary_status')->nullable();
             $t->timestamp('requester_salary_decided_at')->nullable(); $t->timestamps();
         });
@@ -127,6 +127,24 @@ class RequesterSalaryApprovalServiceTest extends TestCase
         // User minta 5M gaji pokok; GP+TK = 5M tetap butuh approval karena GP ≠ 5M
         $this->assertSame('pending', Service::syncAfterHrdSalarySave($applicant, $offer, 4000000));
         $this->assertSame(4000000, (int) DecisionSalary::first()->hrd_amount);
+        $this->assertFalse(Service::canSendCandidateOffering($applicant, $offer->fresh())['allowed']);
+    }
+
+    public function testUserTunjanganDoesNotOffsetGajiPokokMismatch(): void
+    {
+        [$applicant, $offer] = $this->applicant();
+        $offer->update([
+            'sallary_offer_hrd' => 4000000,
+            'sallary_offer_user' => 5000000,
+            'tunjangan_gaji_user' => 1000000,
+        ]);
+        CandidateDataOffers::create([
+            'new_recruitment_id' => $applicant->id,
+            'gaji_pokok' => 4000000,
+            'tunjangan_kerja' => 0,
+        ]);
+        $this->assertSame('pending', Service::syncAfterHrdSalarySave($applicant, $offer, 4000000));
+        $this->assertSame(5000000, (int) DecisionSalary::first()->user_amount);
         $this->assertFalse(Service::canSendCandidateOffering($applicant, $offer->fresh())['allowed']);
     }
 
