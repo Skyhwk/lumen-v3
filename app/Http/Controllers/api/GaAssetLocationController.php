@@ -34,18 +34,68 @@ class GaAssetLocationController extends Controller
             $data->where('ga_asset_locations.branch_id', (int) $request->branch_id);
         }
 
-        return Datatables::of($data)->make(true);
+        return Datatables::of($data)
+            ->filterColumn('ga_asset_locations.created_at', function ($query, $keyword) {
+                $this->filterCreatedAt($query, $keyword);
+            })
+            ->make(true);
     }
 
-    public function branches()
+    public function branches(Request $request)
     {
+        $locationQuery = GaAssetLocation::query()
+            ->leftJoin('master_cabang', 'master_cabang.id', '=', 'ga_asset_locations.branch_id')
+            ->where('ga_asset_locations.is_active', true);
+        $this->applySearchFilters($locationQuery, $request, [
+            'ga_asset_locations.code',
+            'ga_asset_locations.name',
+            'master_cabang.nama_cabang',
+            'ga_asset_locations.created_by',
+        ], 'ga_asset_locations.created_at');
+
+        $roomQuery = GaAssetRoom::query()
+            ->join('ga_asset_locations', 'ga_asset_locations.id', '=', 'ga_asset_rooms.location_id')
+            ->leftJoin('master_cabang', 'master_cabang.id', '=', 'ga_asset_locations.branch_id')
+            ->where('ga_asset_rooms.is_active', true);
+        $this->applySearchFilters($roomQuery, $request, [
+            'ga_asset_rooms.code',
+            'ga_asset_rooms.name',
+            'ga_asset_locations.name',
+            'master_cabang.nama_cabang',
+            'ga_asset_rooms.created_by',
+        ], 'ga_asset_rooms.created_at');
+
+        $locationCounts = (clone $locationQuery)
+            ->selectRaw('ga_asset_locations.branch_id as branch_id, COUNT(*) as total')
+            ->groupBy('ga_asset_locations.branch_id')
+            ->pluck('total', 'branch_id');
+
+        $roomCounts = (clone $roomQuery)
+            ->selectRaw('ga_asset_locations.branch_id as branch_id, COUNT(*) as total')
+            ->groupBy('ga_asset_locations.branch_id')
+            ->pluck('total', 'branch_id');
+
         $rows = MasterCabang::where('is_active', true)
             ->orderBy('nama_cabang')
-            ->get(['id', 'kode_cabang', 'nama_cabang']);
+            ->get(['id', 'kode_cabang', 'nama_cabang'])
+            ->map(function ($row) use ($locationCounts, $roomCounts) {
+                return [
+                    'id' => $row->id,
+                    'kode_cabang' => $row->kode_cabang,
+                    'nama_cabang' => $row->nama_cabang,
+                    'location_count' => (int) ($locationCounts[$row->id] ?? 0),
+                    'room_count' => (int) ($roomCounts[$row->id] ?? 0),
+                ];
+            })
+            ->values();
 
         return response()->json([
             'success' => true,
             'data' => $rows,
+            'totals' => [
+                'location_count' => (int) (clone $locationQuery)->count('ga_asset_locations.id'),
+                'room_count' => (int) (clone $roomQuery)->count('ga_asset_rooms.id'),
+            ],
         ]);
     }
 
@@ -189,6 +239,107 @@ class GaAssetLocationController extends Controller
             'success' => true,
             'message' => 'Lokasi aset berhasil dinonaktifkan.',
         ]);
+    }
+
+    private function applySearchFilters($query, Request $request, array $textColumns, string $createdAtColumn): void
+    {
+        $columns = $request->input('columns', []);
+        if (!is_array($columns)) {
+            $columns = [];
+        }
+
+        foreach ($columns as $column) {
+            if (!is_array($column)) {
+                continue;
+            }
+            $name = (string) ($column['name'] ?? '');
+            $value = trim((string) ($column['search']['value'] ?? ''));
+            if ($name === '' || $value === '') {
+                continue;
+            }
+            if ($name === $createdAtColumn) {
+                $this->filterCreatedAt($query, $value, $createdAtColumn);
+                continue;
+            }
+            if (in_array($name, $textColumns, true)) {
+                $query->where($name, 'like', '%' . $value . '%');
+            }
+        }
+
+        $global = trim((string) $request->input('search.value', ''));
+        if ($global === '') {
+            return;
+        }
+
+        $like = '%' . $global . '%';
+        $query->where(function ($inner) use ($textColumns, $createdAtColumn, $like) {
+            foreach ($textColumns as $column) {
+                $inner->orWhere($column, 'like', $like);
+            }
+            $inner->orWhere($createdAtColumn, 'like', $like);
+        });
+    }
+
+    private function filterCreatedAt($query, string $keyword, string $column = 'ga_asset_locations.created_at'): void
+    {
+        $keyword = trim($keyword);
+        if ($keyword === '') {
+            return;
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $keyword)) {
+            $query->where($column, 'like', '%' . $keyword . '%');
+            return;
+        }
+
+        $months = [
+            'januari' => 1,
+            'februari' => 2,
+            'maret' => 3,
+            'april' => 4,
+            'mei' => 5,
+            'juni' => 6,
+            'juli' => 7,
+            'agustus' => 8,
+            'september' => 9,
+            'oktober' => 10,
+            'november' => 11,
+            'desember' => 12,
+        ];
+        $lower = mb_strtolower($keyword);
+        $month = null;
+        foreach ($months as $name => $number) {
+            if (mb_strpos($lower, $name) !== false) {
+                $month = $number;
+                $lower = trim(str_replace($name, ' ', $lower));
+                break;
+            }
+        }
+
+        $year = null;
+        if (preg_match('/\b(19|20)\d{2}\b/', $keyword, $yearMatch)) {
+            $year = (int) $yearMatch[0];
+        }
+
+        $day = null;
+        if (preg_match('/\b([1-9]|[12]\d|3[01])\b/', $lower, $dayMatch)) {
+            $day = (int) $dayMatch[1];
+        }
+
+        if (!$month && !$year && !$day) {
+            $query->where($column, 'like', '%' . $keyword . '%');
+            return;
+        }
+
+        if ($year) {
+            $query->whereYear($column, $year);
+        }
+        if ($month) {
+            $query->whereMonth($column, $month);
+        }
+        if ($day) {
+            $query->whereDay($column, $day);
+        }
     }
 
     private function payload(Request $request): array

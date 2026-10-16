@@ -36,7 +36,15 @@ class GaAssetRoomController extends Controller
             $data->where('ga_asset_rooms.location_id', (int) $request->location_id);
         }
 
-        return Datatables::of($data)->make(true);
+        if ($request->filled('branch_id')) {
+            $data->where('ga_asset_locations.branch_id', (int) $request->branch_id);
+        }
+
+        return Datatables::of($data)
+            ->filterColumn('ga_asset_rooms.created_at', function ($query, $keyword) {
+                $this->filterCreatedAt($query, $keyword);
+            })
+            ->make(true);
     }
 
     public function options(Request $request)
@@ -167,6 +175,68 @@ class GaAssetRoomController extends Controller
             'success' => true,
             'message' => 'Ruang aset berhasil dinonaktifkan.',
         ]);
+    }
+
+    private function filterCreatedAt($query, string $keyword): void
+    {
+        $keyword = trim($keyword);
+        if ($keyword === '') {
+            return;
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $keyword)) {
+            $query->where('ga_asset_rooms.created_at', 'like', '%' . $keyword . '%');
+            return;
+        }
+
+        $months = [
+            'januari' => 1,
+            'februari' => 2,
+            'maret' => 3,
+            'april' => 4,
+            'mei' => 5,
+            'juni' => 6,
+            'juli' => 7,
+            'agustus' => 8,
+            'september' => 9,
+            'oktober' => 10,
+            'november' => 11,
+            'desember' => 12,
+        ];
+        $lower = mb_strtolower($keyword);
+        $month = null;
+        foreach ($months as $name => $number) {
+            if (mb_strpos($lower, $name) !== false) {
+                $month = $number;
+                $lower = trim(str_replace($name, ' ', $lower));
+                break;
+            }
+        }
+
+        $year = null;
+        if (preg_match('/\b(19|20)\d{2}\b/', $keyword, $yearMatch)) {
+            $year = (int) $yearMatch[0];
+        }
+
+        $day = null;
+        if (preg_match('/\b([1-9]|[12]\d|3[01])\b/', $lower, $dayMatch)) {
+            $day = (int) $dayMatch[1];
+        }
+
+        if (!$month && !$year && !$day) {
+            $query->where('ga_asset_rooms.created_at', 'like', '%' . $keyword . '%');
+            return;
+        }
+
+        if ($year) {
+            $query->whereYear('ga_asset_rooms.created_at', $year);
+        }
+        if ($month) {
+            $query->whereMonth('ga_asset_rooms.created_at', $month);
+        }
+        if ($day) {
+            $query->whereDay('ga_asset_rooms.created_at', $day);
+        }
     }
 
     private function payload(Request $request): array
