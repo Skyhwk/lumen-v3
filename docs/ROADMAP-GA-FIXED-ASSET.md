@@ -1,10 +1,22 @@
 # Roadmap — Sistem Pengelolaan Aset (GA Fixed Asset)
 
-> **Versi dokumen:** 1.1  
-> **Tanggal:** 15 Oktober 2026  
-> **Status:** Planning — belum implementasi  
+> **Versi dokumen:** 1.2  
+> **Tanggal:** 16 Oktober 2026  
+> **Status:** **Fase 1 partial** — Fase 2 belum mulai (dev tim lain)  
 > **Scope:** Full-stack (LUMEN-V3 backend + React frontend)  
 > **Sumber data awal:** `GA - Asset Total (1).xlsx` (~11.434 aset, sheet `DATA`)
+
+### Status implementasi (ringkas)
+
+| Fase | Status | Catatan |
+|------|--------|---------|
+| **F0** | Partial | Mapping kolom import; alias cabang seeded; normalisasi ruang formal belum |
+| **F1** | **~50%** | Import Excel, Daftar Aset, `purchase_date`, kondisi ID; belum: master ruang, tambah aset, label PDF, audit F1 penuh |
+| **F2** | **Not started** | [`docs/TRELLO-TASKS-GA-FIXED-ASSET-F2.md`](./TRELLO-TASKS-GA-FIXED-ASSET-F2.md) |
+| **F3** | **Not started** | [`docs/TRELLO-TASKS-GA-FIXED-ASSET-F3.md`](./TRELLO-TASKS-GA-FIXED-ASSET-F3.md) — blocked until F2 done |
+| **F4–F6** | Not started | — |
+
+**Backlog Trello F1 sisa:** [`docs/TRELLO-TASKS-GA-FIXED-ASSET-F1.md`](./TRELLO-TASKS-GA-FIXED-ASSET-F1.md)
 
 ---
 
@@ -237,6 +249,8 @@ gantt
 
 **Tujuan:** Posisi aset always current; riwayat lengkap untuk mutasi dalam site.
 
+> **Planning Trello (1 kartu = BE+FE):** [`TRELLO-TASKS-GA-FIXED-ASSET-F2.md`](./TRELLO-TASKS-GA-FIXED-ASSET-F2.md) — 6 kartu: migration → mutasi ruang → ubah kondisi → timeline → UAT → runbook.
+
 | ID | Task | Keterangan |
 |----|------|------------|
 | F2-B1 | Migration `ga_asset_movements`, `ga_asset_condition_logs` | |
@@ -255,6 +269,8 @@ gantt
 ## 9. Fase 3 — Approval workflow + mutasi antar site (≈ 3 minggu)
 
 **Tujuan:** Kebijakan perusahaan untuk aksi sensitif; eksekusi otomatis setelah semua manager approve.
+
+> **Planning Trello (1 kartu = BE+FE):** [`TRELLO-TASKS-GA-FIXED-ASSET-F3.md`](./TRELLO-TASKS-GA-FIXED-ASSET-F3.md) — 7 kartu: migration → master approver → pengajuan → inbox + executor → notif → UAT → runbook. **Start setelah Fase 2 selesai.**
 
 ### 9.1 Jenis pengajuan (`request_type`)
 
