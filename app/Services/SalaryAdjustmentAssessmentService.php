@@ -15,6 +15,8 @@ class SalaryAdjustmentAssessmentService
     private const MIN_OPTIONAL_QUESTION_COUNT = 1;
     private const MAX_OPTIONAL_QUESTION_COUNT = 100;
 
+    private const PF16_QUESTION_COUNT = 105;
+
     /** @var SalaryAdjustmentAssessmentEngine */
     private $engine;
 
@@ -399,7 +401,7 @@ class SalaryAdjustmentAssessmentService
             ->where(function ($query) {
                 $query->where('category_scope', 'hr')->orWhereNull('category_scope');
             })
-            ->orderByRaw("CASE WHEN UPPER(name) = 'DISC' THEN 1 WHEN UPPER(name) IN ('KOSTICK PAPI', 'PAPI KOSTICK') THEN 2 ELSE 3 END")
+            ->orderByRaw("CASE WHEN UPPER(name) = 'DISC' THEN 1 WHEN UPPER(name) IN ('KOSTICK PAPI', 'PAPI KOSTICK') THEN 2 WHEN UPPER(name) = '16PF' THEN 3 ELSE 4 END")
             ->orderBy('name')
             ->get()
             ->all();
@@ -487,13 +489,16 @@ class SalaryAdjustmentAssessmentService
                 }
 
                 $isMandatory = $this->isMandatoryCategory($category->name);
+                $isPf16 = $this->isPf16Category($category->name);
                 $hasTimeLimit = filter_var($item['has_time_limit'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
                 $normalized[] = [
                     'id' => (int) $item['id'],
-                    'question_count' => $isMandatory
+                    'question_count' => $isPf16
+                        ? self::PF16_QUESTION_COUNT
+                        : ($isMandatory
                         ? (int) ($item['question_count'] ?? 0)
-                        : $this->clampOptionalQuestionCount($item['question_count'] ?? 1),
+                        : $this->clampOptionalQuestionCount($item['question_count'] ?? 1, $category->name)),
                     'duration_minutes' => $hasTimeLimit
                         ? max(1, (int) ($item['duration_minutes'] ?? 15))
                         : 0,
@@ -531,8 +536,17 @@ class SalaryAdjustmentAssessmentService
         return in_array($normalized, ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK'], true);
     }
 
-    private function clampOptionalQuestionCount($value): int
+    private function isPf16Category(?string $name): bool
     {
+        return strtoupper(trim((string) $name)) === '16PF';
+    }
+
+    private function clampOptionalQuestionCount($value, ?string $categoryName = null): int
+    {
+        if ($this->isPf16Category($categoryName)) {
+            return self::PF16_QUESTION_COUNT;
+        }
+
         $count = (int) $value;
 
         if ($count < self::MIN_OPTIONAL_QUESTION_COUNT) {

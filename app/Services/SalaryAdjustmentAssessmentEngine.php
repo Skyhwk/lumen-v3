@@ -22,6 +22,10 @@ class SalaryAdjustmentAssessmentEngine
             return $this->papiQuestions();
         }
 
+        if ($name === '16PF') {
+            return $this->pf16Questions();
+        }
+
         $questions = DB::table('questions')
             ->where('question_category_id', $category->id)
             ->where('is_active', 1)
@@ -383,7 +387,7 @@ class SalaryAdjustmentAssessmentEngine
         array $answers,
         string $status
     ): void {
-        $result = $this->scoreSession($session, $answers);
+        $result = $this->scoreSession($session, $answers, $assessment);
         $result['status'] = $status;
 
         $session->answers_json = $answers;
@@ -456,10 +460,25 @@ class SalaryAdjustmentAssessmentEngine
         );
     }
 
-    private function scoreSession(SalaryAdjustmentAssessmentSession $session, array $answers): array
-    {
+    private function scoreSession(
+        SalaryAdjustmentAssessmentSession $session,
+        array $answers,
+        ?SalaryAdjustmentAssessment $assessment = null
+    ): array {
         $questions = is_array($session->questions_json) ? $session->questions_json : [];
         $name = strtoupper(trim((string) $session->category_name));
+
+        if ($name === '16PF') {
+            $employee = null;
+            if ($assessment && $assessment->request_id) {
+                $request = SalaryAdjustmentRequest::find($assessment->request_id);
+                if ($request) {
+                    $employee = app(SixteenPfScoringService::class)->employeeForRequest((int) $request->employee_id);
+                }
+            }
+
+            return app(PsychometricScoringService::class)->scoreSession('16PF', $questions, $answers, $employee);
+        }
 
         if ($name === 'DISC' || in_array($name, ['KOSTICK PAPI', 'PAPI KOSTICK'], true)) {
             return [
@@ -562,7 +581,7 @@ class SalaryAdjustmentAssessmentEngine
     private function sanitizeQuestion(array $question, int $answeredCount, int $totalQuestions): array
     {
         $safeQuestion = $question;
-        unset($safeQuestion['answer_key'], $safeQuestion['answer_map']);
+        unset($safeQuestion['answer_key'], $safeQuestion['answer_map'], $safeQuestion['scoring_key']);
         if (!empty($safeQuestion['options'])) {
             foreach ($safeQuestion['options'] as &$option) {
                 unset($option['is_correct']);
@@ -635,6 +654,53 @@ class SalaryAdjustmentAssessmentEngine
                 'answer_map' => $answer['data'] ?? ['P' => [], 'K' => []],
             ];
         })->all();
+    }
+
+    private function pf16Questions(): array
+    {
+        $rows = DB::table('soal_psikotes')
+            ->where('kategori_soal', '16PF')
+            ->orderBy('id')
+            ->get();
+
+        return $rows->map(function ($question) {
+            $prompt = json_decode($question->pertanyaan ?: '{}', true) ?: [];
+            $key = json_decode($question->jawaban ?: '{}', true) ?: [];
+            $no = (int) ($prompt['no'] ?? 0);
+            $optionsRaw = $prompt['options'] ?? [];
+
+            $options = [
+                ['id' => 'a', 'text' => $this->cleanPf16OptionText((string) ($optionsRaw['a'] ?? 'Ya'))],
+                ['id' => 'b', 'text' => $this->cleanPf16OptionText((string) ($optionsRaw['b'] ?? 'Di antaranya'))],
+                ['id' => 'c', 'text' => $this->cleanPf16OptionText((string) ($optionsRaw['c'] ?? 'Tidak'))],
+            ];
+
+            return [
+                'id' => (string) ($no > 0 ? $no : $question->id),
+                'source' => '16pf',
+                'order' => $no > 0 ? $no : (int) $question->id,
+                'type' => '16pf',
+                'text' => (string) ($prompt['text'] ?? ''),
+                'options' => $options,
+                'scoring_key' => [
+                    'factor' => (string) ($key['factor'] ?? 'A'),
+                    'points' => $key['points'] ?? ['a' => 0, 'b' => 0, 'c' => 0],
+                ],
+            ];
+        })->sortBy('order')->values()->map(function ($item, $index) {
+            $item['order'] = $index + 1;
+
+            return $item;
+        })->all();
+    }
+
+    private function cleanPf16OptionText(string $text): string
+    {
+        $text = trim($text);
+        $text = preg_replace('/^[a-cA-C][\.\)]\s*/', '', $text) ?? $text;
+        $text = preg_replace('/^\[[a-cA-C]\]\s*/i', '', $text) ?? $text;
+
+        return trim($text);
     }
 
     private function papiQuestions(): array
