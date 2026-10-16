@@ -1,5 +1,6 @@
 <?php
 namespace App\Http\Controllers\api;
+use App\Helpers\DraftLhpRejectHelper;
 
 use App\Helpers\EmailLhpRilisHelpers;
 use App\Helpers\HelperSatuan;
@@ -958,6 +959,9 @@ class DraftGelombangMikroController extends Controller
 
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
 
