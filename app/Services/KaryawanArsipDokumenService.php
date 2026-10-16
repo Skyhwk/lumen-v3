@@ -359,6 +359,36 @@ class KaryawanArsipDokumenService
         return true;
     }
 
+    public function resolveDownload($id, $karyawanId)
+    {
+        if (!Schema::hasTable('karyawan_dokumen_arsip')) {
+            return null;
+        }
+
+        $doc = DB::table('karyawan_dokumen_arsip')
+            ->where('id', $id)
+            ->where('karyawan_id', $karyawanId)
+            ->where('is_active', 1)
+            ->first();
+
+        if (!$doc || !$doc->path_file) {
+            return null;
+        }
+
+        $absolutePath = public_path(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $doc->path_file));
+        if (!is_file($absolutePath)) {
+            return null;
+        }
+
+        $name = trim((string) ($doc->nama_file ?: basename($absolutePath)));
+        $name = str_replace(['"', '\\', '/'], '', $name) ?: basename($absolutePath);
+
+        return [
+            'path' => $absolutePath,
+            'name' => $name,
+        ];
+    }
+
     public function deleteDocument($id, $karyawanId = null)
     {
         if (!Schema::hasTable('karyawan_dokumen_arsip')) {
