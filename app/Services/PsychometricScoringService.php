@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\DB;
 
 class PsychometricScoringService
 {
-    public function scoreSession(string $categoryName, array $questions, array $answers): array
+    public function scoreSession(string $categoryName, array $questions, array $answers, $employee = null): array
     {
         $normalized = strtoupper(trim($categoryName));
 
@@ -16,6 +16,10 @@ class PsychometricScoringService
 
         if (in_array($normalized, ['KOSTICK PAPI', 'PAPI KOSTICK'], true)) {
             return $this->scorePapi($questions, $answers);
+        }
+
+        if ($normalized === '16PF') {
+            return app(SixteenPfScoringService::class)->score($questions, $answers, $employee);
         }
 
         return $this->scoreQuestionBank($questions, $answers);
