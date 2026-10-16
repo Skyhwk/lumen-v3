@@ -82,6 +82,21 @@ class ArsipKaryawanController extends Controller
         }
     }
 
+    public function download(Request $request)
+    {
+        $this->validate($request, [
+            'id' => 'required|integer',
+            'karyawan_id' => 'required|integer',
+        ]);
+
+        $file = $this->service->resolveDownload($request->id, $request->karyawan_id);
+        if (!$file) {
+            return response()->json(['message' => 'Dokumen arsip tidak ditemukan.'], 404);
+        }
+
+        return response()->download($file['path'], $file['name']);
+    }
+
     public function destroy(Request $request)
     {
         $this->validate($request, [
