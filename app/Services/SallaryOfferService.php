@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\NewRecruitment;
 use App\Models\SallaryOffer;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 class SallaryOfferService
 {
@@ -107,6 +108,34 @@ class SallaryOfferService
         }
 
         return null;
+    }
+
+    /** Tunjangan dari User (interview / nego Approval Salary) — referensi, tidak memakai gate approval. */
+    public static function resolveUserTunjangan($applicant): ?float
+    {
+        if (!self::hasTunjanganGajiUserColumn()) {
+            return null;
+        }
+
+        $recruitmentId = (int) (is_object($applicant) ? ($applicant->id ?? 0) : $applicant);
+
+        $active = self::getActive($recruitmentId);
+        if ($active && self::hasStoredSalaryOfferUser($active->tunjangan_gaji_user)) {
+            return (float) $active->tunjangan_gaji_user;
+        }
+
+        $latest = self::getLatest($recruitmentId);
+        if ($latest && self::hasStoredSalaryOfferUser($latest->tunjangan_gaji_user)) {
+            return (float) $latest->tunjangan_gaji_user;
+        }
+
+        return null;
+    }
+
+    public static function hasTunjanganGajiUserColumn(): bool
+    {
+        return Schema::hasTable('sallary_offer')
+            && Schema::hasColumn('sallary_offer', 'tunjangan_gaji_user');
     }
 
     public static function getLatestRejectReason(int $recruitmentId): ?string

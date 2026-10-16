@@ -513,11 +513,9 @@ class AssessmentController extends Controller
         }
 
         return collect(is_array($value) ? $value : [$value])
-            ->filter(function ($config) {
-                return is_array($config)
-                    && (int) ($config['id'] ?? 0) > 0
-                    && strtolower(trim((string) ($config['type'] ?? ''))) !== 'hr';
-            })
+            ->filter(fn ($config) => is_array($config)
+                && (int) ($config['id'] ?? 0) > 0
+                && ($config['type'] ?? '') !== 'hr')
             ->map(function ($config) {
                 return [
                     'id' => (int) $config['id'],

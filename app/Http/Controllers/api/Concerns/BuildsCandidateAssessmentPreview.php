@@ -329,6 +329,29 @@ trait BuildsCandidateAssessmentPreview
             $summaryText = $totalQuestions > 0
                 ? 'PAPI Kostick selesai — ' . $answered . '/' . $totalQuestions . ' item terjawab'
                 : 'Hasil PAPI Kostick tersedia';
+        } elseif ($engine === '16pf') {
+            $pf16Detail = $this->buildPf16Detail($result);
+            foreach ($pf16Detail['psychogram'] ?? [] as $row) {
+                $items[] = [
+                    'label' => (string) ($row['factor'] ?? '-'),
+                    'value' => 'STEN ' . ($row['sten'] ?? '-')
+                        . ' (' . ($row['sten_band_label'] ?? '-') . ') — '
+                        . ($row['interpretation'] ?? '-'),
+                ];
+            }
+
+            if (isset($result['factors']['MD']['sten'])) {
+                $items[] = [
+                    'label' => 'MD (validitas)',
+                    'value' => 'STEN ' . $result['factors']['MD']['sten'],
+                ];
+            }
+
+            $answered = (int) ($result['answered'] ?? 0);
+            $totalQuestions = (int) ($result['total_questions'] ?? 0);
+            $summaryText = $totalQuestions > 0
+                ? '16PF selesai — ' . $answered . '/' . $totalQuestions . ' item terjawab'
+                : 'Hasil 16PF tersedia';
         } elseif ($engine === 'mixed') {
             $score = $result['score'] ?? null;
             $correct = (int) ($result['correct_answers'] ?? 0);
@@ -385,7 +408,7 @@ trait BuildsCandidateAssessmentPreview
                 : 'Hasil tes tersedia';
         }
 
-        $isPersonalityEngine = $engine === 'disc' || $engine === 'papi_kostick';
+        $isPersonalityEngine = $engine === 'disc' || $engine === 'papi_kostick' || $engine === '16pf';
 
         $targetName = $this->resolveEvaluationTargetName($session);
         if ($targetName !== '') {
@@ -404,6 +427,7 @@ trait BuildsCandidateAssessmentPreview
             'scored_at' => $result['scored_at'] ?? $session->completed_at,
             'disc_detail' => $engine === 'disc' ? $this->buildDiscDetail($result) : null,
             'papi_detail' => $engine === 'papi_kostick' ? $this->buildPapiDetail($result) : null,
+            'pf16_detail' => $engine === '16pf' ? $this->buildPf16Detail($result) : null,
             'question_review' => $isPersonalityEngine ? [] : $this->buildQuestionReview($session, $result),
         ];
     }
@@ -664,6 +688,108 @@ trait BuildsCandidateAssessmentPreview
 
         return [
             'rows' => $rows,
+        ];
+    }
+
+    protected function pf16StenBandLabel(int $sten): string
+    {
+        if ($sten <= 2) {
+            return 'Sangat Rendah';
+        }
+        if ($sten <= 4) {
+            return 'Rendah';
+        }
+        if ($sten <= 6) {
+            return 'Cukup';
+        }
+        if ($sten <= 8) {
+            return 'Baik';
+        }
+
+        return 'Sangat Baik';
+    }
+
+    protected function pf16PoleEmphasis(int $sten): string
+    {
+        if ($sten <= 4) {
+            return 'low';
+        }
+        if ($sten >= 7) {
+            return 'high';
+        }
+
+        return 'mid';
+    }
+
+    protected function pf16ActiveInterpretation(int $sten, array $pole): string
+    {
+        $low = trim((string) ($pole['low'] ?? ''));
+        $high = trim((string) ($pole['high'] ?? ''));
+
+        if ($sten <= 4) {
+            return $low !== '' ? $low : '-';
+        }
+        if ($sten >= 7) {
+            return $high !== '' ? $high : '-';
+        }
+
+        $parts = array_values(array_filter([$low, $high]));
+
+        return $parts !== [] ? implode(' / ', $parts) : 'Skor rata-rata pada dimensi ini.';
+    }
+
+    protected function buildPf16Detail(array $result): array
+    {
+        $profile = app(\App\Services\SixteenPfScoringService::class)->psychogramProfile();
+
+        $rows = [];
+        foreach ($result['psychogram'] ?? [] as $row) {
+            $code = (string) ($row['factor'] ?? '');
+            $factorScores = is_array($result['factors'][$code] ?? null) ? $result['factors'][$code] : [];
+            $sten = (int) ($row['sten'] ?? 5);
+            $band = (string) ($row['band'] ?? 'rata-rata');
+            $pole = is_array($profile[$code] ?? null) ? $profile[$code] : [];
+            $lowLabel = trim((string) ($pole['low'] ?? ($row['low_label'] ?? '')));
+            $highLabel = trim((string) ($pole['high'] ?? ($row['high_label'] ?? '')));
+
+            $rows[] = [
+                'factor' => $code,
+                'raw' => isset($factorScores['raw']) ? (int) $factorScores['raw'] : null,
+                'sten' => $sten,
+                'band' => $band,
+                'sten_band_label' => $this->pf16StenBandLabel($sten),
+                'low_label' => $lowLabel,
+                'high_label' => $highLabel,
+                'interpretation' => $this->pf16ActiveInterpretation($sten, [
+                    'low' => $lowLabel,
+                    'high' => $highLabel,
+                ]),
+                'emphasis' => $this->pf16PoleEmphasis($sten),
+            ];
+        }
+
+        $md = is_array($result['factors']['MD'] ?? null) ? $result['factors']['MD'] : [];
+        $scoreRows = [];
+        foreach (array_merge(['MD'], ['A', 'B', 'C', 'E', 'F', 'G', 'H', 'I', 'L', 'M', 'N', 'O', 'Q1', 'Q2', 'Q3', 'Q4']) as $code) {
+            $factorScores = is_array($result['factors'][$code] ?? null) ? $result['factors'][$code] : [];
+            $scoreRows[] = [
+                'factor' => $code,
+                'raw' => isset($factorScores['raw']) ? (int) $factorScores['raw'] : null,
+                'sten' => isset($factorScores['sten']) ? (int) $factorScores['sten'] : null,
+            ];
+        }
+
+        return [
+            'norm_group' => $result['norm_group'] ?? null,
+            'gender' => $result['gender'] ?? null,
+            'answered' => (int) ($result['answered'] ?? 0),
+            'total_questions' => (int) ($result['total_questions'] ?? 0),
+            'psychogram' => $rows,
+            'score_table' => $scoreRows,
+            'md' => [
+                'raw' => isset($md['raw']) ? (int) $md['raw'] : null,
+                'sten' => isset($md['sten']) ? (int) $md['sten'] : null,
+            ],
         ];
     }
 

@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\api;
+use App\Helpers\DraftLhpRejectHelper;
 use App\Models\HistoryAppReject;
 
 
@@ -727,6 +728,9 @@ class DraftUlkMedanMagnetController extends Controller
 
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $lhps = LhpsMedanLMHeader::where('id', $request->id)

@@ -492,6 +492,9 @@ class AtsFinalDecisionController extends Controller
             ->addColumn('sallary_offer_user', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_user ?? 0;
             })
+            ->addColumn('tunjangan_gaji_user', function ($row) {
+                return optional($row->sallaryOffer)->tunjangan_gaji_user ?? 0;
+            })
             ->addColumn('requester_salary_status', function ($row) {
                 return optional($row->sallaryOffer)->requester_salary_status
                     ?? RequesterSalaryApprovalService::STATUS_NOT_REQUIRED;
@@ -1176,6 +1179,11 @@ class AtsFinalDecisionController extends Controller
 
             if ($userReferenceSalary !== null) {
                 $offerData['sallary_offer_user'] = $userReferenceSalary;
+            }
+
+            $userTunjangan = SallaryOfferService::resolveUserTunjangan($applicant);
+            if ($userTunjangan !== null) {
+                $offerData['tunjangan_gaji_user'] = $userTunjangan;
             }
 
             if ($request->has('sallary_offer_direktur')) {

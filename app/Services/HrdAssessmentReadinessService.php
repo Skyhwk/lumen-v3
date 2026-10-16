@@ -79,6 +79,15 @@ class HrdAssessmentReadinessService
             return null;
         }
 
+        if ($name === '16PF') {
+            $available = DB::table('soal_psikotes')->where('kategori_soal', '16PF')->count();
+            if ($available < 105) {
+                return 'Modul 16PF belum lengkap (butuh 105 soal, tersedia ' . $available . ').';
+            }
+
+            return null;
+        }
+
         $requiredCount = (int) ($category->question_count ?? 0);
         $available = DB::table('questions')
             ->where('question_category_id', $category->id)
@@ -133,6 +142,8 @@ class HrdAssessmentReadinessService
                 $category->current_question_count = $discCount;
             } elseif (in_array($name, ['KOSTICK PAPI', 'PAPI KOSTICK'], true)) {
                 $category->current_question_count = $papiCount;
+            } elseif ($name === '16PF') {
+                $category->current_question_count = (int) DB::table('soal_psikotes')->where('kategori_soal', '16PF')->count();
             }
         });
     }

@@ -17,6 +17,8 @@ use Carbon\Carbon;
 use Exception;
 use Yajra\Datatables\Datatables;
 
+use App\Helpers\DraftLhpRejectHelper;
+
 class LimsLhpKebisinganPersonalController extends Controller
 {
     public function index(Request $request){
@@ -54,6 +56,10 @@ class LimsLhpKebisinganPersonalController extends Controller
     }
 
     public function handleReject(Request $request) {
+
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $header = LhpsKebisinganPersonalHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();

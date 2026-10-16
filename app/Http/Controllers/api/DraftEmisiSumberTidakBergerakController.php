@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 //models
 
 use App\Helpers\EmailLhpRilisHelpers;
+use App\Helpers\DraftLhpRejectHelper;
 use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
 use App\Jobs\CombineLHPJob;
@@ -727,6 +728,9 @@ class DraftEmisiSumberTidakBergerakController extends Controller
 
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
 
