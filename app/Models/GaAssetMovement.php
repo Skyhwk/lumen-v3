@@ -4,9 +4,23 @@ namespace App\Models;
 
 class GaAssetMovement extends Sector
 {
+    public const KIND_ROOM = 'room';
+    public const KIND_BRANCH = 'branch';
+
     protected $table = 'ga_asset_movements';
 
     protected $guarded = ['id'];
+
+    protected $casts = [
+        'asset_id' => 'integer',
+        'from_branch_id' => 'integer',
+        'to_branch_id' => 'integer',
+        'from_location_id' => 'integer',
+        'to_location_id' => 'integer',
+        'from_room_id' => 'integer',
+        'to_room_id' => 'integer',
+        'moved_at' => 'datetime',
+    ];
 
     public function asset()
     {
