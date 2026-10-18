@@ -6,174 +6,98 @@ use App\Http\Controllers\Controller;
 use App\Models\GaAsset;
 use App\Models\GaAssetMovement;
 use App\Models\GaAssetRoom;
-use Carbon\Carbon;
+use App\Services\GaAsset\GaAssetMovementService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class GaAssetMovementController extends Controller
 {
     public function index()
     {
-        try {
-            $movements = GaAssetMovement::with([
-                'asset',
-                'fromBranch',
-                'toBranch',
-                'fromLocation',
-                'toLocation',
-                'fromRoom',
-                'toRoom',
-            ])->orderByDesc('moved_at')->orderByDesc('id')->get();
+        $rows = GaAssetMovement::query()
+            ->with([
+                'asset:id,cs_code,name',
+                'fromBranch:id,nama_cabang',
+                'toBranch:id,nama_cabang',
+                'fromLocation:id,name',
+                'toLocation:id,name',
+                'fromRoom:id,name',
+                'toRoom:id,name',
+            ])
+            ->orderByDesc('moved_at')
+            ->orderByDesc('id')
+            ->limit(1000)
+            ->get();
 
-            return response()->json([
-                'success' => true,
-                'data' => $movements,
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
-            ], 500);
-        }
+        return response()->json(['data' => $rows]);
     }
 
     public function searchAssetByNoCs(Request $request)
     {
-        $noCs = trim((string) $request->input('no_cs'));
-
-        if ($noCs === '') {
-            return response()->json([
-                'success' => false,
-                'message' => 'No CS is required',
-            ], 400);
+        $code = trim((string) $request->input('no_cs'));
+        if ($code === '') {
+            return response()->json(['message' => 'No CS wajib diisi.'], 422);
         }
 
-        try {
-            $asset = GaAsset::with(['cabang', 'location', 'room'])->where('cs_code', $noCs)->first();
+        $asset = GaAsset::query()
+            ->where('is_active', 1)
+            ->where(function ($query) use ($code) {
+                $query->where('cs_code', $code)->orWhere('asset_code', $code);
+            })
+            ->with([
+                'cabang:id,nama_cabang',
+                'location:id,name',
+                'room:id,name',
+            ])
+            ->first();
 
-            if (!$asset) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Asset not found',
-                ], 404);
-            }
-
-            return response()->json([
-                'success' => true,
-                'data' => $asset,
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
-            ], 500);
+        if (!$asset) {
+            return response()->json(['message' => 'Aset dengan No CS tersebut tidak ditemukan.'], 404);
         }
+
+        return response()->json(['data' => $asset]);
     }
 
     public function getRuangByBranchId(Request $request)
     {
-        $branchId = $request->input('branch_id');
-
-        if ($branchId === null || $branchId === '') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Branch ID is required',
-            ], 400);
+        $branchId = (int) $request->input('branch_id');
+        if ($branchId < 1) {
+            return response()->json(['message' => 'Cabang wajib dipilih.'], 422);
         }
 
-        try {
-            $ruang = GaAssetRoom::with('location')
-                ->where('is_active', true)
-                ->whereHas('location', function ($query) use ($branchId) {
-                    $query->where('branch_id', (int) $branchId)
-                        ->where('is_active', true);
-                })
-                ->orderBy('name')
-                ->get();
+        $rooms = GaAssetRoom::query()
+            ->with('location:id,name,branch_id')
+            ->where('is_active', 1)
+            ->whereHas('location', function ($query) use ($branchId) {
+                $query->where('branch_id', $branchId)->where('is_active', 1);
+            })
+            ->orderBy('name')
+            ->get(['id', 'location_id', 'code', 'name']);
 
-            return response()->json([
-                'success' => true,
-                'data' => $ruang,
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
-            ], 500);
-        }
+        return response()->json(['data' => $rooms]);
     }
 
-    public function transferAsset(Request $request)
+    public function transferAsset(Request $request, GaAssetMovementService $service)
     {
-        $noCs = trim((string) $request->input('no_cs'));
-        $roomId = $request->input('room_id');
+        $code = trim((string) $request->input('no_cs'));
+        $roomId = (int) $request->input('room_id');
+        if ($code === '' || $roomId < 1) {
+            return response()->json(['message' => 'No CS dan ruang tujuan wajib diisi.'], 422);
+        }
 
-        if ($noCs === '' || $roomId === null || $roomId === '') {
-            return response()->json([
-                'success' => false,
-                'message' => 'No CS and Room ID are required',
-            ], 400);
+        $asset = GaAsset::query()->where('is_active', 1)->where('cs_code', $code)->first();
+        if (!$asset) {
+            return response()->json(['message' => 'Aset tidak ditemukan.'], 404);
         }
 
         try {
-            $asset = GaAsset::where('cs_code', $noCs)->first();
-            if (!$asset) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Asset not found',
-                ], 404);
-            }
-
-            $newRoom = GaAssetRoom::with('location')
-                ->where('id', (int) $roomId)
-                ->where('is_active', true)
-                ->first();
-            if (!$newRoom || !$newRoom->location || !$newRoom->location->is_active) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Ruang not found',
-                ], 404);
-            }
-
-            $fromBranchId = $asset->branch_id;
-            $fromLocationId = $asset->location_id;
-            $fromRoomId = $asset->room_id;
-            $toBranchId = $newRoom->location->branch_id;
-            $now = Carbon::now();
-
-            DB::transaction(function () use ($asset, $newRoom, $fromBranchId, $fromLocationId, $fromRoomId, $toBranchId, $now, $request) {
-                $asset->branch_id = $toBranchId;
-                $asset->location_id = $newRoom->location_id;
-                $asset->room_id = $newRoom->id;
-                $asset->updated_by = $this->karyawan;
-                $asset->save();
-
-                GaAssetMovement::create([
-                    'ga_asset_id' => $asset->id,
-                    'movement_kind' => (int) $fromBranchId === (int) $toBranchId
-                        ? GaAssetMovement::KIND_ROOM
-                        : GaAssetMovement::KIND_BRANCH,
-                    'from_branch_id' => $fromBranchId,
-                    'to_branch_id' => $toBranchId,
-                    'from_location_id' => $fromLocationId,
-                    'to_location_id' => $newRoom->location_id,
-                    'from_room_id' => $fromRoomId,
-                    'to_room_id' => $newRoom->id,
-                    'note' => trim((string) $request->input('note')) ?: null,
-                    'created_by' => $this->karyawan,
-                    'moved_at' => $now,
-                ]);
-            });
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Asset transferred successfully',
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
-            ], 500);
+            $actor = trim((string) $this->karyawan) ?: 'GA Asset System';
+            $service->transfer($asset, $roomId, $request->input('note'), $actor);
+        } catch (\InvalidArgumentException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        } catch (\Throwable $exception) {
+            return response()->json(['message' => 'Gagal memindahkan aset: ' . $exception->getMessage()], 500);
         }
+
+        return response()->json(['message' => 'Aset berhasil dipindahkan.']);
     }
 }

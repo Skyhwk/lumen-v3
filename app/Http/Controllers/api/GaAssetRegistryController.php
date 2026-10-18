@@ -31,6 +31,7 @@ class GaAssetRegistryController extends Controller
                 'cabang:id,nama_cabang,kode_cabang',
                 'location:id,name',
                 'pic:id,nama_lengkap',
+                'currentDepreciation',
             ])
             ->select('ga_assets.*')
             ->orderByDesc('ga_assets.id');
@@ -168,6 +169,7 @@ class GaAssetRegistryController extends Controller
                 'room.location.cabang:id,nama_cabang',
                 'cabang:id,nama_cabang,kode_cabang',
                 'location:id,name',
+                'currentDepreciation',
             ])
             ->find($request->id);
 
@@ -278,6 +280,8 @@ class GaAssetRegistryController extends Controller
             'model_spec' => 'nullable|string|max:255',
             'acquisition_origin' => 'required|in:new,second,take_over,unknown',
             'purchase_date' => 'nullable|date',
+            'acquisition_cost' => 'nullable|numeric|min:0',
+            'useful_life_years' => 'nullable|integer|min:1|max:100',
             'condition' => 'required|in:hilang,kendala,normal,rusak,rusak_berat,transfer',
             'condition_note' => 'nullable|string',
             'is_unallocated' => 'required|boolean',

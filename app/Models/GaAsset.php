@@ -33,7 +33,7 @@ class GaAsset extends Sector
     public const ACQUISITION_ORIGINS = [
         'new',
         'second',
-        'takeover',
+        'take_over',
         'unknown',
     ];
 
@@ -64,6 +64,12 @@ class GaAsset extends Sector
         'verification_state',
         'label_legacy',
         'condition_note',
+        'purchase_date',
+        'acquisition_cost',
+        'useful_life_years',
+        'condition_text',
+        'damage_received_date',
+        'accurate_sync_flag',
         'version',
         'archived_at',
         'archived_by',
@@ -83,6 +89,8 @@ class GaAsset extends Sector
         'pic_employee_id' => 'integer',
         'version' => 'integer',
         'is_active' => 'boolean',
+        'acquisition_cost' => 'decimal:2',
+        'useful_life_years' => 'integer',
         'archived_at' => 'datetime',
     ];
 
@@ -124,6 +132,17 @@ class GaAsset extends Sector
     public function pic()
     {
         return $this->belongsTo(MasterKaryawan::class, 'pic_employee_id');
+    }
+
+    public function depreciationYears()
+    {
+        return $this->hasMany(GaAssetDepreciationYear::class, 'asset_id');
+    }
+
+    public function currentDepreciation()
+    {
+        return $this->hasOne(GaAssetDepreciationYear::class, 'asset_id')
+            ->where('fiscal_year', (int) date('Y'));
     }
 
     public function acquisition()

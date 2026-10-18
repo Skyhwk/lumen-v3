@@ -4,27 +4,15 @@ namespace App\Models;
 
 class GaAssetMovement extends Sector
 {
-    public const KIND_ROOM = 'perpindahan ruang';
-    public const KIND_BRANCH = 'perpindahan cabang';
+    public const KIND_ROOM = 'room';
+    public const KIND_BRANCH = 'branch';
 
     protected $table = 'ga_asset_movements';
 
-    protected $fillable = [
-        'ga_asset_id',
-        'movement_kind',
-        'from_branch_id',
-        'to_branch_id',
-        'from_location_id',
-        'to_location_id',
-        'from_room_id',
-        'to_room_id',
-        'note',
-        'created_by',
-        'moved_at',
-    ];
+    protected $guarded = ['id'];
 
     protected $casts = [
-        'ga_asset_id' => 'integer',
+        'asset_id' => 'integer',
         'from_branch_id' => 'integer',
         'to_branch_id' => 'integer',
         'from_location_id' => 'integer',
@@ -36,7 +24,7 @@ class GaAssetMovement extends Sector
 
     public function asset()
     {
-        return $this->belongsTo(GaAsset::class, 'ga_asset_id');
+        return $this->belongsTo(GaAsset::class, 'asset_id');
     }
 
     public function fromBranch()

@@ -54,7 +54,9 @@ class GaAssetWriteService
             }
         }
 
-        return $asset;
+        $this->depreciation()->syncAsset($asset);
+
+        return $asset->fresh(['kategori', 'subKategori', 'room', 'currentDepreciation']);
     }
 
     public function update(Request $request, string $actor): GaAsset
@@ -78,7 +80,10 @@ class GaAssetWriteService
                 'updated_at' => $now,
             ]));
 
-            return $asset->fresh(['kategori', 'subKategori', 'room']);
+            $fresh = $asset->fresh(['kategori', 'subKategori', 'room']);
+            $this->depreciation()->syncAsset($fresh);
+
+            return $fresh->fresh(['kategori', 'subKategori', 'room', 'currentDepreciation']);
         });
     }
 
@@ -199,6 +204,8 @@ class GaAssetWriteService
             'pic_employee_id' => $allocation['pic_employee_id'],
             'acquisition_origin' => $request->acquisition_origin,
             'purchase_date' => $request->purchase_date ?: null,
+            'acquisition_cost' => $this->nullableMoney($request->acquisition_cost),
+            'useful_life_years' => $this->nullableYears($request->useful_life_years),
             'condition' => $request->condition,
             'condition_note' => $this->nullableTrimmed($request->condition_note),
             'usage_state' => $allocation['usage_state'],
@@ -215,9 +222,39 @@ class GaAssetWriteService
         return app(GaAssetSequenceService::class);
     }
 
+    private function depreciation(): GaAssetDepreciationService
+    {
+        return app(GaAssetDepreciationService::class);
+    }
+
     private function nullableTrimmed($value): ?string
     {
         $value = trim((string) $value);
         return $value === '' ? null : $value;
+    }
+
+    private function nullableMoney($value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        if (!is_numeric($value) || (float) $value < 0) {
+            throw new \InvalidArgumentException('Harga perolehan tidak valid.');
+        }
+
+        return number_format((float) $value, 2, '.', '');
+    }
+
+    private function nullableYears($value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        $years = (int) $value;
+        if ($years < 1 || $years > 100) {
+            throw new \InvalidArgumentException('Umur manfaat harus antara 1 dan 100 tahun.');
+        }
+
+        return $years;
     }
 }

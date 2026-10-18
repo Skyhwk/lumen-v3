@@ -38,6 +38,15 @@ class GaAssetExcelImportService
     public const COL_FLAG_T = 19;
     public const COL_ROOM = 20;
     public const COL_LOKASI = 21;
+    public const COL_CONDITION_TEXT = 22;
+    public const COL_DAMAGE_DAY = 23;
+    public const COL_DAMAGE_MONTH = 24;
+    public const COL_DAMAGE_YEAR = 25;
+    public const COL_MOVE_ROOM = 26;
+    public const COL_MOVE_DATE = 27;
+    public const COL_COST = 28;
+    public const COL_ACCURATE = 29;
+    public const COL_USEFUL_LIFE = 30;
 
     /** @var array<string, int> */
     private $cabangAliasMap = [];
@@ -62,17 +71,17 @@ class GaAssetExcelImportService
         string $originalFilename,
         bool $commit,
         ?int $userId,
-        ?string $userName
+        ?string $userName,
+        string $mode = 'full'
     ): array {
+        if ($mode === 'financial') {
+            return $this->importFinancialFromPath($path, $originalFilename, $commit, $userId, $userName);
+        }
+
         $this->warmCaches();
         $actorName = $userName ?: 'System';
 
-        $spreadsheet = IOFactory::load($path);
-        $sheet = $spreadsheet->getSheetByName(self::DATA_SHEET);
-        if ($sheet === null) {
-            $sheet = $spreadsheet->getActiveSheet();
-        }
-        $sheetName = $sheet->getTitle();
+        [$sheet, $sheetName] = $this->loadDataSheet($path);
 
         $rowLimit = (int) $sheet->getHighestDataRow();
         $stats = [
@@ -130,6 +139,9 @@ class GaAssetExcelImportService
 
                     $payload['updated_by'] = $actorName;
 
+                    $movement = $payload['_movement'] ?? null;
+                    unset($payload['_movement']);
+
                     if ($existing) {
                         unset(
                             $payload['public_id'],
@@ -139,11 +151,13 @@ class GaAssetExcelImportService
                         );
                         $existing->update($payload);
                         $this->syncSequenceFromPayload($payload, $existing);
+                        $this->recordImportedMovement($existing, $movement, $actorName);
                         $stats['rows_updated']++;
                     } else {
                         $payload['created_by'] = $actorName;
                         $created = GaAsset::create($payload);
                         $this->syncSequenceFromPayload($payload, $created);
+                        $this->recordImportedMovement($created, $movement, $actorName);
                         $stats['rows_imported']++;
                     }
                 } catch (\Throwable $e) {
@@ -176,6 +190,11 @@ class GaAssetExcelImportService
                 'rows_skipped' => $stats['rows_skipped'],
                 'rows_failed' => $stats['rows_failed'],
             ]);
+            try {
+                $stats['depreciation'] = app(GaAssetDepreciationService::class)->rebuild();
+            } catch (\Throwable $e) {
+                $stats['depreciation_error'] = $e->getMessage();
+            }
         } else {
             $callback();
         }
@@ -194,7 +213,204 @@ class GaAssetExcelImportService
             'errors' => array_slice($stats['errors'], 0, 200),
             'errors_truncated' => count($stats['errors']) > 200,
             'batch_id' => $batch ? $batch->id : null,
+            'mode' => 'full',
         ];
+    }
+
+    /**
+     * Update harga, tanggal beli, dan umur manfaat saja (cocok untuk import ulang). Jauh lebih cepat dari import penuh.
+     */
+    public function importFinancialFromPath(
+        string $path,
+        string $originalFilename,
+        bool $commit,
+        ?int $userId,
+        ?string $userName
+    ): array {
+        $actorName = $userName ?: 'System';
+        [$sheet, $sheetName] = $this->loadDataSheet($path);
+        $rowLimit = (int) $sheet->getHighestDataRow();
+
+        $stats = [
+            'rows_total' => 0,
+            'rows_imported' => 0,
+            'rows_updated' => 0,
+            'rows_skipped' => 0,
+            'rows_failed' => 0,
+            'rows_not_found' => 0,
+            'errors' => [],
+        ];
+
+        $assetIdsByCode = $this->assetIdIndexByCode();
+        $now = Carbon::now()->format('Y-m-d H:i:s');
+        $pending = [];
+        $flushSize = 300;
+
+        $flush = function () use (&$pending, $commit, $actorName, $now, &$stats) {
+            if ($pending === [] || !$commit) {
+                $pending = [];
+                return;
+            }
+            DB::transaction(function () use ($pending, $actorName, $now, &$stats) {
+                foreach ($pending as $row) {
+                    DB::table('ga_assets')
+                        ->where('id', $row['id'])
+                        ->update([
+                            'purchase_date' => $row['purchase_date'],
+                            'acquisition_cost' => $row['acquisition_cost'],
+                            'useful_life_years' => $row['useful_life_years'],
+                            'updated_by' => $actorName,
+                            'updated_at' => $now,
+                        ]);
+                    $stats['rows_updated']++;
+                }
+            });
+            $pending = [];
+        };
+
+        $batch = null;
+        if ($commit) {
+            $batch = GaAssetImportBatch::create([
+                'filename' => $originalFilename,
+                'sheet_name' => $sheetName,
+                'is_committed' => false,
+                'created_by' => $userId,
+                'created_by_name' => $actorName,
+            ]);
+        }
+
+        for ($row = 3; $row <= $rowLimit; $row++) {
+            $assetCode = $this->cellString($sheet, $row, self::COL_ASSET_CODE);
+            if ($assetCode === '') {
+                continue;
+            }
+
+            $stats['rows_total']++;
+            $lookup = strtoupper($assetCode);
+
+            try {
+                $assetId = $assetIdsByCode[$lookup] ?? null;
+                if (!$assetId) {
+                    $stats['rows_not_found']++;
+                    continue;
+                }
+
+                $purchaseDate = $this->mapPurchaseDate($sheet, $row);
+                $cost = $this->mapMoney($sheet, $row, self::COL_COST);
+                $life = $this->mapUsefulLife($sheet, $row);
+
+                if ($purchaseDate === null && $cost === null && $life === null) {
+                    $stats['rows_skipped']++;
+                    continue;
+                }
+
+                if (!$commit) {
+                    $stats['rows_updated']++;
+                    continue;
+                }
+
+                $pending[] = [
+                    'id' => $assetId,
+                    'purchase_date' => $purchaseDate,
+                    'acquisition_cost' => $cost,
+                    'useful_life_years' => $life,
+                ];
+
+                if (count($pending) >= $flushSize) {
+                    $flush();
+                }
+            } catch (\Throwable $e) {
+                $stats['rows_failed']++;
+                $stats['errors'][] = [
+                    'row' => $row,
+                    'asset_code' => $assetCode,
+                    'message' => $e->getMessage(),
+                ];
+                if ($batch) {
+                    GaAssetImportError::create([
+                        'batch_id' => $batch->id,
+                        'row_number' => $row,
+                        'asset_code' => $assetCode,
+                        'message' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
+
+        $flush();
+
+        if ($commit && $batch) {
+            $batch->update([
+                'is_committed' => true,
+                'rows_total' => $stats['rows_total'],
+                'rows_imported' => 0,
+                'rows_updated' => $stats['rows_updated'],
+                'rows_skipped' => $stats['rows_skipped'],
+                'rows_failed' => $stats['rows_failed'],
+            ]);
+            try {
+                $stats['depreciation'] = app(GaAssetDepreciationService::class)->rebuild();
+            } catch (\Throwable $e) {
+                $stats['depreciation_error'] = $e->getMessage();
+            }
+        }
+
+        return [
+            'dry_run' => !$commit,
+            'sheet_name' => $sheetName,
+            'filename' => $originalFilename,
+            'mode' => 'financial',
+            'stats' => [
+                'rows_total' => $stats['rows_total'],
+                'rows_imported' => 0,
+                'rows_updated' => $stats['rows_updated'],
+                'rows_skipped' => $stats['rows_skipped'],
+                'rows_failed' => $stats['rows_failed'],
+                'rows_not_found' => $stats['rows_not_found'],
+                'depreciation' => $stats['depreciation'] ?? null,
+                'depreciation_error' => $stats['depreciation_error'] ?? null,
+            ],
+            'errors' => array_slice($stats['errors'], 0, 200),
+            'errors_truncated' => count($stats['errors']) > 200,
+            'batch_id' => $batch ? $batch->id : null,
+        ];
+    }
+
+    /** @return array{0:\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet,1:string} */
+    private function loadDataSheet(string $path): array
+    {
+        $reader = IOFactory::createReaderForFile($path);
+        $reader->setReadDataOnly(true);
+        if (method_exists($reader, 'setLoadSheetsOnly')) {
+            $reader->setLoadSheetsOnly([self::DATA_SHEET]);
+        }
+        $spreadsheet = $reader->load($path);
+        $sheet = $spreadsheet->getSheetByName(self::DATA_SHEET);
+        if ($sheet === null) {
+            $sheet = $spreadsheet->getActiveSheet();
+        }
+
+        return [$sheet, $sheet->getTitle()];
+    }
+
+    /** @return array<string, int> */
+    private function assetIdIndexByCode(): array
+    {
+        $index = [];
+        $rows = DB::table('ga_assets')
+            ->where('is_active', 1)
+            ->get(['id', 'cs_code', 'asset_code']);
+
+        foreach ($rows as $row) {
+            foreach (['cs_code', 'asset_code'] as $column) {
+                $code = strtoupper(trim((string) $row->{$column}));
+                if ($code !== '') {
+                    $index[$code] = (int) $row->id;
+                }
+            }
+        }
+
+        return $index;
     }
 
     private function warmCaches(): void
@@ -238,14 +454,28 @@ class GaAssetExcelImportService
 
         $lokasi = $this->cellString($sheet, $row, self::COL_LOKASI);
         $roomName = $this->cellString($sheet, $row, self::COL_ROOM);
+        $moveRoomName = $this->cellString($sheet, $row, self::COL_MOVE_ROOM);
 
         $branchId = $lokasi !== '' ? $this->resolveCabangId($lokasi) : null;
         $location = null;
         $room = null;
+        $fromRoom = null;
+        $movement = null;
         if ($branchId) {
             $location = $this->resolveDefaultLocation($branchId, $actorName);
             if ($roomName !== '' && $location) {
-                $room = $this->resolveRoom($location, $roomName, $actorName);
+                $fromRoom = $this->resolveRoom($location, $roomName, $actorName);
+            }
+            $targetName = $moveRoomName !== '' ? $moveRoomName : $roomName;
+            if ($targetName !== '' && $location) {
+                $room = $this->resolveRoom($location, $targetName, $actorName);
+            }
+            if ($moveRoomName !== '' && $room && (!$fromRoom || (int) $fromRoom->id !== (int) $room->id)) {
+                $movement = [
+                    'from_room_id' => $fromRoom ? (int) $fromRoom->id : null,
+                    'to_room_id' => (int) $room->id,
+                    'moved_at' => $this->mapFlexibleDate($sheet, $row, self::COL_MOVE_DATE),
+                ];
             }
         }
 
@@ -265,11 +495,18 @@ class GaAssetExcelImportService
             'name' => $assetName,
             'brand' => $this->cellString($sheet, $row, self::COL_BRAND) ?: null,
             'model_spec' => $this->cellString($sheet, $row, self::COL_SPEC) ?: null,
+            'purchase_date' => $this->mapPurchaseDate($sheet, $row),
+            'acquisition_cost' => $this->mapMoney($sheet, $row, self::COL_COST),
+            'useful_life_years' => $this->mapUsefulLife($sheet, $row),
             'branch_id' => $branchId,
             'location_id' => $location ? $location->id : null,
             'room_id' => $room ? $room->id : null,
             'acquisition_origin' => $this->mapAcquisitionOrigin($this->cellString($sheet, $row, self::COL_ACQ_STATUS)),
             'condition' => $this->mapCondition($sheet, $row),
+            'condition_text' => $this->cellString($sheet, $row, self::COL_CONDITION_TEXT) ?: null,
+            'damage_received_date' => $this->mapDateParts($sheet, $row, self::COL_DAMAGE_DAY, self::COL_DAMAGE_MONTH, self::COL_DAMAGE_YEAR),
+            'accurate_sync_flag' => $this->mapAccurateFlag($sheet, $row),
+            '_movement' => $movement,
             'lifecycle_state' => 'active',
             'usage_state' => 'in_use',
             'publication_state' => 'published',
@@ -405,6 +642,125 @@ class GaAssetExcelImportService
     private function flagIsSet($sheet, int $row, int $col): bool
     {
         return strtoupper($this->cellString($sheet, $row, $col)) === 'V';
+    }
+
+    private function recordImportedMovement(GaAsset $asset, $movement, string $actorName): void
+    {
+        if (!is_array($movement) || empty($movement['to_room_id'])) {
+            return;
+        }
+
+        app(GaAssetMovementService::class)->recordImportedMove(
+            $asset,
+            isset($movement['from_room_id']) ? (int) $movement['from_room_id'] : null,
+            (int) $movement['to_room_id'],
+            $movement['moved_at'] ?? null,
+            $actorName
+        );
+    }
+
+    private function mapAccurateFlag($sheet, int $row): ?string
+    {
+        $value = strtoupper($this->cellString($sheet, $row, self::COL_ACCURATE));
+        if ($value === '') {
+            return null;
+        }
+
+        return substr($value, 0, 8);
+    }
+
+    private function mapDateParts($sheet, int $row, int $dayCol, int $monthCol, int $yearCol): ?string
+    {
+        $day = (int) round((float) $this->cellNumber($sheet, $row, $dayCol));
+        $month = (int) round((float) $this->cellNumber($sheet, $row, $monthCol));
+        $year = (int) round((float) $this->cellNumber($sheet, $row, $yearCol));
+        if ($year < 1900 || $year > 2100 || !checkdate($month, $day, $year)) {
+            return null;
+        }
+
+        return sprintf('%04d-%02d-%02d', $year, $month, $day);
+    }
+
+    private function mapFlexibleDate($sheet, int $row, int $col): ?string
+    {
+        $raw = $this->cellNumber($sheet, $row, $col);
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        if (is_numeric($raw) && (float) $raw > 20000) {
+            $unix = ((float) $raw - 25569) * 86400;
+            return gmdate('Y-m-d', (int) $unix);
+        }
+
+        $text = trim((string) $raw);
+        if (preg_match('/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/', $text, $match)) {
+            $year = (int) $match[3];
+            if ($year < 100) {
+                $year += 2000;
+            }
+            $day = (int) $match[1];
+            $month = (int) $match[2];
+            if (checkdate($month, $day, $year)) {
+                return sprintf('%04d-%02d-%02d', $year, $month, $day);
+            }
+        }
+
+        $parsed = strtotime($text);
+        if ($parsed) {
+            return date('Y-m-d', $parsed);
+        }
+
+        return null;
+    }
+
+    private function mapPurchaseDate($sheet, int $row): ?string
+    {
+        $day = (int) round((float) $this->cellNumber($sheet, $row, self::COL_DAY));
+        $month = (int) round((float) $this->cellNumber($sheet, $row, self::COL_MONTH));
+        $year = (int) round((float) $this->cellNumber($sheet, $row, self::COL_YEAR));
+        if ($year < 1900 || $year > 2100 || !checkdate($month, $day, $year)) {
+            return null;
+        }
+
+        return sprintf('%04d-%02d-%02d', $year, $month, $day);
+    }
+
+    private function mapMoney($sheet, int $row, int $col): ?string
+    {
+        $raw = $this->cellNumber($sheet, $row, $col);
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        if (!is_numeric($raw) || (float) $raw < 0) {
+            return null;
+        }
+
+        return number_format((float) $raw, 2, '.', '');
+    }
+
+    private function mapUsefulLife($sheet, int $row): ?int
+    {
+        $raw = $this->cellNumber($sheet, $row, self::COL_USEFUL_LIFE);
+        if ($raw === null || $raw === '' || !is_numeric($raw)) {
+            return null;
+        }
+
+        $years = (int) round((float) $raw);
+        if ($years < 1 || $years > 100) {
+            return null;
+        }
+
+        return $years;
+    }
+
+    private function cellNumber($sheet, int $row, int $col)
+    {
+        $val = $sheet->getCellByColumnAndRow($col + 1, $row)->getCalculatedValue();
+        if ($val === null || $val === '') {
+            return null;
+        }
+
+        return $val;
     }
 
     private function syncSequenceFromPayload(array $payload, GaAsset $asset): void

@@ -78,6 +78,7 @@ class Kernel extends ConsoleKernel
         Commands\SyncLeaveAlpaLedgerCommand::class,
         Commands\SyncGreatdayFormAttachmentFilesCommand::class,
         Commands\ImportGreatdayAssetsFromInternalCommand::class,
+        Commands\GaAssetImportFinancialCommand::class,
         Commands\QuotationDiscoverCommand::class,
         Commands\QuotationCreateCommand::class,
         Commands\QuotationDispatchCommand::class,
