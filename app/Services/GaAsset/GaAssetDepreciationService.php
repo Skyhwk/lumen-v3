@@ -84,23 +84,50 @@ class GaAssetDepreciationService
             'rows_written' => 0,
         ];
 
+        DB::table('ga_asset_depreciation_yearly')->delete();
+
+        $now = Carbon::now()->toDateTimeString();
+        $buffer = [];
+        $flushEvery = 2000;
+
+        $flushBuffer = function () use (&$buffer) {
+            if ($buffer === []) {
+                return;
+            }
+            foreach (array_chunk($buffer, 500) as $chunk) {
+                DB::table('ga_asset_depreciation_yearly')->insert($chunk);
+            }
+            $buffer = [];
+        };
+
         GaAsset::query()
             ->where('is_active', 1)
+            ->whereNotNull('purchase_date')
+            ->whereNotNull('acquisition_cost')
             ->with(['kategori:id,nama_kategori', 'subKategori:id,nama_sub_kategori'])
             ->orderBy('id')
-            ->chunkById(300, function ($assets) use ($throughYear, &$stats) {
+            ->chunkById(500, function ($assets) use ($throughYear, &$stats, &$buffer, $flushEvery, $flushBuffer, $now) {
                 foreach ($assets as $asset) {
                     $stats['assets_seen']++;
                     $rows = $this->rowsForAsset($asset, $throughYear);
-                    $this->replaceRows((int) $asset->id, $rows);
                     if ($rows === []) {
                         $stats['assets_skipped']++;
                         continue;
                     }
                     $stats['assets_snapshotted']++;
-                    $stats['rows_written'] += count($rows);
+                    foreach ($rows as $row) {
+                        $row['created_at'] = $now;
+                        $row['updated_at'] = $now;
+                        $buffer[] = $row;
+                        $stats['rows_written']++;
+                    }
+                    if (count($buffer) >= $flushEvery) {
+                        $flushBuffer();
+                    }
                 }
             });
+
+        $flushBuffer();
 
         return $stats;
     }

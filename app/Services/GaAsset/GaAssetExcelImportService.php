@@ -72,10 +72,18 @@ class GaAssetExcelImportService
         bool $commit,
         ?int $userId,
         ?string $userName,
-        string $mode = 'full'
+        string $mode = 'full',
+        bool $skipDepreciation = false
     ): array {
         if ($mode === 'financial') {
-            return $this->importFinancialFromPath($path, $originalFilename, $commit, $userId, $userName);
+            return $this->importFinancialFromPath(
+                $path,
+                $originalFilename,
+                $commit,
+                $userId,
+                $userName,
+                $skipDepreciation
+            );
         }
 
         $this->warmCaches();
@@ -225,7 +233,8 @@ class GaAssetExcelImportService
         string $originalFilename,
         bool $commit,
         ?int $userId,
-        ?string $userName
+        ?string $userName,
+        bool $skipDepreciation = false
     ): array {
         $actorName = $userName ?: 'System';
         [$sheet, $sheetName] = $this->loadDataSheet($path);
@@ -348,10 +357,14 @@ class GaAssetExcelImportService
                 'rows_skipped' => $stats['rows_skipped'],
                 'rows_failed' => $stats['rows_failed'],
             ]);
-            try {
-                $stats['depreciation'] = app(GaAssetDepreciationService::class)->rebuild();
-            } catch (\Throwable $e) {
-                $stats['depreciation_error'] = $e->getMessage();
+            if (!$skipDepreciation) {
+                try {
+                    $stats['depreciation'] = app(GaAssetDepreciationService::class)->rebuild();
+                } catch (\Throwable $e) {
+                    $stats['depreciation_error'] = $e->getMessage();
+                }
+            } else {
+                $stats['depreciation_skipped'] = true;
             }
         }
 
@@ -369,6 +382,7 @@ class GaAssetExcelImportService
                 'rows_not_found' => $stats['rows_not_found'],
                 'depreciation' => $stats['depreciation'] ?? null,
                 'depreciation_error' => $stats['depreciation_error'] ?? null,
+                'depreciation_skipped' => !empty($stats['depreciation_skipped']),
             ],
             'errors' => array_slice($stats['errors'], 0, 200),
             'errors_truncated' => count($stats['errors']) > 200,
