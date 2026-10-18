@@ -59,6 +59,8 @@ class GaAssetImportController extends Controller
             return response()->json(['message' => 'Mode import tidak valid. Gunakan full atau financial.'], 422);
         }
 
+        $skipDepreciation = filter_var($request->input('skip_depreciation', $mode === 'financial'), FILTER_VALIDATE_BOOLEAN);
+
         try {
             $result = $service->importFromPath(
                 $file->getRealPath(),
@@ -66,7 +68,8 @@ class GaAssetImportController extends Controller
                 $commit,
                 $this->user_id ? (int) $this->user_id : null,
                 is_string($this->karyawan) ? $this->karyawan : null,
-                $mode
+                $mode,
+                $skipDepreciation
             );
         } catch (\Throwable $e) {
             return response()->json([
@@ -79,12 +82,16 @@ class GaAssetImportController extends Controller
 
         if ($commit) {
             if ($mode === 'financial') {
+                $depNote = !empty($stats['depreciation_skipped'])
+                    ? ' Buka Laporan Depresiasi lalu klik Hitung ulang (lebih cepat).'
+                    : ' Depresiasi sudah dihitung ulang.';
                 $message = sprintf(
-                    'Update harga & umur selesai. Diperbarui: %d, dilewati: %d, tidak ditemukan: %d, gagal: %d. Depresiasi dihitung ulang.',
+                    'Update harga & umur selesai. Diperbarui: %d, dilewati: %d, tidak ditemukan: %d, gagal: %d.%s',
                     $stats['rows_updated'],
                     $stats['rows_skipped'],
                     (int) ($stats['rows_not_found'] ?? 0),
-                    $failed
+                    $failed,
+                    $depNote
                 );
             } else {
                 $message = sprintf(
