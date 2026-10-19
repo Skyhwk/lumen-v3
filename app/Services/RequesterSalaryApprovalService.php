@@ -16,11 +16,13 @@ class RequesterSalaryApprovalService
     public const STATUS_PENDING = 'pending';
     public const STATUS_APPROVED = 'approved';
     public const STATUS_REJECTED = 'rejected';
+    public const STATUS_NEGOTIATED = 'negotiated';
 
     public const HISTORY_NOT_REQUIRED = 'requester_salary_not_required';
     public const HISTORY_PENDING = 'requester_salary_approval_pending';
     public const HISTORY_APPROVED = 'requester_salary_offer_approved';
     public const HISTORY_REJECTED = 'requester_salary_offer_rejected';
+    public const HISTORY_NEGOTIATED = 'requester_salary_offer_negotiated';
 
     public static function normalizeAmount($value, bool $allowZero = false): ?int
     {
@@ -108,6 +110,48 @@ class RequesterSalaryApprovalService
         );
     }
 
+    public static function resolveUserTunjanganAmount(NewRecruitment $applicant): int
+    {
+        if (!SallaryOfferService::hasTunjanganGajiUserColumn()) {
+            return 0;
+        }
+
+        return self::normalizeAmount(SallaryOfferService::resolveUserTunjangan($applicant), true) ?? 0;
+    }
+
+    public static function resolveHrdTunjanganKerja(NewRecruitment $applicant): int
+    {
+        $cdo = CandidateDataOffers::where('new_recruitment_id', $applicant->id)->first();
+        if (!$cdo) {
+            return 0;
+        }
+
+        return self::normalizeAmount($cdo->tunjangan_kerja, true) ?? 0;
+    }
+
+    /**
+     * Gate Approval Salary User: GP dan tunjangan HRD harus sama dengan referensi User (bukan total GP+TK saja).
+     */
+    public static function hrdSalaryMatchesUserReference(
+        NewRecruitment $applicant,
+        ?int $hrdGajiPokok = null,
+        ?int $hrdTunjanganKerja = null
+    ): bool {
+        $userGajiPokok = self::resolveUserAmount($applicant);
+        if ($userGajiPokok === null || $userGajiPokok === 0) {
+            return true;
+        }
+
+        $userTunjangan = self::resolveUserTunjanganAmount($applicant);
+        $hrdGp = $hrdGajiPokok ?? self::resolveHrdComparableAmount($applicant);
+        if ($hrdGp === null) {
+            return false;
+        }
+        $hrdTk = $hrdTunjanganKerja ?? self::resolveHrdTunjanganKerja($applicant);
+
+        return self::amountsMatch($userGajiPokok, $hrdGp) && self::amountsMatch($userTunjangan, $hrdTk);
+    }
+
     public static function resolvePencadanganUpah(NewRecruitment $applicant): ?int
     {
         $cdo = CandidateDataOffers::where('new_recruitment_id', $applicant->id)->first();
@@ -131,6 +175,13 @@ class RequesterSalaryApprovalService
         if ($offer->requester_salary_status === self::STATUS_PENDING) {
             throw new \RuntimeException('Gaji tidak dapat diedit selama menunggu Approval Salary User.');
         }
+
+        $candidateOfferingResubmit = RecruitmentStatusService::isAwaitingCandidateOfferingNegotiateResubmit($applicant)
+            || RecruitmentStatusService::isAwaitingCandidateOfferingResubmit($applicant);
+
+        if ($offer->requester_salary_status === self::STATUS_APPROVED && !$candidateOfferingResubmit) {
+            throw new \RuntimeException('Gaji sudah disetujui User.');
+        }
         $userAmount = self::resolveUserAmount($applicant);
         $hrdNormalized = self::normalizeAmount($hrdAmount)
             ?? self::resolveHrdComparableAmount($applicant, $hrdAmount);
@@ -153,7 +204,10 @@ class RequesterSalaryApprovalService
             return self::STATUS_NOT_REQUIRED;
         }
 
-        if ($userAmount === $hrdNormalized) {
+        $hrdTunjangan = self::resolveHrdTunjanganKerja($applicant);
+        $userTunjangan = self::resolveUserTunjanganAmount($applicant);
+
+        if (self::hrdSalaryMatchesUserReference($applicant, $hrdNormalized, $hrdTunjangan)) {
             $previousDecision = DecisionSalary::where('new_recruitment_id', $applicant->id)
                 ->orderByDesc('id')->first();
             self::markOfferStatus($offer, self::STATUS_NOT_REQUIRED);
@@ -165,8 +219,10 @@ class RequesterSalaryApprovalService
                 [
                     'user_amount' => $userAmount,
                     'hrd_amount' => $hrdNormalized,
+                    'user_tunjangan' => $userTunjangan,
+                    'hrd_tunjangan' => $hrdTunjangan,
                     'previous_hrd_amount' => $previousDecision ? $previousDecision->hrd_amount : null,
-                    'reason' => 'Nominal HRD sudah sesuai request User; approval tidak diperlukan.',
+                    'reason' => 'Gaji pokok dan tunjangan HRD sudah sesuai User; approval tidak diperlukan.',
                 ]
             );
 
@@ -202,6 +258,8 @@ class RequesterSalaryApprovalService
             [
                 'user_amount' => $userAmount,
                 'hrd_amount' => $hrdNormalized,
+                'user_tunjangan' => $userTunjangan,
+                'hrd_tunjangan' => $hrdTunjangan,
                 'round' => $nextRound,
                 'sallary_offer_id' => (int) $offer->id,
             ]
@@ -239,7 +297,8 @@ class RequesterSalaryApprovalService
 
         $status = $offer->requester_salary_status ?: self::STATUS_NOT_REQUIRED;
 
-        if ($status === self::STATUS_NOT_REQUIRED || $status === self::STATUS_APPROVED) {
+        // User sudah menyetujui putaran decision_salary — HRD boleh beda dari referensi interview User.
+        if ($status === self::STATUS_APPROVED) {
             return [
                 'allowed' => true,
                 'status' => $status,
@@ -247,9 +306,47 @@ class RequesterSalaryApprovalService
             ];
         }
 
-        $hrdAmount = self::resolveHrdComparableAmount($applicant);
+        if ($status === self::STATUS_NOT_REQUIRED) {
+            if (!self::hrdSalaryMatchesUserReference($applicant)) {
+                return [
+                    'allowed' => false,
+                    'status' => self::STATUS_PENDING,
+                    'message' => 'Gaji pokok atau tunjangan HRD berbeda dari User. Simpan ulang gaji atau minta Approval Salary User.',
+                ];
+            }
 
-        if ($hrdAmount !== null && $userAmount === $hrdAmount) {
+            return [
+                'allowed' => true,
+                'status' => $status,
+                'message' => null,
+            ];
+        }
+
+        if ($status === self::STATUS_NEGOTIATED) {
+            return [
+                'allowed' => false,
+                'status' => $status,
+                'message' => 'User mengajukan negosiasi gaji. Sesuaikan penawaran HRD lalu minta User menyetujui kembali.',
+            ];
+        }
+
+        if ($status === self::STATUS_REJECTED) {
+            return [
+                'allowed' => false,
+                'status' => $status,
+                'message' => 'Penawaran gaji ditolak User. Silakan input ulang gaji HRD.',
+            ];
+        }
+
+        if ($status === self::STATUS_PENDING) {
+            return [
+                'allowed' => false,
+                'status' => $status,
+                'message' => 'Gaji HRD berbeda dari gaji User. Menunggu persetujuan User di Personnel Request (Approval Salary).',
+            ];
+        }
+
+        if (self::hrdSalaryMatchesUserReference($applicant)) {
             return [
                 'allowed' => true,
                 'status' => self::STATUS_NOT_REQUIRED,
@@ -260,9 +357,7 @@ class RequesterSalaryApprovalService
         return [
             'allowed' => false,
             'status' => $status,
-            'message' => $status === self::STATUS_REJECTED
-                ? 'Penawaran gaji ditolak User. Silakan input ulang gaji HRD.'
-                : 'Gaji HRD berbeda dari gaji User. Menunggu persetujuan User di Personnel Request (Approval Salary).',
+            'message' => 'Gaji pokok atau tunjangan HRD berbeda dari User. Menunggu persetujuan User di Personnel Request (Approval Salary).',
         ];
     }
 
@@ -273,9 +368,10 @@ class RequesterSalaryApprovalService
         DecisionSalary $row,
         string $decision,
         ?string $by = null,
-        ?string $reason = null
+        ?string $reason = null,
+        array $extraHistory = []
     ): DecisionSalary {
-        return DB::transaction(function () use ($row, $decision, $by, $reason) {
+        return DB::transaction(function () use ($row, $decision, $by, $reason, $extraHistory) {
             NewRecruitment::where('id', $row->new_recruitment_id)->lockForUpdate()->firstOrFail();
             $locked = DecisionSalary::where('id', $row->id)->lockForUpdate()->firstOrFail();
             $offer = SallaryOfferService::getActive((int) $locked->new_recruitment_id);
@@ -284,20 +380,35 @@ class RequesterSalaryApprovalService
                 || !$latest || (int) $latest->id !== (int) $locked->id
                 || !$offer || (int) $offer->id !== (int) $locked->sallary_offer_id
                 || $offer->requester_salary_status !== self::STATUS_PENDING
-                || !self::amountsMatch($locked->hrd_amount, $offer->sallary_offer_hrd)
-                || !self::amountsMatch($locked->user_amount, $offer->sallary_offer_user)) {
+                || !self::amountsMatch($locked->hrd_amount, $offer->sallary_offer_hrd)) {
                 throw new \RuntimeException('Pengajuan gaji sudah diproses atau berubah. Silakan muat ulang data.');
             }
-            return self::applyDecision($locked, $decision, $by, $reason);
+
+            if ($decision === DecisionSalary::DECISION_NEGOTIATED) {
+                $locked->update([
+                    'user_amount' => self::normalizeAmount($offer->sallary_offer_user),
+                ]);
+                $locked->refresh();
+            } elseif (!self::amountsMatch($locked->user_amount, $offer->sallary_offer_user)) {
+                throw new \RuntimeException('Pengajuan gaji sudah diproses atau berubah. Silakan muat ulang data.');
+            }
+
+            return self::applyDecision($locked, $decision, $by, $reason, $extraHistory);
         });
     }
 
-    private static function applyDecision(DecisionSalary $row, string $decision, ?string $by, ?string $reason): DecisionSalary
-    {
+    private static function applyDecision(
+        DecisionSalary $row,
+        string $decision,
+        ?string $by,
+        ?string $reason,
+        array $extraHistory = []
+    ): DecisionSalary {
         $decision = strtolower(trim($decision));
         if (!in_array($decision, [
             DecisionSalary::DECISION_APPROVED,
             DecisionSalary::DECISION_REJECTED,
+            DecisionSalary::DECISION_NEGOTIATED,
         ], true)) {
             throw new \InvalidArgumentException('Keputusan tidak valid.');
         }
@@ -306,17 +417,23 @@ class RequesterSalaryApprovalService
             throw new \RuntimeException('Pengajuan approval gaji sudah diproses.');
         }
 
-        if ($decision === DecisionSalary::DECISION_REJECTED) {
+        if (in_array($decision, [DecisionSalary::DECISION_REJECTED, DecisionSalary::DECISION_NEGOTIATED], true)) {
             $reason = trim((string) $reason);
             if ($reason === '') {
-                throw new \InvalidArgumentException('Alasan penolakan wajib diisi.');
+                throw new \InvalidArgumentException(
+                    $decision === DecisionSalary::DECISION_NEGOTIATED
+                        ? 'Catatan negosiasi wajib diisi.'
+                        : 'Alasan penolakan wajib diisi.'
+                );
             }
         }
 
         $now = Carbon::now();
         $row->update([
             'decision' => $decision,
-            'reason' => $decision === DecisionSalary::DECISION_REJECTED ? $reason : null,
+            'reason' => in_array($decision, [DecisionSalary::DECISION_REJECTED, DecisionSalary::DECISION_NEGOTIATED], true)
+                ? $reason
+                : null,
             'decided_by' => $by,
             'decided_at' => $now,
         ]);
@@ -325,29 +442,37 @@ class RequesterSalaryApprovalService
             ? SallaryOffer::find($row->sallary_offer_id)
             : SallaryOfferService::getActive((int) $row->new_recruitment_id);
 
-        $offerStatus = $decision === DecisionSalary::DECISION_APPROVED
-            ? self::STATUS_APPROVED
-            : self::STATUS_REJECTED;
+        if ($decision === DecisionSalary::DECISION_APPROVED) {
+            $offerStatus = self::STATUS_APPROVED;
+        } elseif ($decision === DecisionSalary::DECISION_NEGOTIATED) {
+            $offerStatus = self::STATUS_NEGOTIATED;
+        } else {
+            $offerStatus = self::STATUS_REJECTED;
+        }
 
         if ($offer) {
             self::markOfferStatus($offer, $offerStatus, $now);
         }
 
-        $historyStatus = $decision === DecisionSalary::DECISION_APPROVED
-            ? self::HISTORY_APPROVED
-            : self::HISTORY_REJECTED;
+        if ($decision === DecisionSalary::DECISION_APPROVED) {
+            $historyStatus = self::HISTORY_APPROVED;
+        } elseif ($decision === DecisionSalary::DECISION_NEGOTIATED) {
+            $historyStatus = self::HISTORY_NEGOTIATED;
+        } else {
+            $historyStatus = self::HISTORY_REJECTED;
+        }
 
         self::appendHistory(
             (int) $row->new_recruitment_id,
             $historyStatus,
             $by,
-            [
+            array_merge([
                 'decision_salary_id' => (int) $row->id,
                 'user_amount' => self::normalizeAmount($row->user_amount),
                 'hrd_amount' => self::normalizeAmount($row->hrd_amount),
                 'round' => (int) $row->round,
                 'reason' => $reason,
-            ]
+            ], $extraHistory)
         );
 
         $recruitmentId = (int) $row->new_recruitment_id;
@@ -384,7 +509,7 @@ class RequesterSalaryApprovalService
             'requester_salary_status' => $status,
         ];
 
-        if (in_array($status, [self::STATUS_APPROVED, self::STATUS_REJECTED], true)) {
+        if (in_array($status, [self::STATUS_APPROVED, self::STATUS_REJECTED, self::STATUS_NEGOTIATED], true)) {
             $payload['requester_salary_decided_at'] = $decidedAt ?: Carbon::now();
         } else {
             $payload['requester_salary_decided_at'] = null;

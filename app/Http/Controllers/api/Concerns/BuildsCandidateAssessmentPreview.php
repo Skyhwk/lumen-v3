@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api\Concerns;
 
 use App\Models\NewRecruitment;
+use App\Models\RecruitmentInterview;
 use App\Services\RecruitmentPictureService;
 use App\Services\RecruitmentStatusService;
 use Illuminate\Http\Request;
@@ -832,6 +833,7 @@ trait BuildsCandidateAssessmentPreview
             'link_gmeet' => $hrd->link_gmeet,
             'ruangan_interview' => $hrd->ruangan_interview,
             'status_result' => $hrd->status_result,
+            'tanggal_join' => RecruitmentInterview::normalizeTanggalJoin($hrd->getRawOriginal('tanggal_join')),
             'catatan_interview' => $catatan,
             'updated_by' => $hrd->updated_by,
             'updated_at' => $hrd->updated_at,
@@ -866,6 +868,7 @@ trait BuildsCandidateAssessmentPreview
             'link_gmeet' => $user->link_gmeet,
             'ruangan_interview' => $user->ruangan_interview,
             'status_result' => $user->status_result,
+            'tanggal_join' => RecruitmentInterview::normalizeTanggalJoin($user->getRawOriginal('tanggal_join')),
             'catatan_interview' => $catatan,
             'updated_by' => $user->updated_by,
             'updated_at' => $user->updated_at,

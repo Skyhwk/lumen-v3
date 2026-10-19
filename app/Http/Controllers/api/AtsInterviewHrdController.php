@@ -314,18 +314,23 @@ class AtsInterviewHrdController extends Controller
             'is_input_review_hrd' => 1,
         ]);
 
+        $interviewPayload = [
+            'nilai_interview' => $nilaiHrd,
+            'status_result' => $statusResult,
+            'catatan_interview' => $catatan,
+            'updated_by' => $user,
+        ];
+        if (RecruitmentInterview::hasTanggalJoinColumn() && $request->exists('tanggal_join')) {
+            $interviewPayload['tanggal_join'] = RecruitmentInterview::normalizeTanggalJoin($request->input('tanggal_join'));
+        }
+
         $interview = RecruitmentInterview::updateOrCreate(
             [
                 'new_recruitment_id' => $applicant->id,
                 'stage' => 'hrd',
                 'is_active' => 1,
             ],
-            [
-                'nilai_interview' => $nilaiHrd,
-                'status_result' => $statusResult,
-                'catatan_interview' => $catatan,
-                'updated_by' => $user,
-            ]
+            $interviewPayload
         );
 
         return response()->json([
