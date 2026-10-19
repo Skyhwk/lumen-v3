@@ -299,8 +299,8 @@ class AtsNotificationService
     {
         $candidate = $this->candidateName($recruitment);
         $this->notifyFinanceTeam(
-            'Review Gaji Kandidat',
-            "Kandidat {$candidate} menunggu review gaji Finance.",
+            'Review Penawaran Gaji HRD',
+            "HRD mengajukan penawaran gaji kandidat {$candidate} untuk review Finance.",
             self::URL_FINANCE_OFFERING
         );
     }
