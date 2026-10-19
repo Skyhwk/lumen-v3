@@ -11,6 +11,8 @@ class SallaryOffer extends Model
 
     protected $casts = [
         'sallary_offer_hrd'            => 'float',
+        'salary_offer_candidate'       => 'float',
+        'tunjangan_offer_candidate'    => 'float',
         'sallary_offer_user'           => 'float',
         'tunjangan_gaji_user'          => 'float',
         'sallary_offer_direktur'       => 'float',
