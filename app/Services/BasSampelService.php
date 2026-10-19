@@ -6,9 +6,83 @@ use App\Models\OrderDetail;
 use App\Models\DataLapanganAir;
 use App\Models\BasSampelSelesai;
 use App\Models\SampelTidakSelesai;
+use Illuminate\Support\Facades\Log;
 
 class BasSampelService
 {
+    /**
+     * Catat bas_sampel_selesai saat sampler submit FDL (Air / Udara / Emisi).
+     * Air: langsung jika belum ada. Udara & Emisi: hanya jika semua parameter required terpenuhi.
+     */
+    public static function tryRecordFromFdlSubmit(string $noSampel): bool
+    {
+        $noSampel = strtoupper(trim($noSampel));
+        if ($noSampel === '') {
+            return false;
+        }
+
+        if (BasSampelSelesai::where('no_sampel', $noSampel)->exists()) {
+            return false;
+        }
+
+        $sample = OrderDetail::where('no_sampel', $noSampel)->where('is_active', true)->first();
+        if (!$sample) {
+            return false;
+        }
+
+        if (!$sample->isAir() && !$sample->isUdara() && !$sample->isEmisi()) {
+            return false;
+        }
+
+        if ($sample->isAir()) {
+            return self::insertBasSelesai($sample);
+        }
+
+        try {
+            $status = app(SamplingCompletionService::class)->getStatusSampling($sample);
+        } catch (\Throwable $e) {
+            Log::channel('sampling')->warning('bas_sampel_selesai FDL: gagal cek kelengkapan', [
+                'no_sampel' => $noSampel,
+                'message' => $e->getMessage(),
+            ]);
+            return false;
+        }
+
+        if ($status !== 'selesai') {
+            return false;
+        }
+
+        return self::insertBasSelesai($sample);
+    }
+
+    private static function insertBasSelesai(OrderDetail $sample): bool
+    {
+        if (BasSampelSelesai::where('no_sampel', $sample->no_sampel)->exists()) {
+            return false;
+        }
+
+        $category = preg_replace('/^\d+-/', '', $sample->kategori_3 ?? $sample->kategori_2);
+        $parts = explode(' ', $category, 2);
+
+        BasSampelSelesai::create([
+            'no_quotation' => $sample->no_quotation,
+            'no_order' => $sample->no_order,
+            'no_sampel' => $sample->no_sampel,
+            'tanggal_sampling' => $sample->tanggal_sampling,
+            'kategori' => $parts[0],
+            'sub_kategori' => $parts[1] ?? null,
+            'status' => 'Selesai',
+        ]);
+
+        if ($sample->no_order) {
+            SampelTidakSelesai::where('no_order', $sample->no_order)
+                ->where('no_sampel', $sample->no_sampel)
+                ->delete();
+        }
+
+        return true;
+    }
+
     public static function isCompleted($sample, callable $getStatusSampling)
     {
         if ($sample->kategori_2 === '1-Air') {

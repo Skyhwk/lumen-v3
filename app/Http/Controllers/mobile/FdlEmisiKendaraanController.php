@@ -289,6 +289,8 @@ class FdlEmisiKendaraanController extends Controller
                             $orderDetail->save();
                         }
 
+                        FdlOrderDetailService::afterSamplerSubmit($request->no_sampel);
+
                         DB::commit();
                         return response()->json([
                             'status' => 21,
@@ -426,6 +428,7 @@ class FdlEmisiKendaraanController extends Controller
                         $update_order = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->where('is_active', 1)->update([
                             'tanggal_terima' => Carbon::now()->format('Y-m-d'),
                         ]);
+                        FdlOrderDetailService::afterSamplerSubmit($request->no_sampel);
                         DB::commit();
                         return response()->json([
                             'status' => 201,

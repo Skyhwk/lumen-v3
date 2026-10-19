@@ -316,7 +316,7 @@ class FdlPartikulatIsokinetikMethod1Controller extends Controller
             //     $orderDetail->save();
             // }
 
-            InsertActivityFdl::by($this->user_id)->action('input')->target("Survei Cerobong pada perusahaan $request->nama_perusahaan")->save();
+            InsertActivityFdl::by($this->user_id)->action('input')->target("Survei Cerobong pada perusahaan $request->nama_perusahaan")->noSampel($request->no_sample)->save();
 
 
             DB::commit();

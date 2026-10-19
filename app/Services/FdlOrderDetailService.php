@@ -21,6 +21,12 @@ use App\Models\OrderDetail;
 
 class FdlOrderDetailService
 {
+    /** Setelah sampler submit FDL: cek & catat bas_sampel_selesai jika layak. */
+    public static function afterSamplerSubmit($noSampel): void
+    {
+        BasSampelService::tryRecordFromFdlSubmit((string) $noSampel);
+    }
+
     /**
      * Set tanggal_terima menjadi null pada order detail aktif untuk nomor sampel terkait.
      */
