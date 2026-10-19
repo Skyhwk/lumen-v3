@@ -26,6 +26,29 @@ class SallaryOfferService
             ->first();
     }
 
+    /** Active offer, atau penawaran terakhir jika Finance/Director sudah menonaktifkan. */
+    public static function resolveDisplayOffer(?NewRecruitment $applicant): ?SallaryOffer
+    {
+        if (!$applicant) {
+            return null;
+        }
+
+        if ($applicant->relationLoaded('sallaryOffer') && $applicant->sallaryOffer) {
+            return $applicant->sallaryOffer;
+        }
+
+        $active = $applicant->sallaryOffer;
+        if ($active) {
+            return $active;
+        }
+
+        if ($applicant->relationLoaded('latestSallaryOffer')) {
+            return $applicant->latestSallaryOffer;
+        }
+
+        return self::getLatest((int) $applicant->id);
+    }
+
     public static function deactivateActive(int $recruitmentId, array $extra = []): void
     {
         SallaryOffer::query()
@@ -110,7 +133,7 @@ class SallaryOfferService
         return null;
     }
 
-    /** Tunjangan dari User (interview / nego Approval Salary) — referensi, tidak memakai gate approval. */
+    /** Tunjangan dari User (interview / nego Approval Salary); ikut dibandingkan dengan tunjangan HRD. */
     public static function resolveUserTunjangan($applicant): ?float
     {
         if (!self::hasTunjanganGajiUserColumn()) {

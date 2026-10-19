@@ -448,7 +448,7 @@ class AtsFinalDecisionController extends Controller
         }
 
         $query = $this->buildFinalDecisionTabQuery($stageTab, $request->filled('year') ? $request->year : null)
-            ->with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'sallaryOffer', 'candidateDataOffer', 'candidateProfile'])
+            ->with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'sallaryOffer', 'latestSallaryOffer', 'candidateDataOffer', 'candidateProfile', 'openDecisionSalary'])
             ->orderBy('id', 'desc');
 
         $datatable = DataTables::of($query)
@@ -459,10 +459,47 @@ class AtsFinalDecisionController extends Controller
                 return optional($row->personalRequest)->created_by ?: '-';
             })
             ->addColumn('sallary_offer', function ($row) {
-                return $row->sallaryOffer;
+                return SallaryOfferService::resolveDisplayOffer($row);
             })
             ->addColumn('candidate_data_offer', function ($row) {
                 return $row->candidateDataOffer;
+            })
+            ->addColumn('hrd_interview', function ($row) {
+                $hrd = $row->hrdInterview;
+                if (!$hrd) {
+                    return null;
+                }
+                $payload = $hrd->toArray();
+                $payload['tanggal_join'] = RecruitmentInterview::normalizeTanggalJoin(
+                    $hrd->getRawOriginal('tanggal_join')
+                );
+                return $payload;
+            })
+            ->addColumn('user_interview', function ($row) {
+                $user = $row->userInterview;
+                if (!$user) {
+                    return null;
+                }
+                $payload = $user->toArray();
+                $payload['tanggal_join'] = RecruitmentInterview::normalizeTanggalJoin(
+                    $user->getRawOriginal('tanggal_join')
+                );
+                return $payload;
+            })
+            ->addColumn('decision_salary', function ($row) {
+                $ds = $row->openDecisionSalary;
+                if (!$ds) {
+                    return null;
+                }
+                $payload = $ds->toArray();
+                if (DecisionSalary::hasTanggalJoinColumn()) {
+                    $payload['tanggal_join'] = RecruitmentInterview::normalizeTanggalJoin(
+                        $ds->getRawOriginal('tanggal_join')
+                    );
+                }
+                $payload['allow_hrd_transfer_jabatan'] = DecisionSalary::asBool($ds->allow_hrd_transfer_jabatan);
+                $payload['allow_hrd_transfer_divisi'] = DecisionSalary::asBool($ds->allow_hrd_transfer_divisi);
+                return $payload;
             })
             ->addColumn('expected_salary', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_hrd ?? $row->ekspetasi_gaji ?? 0;
@@ -490,10 +527,10 @@ class AtsFinalDecisionController extends Controller
                 });
             })
             ->addColumn('sallary_offer_user', function ($row) {
-                return optional($row->sallaryOffer)->sallary_offer_user ?? 0;
+                return optional(SallaryOfferService::resolveDisplayOffer($row))->sallary_offer_user ?? 0;
             })
             ->addColumn('tunjangan_gaji_user', function ($row) {
-                return optional($row->sallaryOffer)->tunjangan_gaji_user ?? 0;
+                return optional(SallaryOfferService::resolveDisplayOffer($row))->tunjangan_gaji_user ?? 0;
             })
             ->addColumn('requester_salary_status', function ($row) {
                 return optional($row->sallaryOffer)->requester_salary_status
@@ -542,6 +579,33 @@ class AtsFinalDecisionController extends Controller
                         'email_sent_at' => $emailSentAt,
                         'requester_salary_status' => $requesterStatus,
                         'reject_reason' => $rejectReason,
+                    ];
+                }
+                if ($requesterStatus === RequesterSalaryApprovalService::STATUS_NEGOTIATED) {
+                    $negoReason = null;
+                    foreach (array_reverse($history) as $entry) {
+                        if (($entry['status'] ?? '') === RequesterSalaryApprovalService::HISTORY_NEGOTIATED) {
+                            $negoReason = trim((string) ($entry['reason'] ?? '')) ?: null;
+                            break;
+                        }
+                    }
+                    if ($negoReason === null) {
+                        $openDecision = DecisionSalary::query()
+                            ->where('new_recruitment_id', $row->id)
+                            ->where('decision', DecisionSalary::DECISION_NEGOTIATED)
+                            ->orderByDesc('id')
+                            ->first();
+                        $negoReason = $openDecision ? trim((string) ($openDecision->reason ?? '')) : null;
+                        $negoReason = $negoReason !== '' ? $negoReason : null;
+                    }
+
+                    return [
+                        'code' => 'requester_salary_negotiated',
+                        'label' => 'Nego User (Re-input HRD)',
+                        'email_sent_at' => $emailSentAt,
+                        'requester_salary_status' => $requesterStatus,
+                        'nego_reason' => $negoReason,
+                        'reject_reason' => $negoReason,
                     ];
                 }
 
@@ -921,6 +985,9 @@ class AtsFinalDecisionController extends Controller
             ->editColumn('status', function ($row) {
                 return $row->status ?: 'management_decision';
             })
+            ->editColumn('tanggal_join_tercepat', function ($row) {
+                return NewRecruitment::normalizeDateOnly($row->getRawOriginal('tanggal_join_tercepat'));
+            })
             ->rawColumns([]);
 
         $clientSide = $this->serveAtsClientSideList($datatable);
@@ -1268,7 +1335,8 @@ class AtsFinalDecisionController extends Controller
                     $applicant,
                     $activeOffer,
                     $valueToSave,
-                    $user
+                    $user,
+                    $request->input('requester_nego_note')
                 );
             }
         }
@@ -1432,6 +1500,8 @@ class AtsFinalDecisionController extends Controller
             $message = 'Data disimpan. Gaji HRD berbeda dari gaji User — menunggu Approval Salary di Personnel Request.';
         } elseif ($requesterStatus === RequesterSalaryApprovalService::STATUS_REJECTED) {
             $message = 'Data disimpan. Penawaran sebelumnya ditolak User — pastikan nominal sudah disesuaikan.';
+        } elseif ($requesterStatus === RequesterSalaryApprovalService::STATUS_NEGOTIATED) {
+            $message = 'Data disimpan. User masih dalam nego — tombol approve offering terkunci sampai User menyetujui.';
         }
 
         return response()->json([
