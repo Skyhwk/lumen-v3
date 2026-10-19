@@ -85,6 +85,7 @@ class Kernel extends ConsoleKernel
         Commands\QuotationGenerateCommand::class,
         Commands\UpdateQuotationStatusFromExcelCommand::class,
         Commands\GenerateMonthlyAbsensiCommand::class,
+        Commands\ImportNearHo::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,
