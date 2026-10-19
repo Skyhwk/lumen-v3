@@ -16,7 +16,6 @@ class NewRecruitment extends Model
         'rekomendasi' => 'array',
         'masalah_hukum' => 'array',
         'bypass' => 'array',
-        'tanggal_join_tercepat' => 'date',
         'is_reject_finance' => 'boolean',
         'is_rejected_kandidat' => 'boolean',
     ];
@@ -102,7 +101,7 @@ class NewRecruitment extends Model
     /**
      * Putaran nego aktif di tab User:
      * - pending: menunggu keputusan User
-     * - rejected: menunggu HRD re-input
+     * - rejected / negotiated: menunggu HRD re-input
      * - approved: tetap tampil sampai HRD kirim offering ke kandidat
      */
     public function openDecisionSalary()
@@ -111,6 +110,7 @@ class NewRecruitment extends Model
             ->whereIn('decision', [
                 DecisionSalary::DECISION_PENDING,
                 DecisionSalary::DECISION_REJECTED,
+                DecisionSalary::DECISION_NEGOTIATED,
                 DecisionSalary::DECISION_APPROVED,
             ])
             ->latest('id');
@@ -151,5 +151,27 @@ class NewRecruitment extends Model
     public function candidateMedicalInformation()
     {
         return $this->hasOne(CandidateMedicalInformation::class, 'new_recruitment_id');
+    }
+
+    public function getTanggalJoinTercepatAttribute($value)
+    {
+        return static::normalizeDateOnly($this->attributes['tanggal_join_tercepat'] ?? $value);
+    }
+
+    public static function normalizeDateOnly($value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_object($value) && isset($value->date)) {
+            $value = $value->date;
+        }
+
+        if (!preg_match('/(\d{4}-\d{2}-\d{2})/', trim((string) $value), $matches)) {
+            return null;
+        }
+
+        return $matches[1];
     }
 }

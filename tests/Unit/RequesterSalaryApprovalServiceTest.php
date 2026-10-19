@@ -148,6 +148,41 @@ class RequesterSalaryApprovalServiceTest extends TestCase
         $this->assertFalse(Service::canSendCandidateOffering($applicant, $offer->fresh())['allowed']);
     }
 
+    public function testMatchingGajiPokokWithDifferentTunjanganRequiresApproval(): void
+    {
+        [$applicant, $offer] = $this->applicant();
+        $offer->update([
+            'sallary_offer_hrd' => 5000000,
+            'sallary_offer_user' => 5000000,
+            'tunjangan_gaji_user' => 1000000,
+        ]);
+        CandidateDataOffers::create([
+            'new_recruitment_id' => $applicant->id,
+            'gaji_pokok' => 5000000,
+            'tunjangan_kerja' => 0,
+        ]);
+        $this->assertSame('pending', Service::syncAfterHrdSalarySave($applicant, $offer, 5000000));
+        $this->assertFalse(Service::canSendCandidateOffering($applicant, $offer->fresh())['allowed']);
+    }
+
+    public function testMatchingGajiPokokAndTunjanganNeedsNoApproval(): void
+    {
+        [$applicant, $offer] = $this->applicant();
+        $offer->update([
+            'sallary_offer_hrd' => 5000000,
+            'sallary_offer_user' => 5000000,
+            'tunjangan_gaji_user' => 1000000,
+        ]);
+        CandidateDataOffers::create([
+            'new_recruitment_id' => $applicant->id,
+            'gaji_pokok' => 5000000,
+            'tunjangan_kerja' => 1000000,
+        ]);
+        $this->assertSame('not_required', Service::syncAfterHrdSalarySave($applicant, $offer, 5000000));
+        $this->assertSame(0, DecisionSalary::count());
+        $this->assertTrue(Service::canSendCandidateOffering($applicant, $offer->fresh())['allowed']);
+    }
+
     /** @dataProvider zeroReferenceSalaryProvider */
     public function testZeroUserSalaryDoesNotRequireApproval(int $hrdAmount): void
     {
@@ -208,7 +243,24 @@ class RequesterSalaryApprovalServiceTest extends TestCase
 
     public static function decisionNotificationProvider(): array
     {
-        return [['approved', null], ['rejected', 'Di luar anggaran']];
+        return [['approved', null], ['rejected', 'Di luar anggaran'], ['negotiated', 'Mohon sesuaikan ke 5.5jt']];
+    }
+
+    public function testNegotiatedBlocksSendingUntilApproved(): void
+    {
+        [$applicant, $offer] = $this->applicant();
+        Service::syncAfterHrdSalarySave($applicant, $offer, 6000000);
+        $round = Service::getPendingForRecruitment($applicant->id);
+        $this->assertSame('negotiated', Service::recordDecision($round, 'negotiated', 'User', 'Naikkan sedikit')->decision);
+        $this->assertSame('negotiated', $offer->fresh()->requester_salary_status);
+        $this->assertFalse(Service::canSendCandidateOffering($applicant, $offer->fresh())['allowed']);
+        $offer->refresh()->update(['sallary_offer_hrd' => 5500000]);
+        $this->assertSame('pending', Service::syncAfterHrdSalarySave($applicant, $offer, 5500000, 'HRD', 'Sudah disesuaikan'));
+        $this->assertFalse(Service::canSendCandidateOffering($applicant, $offer->fresh())['allowed']);
+        $next = Service::getPendingForRecruitment($applicant->id);
+        $this->assertSame(2, $next->round);
+        Service::recordDecision($next, 'approved', 'User');
+        $this->assertTrue(Service::canSendCandidateOffering($applicant, $offer->fresh())['allowed']);
     }
 
     public function testRolledBackDecisionDoesNotNotifyHrd(): void

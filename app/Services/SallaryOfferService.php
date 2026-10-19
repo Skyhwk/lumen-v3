@@ -110,7 +110,7 @@ class SallaryOfferService
         return null;
     }
 
-    /** Tunjangan dari User (interview / nego Approval Salary) — referensi, tidak memakai gate approval. */
+    /** Tunjangan dari User (interview / nego Approval Salary); ikut dibandingkan dengan tunjangan HRD. */
     public static function resolveUserTunjangan($applicant): ?float
     {
         if (!self::hasTunjanganGajiUserColumn()) {

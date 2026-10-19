@@ -308,18 +308,21 @@ class AtsNotificationService
     public function requesterSalaryDecisionMade($recruitment, string $decision, ?string $reason = null): void
     {
         $candidate = $this->candidateName($recruitment);
-        $approved = $decision === 'approved';
-        $message = $approved
-            ? "User menyetujui gaji kandidat {$candidate}. HRD dapat melanjutkan kirim offering ke kandidat."
-            : "User menolak gaji kandidat {$candidate}. HRD perlu menginput ulang penawaran gaji.";
-        if (!$approved && trim((string) $reason) !== '') {
-            $message .= ' Alasan: ' . trim($reason);
+        $normalized = strtolower(trim($decision));
+        if ($normalized === 'approved') {
+            $title = 'User Menyetujui Gaji';
+            $message = "User menyetujui gaji kandidat {$candidate}. HRD dapat melanjutkan kirim offering ke kandidat.";
+        } elseif ($normalized === 'negotiated') {
+            $title = 'User Mengajukan Nego Gaji';
+            $message = "User mengajukan nego gaji kandidat {$candidate}. HRD perlu menyesuaikan penawaran; tombol approve offering tetap terkunci sampai User menyetujui.";
+        } else {
+            $title = 'User Menolak Gaji';
+            $message = "User menolak gaji kandidat {$candidate}. HRD perlu menginput ulang penawaran gaji.";
         }
-        $this->notifyHrdTeam(
-            $approved ? 'User Menyetujui Gaji' : 'User Menolak Gaji',
-            $message,
-            self::URL_FINAL_DECISION
-        );
+        if ($normalized !== 'approved' && trim((string) $reason) !== '') {
+            $message .= ' Catatan: ' . trim($reason);
+        }
+        $this->notifyHrdTeam($title, $message, self::URL_FINAL_DECISION);
     }
 
     public function financeDecisionMade($recruitment, string $decision): void
