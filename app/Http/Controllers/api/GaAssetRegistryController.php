@@ -277,7 +277,7 @@ class GaAssetRegistryController extends Controller
             'sub_kategori_baru' => 'nullable|string|max:191',
             'name' => 'required|string|max:255',
             'brand' => 'nullable|string|max:150',
-            'model_spec' => 'nullable|string|max:255',
+            'model_spec' => 'nullable|string',
             'acquisition_origin' => 'required|in:new,second,take_over,unknown',
             'purchase_date' => 'nullable|date',
             'acquisition_cost' => 'nullable|numeric|min:0',
@@ -306,7 +306,9 @@ class GaAssetRegistryController extends Controller
         if (!$request->filled('sub_kategori_aset_id') && !$request->filled('sub_kategori_baru')) {
             return response()->json(['message' => 'Sub kategori aset wajib dipilih atau diisi.'], 422);
         }
-        if ($request->condition !== 'normal' && trim((string) $request->condition_note) === '') {
+        $conditionNotePlain = trim(strip_tags((string) $request->condition_note));
+        $conditionNotePlain = str_replace("\xc2\xa0", ' ', $conditionNotePlain);
+        if ($request->condition !== 'normal' && $conditionNotePlain === '') {
             return response()->json(['message' => 'Catatan kondisi wajib diisi jika kondisi aset bukan Normal.'], 422);
         }
 

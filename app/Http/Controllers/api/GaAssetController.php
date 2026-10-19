@@ -539,7 +539,7 @@ class GaAssetController extends Controller
             'sub_kategori_aset_id' => ['required', 'integer', 'min:1'],
             'name' => ['required', 'string', 'max:255'],
             'brand' => ['nullable', 'string', 'max:150'],
-            'model_spec' => ['nullable', 'string', 'max:255'],
+            'model_spec' => ['nullable', 'string'],
             'branch_id' => ['required', 'integer', 'min:1'],
             'location_id' => ['nullable', 'integer', 'min:1'],
             'room_id' => ['nullable', 'integer', 'min:1'],
