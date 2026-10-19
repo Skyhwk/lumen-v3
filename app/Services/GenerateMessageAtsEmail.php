@@ -108,14 +108,15 @@ class GenerateMessageAtsEmail
         $encodedToken = $token ?? $recruitment->token;
 
         return (object) [
-            'approve' => $portalUrl ? "{$portalUrl}/public/recruitment/candidate-offering/{$encodedToken}?decision=approve" : '',
-            'reject'  => $portalUrl ? "{$portalUrl}/public/recruitment/candidate-offering/{$encodedToken}?decision=reject" : '',
+            'approve'    => $portalUrl ? "{$portalUrl}/public/recruitment/candidate-offering/{$encodedToken}?decision=approve" : '',
+            'reject'     => $portalUrl ? "{$portalUrl}/public/recruitment/candidate-offering/{$encodedToken}?decision=reject" : '',
+            'negotiate'  => $portalUrl ? "{$portalUrl}/public/recruitment/candidate-offering/{$encodedToken}?decision=negotiate" : '',
         ];
     }
 
     private static function candidateOfferingActionButtonsHtml($btn): string
     {
-        if (!$btn || (empty($btn->approve) && empty($btn->reject))) {
+        if (!$btn || (empty($btn->approve) && empty($btn->reject) && empty($btn->negotiate))) {
             return '';
         }
 
@@ -149,6 +150,9 @@ class GenerateMessageAtsEmail
         $deductionRowsHtml = $letterData ? self::buildSalaryDeductionEmailRows($letterData) : '';
         $pencadanganNoteHtml = $letterData ? self::buildPencadanganNoteEmail($letterData) : '';
         $greeting = self::candidateGreetingHtml($data, $data->nama_lengkap ?? 'Kandidat');
+        $deadlineLabel = htmlspecialchars(
+            CandidateOfferingDecisionService::deadlineFrom()->locale('id')->translatedFormat('d F Y') . ' pukul 23.00 WIB'
+        );
 
         return "
         <!DOCTYPE html>
@@ -205,6 +209,12 @@ class GenerateMessageAtsEmail
                         <!-- PDF Attachment Box -->
                         <div style='background-color: #f0f9ff; border: 1px dashed #0284c7; border-radius: 8px; padding: 14px 18px; margin: 20px 0; font-size: 13px; color: #0369a1; line-height: 1.6;'>
                             <strong>Dokumen Lampiran:</strong> Rincian resmi Surat Penawaran Gaji telah dilampirkan dalam format <strong>PDF (Surat Penawaran Gaji.pdf)</strong> pada email ini.
+                        </div>
+
+                        <div style='background-color: #fff7ed; border: 1px solid #fdba74; border-radius: 8px; padding: 14px 18px; margin: 8px 0 18px 0; font-size: 13px; color: #9a3412; line-height: 1.65;'>
+                            <strong>Masa berlaku sampai {$deadlineLabel}.</strong>
+                            Penawaran ini berlaku hingga <strong>H+2 pukul 23.00 WIB</strong> (contoh: dikirim Senin pagi, tetap berlaku sampai Rabu malam jam 23.00).
+                            Apabila Anda tidak memilih <strong>Approve</strong>, <strong>Reject</strong>, atau <strong>Negotiate</strong> sampai batas waktu tersebut, penawaran ini akan <strong>otomatis dinyatakan disetujui</strong>.
                         </div>
 
                         <p style='font-size: 14px; line-height: 1.65; color: #334155; margin-top: 20px; margin-bottom: 8px;'>

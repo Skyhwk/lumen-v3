@@ -55,6 +55,7 @@ class Kernel extends ConsoleKernel
         Commands\TestCsTicketGeneratorCommand::class,
         Commands\SendKeptManagementDecisionReminders::class,
         Commands\SendCandidateActionReminders::class,
+        Commands\AutoApproveCandidateOffering::class,
         Commands\SendPendingAssessmentInvitations::class,
         Commands\SendInternalAssessmentNalarLogikaPdfCommand::class,
         Commands\RejectOverdueAssessment::class,
@@ -112,6 +113,10 @@ class Kernel extends ConsoleKernel
             ->dailyAt('07:00')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping(30);
+        $schedule->command('recruitment:auto-approve-candidate-offering')
+            ->everyFifteenMinutes()
+            ->timezone('Asia/Jakarta')
+            ->withoutOverlapping(10);
         // $schedule->command('absensi:generate-monthly')
         //     ->monthlyOn(1, '10:00')
         //     ->timezone('Asia/Jakarta')
