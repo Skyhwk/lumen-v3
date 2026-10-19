@@ -635,6 +635,7 @@ class PersonnelRequestController extends Controller
                 'personnelRequest.detailDivisi',
                 'personnelRequest.detailPosisi',
                 'userInterview',
+                'hrdInterview',
                 'candidateProfile',
             ])
             ->where('is_active', 1)
@@ -876,6 +877,7 @@ class PersonnelRequestController extends Controller
                     'personnelRequest.detailDivisi',
                     'personnelRequest.detailPosisi',
                     'userInterview',
+                    'hrdInterview',
                     'candidateProfile',
                     'sallaryOffer',
                     'candidateDataOffer',
@@ -2047,10 +2049,15 @@ class PersonnelRequestController extends Controller
                 return response()->json(['message' => 'Catatan interview user wajib diisi.'], 422);
             }
 
-            $interview->update([
+            $interviewPayload = [
                 'catatan_interview' => $request->catatan_interview_user,
                 'updated_by' => $this->getEffectiveKaryawanName(),
-            ]);
+            ];
+            if (RecruitmentInterview::hasTanggalJoinColumn() && $request->exists('tanggal_join')) {
+                $interviewPayload['tanggal_join'] = RecruitmentInterview::normalizeTanggalJoin($request->input('tanggal_join'));
+            }
+
+            $interview->update($interviewPayload);
             $interview->refresh();
 
             DB::commit();
@@ -2058,6 +2065,7 @@ class PersonnelRequestController extends Controller
                 'message' => 'Berhasil menyimpan catatan interview user!',
                 'data' => [
                     'catatan_interview' => $interview->catatan_interview,
+                    'tanggal_join' => RecruitmentInterview::normalizeTanggalJoin($interview->getRawOriginal('tanggal_join')),
                     'updated_by' => $interview->updated_by,
                     'updated_at' => $interview->updated_at,
                 ],
