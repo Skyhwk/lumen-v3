@@ -569,6 +569,22 @@ class AtsFinalDecisionController extends Controller
                     ];
                 }
 
+                if (RecruitmentStatusService::isAwaitingCandidateOfferingNegotiateResubmit($row)) {
+                    $readyToResend = RecruitmentStatusService::hasHrdSalaryInputSavedAfterCandidateNegotiate($row);
+                    $nego = RecruitmentStatusService::getCandidateOfferingNegotiateDetails($row) ?: [];
+
+                    return [
+                        'code' => 'candidate_offering_negotiated',
+                        'label' => $readyToResend
+                            ? 'Siap Kirim Ulang ke Kandidat'
+                            : 'Dinegosiasi Kandidat (Re-input HRD)',
+                        'email_sent_at' => $emailSentAt,
+                        'salary_offer_candidate' => $nego['salary_offer_candidate'] ?? optional($offer)->salary_offer_candidate,
+                        'tunjangan_offer_candidate' => $nego['tunjangan_offer_candidate'] ?? optional($offer)->tunjangan_offer_candidate,
+                        'tanggal_mulai_kerja' => $nego['tanggal_mulai_kerja'] ?? optional($row->candidateDataOffer)->tanggal_mulai_kerja,
+                    ];
+                }
+
                 if (RecruitmentStatusService::isAwaitingCandidateOfferingResubmit($row)) {
                     $readyToResend = RecruitmentStatusService::hasHrdSalaryInputSavedAfterCandidateReject($row);
 
@@ -1382,7 +1398,9 @@ class AtsFinalDecisionController extends Controller
             $savedOffer = CandidateDataOffers::where('new_recruitment_id', $id)->first();
 
             if ($savedOffer && (float) ($savedOffer->gaji_pokok ?? 0) > 0 && !empty($savedOffer->tanggal_mulai_kerja)) {
-                if (RecruitmentStatusService::isAwaitingCandidateOfferingResubmit($applicant)) {
+                if (RecruitmentStatusService::isAwaitingCandidateOfferingResubmit($applicant)
+                    || RecruitmentStatusService::isAwaitingCandidateOfferingNegotiateResubmit($applicant)
+                ) {
                     $nextStatus = 'salary_offer';
                 } elseif (RecruitmentStatusService::isAwaitingFinanceResubmit($applicant)) {
                     $nextStatus = 'internal_sallary_offer';

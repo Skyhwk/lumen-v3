@@ -115,6 +115,89 @@ class RecruitmentStatusService
         return self::isAwaitingCandidateOfferingResubmit($recruitment);
     }
 
+    public static function getLatestCandidateOfferingNegotiateEntry(array $history): ?array
+    {
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (($history[$i]['status'] ?? '') === 'candidate_offering_negotiated') {
+                return $history[$i];
+            }
+        }
+
+        return null;
+    }
+
+    public static function isAwaitingCandidateOfferingNegotiateResubmit($recruitment): bool
+    {
+        $history = self::parseMetaHistory($recruitment);
+        $negotiatedIndex = null;
+
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (($history[$i]['status'] ?? '') === 'candidate_offering_negotiated') {
+                $negotiatedIndex = $i;
+                break;
+            }
+        }
+
+        if ($negotiatedIndex === null) {
+            return false;
+        }
+
+        for ($i = $negotiatedIndex + 1; $i < count($history); $i++) {
+            if (($history[$i]['status'] ?? '') === 'candidate_offering_sent') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static function hasHrdSalaryInputSavedAfterCandidateNegotiate($recruitment): bool
+    {
+        if (!self::isAwaitingCandidateOfferingNegotiateResubmit($recruitment)) {
+            return false;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+        $negotiatedIndex = null;
+
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (($history[$i]['status'] ?? '') === 'candidate_offering_negotiated') {
+                $negotiatedIndex = $i;
+                break;
+            }
+        }
+
+        if ($negotiatedIndex === null) {
+            return false;
+        }
+
+        for ($i = $negotiatedIndex + 1; $i < count($history); $i++) {
+            if (($history[$i]['status'] ?? '') === 'hrd_salary_input_saved') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function getCandidateOfferingNegotiateDetails($recruitment): ?array
+    {
+        if (!self::isAwaitingCandidateOfferingNegotiateResubmit($recruitment)) {
+            return null;
+        }
+
+        $entry = self::getLatestCandidateOfferingNegotiateEntry(self::parseMetaHistory($recruitment));
+        if (!$entry) {
+            return null;
+        }
+
+        return [
+            'salary_offer_candidate' => $entry['salary_offer_candidate'] ?? null,
+            'tunjangan_offer_candidate' => $entry['tunjangan_offer_candidate'] ?? null,
+            'tanggal_mulai_kerja' => $entry['tanggal_mulai_kerja'] ?? null,
+        ];
+    }
+
     public static function getCandidateOfferingRejectReason($recruitment): ?string
     {
         if (!self::isAwaitingCandidateOfferingResubmit($recruitment)) {
@@ -155,6 +238,10 @@ class RecruitmentStatusService
         }
 
         if (self::isAwaitingCandidateOfferingResubmit($recruitment)) {
+            return false;
+        }
+
+        if (self::isAwaitingCandidateOfferingNegotiateResubmit($recruitment)) {
             return false;
         }
 
