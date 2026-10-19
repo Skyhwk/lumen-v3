@@ -852,6 +852,8 @@ class PersonnelRequesthrdController extends Controller
                     'nr.email',
                     'nr.no_telepon',
                     'nr.posisi_dilamar',
+                    'nr.meta_history',
+                    'nr.status',
                     'pr.posisi as pr_posisi',
                     'mj.nama_jabatan'
                 )
@@ -862,7 +864,7 @@ class PersonnelRequesthrdController extends Controller
 
             $candidates = $step === 'join'
                 ? $this->mapPipelineJoinCandidates($rows)
-                : $this->mapPipelineDefaultCandidates($rows);
+                : $this->mapPipelineDefaultCandidates($rows, $step);
 
             return response()->json([
                 'status' => 'success',
@@ -880,16 +882,24 @@ class PersonnelRequesthrdController extends Controller
         }
     }
 
-    private function mapPipelineDefaultCandidates($rows)
+    private function mapPipelineDefaultCandidates($rows, ?string $step = null)
     {
-        return $rows->map(function ($row) {
-            return [
+        return $rows->map(function ($row) use ($step) {
+            $item = [
                 'id' => (int) $row->id,
                 'nama_lengkap' => $row->nama_lengkap ?: '-',
                 'email' => $row->email ?: '-',
                 'no_telepon' => $row->no_telepon ?: '-',
                 'posisi_dilamar' => $this->resolvePipelineCandidatePosition($row),
             ];
+
+            if ($step === 'salary_offer') {
+                $pipeline = RecruitmentStatusService::resolvePipelineStatus($row);
+                $item['stage_status_label'] = $pipeline['label'] ?? null;
+                $item['candidate_offering_email_sent_at'] = RecruitmentStatusService::getLatestCandidateOfferingEmailSentAt($row);
+            }
+
+            return $item;
         })->values();
     }
 

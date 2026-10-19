@@ -1107,6 +1107,26 @@ class RecruitmentStatusService
         return false;
     }
 
+    /** Waktu terakhir email offering ke kandidat (dari meta_history). */
+    public static function getLatestCandidateOfferingEmailSentAt($recruitment): ?string
+    {
+        $history = self::parseMetaHistory($recruitment);
+
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            $status = strtolower((string) ($history[$i]['status'] ?? ''));
+            if (!in_array($status, ['candidate_offering_email_sent', 'candidate_offering_sent'], true)) {
+                continue;
+            }
+
+            $at = trim((string) ($history[$i]['at'] ?? ''));
+            if ($at !== '') {
+                return $at;
+            }
+        }
+
+        return null;
+    }
+
     public static function recruitmentPipelineSalaryOfferStatuses(): array
     {
         return ['internal_sallary_offer', 'salary_offer', 'sallary_offer', 'approved'];
