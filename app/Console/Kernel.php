@@ -114,9 +114,9 @@ class Kernel extends ConsoleKernel
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping(30);
         $schedule->command('recruitment:auto-approve-candidate-offering')
-            ->everyFifteenMinutes()
+            ->dailyAt('23:30')
             ->timezone('Asia/Jakarta')
-            ->withoutOverlapping(10);
+            ->withoutOverlapping(30);
         // $schedule->command('absensi:generate-monthly')
         //     ->monthlyOn(1, '10:00')
         //     ->timezone('Asia/Jakarta')
