@@ -111,7 +111,15 @@ class FinanceDecisionController extends Controller
                     ?? 0;
             })
             ->addColumn('sallary_offer_user', function ($row) {
-                return optional($row->sallaryOffer)->sallary_offer_user ?? 0;
+                $offer = $row->sallaryOffer;
+                $pokok = (float) (optional($offer)->sallary_offer_user ?? 0);
+                $tunjangan = (float) (optional($offer)->tunjangan_gaji_user ?? 0);
+                $total = $pokok + $tunjangan;
+                if ($total > 0) {
+                    return $total;
+                }
+
+                return $pokok;
             })
             ->addColumn('sallary_offer_direktur', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_direktur ?? 0;

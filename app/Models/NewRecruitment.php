@@ -78,6 +78,12 @@ class NewRecruitment extends Model
             ->orderByDesc('id');
     }
 
+    public function latestSallaryOffer()
+    {
+        return $this->hasOne(SallaryOffer::class, 'new_recruitment_id')
+            ->latest('id');
+    }
+
     public function salaryOffer()
     {
         return $this->hasOne(SallaryOffer::class, 'new_recruitment_id')

@@ -7,7 +7,6 @@ use App\Models\NewRecruitment;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Schema;
 
 class CandidateOfferingDecisionService
 {
@@ -337,7 +336,7 @@ class CandidateOfferingDecisionService
     private static function updateStartDateWithHistory(int $recruitmentId, string $newStartDate, string $by): void
     {
         $cdo = CandidateDataOffers::where('new_recruitment_id', $recruitmentId)->first();
-        $previous = $cdo->tanggal_mulai_kerja ?? null;
+        $previous = optional($cdo)->tanggal_mulai_kerja;
         $payload = [
             'tanggal_mulai_kerja' => $newStartDate,
             'updated_by' => $by,
@@ -347,34 +346,17 @@ class CandidateOfferingDecisionService
             $payload['created_by'] = $by;
         }
 
-        $previousNorm = null;
-        if (!empty($previous)) {
-            try {
-                $previousNorm = Carbon::parse($previous)->toDateTimeString();
-            } catch (\Throwable $e) {
-                $previousNorm = (string) $previous;
-            }
-        }
-        if ($previousNorm !== $newStartDate && Schema::hasColumn('candidate_data_offers', 'tanggal_mulai_kerja_history')) {
-            $history = [];
-            if ($cdo && !empty($cdo->tanggal_mulai_kerja_history)) {
-                $history = is_array($cdo->tanggal_mulai_kerja_history)
-                    ? $cdo->tanggal_mulai_kerja_history
-                    : (json_decode($cdo->tanggal_mulai_kerja_history, true) ?: []);
-            }
-            $history[] = [
-                'tanggal_mulai_kerja_lama' => $previousNorm,
-                'tanggal_mulai_kerja_baru' => $newStartDate,
-                'changed_at' => Carbon::now()->toDateTimeString(),
-                'changed_by' => $by,
-                'source' => self::HISTORY_NEGOTIATED,
-            ];
-            $payload['tanggal_mulai_kerja_history'] = $history;
-        }
-
         CandidateDataOffers::updateOrCreate(
             ['new_recruitment_id' => $recruitmentId],
             $payload
+        );
+
+        CandidateDataOffers::appendTanggalMulaiKerjaHistory(
+            $recruitmentId,
+            $previous,
+            $newStartDate,
+            self::HISTORY_NEGOTIATED,
+            $by
         );
     }
 

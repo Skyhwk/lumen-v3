@@ -448,7 +448,7 @@ class AtsFinalDecisionController extends Controller
         }
 
         $query = $this->buildFinalDecisionTabQuery($stageTab, $request->filled('year') ? $request->year : null)
-            ->with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'sallaryOffer', 'candidateDataOffer', 'candidateProfile', 'openDecisionSalary'])
+            ->with(['personalRequest.masterJabatan', 'hrdInterview', 'userInterview', 'sallaryOffer', 'latestSallaryOffer', 'candidateDataOffer', 'candidateProfile', 'openDecisionSalary'])
             ->orderBy('id', 'desc');
 
         $datatable = DataTables::of($query)
@@ -459,7 +459,7 @@ class AtsFinalDecisionController extends Controller
                 return optional($row->personalRequest)->created_by ?: '-';
             })
             ->addColumn('sallary_offer', function ($row) {
-                return $row->sallaryOffer;
+                return SallaryOfferService::resolveDisplayOffer($row);
             })
             ->addColumn('candidate_data_offer', function ($row) {
                 return $row->candidateDataOffer;
@@ -527,10 +527,10 @@ class AtsFinalDecisionController extends Controller
                 });
             })
             ->addColumn('sallary_offer_user', function ($row) {
-                return optional($row->sallaryOffer)->sallary_offer_user ?? 0;
+                return optional(SallaryOfferService::resolveDisplayOffer($row))->sallary_offer_user ?? 0;
             })
             ->addColumn('tunjangan_gaji_user', function ($row) {
-                return optional($row->sallaryOffer)->tunjangan_gaji_user ?? 0;
+                return optional(SallaryOfferService::resolveDisplayOffer($row))->tunjangan_gaji_user ?? 0;
             })
             ->addColumn('requester_salary_status', function ($row) {
                 return optional($row->sallaryOffer)->requester_salary_status

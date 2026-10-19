@@ -402,10 +402,29 @@ class RequesterSalaryApprovalService
             $payload['allow_hrd_transfer_jabatan'] = DecisionSalary::asBool($meta['allow_hrd_transfer_jabatan'] ?? $row->allow_hrd_transfer_jabatan);
             $payload['allow_hrd_transfer_divisi'] = DecisionSalary::asBool($meta['allow_hrd_transfer_divisi'] ?? $row->allow_hrd_transfer_divisi);
         }
+        $oldJoinDate = null;
+        $newJoinDate = null;
         if (DecisionSalary::hasTanggalJoinColumn() && array_key_exists('tanggal_join', $meta)) {
-            $payload['tanggal_join'] = RecruitmentInterview::normalizeTanggalJoin($meta['tanggal_join']);
+            $cdo = CandidateDataOffers::where('new_recruitment_id', $row->new_recruitment_id)->first();
+            $oldJoinDate = CandidateDataOffers::normalizeDateOnly(
+                optional($cdo)->tanggal_mulai_kerja
+                ?? $row->getRawOriginal('tanggal_join')
+                ?? $row->tanggal_join
+            );
+            $newJoinDate = RecruitmentInterview::normalizeTanggalJoin($meta['tanggal_join']);
+            $payload['tanggal_join'] = $newJoinDate;
         }
         $row->update($payload);
+
+        if ($newJoinDate) {
+            CandidateDataOffers::appendTanggalMulaiKerjaHistory(
+                (int) $row->new_recruitment_id,
+                $oldJoinDate,
+                $newJoinDate,
+                'decision_salary_' . $decision,
+                $by
+            );
+        }
 
         $offer = $row->sallary_offer_id
             ? SallaryOffer::find($row->sallary_offer_id)
