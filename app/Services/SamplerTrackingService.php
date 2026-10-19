@@ -3291,7 +3291,7 @@ public function buildTrackingRows($sessions)
         return in_array($column, $this->columnsByTable[$table], true);
     }
 
-    protected function hasActiveSchedule($session, $member)
+    public function hasActiveSchedule($session, $member)
     {
         $latestQuotation = $session->no_order
             ? OrderHeader::where('no_order', $session->no_order)

@@ -88,6 +88,17 @@ class SamplerTrackingTroubleService
         $members = $session->activeMembers->filter(function ($member) use ($samplerId) {
             return (string) $member->sampler_id === (string) $samplerId;
         });
+        $trackingService = app(SamplerTrackingService::class);
+        if ($members->isEmpty() || ($session->no_order && !$members->contains(function ($member) use ($trackingService, $session) {
+            return $trackingService->hasActiveSchedule($session, $member);
+        }))) {
+            return [
+                'complete' => false,
+                'stops_complete' => false,
+                'due_date' => $this->dueDate($date, 0),
+                'missing_active_assignment' => true,
+            ];
+        }
         $dailyMembers = $sessions->flatMap(function ($item) use ($samplerId) {
             return $item->activeMembers->filter(function ($member) use ($samplerId) {
                 return (string) $member->sampler_id === (string) $samplerId;
@@ -275,7 +286,6 @@ class SamplerTrackingTroubleService
 
         DB::table(self::TABLE)
             ->where('is_clear', 0)
-            ->whereNull('reopened_at')
             ->orderBy('id')
             ->chunkById(200, function ($troubles) use (&$cleared, $trackingService) {
                 foreach ($troubles as $trouble) {
@@ -311,10 +321,10 @@ class SamplerTrackingTroubleService
 
         if (!empty($trouble->sampler_id) && !empty($trouble->activity_date)) {
             $progress = $this->progress($trouble->sampler_id, $trouble->activity_date, $sessionId);
-            if (!empty($progress['complete'])) {
+            if (!empty($progress['missing_active_assignment'])) {
                 return true;
             }
-            if (!empty($progress['missing_active_assignment']) && !$trackingService->sessionHasMeaningfulTrackingData($session)) {
+            if (!empty($progress['complete'])) {
                 return true;
             }
         }
@@ -349,6 +359,19 @@ class SamplerTrackingTroubleService
             ->where('activity_date', '<', $today)->orderBy('activity_date')->get();
         return $troubles->filter(function ($trouble) use ($today) {
             $progress = $this->progress($trouble->sampler_id, $trouble->activity_date, $trouble->tracking_session_id);
+            // A reopened trouble must not resurrect after its schedule was deleted,
+            // deactivated, or replaced with another active assignment.
+            if (!empty($progress['missing_active_assignment'])) {
+                if (!$trouble->is_clear) {
+                    DB::table(self::TABLE)->where('id', $trouble->id)->where('is_clear', 0)->update([
+                        'is_clear' => 1,
+                        'cleared_at' => Carbon::now('Asia/Jakarta'),
+                        'updated_at' => Carbon::now('Asia/Jakarta'),
+                    ]);
+                    $trouble->is_clear = 1;
+                }
+                return false;
+            }
             if (!$progress['complete']) {
                 if (!$this->isPastDue($progress, Carbon::parse($today, 'Asia/Jakarta')->subDay()->toDateString())) {
                     return false;
