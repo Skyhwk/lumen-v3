@@ -8,8 +8,12 @@ use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\Cell\Cell;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use RuntimeException;
+use Throwable;
 
 class ImportNearHo extends Command
 {
@@ -58,6 +62,7 @@ class ImportNearHo extends Command
 
         $planned = [];
         $skipped = [];
+        $statusByRow = [];
         $seenNames = [];
         $seenPhones = [];
 
@@ -66,19 +71,19 @@ class ImportNearHo extends Command
             $phone = $row['phone'];
 
             if ($nameKey === '') {
-                $skipped[] = $this->skip($row, 'Nama customer kosong');
+                $skipped[] = $this->skip($row, 'Nama customer kosong', $statusByRow);
                 continue;
             }
             if ($phone === null) {
-                $skipped[] = $this->skip($row, 'Nomor telepon tidak valid: ' . $row['phone_raw']);
+                $skipped[] = $this->skip($row, 'Nomor telepon tidak valid: ' . $row['phone_raw'], $statusByRow);
                 continue;
             }
             if (isset($seenNames[$nameKey]) || isset($existingNames[$nameKey])) {
-                $skipped[] = $this->skip($row, 'Nama customer sudah ada');
+                $skipped[] = $this->skip($row, 'Nama customer sudah ada', $statusByRow);
                 continue;
             }
             if (isset($seenPhones[$phone]) || isset($existingPhones[$phone])) {
-                $skipped[] = $this->skip($row, 'Nomor telepon sudah dipakai');
+                $skipped[] = $this->skip($row, 'Nomor telepon sudah dipakai', $statusByRow);
                 continue;
             }
 
@@ -134,50 +139,76 @@ class ImportNearHo extends Command
         }
 
         if (!$execute) {
+            foreach ($planned as $item) {
+                $statusByRow[$item['row']] = 'Siap diimpor';
+            }
             $this->comment('Belum ada data yang ditulis. Tambahkan --execute untuk menyimpan.');
+            $this->info('Hasil: ' . $this->writeResult($rows, $statusByRow));
             return 0;
         }
 
         if (!$planned) {
             $this->info('Tidak ada data baru untuk disimpan.');
+            $this->info('Hasil: ' . $this->writeResult($rows, $statusByRow));
             return 0;
         }
 
         $now = Carbon::now()->format('Y-m-d H:i:s');
         $actor = 'import-near-ho';
+        $saved = false;
+        $saveError = null;
 
-        DB::transaction(function () use (&$planned, $now, $actor) {
-            foreach ($planned as &$item) {
-                $item['id_pelanggan'] = $this->makeIdPelanggan($item['nama_pelanggan']);
-                $pelanggan = MasterPelanggan::create([
-                    'id_cabang' => 1,
-                    'no_urut' => $item['no_urut'],
-                    'id_pelanggan' => $item['id_pelanggan'],
-                    'nama_pelanggan' => $item['nama_pelanggan'],
-                    'wilayah' => null,
-                    'kategori_pelanggan' => 'Domestik',
-                    'sub_kategori' => $item['sub_kategori'] !== '' ? $item['sub_kategori'] : null,
-                    'npwp' => null,
-                    'bahan_pelanggan' => null,
-                    'merk_pelanggan' => null,
-                    'sales_penanggung_jawab' => null,
-                    'sales_id' => null,
-                    'created_by' => $actor,
-                    'created_at' => $now,
-                    'is_active' => 1,
-                ]);
+        try {
+            DB::transaction(function () use (&$planned, $now, $actor) {
+                foreach ($planned as &$item) {
+                    $item['id_pelanggan'] = $this->makeIdPelanggan($item['nama_pelanggan']);
+                    $pelanggan = MasterPelanggan::create([
+                        'id_cabang' => 1,
+                        'no_urut' => $item['no_urut'],
+                        'id_pelanggan' => $item['id_pelanggan'],
+                        'nama_pelanggan' => $item['nama_pelanggan'],
+                        'wilayah' => null,
+                        'kategori_pelanggan' => 'Domestik',
+                        'sub_kategori' => $item['sub_kategori'] !== '' ? $item['sub_kategori'] : null,
+                        'npwp' => null,
+                        'bahan_pelanggan' => null,
+                        'merk_pelanggan' => null,
+                        'sales_penanggung_jawab' => null,
+                        'sales_id' => null,
+                        'created_by' => $actor,
+                        'created_at' => $now,
+                        'is_active' => 1,
+                    ]);
 
-                KontakPelanggan::create([
-                    'pelanggan_id' => $pelanggan->id,
-                    'no_tlp_perusahaan' => $item['no_tlp_perusahaan'],
-                    'email_perusahaan' => null,
-                    'created_by' => $actor,
-                    'created_at' => $now,
-                    'is_active' => 1,
-                ]);
-            }
-            unset($item);
-        });
+                    KontakPelanggan::create([
+                        'pelanggan_id' => $pelanggan->id,
+                        'no_tlp_perusahaan' => $item['no_tlp_perusahaan'],
+                        'email_perusahaan' => null,
+                        'created_by' => $actor,
+                        'created_at' => $now,
+                        'is_active' => 1,
+                    ]);
+                }
+                unset($item);
+            });
+            $saved = true;
+        } catch (Throwable $e) {
+            $saveError = $e->getMessage();
+        }
+
+        foreach ($planned as $item) {
+            $statusByRow[$item['row']] = $saved
+                ? 'Berhasil'
+                : 'Gagal: ' . ($saveError ?: 'Import dibatalkan');
+        }
+
+        $resultPath = $this->writeResult($rows, $statusByRow);
+        $this->info('Hasil: ' . $resultPath);
+
+        if (!$saved) {
+            $this->error('Import dibatalkan: ' . $saveError);
+            return 1;
+        }
 
         $this->table(
             ['Baris', 'ID Pelanggan', 'No Urut', 'Nama', 'Telepon', 'Bidang'],
@@ -297,13 +328,45 @@ class ImportNearHo extends Command
         return substr(str_shuffle($str), 0, 4) . sprintf('%02d', $no);
     }
 
-    private function skip(array $row, string $reason): array
+    private function skip(array $row, string $reason, array &$statusByRow): array
     {
+        $statusByRow[$row['row']] = 'Gagal: ' . $reason;
+
         return [
             'row' => $row['row'],
             'nama' => $row['nama'],
             'phone' => $row['phone'] ?: $row['phone_raw'],
             'reason' => $reason,
         ];
+    }
+
+    private function writeResult(array $rows, array $statusByRow): string
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Hasil Import');
+        $sheet->fromArray(['No', 'NAMA CUSTOMER', 'No Telp', 'Bidang', 'Status Import'], null, 'A1');
+        $sheet->getStyle('A1:E1')->getFont()->setBold(true);
+
+        $line = 2;
+        foreach ($rows as $index => $row) {
+            $phone = $row['phone'] ?: $row['phone_raw'];
+            $status = $statusByRow[$row['row']] ?? 'Gagal: Status tidak diketahui';
+            $sheet->setCellValue('A' . $line, $index + 1);
+            $sheet->setCellValue('B' . $line, $row['nama']);
+            $sheet->setCellValueExplicit('C' . $line, (string) $phone, DataType::TYPE_STRING);
+            $sheet->setCellValue('D' . $line, $row['bidang']);
+            $sheet->setCellValue('E' . $line, $status);
+            $line++;
+        }
+
+        foreach (range('A', 'E') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        $path = public_path('hasil-import-customer-15km-' . Carbon::now()->format('Ymd_His') . '.xlsx');
+        (new Xlsx($spreadsheet))->save($path);
+
+        return $path;
     }
 }
