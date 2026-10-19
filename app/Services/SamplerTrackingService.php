@@ -487,6 +487,7 @@ class SamplerTrackingService
         if ($memberUpdate !== []) {
             SamplerTrackingMember::whereIn('sampler_tracking_session_id', $sessionIds)->update($memberUpdate);
         }
+        (new SamplerTrackingTroubleService())->deactivateForSessions($sessionIds->all());
     }
 
     protected function deactivateSessionIfNoActiveJadwalForTeamKey(string $quotation, $row): void
@@ -525,6 +526,7 @@ class SamplerTrackingService
             if ($memberUpdate !== []) {
                 SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)->update($memberUpdate);
             }
+            (new SamplerTrackingTroubleService())->deactivateForSessions([$session->id]);
         }
     }
 
@@ -650,6 +652,7 @@ class SamplerTrackingService
             if ($memberUpdate !== []) {
                 SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)->update($memberUpdate);
             }
+            (new SamplerTrackingTroubleService())->deactivateForSessions([$session->id]);
         }
     }
 
@@ -791,6 +794,7 @@ class SamplerTrackingService
                 $previous->team_key = sha1('archived|' . $previous->id . '|' . $key);
                 $previous->is_active = false;
                 $previous->save();
+                (new SamplerTrackingTroubleService())->deactivateForSessions([$previous->id]);
             }
         }
 
@@ -1008,11 +1012,25 @@ class SamplerTrackingService
 
                 $inactiveUpdate = $this->onlyExistingColumns((new SamplerTrackingMember())->getTable(), ['is_active' => false]);
                 if (count($inactiveUpdate) > 0) {
+                    $removedMembers = SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)
+                        ->where('is_active', true)
+                        ->when(count($activeMemberIds) > 0, function ($query) use ($activeMemberIds) {
+                            $query->whereNotIn('id', $activeMemberIds);
+                        })
+                        ->get(['sampler_id']);
                     SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)
                         ->when(count($activeMemberIds) > 0, function ($query) use ($activeMemberIds) {
                             $query->whereNotIn('id', $activeMemberIds);
                         })
                         ->update($inactiveUpdate);
+                    foreach ($removedMembers as $removedMember) {
+                        if ($removedMember->sampler_id) {
+                            (new SamplerTrackingTroubleService())->deactivateForSamplerSession(
+                                $removedMember->sampler_id,
+                                (int) $session->id
+                            );
+                        }
+                    }
                 }
 
                 $sessions[] = $session;
@@ -1036,6 +1054,7 @@ class SamplerTrackingService
                         ->where('is_active', false)->pluck('id');
                     SamplerTrackingMember::whereIn('sampler_tracking_session_id', $inactiveSessionIds)
                         ->update(['is_active' => false]);
+                    (new SamplerTrackingTroubleService())->deactivateForSessions($inactiveSessionIds->all());
                 }
             }
         }, 5);
@@ -1380,6 +1399,7 @@ class SamplerTrackingService
         if ($memberUpdate !== []) {
             SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)->update($memberUpdate);
         }
+        (new SamplerTrackingTroubleService())->deactivateForSessions([$session->id]);
     }
 
     /** Session kosong aktif diganti session lama yang sudah punya bukti sampling. */
@@ -1954,6 +1974,9 @@ public function buildTrackingRows($sessions)
         if (Schema::hasColumn(SamplerTrackingTroubleService::TABLE, 'cleared_at')) {
             $update['cleared_at'] = $this->now();
         }
+        if (Schema::hasColumn(SamplerTrackingTroubleService::TABLE, 'is_active')) {
+            $update['is_active'] = 0;
+        }
 
         DB::table(SamplerTrackingTroubleService::TABLE)
             ->where('tracking_session_id', $sessionId)
@@ -2252,6 +2275,7 @@ public function buildTrackingRows($sessions)
         $query = DB::table(SamplerTrackingTroubleService::TABLE)
             ->whereIn('sampler_id', $samplerIds->all())
             ->whereDate('activity_date', $date)
+            ->where('is_active', 1)
             ->where('is_clear', 0)
             ->whereNull('reopened_at');
 
@@ -2287,6 +2311,7 @@ public function buildTrackingRows($sessions)
         $troubles = DB::table(SamplerTrackingTroubleService::TABLE)
             ->whereIn('sampler_id', $samplerIds)
             ->whereIn('activity_date', $dates)
+            ->where('is_active', 1)
             ->where('is_clear', 0)
             ->get(['sampler_id', 'activity_date', 'reopened_at']);
 

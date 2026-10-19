@@ -57,7 +57,9 @@ class SamplerTrackingTroubleService
 
     protected function ready()
     {
-        if (!Schema::hasTable(self::TABLE) || !Schema::hasColumn(self::TABLE, 'tracking_session_id')) {
+        if (!Schema::hasTable(self::TABLE)
+            || !Schema::hasColumn(self::TABLE, 'tracking_session_id')
+            || !Schema::hasColumn(self::TABLE, 'is_active')) {
             throw new HttpException(503, 'Konfigurasi pemeriksaan activity sampler belum tersedia. Hubungi administrator.');
         }
     }
@@ -106,6 +108,7 @@ class SamplerTrackingTroubleService
         });
         $wasReopened = DB::table(self::TABLE)->where('sampler_id', $samplerId)
             ->where('tracking_session_id', $sessionId)
+            ->where('is_active', 1)
             ->whereNotNull('reopened_by')->whereNotNull('reopened_at')->exists();
         $stopsComplete = $members->every(function ($member) {
             return SamplerTrackingActivity::hasEvent($member, 'checkin')
@@ -238,6 +241,14 @@ class SamplerTrackingTroubleService
             if (!$session || !$session->is_active || !$trackingService->sessionHasMeaningfulTrackingData($session)) {
                 continue;
             }
+            if ($session->no_order) {
+                $member = $session->activeMembers->first(function ($candidate) use ($assignment) {
+                    return (string) $candidate->sampler_id === (string) $assignment->sampler_id;
+                });
+                if (!$member || !$trackingService->hasActiveSchedule($session, $member)) {
+                    continue;
+                }
+            }
 
             $exists = DB::table(self::TABLE)
                 ->where('sampler_id', $assignment->sampler_id)
@@ -265,19 +276,17 @@ class SamplerTrackingTroubleService
             $count += DB::table(self::TABLE)->insertOrIgnore([
                 'sampler_id' => $assignment->sampler_id,
                 'tracking_session_id' => $assignment->tracking_session_id,
-                'activity_date' => $assignment->activity_date, 'is_clear' => 0,
+                'activity_date' => $assignment->activity_date, 'is_active' => 1, 'is_clear' => 0,
                 'created_at' => Carbon::now('Asia/Jakarta'), 'updated_at' => Carbon::now('Asia/Jakarta'),
             ]);
         }
         return $count;
     }
 
-    /**
-     * Tutup trouble terbuka yang sudah tidak relevan (session hilang/kosong/sudah selesai).
-     */
+    /** Close obsolete trouble records whose assignment is gone, empty, or complete. */
     public function pruneStaleOpenTroubles(): int
     {
-        if (!Schema::hasTable(self::TABLE)) {
+        if (!Schema::hasTable(self::TABLE) || !Schema::hasColumn(self::TABLE, 'is_active')) {
             return 0;
         }
 
@@ -285,7 +294,10 @@ class SamplerTrackingTroubleService
         $cleared = 0;
 
         DB::table(self::TABLE)
-            ->where('is_clear', 0)
+            ->where('is_active', 1)
+            ->where(function ($query) {
+                $query->where('is_clear', 0)->orWhereNotNull('reopened_at');
+            })
             ->orderBy('id')
             ->chunkById(200, function ($troubles) use (&$cleared, $trackingService) {
                 foreach ($troubles as $trouble) {
@@ -306,26 +318,30 @@ class SamplerTrackingTroubleService
         $sessionId = (int) ($trouble->tracking_session_id ?? 0);
 
         if ($sessionId <= 0) {
+            $this->deactivateTrouble((int) $trouble->id);
             return true;
         }
 
         $session = SamplerTrackingSession::with('activeMembers')->find($sessionId);
         if (!$session || !(bool) $session->is_active) {
+            $this->deactivateTrouble((int) $trouble->id);
             return true;
         }
 
         $hasEvents = SamplerTrackingEvent::where('sampler_tracking_session_id', $sessionId)->exists();
         if (!$hasEvents && !$trackingService->sessionHasMeaningfulTrackingData($session)) {
+            $this->deactivateTrouble((int) $trouble->id);
             return true;
         }
 
         if (!empty($trouble->sampler_id) && !empty($trouble->activity_date)) {
             $progress = $this->progress($trouble->sampler_id, $trouble->activity_date, $sessionId);
             if (!empty($progress['missing_active_assignment'])) {
+                $this->deactivateTrouble((int) $trouble->id);
                 return true;
             }
             if (!empty($progress['complete'])) {
-                return true;
+                return !(bool) ($trouble->is_clear ?? false);
             }
         }
 
@@ -345,11 +361,78 @@ class SamplerTrackingTroubleService
         DB::table(self::TABLE)->where('id', $troubleId)->where('is_clear', 0)->update($update);
     }
 
+    public function deactivateForSessions($sessionIds): int
+    {
+        if (!Schema::hasTable(self::TABLE)
+            || !Schema::hasColumn(self::TABLE, 'tracking_session_id')
+            || !Schema::hasColumn(self::TABLE, 'is_active')) {
+            return 0;
+        }
+
+        $sessionIds = array_values(array_unique(array_filter(array_map('intval', (array) $sessionIds))));
+        if (!$sessionIds) {
+            return 0;
+        }
+
+        $update = [
+            'is_active' => 0,
+            'is_clear' => 1,
+            'updated_at' => Carbon::now('Asia/Jakarta'),
+        ];
+        if (Schema::hasColumn(self::TABLE, 'cleared_at')) {
+            $update['cleared_at'] = Carbon::now('Asia/Jakarta');
+        }
+
+        return DB::table(self::TABLE)->whereIn('tracking_session_id', $sessionIds)
+            ->where('is_active', 1)->update($update);
+    }
+
+    public function deactivateForSamplerSession($samplerId, int $sessionId): int
+    {
+        if (!Schema::hasTable(self::TABLE)
+            || !Schema::hasColumn(self::TABLE, 'tracking_session_id')
+            || !Schema::hasColumn(self::TABLE, 'is_active')) {
+            return 0;
+        }
+
+        $update = [
+            'is_active' => 0,
+            'is_clear' => 1,
+            'updated_at' => Carbon::now('Asia/Jakarta'),
+        ];
+        if (Schema::hasColumn(self::TABLE, 'cleared_at')) {
+            $update['cleared_at'] = Carbon::now('Asia/Jakarta');
+        }
+
+        return DB::table(self::TABLE)->where('sampler_id', $samplerId)
+            ->where('tracking_session_id', $sessionId)->where('is_active', 1)->update($update);
+    }
+
+    public function deactivateTrouble(int $troubleId): int
+    {
+        if (!Schema::hasTable(self::TABLE) || !Schema::hasColumn(self::TABLE, 'is_active')) {
+            return 0;
+        }
+
+        $update = [
+            'is_active' => 0,
+            'is_clear' => 1,
+            'updated_at' => Carbon::now('Asia/Jakarta'),
+        ];
+        if (Schema::hasColumn(self::TABLE, 'cleared_at')) {
+            $update['cleared_at'] = Carbon::now('Asia/Jakarta');
+        }
+
+        return DB::table(self::TABLE)->where('id', $troubleId)
+            ->where('is_active', 1)->update($update);
+    }
+
     public function unresolved($samplerId)
     {
         $this->ready();
         $today = Carbon::now('Asia/Jakarta')->toDateString();
         $troubles = DB::table(self::TABLE)->where('sampler_id', $samplerId)
+            ->where('is_active', 1)
             ->where(function ($query) {
                 $query->where('is_clear', 0)->orWhere(function ($reopened) {
                     $reopened->whereNotNull('reopened_by')->whereNotNull('reopened_at');
@@ -362,14 +445,7 @@ class SamplerTrackingTroubleService
             // A reopened trouble must not resurrect after its schedule was deleted,
             // deactivated, or replaced with another active assignment.
             if (!empty($progress['missing_active_assignment'])) {
-                if (!$trouble->is_clear) {
-                    DB::table(self::TABLE)->where('id', $trouble->id)->where('is_clear', 0)->update([
-                        'is_clear' => 1,
-                        'cleared_at' => Carbon::now('Asia/Jakarta'),
-                        'updated_at' => Carbon::now('Asia/Jakarta'),
-                    ]);
-                    $trouble->is_clear = 1;
-                }
+                $this->deactivateTrouble((int) $trouble->id);
                 return false;
             }
             if (!$progress['complete']) {
@@ -413,7 +489,7 @@ class SamplerTrackingTroubleService
     public function isReopened($samplerId, $sessionId)
     {
         return DB::table(self::TABLE)->where('sampler_id', $samplerId)
-            ->where('tracking_session_id', $sessionId)->where('is_clear', 0)
+            ->where('tracking_session_id', $sessionId)->where('is_active', 1)->where('is_clear', 0)
             ->whereNotNull('reopened_by')->whereNotNull('reopened_at')->exists();
     }
 
@@ -499,7 +575,7 @@ class SamplerTrackingTroubleService
         $followUp = (string) ($payload['sampler_follow_up_action'] ?? '');
 
         return DB::transaction(function () use ($troubleId, $actorId, $note, $reopenReason, $followUp, $payload) {
-            $trouble = DB::table(self::TABLE)->where('id', $troubleId)->lockForUpdate()->first();
+            $trouble = DB::table(self::TABLE)->where('id', $troubleId)->where('is_active', 1)->lockForUpdate()->first();
             if (!$trouble) throw new HttpException(404, 'Data trouble tidak ditemukan.');
             if (!$actorId) throw new HttpException(403, 'Akses tidak diizinkan.');
             if (!$trouble->tracking_session_id) throw new HttpException(422, 'Kendala lama belum terhubung ke penugasan.');
@@ -514,6 +590,7 @@ class SamplerTrackingTroubleService
             }
 
             $targetQuery = DB::table(self::TABLE)
+                ->where('is_active', 1)
                 ->where('is_clear', 0)
                 ->whereNull('reopened_at');
 
