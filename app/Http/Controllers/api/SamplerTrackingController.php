@@ -688,6 +688,7 @@ class SamplerTrackingController extends Controller
         $date = $this->normalizeTroubleFilterDate($date);
         $today = Carbon::now('Asia/Jakarta')->toDateString();
         $query = DB::table(SamplerTrackingTroubleService::TABLE)
+            ->where('is_active', 1)
             ->where('activity_date', '<=', $today)
             ->whereNotNull('reopened_at');
 
@@ -729,6 +730,7 @@ class SamplerTrackingController extends Controller
 
         $today = Carbon::now('Asia/Jakarta')->toDateString();
         $query = DB::table(SamplerTrackingTroubleService::TABLE)
+            ->where('is_active', 1)
             ->where('activity_date', '<=', $today)
             ->where('is_clear', 0)
             ->whereNull('reopened_at')
@@ -780,6 +782,7 @@ class SamplerTrackingController extends Controller
         $date = $this->normalizeTroubleFilterDate($date);
         $today = Carbon::now('Asia/Jakarta')->toDateString();
         $query = DB::table(SamplerTrackingTroubleService::TABLE)
+            ->where('is_active', 1)
             ->where('activity_date', '<=', $today)
             ->where('is_clear', 0)
             ->whereNotNull('reopened_at');

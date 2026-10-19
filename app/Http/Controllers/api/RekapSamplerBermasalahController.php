@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\Schema;
  * ┌─────────────────────────────────────────────────────────────────────────────┐
  * │ 2. loadRekapTroubles()                                                       │
  * │    Sumber utama: sampler_tracking_troubles                                   │
- * │    Filter: tracking_session_id terisi AND (is_clear=0 OR reopened_at terisi). │
+ * │    Filter: is_active=1, tracking_session_id terisi, belum clear/unblock.      │
  * │    Tanpa filter tanggal — blocked aktif + riwayat unblock ditampilkan.        │
  * └───────────────────────────────────┬─────────────────────────────────────────┘
  *                                     ▼
@@ -66,6 +66,8 @@ class RekapSamplerBermasalahController extends SamplerTrackingController
         if (!$this->user_id) {
             abort(403, 'Akses tidak diizinkan.');
         }
+
+        app(SamplerTrackingTroubleService::class)->pruneStaleOpenTroubles();
 
         if ($request->has('draw')) {
             return response()->json($this->rekapSamplerBermasalahDataTable($request));
@@ -143,6 +145,7 @@ class RekapSamplerBermasalahController extends SamplerTrackingController
     protected function loadRekapTroubles()
     {
         return DB::table(SamplerTrackingTroubleService::TABLE)
+            ->where('is_active', 1)
             ->whereNotNull('tracking_session_id')
             ->where(function ($query) {
                 $query->where('is_clear', 0)
