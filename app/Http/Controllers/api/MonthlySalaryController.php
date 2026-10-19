@@ -221,6 +221,7 @@ class MonthlySalaryController extends Controller
                 ->selectRaw('
                     sum(gaji_pokok) as total_gaji_pokok,
                     sum(tunjangan) as total_tunjangan,
+                    sum(gaji_pokok + tunjangan) as total_gaji_tunjangan,
                     sum(bonus) as total_bonus,
                     sum(pencadangan_upah) as total_pencadangan_upah,
                     sum(jamsostek) as total_jamsostek,
@@ -235,6 +236,9 @@ class MonthlySalaryController extends Controller
 
             // Prepare DataTable response
             $response = Datatables::of($data)
+                ->addColumn('total_gaji_tunjangan', function ($row) {
+                    return (float) $row->gaji_pokok + (float) $row->tunjangan;
+                })
                 ->make(true)
                 ->getData();
 
