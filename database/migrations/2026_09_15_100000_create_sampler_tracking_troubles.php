@@ -13,6 +13,7 @@ class CreateSamplerTrackingTroubles extends Migration
                 $table->bigIncrements('id');
                 $table->string('sampler_id', 70);
                 $table->date('activity_date');
+                $table->boolean('is_active')->default(1);
                 $table->boolean('is_clear')->default(0);
                 $table->timestamp('cleared_at')->nullable();
                 $table->unsignedBigInteger('reopened_by')->nullable();

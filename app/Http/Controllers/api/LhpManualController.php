@@ -21,7 +21,7 @@ use Yajra\DataTables\Facades\DataTables;
 
 class LhpManualController extends Controller
 {
-    private const DRAW_ORDER = ['watermark', 'cover', 'logo', 'qr'];
+    private const DRAW_ORDER = ['watermark', 'cover', 'logo', 'logo_kan', 'qr'];
     private const MAX_PDF_COUNT = 20;
     // private const ALLOWED_DOC_TYPES = [
     //     'LHP_HIGIENE_SANITASI',
@@ -410,6 +410,7 @@ class LhpManualController extends Controller
             );
 
             $logoPath = public_path('isl_logo.png');
+            $logoKanPath = public_path('img/logo_kan.png');
             $watermarkPath = public_path('logo-watermark.png');
 
             $pdf = $this->makeStampPdf();
@@ -420,6 +421,7 @@ class LhpManualController extends Controller
                     $pdfFile->getRealPath(),
                     $this->sortOverlays($overlaySets[$index] ?? []),
                     $logoPath,
+                    $logoKanPath,
                     $watermarkPath,
                     $qrPath
                 );
@@ -847,7 +849,7 @@ class LhpManualController extends Controller
         return $pdf;
     }
 
-    private function stampDocument(Fpdi $pdf, $sourcePath, array $sorted, $logoPath, $watermarkPath, $qrPath)
+    private function stampDocument(Fpdi $pdf, $sourcePath, array $sorted, $logoPath, $logoKanPath, $watermarkPath, $qrPath)
     {
         $tempPath = null;
 
@@ -873,7 +875,7 @@ class LhpManualController extends Controller
                     if (!$this->isVisibleOnPage($overlay, $page, $pageCount)) {
                         continue;
                     }
-                    $this->drawOverlay($pdf, $overlay, $size, $logoPath, $watermarkPath, $qrPath);
+                    $this->drawOverlay($pdf, $overlay, $size, $logoPath, $logoKanPath, $watermarkPath, $qrPath);
                 }
             }
         } finally {
@@ -1008,7 +1010,7 @@ class LhpManualController extends Controller
         return true;
     }
 
-    private function drawOverlay(Fpdi $pdf, array $overlay, array $size, $logoPath, $watermarkPath, $qrPath)
+    private function drawOverlay(Fpdi $pdf, array $overlay, array $size, $logoPath, $logoKanPath, $watermarkPath, $qrPath)
     {
         $x = $size['width'] * ((float) ($overlay['xPercent'] ?? 0) / 100);
         $y = $size['height'] * ((float) ($overlay['yPercent'] ?? 0) / 100);
@@ -1032,6 +1034,9 @@ class LhpManualController extends Controller
         $imageType = '';
         if ($type === 'logo' && is_file($logoPath)) {
             $path = $logoPath;
+            $imageType = 'PNG';
+        } elseif ($type === 'logo_kan' && is_file($logoKanPath)) {
+            $path = $logoKanPath;
             $imageType = 'PNG';
         } elseif ($type === 'watermark' && is_file($watermarkPath)) {
             $path = $watermarkPath;
