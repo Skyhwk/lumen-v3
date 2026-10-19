@@ -69,14 +69,20 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
             $session->setRelation('activeMembers', $ownMembers);
         });
 
-        $blockingTroubles = $troubleService->troublesBlockingCurrentActivity($samplerId);
+        // An explicitly reopened recovery assignment is authorized to record
+        // events by assertAllowed(). Do not mark that same recovery read-only
+        // in Apps FDL while it still needs check-in/check-out completion.
+        $isRecovery = $recovery !== null;
+        $blockingTroubles = $isRecovery
+            ? collect()
+            : $troubleService->troublesBlockingCurrentActivity($samplerId);
 
         return response()->json([
             'success' => true,
             'data' => $data,
             'activity_date' => $date,
             'server_today' => $today,
-            'is_recovery' => $date !== $today,
+            'is_recovery' => $isRecovery,
             'troubles' => $troubles,
             'blocked' => $blockingTroubles->isNotEmpty(),
             'blocked_message' => $blockingTroubles->isNotEmpty() ? $troubleService->message($troubles) : null,
