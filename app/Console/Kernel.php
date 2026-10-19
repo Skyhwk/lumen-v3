@@ -77,6 +77,7 @@ class Kernel extends ConsoleKernel
         Commands\SyncHrSpecialLeaveTypesCommand::class,
         Commands\SyncLeaveAlpaLedgerCommand::class,
         Commands\SyncGreatdayFormAttachmentFilesCommand::class,
+        Commands\SyncGreatdayMobileAbsensiCommand::class,
         Commands\ImportGreatdayAssetsFromInternalCommand::class,
         Commands\QuotationDiscoverCommand::class,
         Commands\QuotationCreateCommand::class,
