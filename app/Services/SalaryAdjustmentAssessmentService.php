@@ -442,8 +442,12 @@ class SalaryAdjustmentAssessmentService
                 throw new \RuntimeException('Kategori soal tidak ditemukan.');
             }
 
+            $isTyping = InternalTypingTestService::isTypingCategoryName($category->name ?? null);
             $categoryForEngine = (object) array_merge((array) $category, [
-                'question_count' => $config['question_count'],
+                'question_count' => $isTyping
+                    ? max(20, (int) ($config['question_count'] ?? InternalTypingTestService::DEFAULT_WORD_POOL_SIZE))
+                    : $config['question_count'],
+                'duration_minutes' => $config['duration_minutes'],
             ]);
 
             $questions = $this->engine->buildQuestionsForCategory($categoryForEngine);
@@ -571,10 +575,16 @@ class SalaryAdjustmentAssessmentService
 
         $mandatory = [];
         $optional = [];
+        $typing = [];
 
         foreach ($categoryConfigs as $config) {
             $category = QuestionCategory::find($config['id']);
             $name = strtoupper(trim((string) ($category->name ?? '')));
+
+            if (InternalTypingTestService::isTypingCategoryName($name)) {
+                $typing[] = $config;
+                continue;
+            }
 
             if ($this->isMandatoryCategory($name)) {
                 $mandatory[] = $config;
@@ -603,6 +613,6 @@ class SalaryAdjustmentAssessmentService
 
         shuffle($optional);
 
-        return array_merge($mandatory, $optional);
+        return array_merge($mandatory, $optional, $typing);
     }
 }

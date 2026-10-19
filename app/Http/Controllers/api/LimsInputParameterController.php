@@ -2553,7 +2553,11 @@ class LimsInputParameterController extends Controller
 				if($data_parameter->id == 585 || $data_parameter->id == 555) {
 					$hp = self::tabelMpn($request->tb1, $request->tb2, $request->tb3);
 				}else {
-					$hp = isset($data_kalkulasi['hasil_mpn']) ? $data_kalkulasi['hasil_mpn'] : (isset($data_parsing->hp) ? $data_parsing->hp : null);
+					$hp = isset($data_kalkulasi['hasil_mpn'])
+						? $data_kalkulasi['hasil_mpn']
+						: (isset($data_kalkulasi['hasil'])
+							? $data_kalkulasi['hasil']
+							: (isset($data_parsing->hp) ? $data_parsing->hp : null));
 				}
 				// dd($hp);
 

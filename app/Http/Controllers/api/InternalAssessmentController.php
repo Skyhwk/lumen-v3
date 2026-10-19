@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use App\Services\InternalTypingTestService;
 use App\Services\ScaleScoringService;
 
 class InternalAssessmentController extends Controller
@@ -270,6 +271,15 @@ class InternalAssessmentController extends Controller
                 }
                 if (!array_key_exists($request->question_id, $answers)) {
                     $answers[$request->question_id] = ['P' => (string) $most, 'K' => (string) $least];
+                }
+            } elseif (($question['type'] ?? '') === 'typing_test') {
+                $typingService = new InternalTypingTestService();
+                $normalized = $typingService->normalizeAnswerPayload($request->answer, $question);
+                if (!$normalized || empty($normalized['typed_words'])) {
+                    return response()->json(['message' => 'Hasil tes mengetik belum valid.'], 422);
+                }
+                if (!array_key_exists($request->question_id, $answers)) {
+                    $answers[$request->question_id] = $normalized;
                 }
             } elseif (!array_key_exists($request->question_id, $answers)) {
                 $answers[$request->question_id] = is_array($request->answer)
@@ -553,11 +563,14 @@ class InternalAssessmentController extends Controller
                     continue;
                 }
 
-                $questionCacheKey = $categoryId . ':' . $questionCount;
+                $questionCacheKey = $categoryId . ':' . $questionCount . ':' . json_encode([
+                    'duration_minutes' => $definition['duration_minutes'] ?? null,
+                    'has_time_limit' => $definition['has_time_limit'] ?? null,
+                ]);
                 if (!array_key_exists($questionCacheKey, $questionPayloadCache)) {
                     // Set pertanyaan yang sama dipakai untuk semua target pada satu kategori.
                     // Ini menjaga form evaluasi konsisten sekaligus mencegah query berulang per bawahan.
-                    $questionPayloadCache[$questionCacheKey] = $this->sessionQuestions($category, $questionCount);
+                    $questionPayloadCache[$questionCacheKey] = $this->sessionQuestions($category, $questionCount, $definition);
                 }
                 $questions = $questionPayloadCache[$questionCacheKey];
                 if (!$questions) {
@@ -635,10 +648,16 @@ class InternalAssessmentController extends Controller
         $hr = $items->reject(function ($item) use ($mandatoryNames) {
             return in_array(strtoupper(trim((string) $item['category']->name)), $mandatoryNames, true);
         })->reject(function ($item) {
+            return InternalTypingTestService::isTypingCategoryName($item['category']->name ?? null);
+        })->reject(function ($item) {
             return strtolower(trim((string) ($item['category']->category_scope ?? 'hr'))) === 'default';
         })->shuffle()->values();
 
-        return $mandatory->concat($hr)->concat($default)->values()->all();
+        $typing = $items->filter(function ($item) {
+            return InternalTypingTestService::isTypingCategoryName($item['category']->name ?? null);
+        })->values();
+
+        return $mandatory->concat($hr)->concat($default)->concat($typing)->values()->all();
     }
 
     private function evaluationTargetsForCategory($categoryName, $employee)
@@ -692,9 +711,14 @@ class InternalAssessmentController extends Controller
         })->values()->all();
     }
 
-    private function sessionQuestions($category, $questionCount)
+    private function sessionQuestions($category, $questionCount, array $definition = [])
     {
         $categoryName = strtoupper(trim((string) $category->name));
+        if (InternalTypingTestService::isTypingCategoryName($categoryName)) {
+            $definition['question_count'] = $questionCount;
+
+            return (new InternalTypingTestService())->buildQuestions($definition);
+        }
         if ($categoryName === 'DISC') {
             return $this->discQuestions($questionCount);
         }
@@ -922,7 +946,7 @@ class InternalAssessmentController extends Controller
             return [
                 'status' => 'ready',
                 'sessions' => $sessionNavigation,
-                'session' => [
+                'session' => array_merge([
                     'order' => $firstGroup['order'],
                     'name' => $firstGroup['name'],
                     'target_name' => $first->evaluation_target_name ?? null,
@@ -930,7 +954,7 @@ class InternalAssessmentController extends Controller
                     'duration_minutes' => $first->duration_minutes,
                     'question_count' => count($firstQuestions),
                     'is_first' => true,
-                ],
+                ], $this->publicSessionMeta($first)),
             ];
         }
 
@@ -943,7 +967,7 @@ class InternalAssessmentController extends Controller
                 return [
                     'status' => 'waiting',
                     'sessions' => $sessionNavigation,
-                    'session' => [
+                    'session' => array_merge([
                         'order' => $pendingGroup['order'],
                         'name' => $pendingGroup['name'],
                         'target_name' => $pending->evaluation_target_name ?? null,
@@ -953,7 +977,7 @@ class InternalAssessmentController extends Controller
                         'is_first' => !$sessions->contains(function ($item) {
                             return in_array($item->status, ['completed', 'expired'], true);
                         }),
-                    ],
+                    ], $this->publicSessionMeta($pending)),
                 ];
             }
             return ['status' => 'ready_to_complete', 'sessions' => $sessionNavigation];
@@ -988,15 +1012,16 @@ class InternalAssessmentController extends Controller
         }
 
         unset($next['answer_key'], $next['answer_map']);
-        foreach ($next['options'] as &$option) {
+        foreach ($next['options'] ?? [] as &$option) {
             unset($option['is_correct']);
         }
+        unset($option);
 
         $activeGroup = $sessionGroupById[$session->id] ?? ['order' => (int) $session->session_order + $sessionOrderOffset, 'name' => $session->category_name, 'targets' => []];
         return [
             'status' => 'in_progress',
             'sessions' => $sessionNavigation,
-            'session' => [
+            'session' => array_merge([
                 'id' => $session->id,
                 'order' => $activeGroup['order'],
                 'name' => $activeGroup['name'],
@@ -1004,7 +1029,7 @@ class InternalAssessmentController extends Controller
                 'targets' => $activeGroup['targets'],
                 'duration_minutes' => $session->duration_minutes,
                 'expires_at' => $session->expires_at,
-            ],
+            ], $this->publicSessionMeta($session)),
             'answered' => $answers->count(),
             'total' => $questions->count(),
             'question' => $next,
@@ -1051,6 +1076,22 @@ class InternalAssessmentController extends Controller
             : (string) $session->category_name . ' - ' . $targetName;
     }
 
+    private function publicSessionMeta($session): array
+    {
+        $isTyping = InternalTypingTestService::isTypingCategoryName($session->category_name ?? null);
+        $meta = ['is_typing_test' => $isTyping];
+        if (!$isTyping) {
+            return $meta;
+        }
+
+        $durationMinutes = (int) ($session->duration_minutes ?? 0);
+        $meta['duration_seconds'] = $durationMinutes > 0
+            ? $durationMinutes * 60
+            : InternalTypingTestService::DEFAULT_DURATION_SECONDS;
+
+        return $meta;
+    }
+
     private function finishSession($session, array $answers, $status)
     {
         $result = $this->scoreSession($session, $answers);
@@ -1070,6 +1111,9 @@ class InternalAssessmentController extends Controller
     {
         $questions = json_decode($session->questions_json ?: '[]', true) ?: [];
         $categoryName = strtoupper(trim((string) $session->category_name));
+        if (InternalTypingTestService::isTypingCategoryName($categoryName)) {
+            return (new InternalTypingTestService())->scoreSession($questions, $answers);
+        }
         if ($categoryName === 'DISC') {
             return $this->scoreDisc($questions, $answers);
         }

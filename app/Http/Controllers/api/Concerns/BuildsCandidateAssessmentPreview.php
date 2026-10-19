@@ -388,6 +388,27 @@ trait BuildsCandidateAssessmentPreview
             }
 
             $summaryText = 'Skor ' . $score . '/100';
+        } elseif ($engine === 'typing_test') {
+            $accuracy = $result['accuracy_percent'] ?? $result['score'] ?? null;
+            $wpm = $result['wpm'] ?? null;
+            $correctWords = (int) ($result['correct_words'] ?? 0);
+            $typedWords = (int) ($result['typed_words'] ?? 0);
+
+            if ($accuracy !== null) {
+                $items[] = ['label' => 'Akurasi', 'value' => $accuracy . '%'];
+            }
+            if ($wpm !== null) {
+                $items[] = ['label' => 'Kecepatan (WPM)', 'value' => (string) $wpm];
+            }
+            if ($typedWords > 0) {
+                $incorrectWords = (int) ($result['incorrect_words'] ?? max(0, $typedWords - $correctWords));
+                $items[] = ['label' => 'Kata benar', 'value' => (string) $correctWords];
+                $items[] = ['label' => 'Kata salah', 'value' => (string) $incorrectWords];
+            }
+
+            $summaryText = $accuracy !== null
+                ? 'Tes mengetik — akurasi ' . $accuracy . '%'
+                : 'Hasil tes mengetik tersedia';
         } else {
             $score = $result['score'] ?? null;
             $correct = (int) ($result['correct_answers'] ?? 0);
@@ -409,6 +430,7 @@ trait BuildsCandidateAssessmentPreview
         }
 
         $isPersonalityEngine = $engine === 'disc' || $engine === 'papi_kostick' || $engine === '16pf';
+        $skipQuestionReview = $isPersonalityEngine || $engine === 'typing_test';
 
         $targetName = $this->resolveEvaluationTargetName($session);
         if ($targetName !== '') {
@@ -428,7 +450,32 @@ trait BuildsCandidateAssessmentPreview
             'disc_detail' => $engine === 'disc' ? $this->buildDiscDetail($result) : null,
             'papi_detail' => $engine === 'papi_kostick' ? $this->buildPapiDetail($result) : null,
             'pf16_detail' => $engine === '16pf' ? $this->buildPf16Detail($result) : null,
-            'question_review' => $isPersonalityEngine ? [] : $this->buildQuestionReview($session, $result),
+            'typing_detail' => $engine === 'typing_test' ? $this->buildTypingDetail($result) : null,
+            'question_review' => $skipQuestionReview ? [] : $this->buildQuestionReview($session, $result),
+        ];
+    }
+
+    protected function buildTypingDetail(array $result): array
+    {
+        $correct = (int) ($result['correct_words'] ?? 0);
+        $typed = (int) ($result['typed_words'] ?? $result['answered'] ?? 0);
+        $incorrect = (int) ($result['incorrect_words'] ?? max(0, $typed - $correct));
+
+        return [
+            'score' => isset($result['score']) ? (float) $result['score'] : null,
+            'accuracy_percent' => isset($result['accuracy_percent'])
+                ? (float) $result['accuracy_percent']
+                : (isset($result['score']) ? (float) $result['score'] : null),
+            'wpm' => isset($result['wpm']) ? (float) $result['wpm'] : null,
+            'correct_words' => $correct,
+            'incorrect_words' => $incorrect,
+            'typed_words' => $typed,
+            'target_words' => (int) ($result['target_words'] ?? 0),
+            'duration_ms' => (int) ($result['duration_ms'] ?? 0),
+            'duration_limit_seconds' => (int) (
+                $result['duration_limit_seconds']
+                ?? (int) round(((int) ($result['duration_limit_ms'] ?? 0)) / 1000)
+            ),
         ];
     }
 
@@ -584,6 +631,9 @@ trait BuildsCandidateAssessmentPreview
         foreach ($questions as $index => $question) {
             $questionId = (string) ($question['id'] ?? '');
             $type = (string) ($question['type'] ?? '');
+            if ($type === 'typing_test') {
+                continue;
+            }
             $isScale = $type === 'scale' || ($question['scoring_type'] ?? '') === 'scale_average';
             $options = is_array($question['options'] ?? null) ? $question['options'] : [];
             $optionsById = [];
@@ -661,6 +711,9 @@ trait BuildsCandidateAssessmentPreview
         $normalized = [];
         foreach ($items as $item) {
             if ($item === null || $item === '') {
+                continue;
+            }
+            if (is_array($item) || is_object($item)) {
                 continue;
             }
             $normalized[] = (string) $item;

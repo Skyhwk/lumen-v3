@@ -9,9 +9,24 @@ use Illuminate\Http\Request;
 
 class PenyesuaianGajiAssessmentPublicController extends Controller
 {
+    private function mergedInput(Request $request): array
+    {
+        $input = $request->all();
+        $raw = json_decode($request->getContent(), true);
+
+        return is_array($raw) ? array_replace($input, $raw) : $input;
+    }
+
+    private function requestToken(Request $request): string
+    {
+        $input = $this->mergedInput($request);
+
+        return trim((string) ($input['token'] ?? ''));
+    }
+
     public function overview(Request $request, SalaryAdjustmentAssessmentService $service, SalaryAdjustmentAssessmentEngine $engine)
     {
-        $assessment = $service->findByToken((string) $request->input('token', ''));
+        $assessment = $service->findByToken($this->requestToken($request));
         if (!$assessment) {
             return response()->json(['message' => 'Link assessment tidak valid.'], 404);
         }
@@ -21,7 +36,7 @@ class PenyesuaianGajiAssessmentPublicController extends Controller
 
     public function start(Request $request, SalaryAdjustmentAssessmentService $service, SalaryAdjustmentAssessmentEngine $engine)
     {
-        $assessment = $service->findByToken((string) $request->input('token', ''));
+        $assessment = $service->findByToken($this->requestToken($request));
         if (!$assessment) {
             return response()->json(['message' => 'Link assessment tidak valid.'], 404);
         }
@@ -36,7 +51,7 @@ class PenyesuaianGajiAssessmentPublicController extends Controller
 
     public function state(Request $request, SalaryAdjustmentAssessmentService $service, SalaryAdjustmentAssessmentEngine $engine)
     {
-        $assessment = $service->findByToken((string) $request->input('token', ''));
+        $assessment = $service->findByToken($this->requestToken($request));
         if (!$assessment) {
             return response()->json(['message' => 'Link assessment tidak valid.'], 404);
         }
@@ -46,15 +61,16 @@ class PenyesuaianGajiAssessmentPublicController extends Controller
 
     public function answer(Request $request, SalaryAdjustmentAssessmentService $service, SalaryAdjustmentAssessmentEngine $engine)
     {
-        $assessment = $service->findByToken((string) $request->input('token', ''));
+        $input = $this->mergedInput($request);
+        $assessment = $service->findByToken($this->requestToken($request));
         if (!$assessment) {
             return response()->json(['message' => 'Link assessment tidak valid.'], 404);
         }
 
         $result = $engine->answer(
             $assessment,
-            (string) $request->input('question_id'),
-            $request->input('answer')
+            (string) ($input['question_id'] ?? ''),
+            $input['answer'] ?? null
         );
 
         if (isset($result['error'])) {

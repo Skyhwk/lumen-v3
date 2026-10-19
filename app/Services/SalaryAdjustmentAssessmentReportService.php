@@ -45,8 +45,12 @@ class SalaryAdjustmentAssessmentReportService
 
             $result = $storedResult;
             if (!empty($questions) && !empty($answers)) {
-                $scoringEmployee = $categoryName === '16PF' ? $employee : null;
-                $result = $this->scoring->scoreSession($categoryName, $questions, $answers, $scoringEmployee);
+                if (InternalTypingTestService::isTypingCategoryName($categoryName)) {
+                    $result = (new InternalTypingTestService())->scoreSession($questions, $answers);
+                } else {
+                    $scoringEmployee = $categoryName === '16PF' ? $employee : null;
+                    $result = $this->scoring->scoreSession($categoryName, $questions, $answers, $scoringEmployee);
+                }
                 if (!empty($storedResult['scored_at'])) {
                     $result['scored_at'] = $storedResult['scored_at'];
                 } elseif ($session->completed_at) {

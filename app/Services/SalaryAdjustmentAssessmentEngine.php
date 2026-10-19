@@ -14,6 +14,14 @@ class SalaryAdjustmentAssessmentEngine
     {
         $name = strtoupper(trim((string) $category->name));
 
+        if (InternalTypingTestService::isTypingCategoryName($name)) {
+            return (new InternalTypingTestService())->buildQuestions([
+                'question_count' => (int) ($category->question_count ?? InternalTypingTestService::DEFAULT_WORD_POOL_SIZE),
+                'duration_minutes' => max(1, (int) ($category->duration_minutes ?? 1)),
+                'has_time_limit' => true,
+            ]);
+        }
+
         if ($name === 'DISC') {
             return $this->discQuestions();
         }
@@ -76,10 +84,13 @@ class SalaryAdjustmentAssessmentEngine
 
     public function overview(SalaryAdjustmentAssessment $assessment): array
     {
-        if (!$assessment->is_link_active && $assessment->attempt_status === 'completed') {
+        if ($assessment->attempt_status === 'completed') {
             return [
-                'status' => 'used',
-                'message' => 'Link assessment sudah digunakan.',
+                'status' => 'completed',
+                'message' => $assessment->is_link_active
+                    ? 'Assessment selesai.'
+                    : 'Assessment selesai. Link sudah tidak dapat digunakan lagi.',
+                'score' => (float) ($assessment->total_score ?? 0),
             ];
         }
 
@@ -111,16 +122,23 @@ class SalaryAdjustmentAssessmentEngine
             $questions = is_array($session->questions_json)
                 ? $session->questions_json
                 : (json_decode($session->questions_json ?: '[]', true) ?: []);
+            $isTyping = InternalTypingTestService::isTypingCategoryName($session->category_name ?? null);
+            $durationMinutes = (int) $session->duration_minutes;
+            $durationSeconds = $isTyping
+                ? ($durationMinutes > 0 ? $durationMinutes * 60 : InternalTypingTestService::DEFAULT_DURATION_SECONDS)
+                : null;
 
             return [
                 'name' => $session->category_name,
                 'question_count' => (int) $session->question_count,
                 'available_question_count' => count($questions),
                 'can_start' => !empty($questions),
-                'duration_minutes' => (int) $session->duration_minutes,
-                'has_time_limit' => (int) $session->duration_minutes > 0,
+                'duration_minutes' => $durationMinutes,
+                'has_time_limit' => $durationMinutes > 0,
                 'status' => $session->status,
                 'order' => (int) $session->session_order,
+                'is_typing_test' => $isTyping,
+                'duration_seconds' => $durationSeconds,
             ];
         })->values()->all();
 
@@ -188,7 +206,10 @@ class SalaryAdjustmentAssessmentEngine
             if ($session->status === 'pending') {
                 $session->status = 'in_progress';
                 $session->started_at = $now;
-                if ((int) $session->duration_minutes > 0) {
+                if (
+                    (int) $session->duration_minutes > 0
+                    && !InternalTypingTestService::isTypingCategoryName($session->category_name ?? null)
+                ) {
                     $session->expires_at = $now->copy()->addMinutes((int) $session->duration_minutes);
                 }
                 $session->save();
@@ -200,8 +221,12 @@ class SalaryAdjustmentAssessmentEngine
 
     public function state(SalaryAdjustmentAssessment $assessment): array
     {
-        if (!$assessment->is_link_active && $assessment->attempt_status === 'completed') {
-            return ['status' => 'used', 'message' => 'Link assessment sudah digunakan.'];
+        if ($assessment->attempt_status === 'completed') {
+            return [
+                'status' => 'completed',
+                'message' => 'Assessment selesai.',
+                'score' => (float) ($assessment->total_score ?? 0),
+            ];
         }
 
         return $this->statePayload($assessment);
@@ -235,7 +260,30 @@ class SalaryAdjustmentAssessmentEngine
                 return ['error' => 'Tidak ada sesi aktif.', 'code' => 409];
             }
 
+            $questions = is_array($session->questions_json) ? $session->questions_json : [];
+            $question = collect($questions)->firstWhere('id', (string) $questionId);
+
             if ($this->sessionIsExpired($session)) {
+                if ($question && $this->isTypingQuestion($question, $session) && is_array($answer)) {
+                    $allowEmpty = !empty($answer['auto_timeout']);
+                    $normalized = (new InternalTypingTestService())->normalizeAnswerPayload(
+                        $answer,
+                        $question,
+                        $allowEmpty
+                    );
+                    if ($normalized) {
+                        $answers = is_array($session->answers_json) ? $session->answers_json : [];
+                        if (!array_key_exists($questionId, $answers)) {
+                            $answers[$questionId] = $normalized;
+                            $session->answers_json = $answers;
+                            $session->save();
+                            $this->finishSession($assessment, $session->fresh(), $answers, 'completed');
+
+                            return ['state' => $this->statePayload($assessment->fresh())];
+                        }
+                    }
+                }
+
                 return ['state' => $this->advanceExpiredSession($assessment, $session), 'code' => 403];
             }
 
@@ -257,8 +305,6 @@ class SalaryAdjustmentAssessmentEngine
             }
 
             $answers = is_array($session->answers_json) ? $session->answers_json : [];
-            $questions = is_array($session->questions_json) ? $session->questions_json : [];
-            $question = collect($questions)->firstWhere('id', (string) $questionId);
 
             if ($question && ($question['type'] ?? '') === 'disc') {
                 $most = $answer['P'] ?? null;
@@ -268,6 +314,20 @@ class SalaryAdjustmentAssessmentEngine
                 }
                 if (!array_key_exists($questionId, $answers)) {
                     $answers[$questionId] = ['P' => (string) $most, 'K' => (string) $least];
+                }
+            } elseif ($this->isTypingQuestion($question, $session)) {
+                $allowEmpty = is_array($answer)
+                    && !empty($answer['auto_timeout']);
+                $normalized = (new InternalTypingTestService())->normalizeAnswerPayload(
+                    $answer,
+                    $question,
+                    $allowEmpty
+                );
+                if (!$normalized) {
+                    return ['error' => 'Hasil tes mengetik belum valid.', 'code' => 422];
+                }
+                if (!array_key_exists($questionId, $answers)) {
+                    $answers[$questionId] = $normalized;
                 }
             } elseif (!array_key_exists($questionId, $answers)) {
                 $answers[$questionId] = is_array($answer) ? array_values($answer) : [$answer];
@@ -351,7 +411,7 @@ class SalaryAdjustmentAssessmentEngine
         if ($session->expires_at && Carbon::now()->greaterThanOrEqualTo(Carbon::parse($session->expires_at))) {
             foreach ($questions as $question) {
                 if (!array_key_exists($question['id'], $answers)) {
-                    $answers[$question['id']] = null;
+                    $answers[$question['id']] = $this->expiredPlaceholderAnswer($question, $session);
                 }
             }
             if (!in_array($session->status, ['completed', 'expired'], true)) {
@@ -468,6 +528,10 @@ class SalaryAdjustmentAssessmentEngine
         $questions = is_array($session->questions_json) ? $session->questions_json : [];
         $name = strtoupper(trim((string) $session->category_name));
 
+        if (InternalTypingTestService::isTypingCategoryName($name)) {
+            return (new InternalTypingTestService())->scoreSession($questions, $answers);
+        }
+
         if ($name === '16PF') {
             $employee = null;
             if ($assessment && $assessment->request_id) {
@@ -549,7 +613,7 @@ class SalaryAdjustmentAssessmentEngine
 
             foreach ($questions as $question) {
                 if (!array_key_exists($question['id'], $answers)) {
-                    $answers[$question['id']] = null;
+                    $answers[$question['id']] = $this->expiredPlaceholderAnswer($question, $session);
                 }
             }
 
@@ -611,13 +675,48 @@ class SalaryAdjustmentAssessmentEngine
 
     private function sessionMeta(SalaryAdjustmentAssessmentSession $session, SalaryAdjustmentAssessment $assessment): array
     {
+        $isTyping = InternalTypingTestService::isTypingCategoryName($session->category_name ?? null);
+        $durationMinutes = (int) $session->duration_minutes;
+
         return [
             'name' => $session->category_name,
             'order' => $session->session_order,
-            'duration_minutes' => (int) $session->duration_minutes,
-            'has_time_limit' => (int) $session->duration_minutes > 0,
+            'duration_minutes' => $durationMinutes,
+            'has_time_limit' => $durationMinutes > 0,
             'expires_at' => $session->expires_at,
             'question_count' => (int) $session->question_count,
+            'is_typing_test' => $isTyping,
+            'duration_seconds' => $isTyping
+                ? ($durationMinutes > 0 ? $durationMinutes * 60 : InternalTypingTestService::DEFAULT_DURATION_SECONDS)
+                : null,
+        ];
+    }
+
+    private function isTypingQuestion(array $question, SalaryAdjustmentAssessmentSession $session): bool
+    {
+        if (($question['type'] ?? '') === 'typing_test') {
+            return true;
+        }
+
+        return InternalTypingTestService::isTypingCategoryName($session->category_name ?? null);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function expiredPlaceholderAnswer(array $question, SalaryAdjustmentAssessmentSession $session)
+    {
+        if (!$this->isTypingQuestion($question, $session)) {
+            return null;
+        }
+
+        $durationMinutes = max(1, (int) $session->duration_minutes);
+
+        return [
+            'typed_words' => [],
+            'duration_ms' => $durationMinutes * 60 * 1000,
+            'target_word_count' => count($question['words'] ?? []),
+            'auto_expired' => true,
         ];
     }
 
