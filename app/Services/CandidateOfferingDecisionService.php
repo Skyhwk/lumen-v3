@@ -53,10 +53,12 @@ class CandidateOfferingDecisionService
     public static function isWaitingCandidateOffering($recruitment): bool
     {
         $status = (string) ($recruitment->status ?? '');
-        $lastHistoryStatus = self::lastHistoryStatus($recruitment);
+        if (!in_array($status, ['salary_offer', 'internal_sallary_offer'], true)) {
+            return false;
+        }
 
-        return $lastHistoryStatus === self::HISTORY_SENT
-            && in_array($status, ['salary_offer', 'internal_sallary_offer'], true);
+        // Finance may append candidate_offering_email_sent after candidate_offering_sent.
+        return RecruitmentStatusService::isAwaitingCandidateOfferingResponse($recruitment);
     }
 
     public static function lastOfferingSentAt($recruitment): ?Carbon

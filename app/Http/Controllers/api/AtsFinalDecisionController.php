@@ -544,6 +544,54 @@ class AtsFinalDecisionController extends Controller
                         'reject_reason' => $rejectReason,
                     ];
                 }
+                if ($requesterStatus === RequesterSalaryApprovalService::STATUS_NEGOTIATED) {
+                    $negoReason = null;
+                    $negoEntry = null;
+                    foreach (array_reverse($history) as $entry) {
+                        if (($entry['status'] ?? '') === RequesterSalaryApprovalService::HISTORY_NEGOTIATED) {
+                            $negoEntry = $entry;
+                            $negoReason = trim((string) ($entry['reason'] ?? '')) ?: null;
+                            break;
+                        }
+                    }
+                    if ($negoReason === null) {
+                        $openDecision = DecisionSalary::query()
+                            ->where('new_recruitment_id', $row->id)
+                            ->where('decision', DecisionSalary::DECISION_NEGOTIATED)
+                            ->orderByDesc('id')
+                            ->first();
+                        $negoReason = $openDecision ? trim((string) ($openDecision->reason ?? '')) : null;
+                        $negoReason = $negoReason !== '' ? $negoReason : null;
+                    }
+
+                    return [
+                        'code' => 'requester_salary_negotiated',
+                        'label' => 'Nego User (Re-input HRD)',
+                        'email_sent_at' => $emailSentAt,
+                        'requester_salary_status' => $requesterStatus,
+                        'nego_reason' => $negoReason,
+                        'reject_reason' => $negoReason,
+                        'allow_hrd_transfer_jabatan' => (bool) ($negoEntry['allow_hrd_transfer_jabatan'] ?? false),
+                        'allow_hrd_transfer_divisi' => (bool) ($negoEntry['allow_hrd_transfer_divisi'] ?? false),
+                        'tanggal_join_nego' => $negoEntry['tanggal_join_nego'] ?? null,
+                    ];
+                }
+
+                if (RecruitmentStatusService::isAwaitingCandidateOfferingNegotiateResubmit($row)) {
+                    $readyToResend = RecruitmentStatusService::hasHrdSalaryInputSavedAfterCandidateNegotiate($row);
+                    $nego = RecruitmentStatusService::getCandidateOfferingNegotiateDetails($row) ?: [];
+
+                    return [
+                        'code' => 'candidate_offering_negotiated',
+                        'label' => $readyToResend
+                            ? 'Siap Kirim Ulang ke Kandidat'
+                            : 'Dinegosiasi Kandidat (Re-input HRD)',
+                        'email_sent_at' => $emailSentAt,
+                        'salary_offer_candidate' => $nego['salary_offer_candidate'] ?? optional($offer)->salary_offer_candidate,
+                        'tunjangan_offer_candidate' => $nego['tunjangan_offer_candidate'] ?? optional($offer)->tunjangan_offer_candidate,
+                        'tanggal_mulai_kerja' => $nego['tanggal_mulai_kerja'] ?? optional($row->candidateDataOffer)->tanggal_mulai_kerja,
+                    ];
+                }
 
                 if (RecruitmentStatusService::isAwaitingCandidateOfferingResponse($row)) {
                     return [
@@ -566,22 +614,6 @@ class AtsFinalDecisionController extends Controller
                         'code' => 'waiting_candidate_approval',
                         'label' => 'Menunggu Respon Kandidat',
                         'email_sent_at' => $emailSentAt,
-                    ];
-                }
-
-                if (RecruitmentStatusService::isAwaitingCandidateOfferingNegotiateResubmit($row)) {
-                    $readyToResend = RecruitmentStatusService::hasHrdSalaryInputSavedAfterCandidateNegotiate($row);
-                    $nego = RecruitmentStatusService::getCandidateOfferingNegotiateDetails($row) ?: [];
-
-                    return [
-                        'code' => 'candidate_offering_negotiated',
-                        'label' => $readyToResend
-                            ? 'Siap Kirim Ulang ke Kandidat'
-                            : 'Dinegosiasi Kandidat (Re-input HRD)',
-                        'email_sent_at' => $emailSentAt,
-                        'salary_offer_candidate' => $nego['salary_offer_candidate'] ?? optional($offer)->salary_offer_candidate,
-                        'tunjangan_offer_candidate' => $nego['tunjangan_offer_candidate'] ?? optional($offer)->tunjangan_offer_candidate,
-                        'tanggal_mulai_kerja' => $nego['tanggal_mulai_kerja'] ?? optional($row->candidateDataOffer)->tanggal_mulai_kerja,
                     ];
                 }
 
@@ -713,6 +745,14 @@ class AtsFinalDecisionController extends Controller
                     ];
                 }
 
+                if (RecruitmentStatusService::isAwaitingJoinDateForHiringLetter($row)) {
+                    return [
+                        'code' => 'awaiting_join_date',
+                        'label' => 'Disetujui Direktur — Input Tanggal Join',
+                        'email_sent_at' => $emailSentAt,
+                    ];
+                }
+
                 if (RecruitmentStatusService::isReadyToSendDirectorAfterFinanceApprove($row)) {
                     return [
                         'code' => 'finance_approved',
@@ -724,24 +764,7 @@ class AtsFinalDecisionController extends Controller
                 $history = json_decode($row->meta_history ?: '[]', true);
                 $history = is_array($history) ? $history : [];
 
-                $decision = null;
-                if (!empty($history)) {
-                    for ($i = count($history) - 1; $i >= 0; $i--) {
-                        $hStatus = (string) ($history[$i]['status'] ?? '');
-                        if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $hStatus, $m)) {
-                            $decision = $m[1];
-                            break;
-                        }
-                    }
-                }
-
-                if (RecruitmentStatusService::isAwaitingJoinDateForHiringLetter($row)) {
-                    return [
-                        'code' => 'awaiting_join_date',
-                        'label' => 'Disetujui Direktur — Input Tanggal Join',
-                        'email_sent_at' => $emailSentAt,
-                    ];
-                }
+                $decision = RecruitmentStatusService::getLatestDirectorSalaryDecision($history);
 
                 if ($decision === 'approved' || $status === 'hired' || $status === 'accepted') {
                     return [

@@ -375,6 +375,7 @@ class RecruitmentStatusService
             if (in_array($status, [
                 'candidate_offering_approved',
                 'candidate_offering_rejected',
+                'candidate_offering_negotiated',
                 'candidate_rejected',
             ], true)) {
                 return false;
@@ -1176,6 +1177,14 @@ class RecruitmentStatusService
             return false;
         }
 
+        if (self::isAwaitingCandidateOfferingNegotiateResubmit($recruitment)) {
+            return false;
+        }
+
+        if (self::isAwaitingCandidateOfferingResubmit($recruitment)) {
+            return false;
+        }
+
         if (!self::hasFinanceApproved($recruitment)) {
             return false;
         }
@@ -1636,6 +1645,7 @@ class RecruitmentStatusService
         if (self::isAwaitingDirectorSalaryResubmit($recruitment)
             || self::isAwaitingFinanceResubmit($recruitment)
             || self::isAwaitingCandidateOfferingResubmit($recruitment)
+            || self::isAwaitingCandidateOfferingNegotiateResubmit($recruitment)
             || self::isFinanceRejectedOnManagementDecision($recruitment)) {
             return true;
         }

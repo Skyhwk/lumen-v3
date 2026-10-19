@@ -707,10 +707,11 @@ class GenerateMessageAtsEmail
         $portalUrl = self::portalBaseUrl();
         $encodedToken = $token ?? $recruitment->token_approval ?? '';
 
+        // Approval (Salary) Direktur: hanya Approve & Reject (negosiasi hanya di offering kandidat).
         return (object) [
             'approve'   => $portalUrl ? "{$portalUrl}/public/recruitment/salary-decision/{$encodedToken}?decision=approve" : '',
             'reject'    => $portalUrl ? "{$portalUrl}/public/recruitment/salary-decision/{$encodedToken}?decision=reject" : '',
-            'negotiate' => $portalUrl ? "{$portalUrl}/public/recruitment/salary-decision/{$encodedToken}?decision=negotiate" : '',
+            'negotiate' => '',
         ];
     }
 

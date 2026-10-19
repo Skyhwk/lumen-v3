@@ -119,6 +119,9 @@ class FinanceOfferingSallaryController extends Controller
             ->addColumn('sallary_offer_user', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_user ?? 0;
             })
+            ->addColumn('tunjangan_gaji_user', function ($row) {
+                return optional($row->sallaryOffer)->tunjangan_gaji_user ?? 0;
+            })
             ->addColumn('sallary_offer_direktur', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_direktur ?? 0;
             })

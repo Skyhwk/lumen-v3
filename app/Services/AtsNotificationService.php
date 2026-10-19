@@ -308,7 +308,18 @@ class AtsNotificationService
     public function requesterSalaryDecisionMade($recruitment, string $decision, ?string $reason = null): void
     {
         $candidate = $this->candidateName($recruitment);
-        $approved = $decision === 'approved';
+        $normalized = strtolower(trim($decision));
+        if ($normalized === 'negotiated') {
+            $message = "User mengajukan negosiasi gaji kandidat {$candidate}. HRD perlu menyesuaikan penawaran.";
+            if (trim((string) $reason) !== '') {
+                $message .= ' Catatan: ' . trim($reason);
+            }
+            $this->notifyHrdTeam('User Negosiasi Gaji', $message, self::URL_FINAL_DECISION);
+
+            return;
+        }
+
+        $approved = $normalized === 'approved';
         $message = $approved
             ? "User menyetujui gaji kandidat {$candidate}. HRD dapat melanjutkan kirim offering ke kandidat."
             : "User menolak gaji kandidat {$candidate}. HRD perlu menginput ulang penawaran gaji.";

@@ -719,6 +719,7 @@ class PersonnelRequestController extends Controller
             ->whereIn('decision', [
                 DecisionSalary::DECISION_PENDING,
                 DecisionSalary::DECISION_REJECTED,
+                DecisionSalary::DECISION_NEGOTIATED,
                 DecisionSalary::DECISION_APPROVED,
             ])
             ->whereIn('id', function ($q) {
@@ -727,6 +728,7 @@ class PersonnelRequestController extends Controller
                     ->whereIn('decision', [
                         DecisionSalary::DECISION_PENDING,
                         DecisionSalary::DECISION_REJECTED,
+                        DecisionSalary::DECISION_NEGOTIATED,
                         DecisionSalary::DECISION_APPROVED,
                     ])
                     ->groupBy('new_recruitment_id');
@@ -1067,13 +1069,23 @@ class PersonnelRequestController extends Controller
             if (!$pending) {
                 $pending = RequesterSalaryApprovalService::getPendingForRecruitment((int) $recruitment->id);
             }
-            // Setelah reject, putaran tetap ditampilkan di tab User sampai HRD re-input / User approve
+            // Setelah reject / negotiated, putaran tetap ditampilkan di tab User sampai HRD re-input / User approve
             if (!$pending) {
                 $pending = DecisionSalary::query()
                     ->where('new_recruitment_id', $recruitment->id)
-                    ->where('decision', DecisionSalary::DECISION_REJECTED)
+                    ->whereIn('decision', [DecisionSalary::DECISION_REJECTED, DecisionSalary::DECISION_NEGOTIATED])
                     ->orderByDesc('id')
                     ->first();
+            }
+
+            $historyEntries = json_decode($recruitment->meta_history ?: '[]', true);
+            $historyEntries = is_array($historyEntries) ? $historyEntries : [];
+            $lastNegoHistory = null;
+            foreach (array_reverse($historyEntries) as $entry) {
+                if (($entry['status'] ?? '') === RequesterSalaryApprovalService::HISTORY_NEGOTIATED) {
+                    $lastNegoHistory = $entry;
+                    break;
+                }
             }
 
             $posisiName = optional($recruitment->personnelRequest->detailPosisi)->nama_jabatan
@@ -1095,6 +1107,9 @@ class PersonnelRequestController extends Controller
                     'sallary_offer' => $recruitment->sallaryOffer,
                     'candidate_data_offer' => $recruitment->candidateDataOffer,
                     'posisi_name' => $posisiName,
+                    'allow_hrd_transfer_jabatan' => (bool) ($lastNegoHistory['allow_hrd_transfer_jabatan'] ?? false),
+                    'allow_hrd_transfer_divisi' => (bool) ($lastNegoHistory['allow_hrd_transfer_divisi'] ?? false),
+                    'tanggal_join_nego' => $lastNegoHistory['tanggal_join_nego'] ?? null,
                 ],
             ], 200);
         } catch (\Throwable $th) {
@@ -1116,14 +1131,21 @@ class PersonnelRequestController extends Controller
             }
 
             $decision = strtolower(trim((string) $request->input('decision')));
-            if (!in_array($decision, ['approve', 'approved', 'reject', 'rejected'], true)) {
+            if ($decision === 'nego') {
+                $decision = 'negotiate';
+            }
+            if (!in_array($decision, ['approve', 'approved', 'reject', 'rejected', 'negotiate'], true)) {
                 DB::rollBack();
                 return response()->json(['message' => 'Keputusan tidak valid.'], 422);
             }
 
-            $normalized = in_array($decision, ['approve', 'approved'], true)
-                ? DecisionSalary::DECISION_APPROVED
-                : DecisionSalary::DECISION_REJECTED;
+            if (in_array($decision, ['approve', 'approved'], true)) {
+                $normalized = DecisionSalary::DECISION_APPROVED;
+            } elseif ($decision === 'negotiate') {
+                $normalized = DecisionSalary::DECISION_NEGOTIATED;
+            } else {
+                $normalized = DecisionSalary::DECISION_REJECTED;
+            }
 
             $row = null;
             if ($request->filled('decision_salary_id')) {
@@ -1145,31 +1167,7 @@ class PersonnelRequestController extends Controller
                 return response()->json(['message' => 'Tidak ada pengajuan gaji yang menunggu approval.'], 404);
             }
 
-            if ($request->exists('tunjangan_gaji_user') && SallaryOfferService::hasTunjanganGajiUserColumn()) {
-                $tunjanganNormalized = RequesterSalaryApprovalService::normalizeAmount(
-                    $request->input('tunjangan_gaji_user'),
-                    true
-                );
-                if ($tunjanganNormalized === null) {
-                    $tunjanganNormalized = 0;
-                }
-
-                $activeOffer = SallaryOfferService::getActive((int) $recruitment->id);
-                if ($activeOffer) {
-                    $activeOffer->update([
-                        'tunjangan_gaji_user' => $tunjanganNormalized,
-                        'updated_by' => $this->karyawan,
-                    ]);
-                }
-            }
-
-            $saved = RequesterSalaryApprovalService::recordDecision(
-                $row,
-                $normalized,
-                $this->karyawan,
-                $request->input('reason')
-            );
-
+            $pokokNormalized = null;
             if ($request->exists('sallary_offer_user')) {
                 $pokokNormalized = RequesterSalaryApprovalService::normalizeAmount(
                     $request->input('sallary_offer_user')
@@ -1180,22 +1178,86 @@ class PersonnelRequestController extends Controller
                         'message' => 'Gaji Pokok User wajib diisi.',
                     ], 422);
                 }
+            }
 
-                $activeOffer = SallaryOfferService::getActive((int) $recruitment->id);
-                if ($activeOffer) {
-                    $activeOffer->update([
-                        'sallary_offer_user' => $pokokNormalized,
-                        'updated_by' => $this->karyawan,
-                    ]);
+            $tunjanganNormalized = null;
+            if ($request->exists('tunjangan_gaji_user') && SallaryOfferService::hasTunjanganGajiUserColumn()) {
+                $tunjanganNormalized = RequesterSalaryApprovalService::normalizeAmount(
+                    $request->input('tunjangan_gaji_user'),
+                    true
+                );
+                if ($tunjanganNormalized === null) {
+                    $tunjanganNormalized = 0;
                 }
             }
 
+            $activeOffer = SallaryOfferService::getActive((int) $recruitment->id);
+            if ($activeOffer && $pokokNormalized !== null) {
+                $offerUpdate = [
+                    'sallary_offer_user' => $pokokNormalized,
+                    'updated_by' => $this->karyawan,
+                ];
+                if ($tunjanganNormalized !== null) {
+                    $offerUpdate['tunjangan_gaji_user'] = $tunjanganNormalized;
+                }
+                $activeOffer->update($offerUpdate);
+            }
+
+            $joinRaw = trim((string) $request->input('tanggal_join', ''));
+            $normalizedJoin = $joinRaw !== '' ? RecruitmentInterview::normalizeTanggalJoin($joinRaw) : null;
+
+            $cdo = $recruitment->candidateDataOffer;
+            $hrdTunjangan = $cdo
+                ? (RequesterSalaryApprovalService::normalizeAmount($cdo->tunjangan_kerja, true) ?? 0)
+                : 0;
+            $userTunjangan = $tunjanganNormalized !== null
+                ? $tunjanganNormalized
+                : (RequesterSalaryApprovalService::normalizeAmount(optional($activeOffer)->tunjangan_gaji_user, true) ?? 0);
+
+            $extraHistory = array_filter([
+                'allow_hrd_transfer_jabatan' => $request->boolean('allow_hrd_transfer_jabatan') ?: null,
+                'allow_hrd_transfer_divisi' => $request->boolean('allow_hrd_transfer_divisi') ?: null,
+                'tanggal_join_nego' => $normalizedJoin,
+                'user_tunjangan_amount' => $normalized === DecisionSalary::DECISION_NEGOTIATED ? $userTunjangan : null,
+                'hrd_tunjangan_amount' => $normalized === DecisionSalary::DECISION_NEGOTIATED ? $hrdTunjangan : null,
+            ], static function ($value) {
+                return $value !== null && $value !== false && $value !== '';
+            });
+
+            if ($normalized === DecisionSalary::DECISION_NEGOTIATED && RecruitmentInterview::hasTanggalJoinColumn()) {
+                if ($normalizedJoin !== null) {
+                    $interview = RecruitmentInterview::where('new_recruitment_id', $recruitment->id)
+                        ->where('stage', 'user')
+                        ->where('is_active', 1)
+                        ->orderByDesc('id')
+                        ->first();
+                    if ($interview) {
+                        $interview->update([
+                            'tanggal_join' => $normalizedJoin,
+                            'updated_by' => $this->getEffectiveKaryawanName(),
+                        ]);
+                    }
+                }
+            }
+
+            $saved = RequesterSalaryApprovalService::recordDecision(
+                $row,
+                $normalized,
+                $this->karyawan,
+                $request->input('reason'),
+                $extraHistory
+            );
+
             DB::commit();
 
+            $message = $normalized === DecisionSalary::DECISION_APPROVED
+                ? 'Gaji HRD disetujui. HRD dapat melanjutkan kirim offering ke kandidat.'
+                : ($normalized === DecisionSalary::DECISION_NEGOTIATED
+                    ? 'Usulan negosiasi gaji berhasil dikirim ke HRD.'
+                    : 'Gaji HRD ditolak. HRD perlu menginput ulang penawaran.');
+
             return response()->json([
-                'message' => $normalized === DecisionSalary::DECISION_APPROVED
-                    ? 'Gaji HRD disetujui. HRD dapat melanjutkan kirim offering ke kandidat.'
-                    : 'Gaji HRD ditolak. HRD perlu menginput ulang penawaran.',
+                'message' => $message,
                 'data' => $saved,
             ], 200);
         } catch (\InvalidArgumentException $e) {
@@ -2053,8 +2115,12 @@ class PersonnelRequestController extends Controller
                 'catatan_interview' => $request->catatan_interview_user,
                 'updated_by' => $this->getEffectiveKaryawanName(),
             ];
-            if (RecruitmentInterview::hasTanggalJoinColumn() && $request->exists('tanggal_join')) {
-                $interviewPayload['tanggal_join'] = RecruitmentInterview::normalizeTanggalJoin($request->input('tanggal_join'));
+            if (RecruitmentInterview::hasTanggalJoinColumn()) {
+                $joinRaw = trim((string) $request->input('tanggal_join', ''));
+                $normalizedJoin = $joinRaw !== '' ? RecruitmentInterview::normalizeTanggalJoin($joinRaw) : null;
+                if ($normalizedJoin !== null) {
+                    $interviewPayload['tanggal_join'] = $normalizedJoin;
+                }
             }
 
             $interview->update($interviewPayload);
