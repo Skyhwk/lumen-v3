@@ -34,6 +34,7 @@ class CandidateOfferingDecisionController extends Controller
                 'result' => 'ready',
                 'candidate' => CandidateOfferingDecisionService::candidatePayload($recruitment),
                 'offer' => CandidateOfferingDecisionService::currentOffer($recruitment),
+                'can_negotiate' => !CandidateOfferingDecisionService::hasNegotiatedOnce($recruitment),
             ]);
         });
     }
@@ -92,6 +93,14 @@ class CandidateOfferingDecisionController extends Controller
             }
             if ($decision === 'reject') {
                 return response()->json(CandidateOfferingDecisionService::reject($recruitment, $now, $rejectReason), 200);
+            }
+
+            if (CandidateOfferingDecisionService::hasNegotiatedOnce($recruitment)) {
+                return response()->json([
+                    'result' => 'unavailable',
+                    'message' => 'Negosiasi hanya dapat dilakukan 1 kali. Silakan Approve atau Reject penawaran ini.',
+                    'candidate' => CandidateOfferingDecisionService::candidatePayload($recruitment),
+                ], 403);
             }
 
             try {

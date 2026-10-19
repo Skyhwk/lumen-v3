@@ -39,6 +39,17 @@ class CandidateOfferingDecisionService
         return strtolower(trim((string) ($last['status'] ?? '')));
     }
 
+    public static function hasNegotiatedOnce($recruitment): bool
+    {
+        foreach (self::parseHistory($recruitment) as $entry) {
+            if (($entry['status'] ?? '') === self::HISTORY_NEGOTIATED) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static function isWaitingCandidateOffering($recruitment): bool
     {
         $status = (string) ($recruitment->status ?? '');

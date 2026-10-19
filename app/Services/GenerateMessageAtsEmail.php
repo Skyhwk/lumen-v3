@@ -106,11 +106,14 @@ class GenerateMessageAtsEmail
     {
         $portalUrl = self::portalBaseUrl();
         $encodedToken = $token ?? $recruitment->token;
+        $canNegotiate = !CandidateOfferingDecisionService::hasNegotiatedOnce($recruitment);
 
         return (object) [
             'approve'    => $portalUrl ? "{$portalUrl}/public/recruitment/candidate-offering/{$encodedToken}?decision=approve" : '',
             'reject'     => $portalUrl ? "{$portalUrl}/public/recruitment/candidate-offering/{$encodedToken}?decision=reject" : '',
-            'negotiate'  => $portalUrl ? "{$portalUrl}/public/recruitment/candidate-offering/{$encodedToken}?decision=negotiate" : '',
+            'negotiate'  => ($portalUrl && $canNegotiate)
+                ? "{$portalUrl}/public/recruitment/candidate-offering/{$encodedToken}?decision=negotiate"
+                : '',
         ];
     }
 
