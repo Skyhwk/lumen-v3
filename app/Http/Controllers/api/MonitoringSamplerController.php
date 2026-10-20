@@ -16,6 +16,8 @@ class MonitoringSamplerController extends Controller
     public function index(Request $request)
     {
         try {
+            [$periodeAwal, $periodeAkhir] = $this->resolvePeriodeRange($request);
+
             $existingWork = DB::table('persiapan_sampel_header')
                 ->select(
                     'id',
@@ -29,17 +31,38 @@ class MonitoringSamplerController extends Controller
                     'is_printed_stps'
                 )
                 ->where('is_active', true)
-                ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
+                ->whereBetween('tanggal_sampling', [$periodeAwal, $periodeAkhir])
                 ->get();
+
+            $headerSamples = [];
+            $allSampleNos = [];
+            foreach ($existingWork as $row) {
+                $samples = $this->decodeNoSampelList($row->no_sampel);
+                $headerSamples[(int) $row->id] = $samples;
+                foreach ($samples as $noSampel) {
+                    $allSampleNos[$noSampel] = true;
+                }
+            }
+
+            $selesaiLookup = $this->buildSelesaiLookup($existingWork, $periodeAwal, $periodeAkhir);
+            $orderDetailsBySampel = $this->loadOrderDetailsBySampel(array_keys($allSampleNos));
 
             $doneList = [];
             $headerByOrderDate = [];
 
             foreach ($existingWork as $row) {
+                $samples = $headerSamples[(int) $row->id] ?? [];
                 $headerMeta = [
                     'id_persiapan_sampel_header' => (int) $row->id,
                     'no_stps' => $this->noStpsFromHeader($row),
-                    'jumlah_titik' => $this->countTitik($row->no_sampel),
+                    'jumlah_titik' => count($samples),
+                    'titik_diambil' => $this->countTitikDiambil(
+                        $samples,
+                        $row->no_order,
+                        $row->tanggal_sampling,
+                        $selesaiLookup,
+                        $orderDetailsBySampel
+                    ),
                     'is_proccess' => true,
                     'is_downloaded_stps' => $row->is_downloaded_stps,
                     'is_printed_stps' => $row->is_printed_stps,
@@ -98,7 +121,7 @@ class MonitoringSamplerController extends Controller
             ])
             ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
             ->where('is_active', true)
-            ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
+            ->whereBetween('tanggal_sampling', [$periodeAwal, $periodeAkhir])
             ->get();
 
             $groupedData = [];
@@ -162,6 +185,7 @@ class MonitoringSamplerController extends Controller
 
                     $schedule->sampler = implode(',', $pendingSamplers);
                     $kategori = implode(',', json_decode($schedule->kategori, true) ?? []);
+                    $durasiLabel = $this->mapDurasi($schedule->durasi);
 
                     $key = $orderHeader->no_document . '|' .
                         $item->no_order . '|' .
@@ -174,6 +198,10 @@ class MonitoringSamplerController extends Controller
                         $newSamplers = explode(',', $schedule->sampler ?? '');
                         $merged = array_unique(array_merge($existingSamplers, $newSamplers));
                         $groupedData[$key]['sampler'] = implode(',', array_filter($merged));
+                        $groupedData[$key]['durasi'] = $this->mergeDurasiLabels(
+                            $groupedData[$key]['durasi'] ?? '-',
+                            $durasiLabel
+                        );
                     } else {
                         $groupedData[$key] = [
                             'id_persiapan_sampel_header' => $headerMeta['id_persiapan_sampel_header'],
@@ -183,6 +211,8 @@ class MonitoringSamplerController extends Controller
                             'jadwal' => $schedule->tanggal,
                             'sampler' => $schedule->sampler ?? '',
                             'jumlah_titik' => $headerMeta['jumlah_titik'],
+                            'titik_diambil' => $headerMeta['titik_diambil'],
+                            'durasi' => $durasiLabel,
                             'no_order' => $item->no_order ?? '',
                             'periode' => $periode,
                             'kategori' => $kategori,
@@ -278,6 +308,7 @@ class MonitoringSamplerController extends Controller
                     'jadwal' => $header->tanggal_sampling,
                     'sampler' => $header->sampler_jadwal,
                     'jumlah_titik' => count($samples),
+                    'titik_diambil' => collect($samples)->where('is_selesai', true)->count(),
                     'samples' => $samples,
                 ],
             ], 200);
@@ -301,9 +332,126 @@ class MonitoringSamplerController extends Controller
 
     private function countTitik($noSampelJson): int
     {
-        $decoded = is_string($noSampelJson) ? json_decode($noSampelJson, true) : $noSampelJson;
+        return count($this->decodeNoSampelList($noSampelJson));
+    }
 
-        return is_array($decoded) ? count($decoded) : 0;
+    private function decodeNoSampelList($noSampelJson): array
+    {
+        $decoded = is_string($noSampelJson) ? json_decode($noSampelJson, true) : $noSampelJson;
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        return collect($decoded)
+            ->map(function ($noSampel) {
+                return trim((string) $noSampel);
+            })
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function mapDurasi($durasi): string
+    {
+        $map = [
+            0 => 'Sesaat',
+            1 => '8 Jam',
+            2 => '1x24 Jam',
+            3 => '2x24 Jam',
+            4 => '3x24 Jam',
+            5 => '4x24 Jam',
+            6 => '5x24 Jam',
+            7 => '6x24 Jam',
+            8 => '7x24 Jam',
+            9 => '8x24 Jam',
+        ];
+
+        $key = is_numeric($durasi) ? (int) $durasi : null;
+
+        return $key !== null && isset($map[$key]) ? $map[$key] : '-';
+    }
+
+    private function mergeDurasiLabels(string $existing, string $incoming): string
+    {
+        $parts = collect(explode(',', $existing))
+            ->merge(explode(',', $incoming))
+            ->map(function ($value) {
+                return trim($value);
+            })
+            ->filter(function ($value) {
+                return $value !== '' && $value !== '-';
+            })
+            ->unique()
+            ->values();
+
+        return $parts->isEmpty() ? '-' : $parts->implode(', ');
+    }
+
+    private function buildSelesaiLookup($headers, $periodeAwal, $periodeAkhir): array
+    {
+        $orders = collect($headers)
+            ->pluck('no_order')
+            ->map(function ($noOrder) {
+                return trim((string) $noOrder);
+            })
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($orders === []) {
+            return [];
+        }
+
+        $rows = BasSampelSelesai::query()
+            ->whereIn('no_order', $orders)
+            ->whereBetween('tanggal_sampling', [$periodeAwal, $periodeAkhir])
+            ->get(['no_order', 'tanggal_sampling', 'no_sampel']);
+
+        $lookup = [];
+        foreach ($rows as $row) {
+            $key = sprintf(
+                '%s|%s|%s',
+                trim((string) $row->no_order),
+                trim((string) $row->tanggal_sampling),
+                trim((string) $row->no_sampel)
+            );
+            $lookup[$key] = true;
+        }
+
+        return $lookup;
+    }
+
+    private function loadOrderDetailsBySampel(array $sampleNos)
+    {
+        if ($sampleNos === []) {
+            return collect();
+        }
+
+        return OrderDetail::where('is_active', true)
+            ->whereIn('no_sampel', $sampleNos)
+            ->get(['no_sampel', 'kategori_3', 'parameter'])
+            ->keyBy(function ($row) {
+                return trim((string) $row->no_sampel);
+            });
+    }
+
+    private function countTitikDiambil(array $samples, $noOrder, $tanggalSampling, array $selesaiLookup, $orderDetailsBySampel): int
+    {
+        $taken = 0;
+        $orderKey = trim((string) $noOrder);
+        $tanggalKey = trim((string) $tanggalSampling);
+
+        foreach ($samples as $noSampel) {
+            $selesaiKey = sprintf('%s|%s|%s', $orderKey, $tanggalKey, $noSampel);
+            $orderDetail = $orderDetailsBySampel->get($noSampel);
+            if (isset($selesaiLookup[$selesaiKey]) || $this->isPsikologiSample($orderDetail) || $this->isK3Sample($orderDetail)) {
+                $taken++;
+            }
+        }
+
+        return $taken;
     }
 
     private function resolveSubKategori($orderDetail, $basRow): string
@@ -377,5 +525,32 @@ class MonitoringSamplerController extends Controller
     private function stripKategoriPrefix(string $value): string
     {
         return trim((string) preg_replace('/^\d+-/', '', $value));
+    }
+
+    /** Bulan berjalan dipotong sampai hari ini (Asia/Jakarta). Bulan lain tetap 1 s/d akhir bulan. */
+    private function resolvePeriodeRange(Request $request): array
+    {
+        $awal = $request->input('periode_awal');
+        $akhir = $request->input('periode_akhir');
+        $today = Carbon::now('Asia/Jakarta')->startOfDay();
+
+        if (!$awal && !$akhir) {
+            $awal = $today->copy()->startOfMonth()->toDateString();
+            $akhir = $today->toDateString();
+            return [$awal, $akhir];
+        }
+
+        try {
+            $start = $awal ? Carbon::parse($awal, 'Asia/Jakarta')->startOfDay() : $today->copy()->startOfMonth();
+            $end = $akhir ? Carbon::parse($akhir, 'Asia/Jakarta')->startOfDay() : $start->copy()->endOfMonth();
+        } catch (\Throwable $e) {
+            return [$today->copy()->startOfMonth()->toDateString(), $today->toDateString()];
+        }
+
+        if ($start->isSameMonth($today) && $end->gt($today)) {
+            $end = $today->copy();
+        }
+
+        return [$start->toDateString(), $end->toDateString()];
     }
 }
