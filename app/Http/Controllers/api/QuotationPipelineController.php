@@ -23,10 +23,15 @@ class QuotationPipelineController extends Controller
 
             $range = $this->yearRange($year);
             $salesIds = $this->salesIds($request);
+            $cabang = $request->input('id_cabang', 1);
+            if (!is_numeric($cabang) || (int) $cabang <= 0) {
+                $cabang = 1;
+            }
+            $cabang = (int) $cabang;
 
             $requestQr = $this->countRequestQr($request, $range);
-            $nonKontrak = $this->countQuotationStages(QuotationNonKontrak::query(), $range, $salesIds, true);
-            $kontrak = $this->countQuotationStages(QuotationKontrakH::query(), $range, $salesIds, false);
+            $nonKontrak = $this->countQuotationStages(QuotationNonKontrak::query(), $year, $salesIds, $cabang, true);
+            $kontrak = $this->countQuotationStages(QuotationKontrakH::query(), $year, $salesIds, $cabang, false);
 
             $keys = array(
                 'quote_request',
@@ -150,9 +155,9 @@ class QuotationPipelineController extends Controller
         );
     }
 
-    private function countQuotationStages($query, $range, $salesIds, $isNonKontrak)
+    private function countQuotationStages($query, $year, $salesIds, $cabang, $isNonKontrak)
     {
-        $this->applyYearRange($query, $range, 'tanggal_penawaran');
+        $query->whereYear('tanggal_penawaran', $year);
 
         if (is_array($salesIds)) {
             $query->whereIn('sales_id', $salesIds);
@@ -161,24 +166,29 @@ class QuotationPipelineController extends Controller
         $followUpExtra = $isNonKontrak
             ? " AND status_sampling <> 'SD'"
             : '';
+        $cabangSql = ' AND id_cabang = ' . (int) $cabang;
 
         $row = $query->selectRaw("
                 COALESCE(SUM(CASE
                     WHEN is_active = 1 AND is_approved = 0
                         AND COALESCE(flag_status, 'rejected') = 'rejected'
+                        {$cabangSql}
                     THEN 1 ELSE 0 END), 0) AS quote_request,
                 COALESCE(SUM(CASE
                     WHEN is_active = 1 AND is_approved = 0 AND flag_status = 'draft'
+                        {$cabangSql}
                     THEN 1 ELSE 0 END), 0) AS need_approve,
                 COALESCE(SUM(CASE
                     WHEN is_active = 1 AND is_approved = 1 AND flag_status = 'draft'
                         AND is_emailed = 0
+                        {$cabangSql}
                     THEN 1 ELSE 0 END), 0) AS qt_approved,
                 COALESCE(SUM(CASE
                     WHEN is_active = 1 AND is_approved = 1 AND is_emailed = 1
                         AND is_generate_data_lab = 1
                         AND flag_status IN ('emailed', 'sp')
                         {$followUpExtra}
+                        {$cabangSql}
                     THEN 1 ELSE 0 END), 0) AS follow_up_qt,
                 COALESCE(SUM(CASE
                     WHEN is_active = 1 AND is_approved = 1 AND is_emailed = 1
@@ -191,9 +201,11 @@ class QuotationPipelineController extends Controller
                         AND flag_status = 'sp'
                         AND is_ready_order = 1
                         AND konfirmasi_order = 1
+                        {$cabangSql}
                     THEN 1 ELSE 0 END), 0) AS ready_order,
                 COALESCE(SUM(CASE
                     WHEN is_approved = 1 AND is_emailed = 1 AND flag_status = 'ordered'
+                        {$cabangSql}
                     THEN 1 ELSE 0 END), 0) AS qt_ordered
             ")
             ->first();
