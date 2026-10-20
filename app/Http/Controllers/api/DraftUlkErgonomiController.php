@@ -1623,62 +1623,82 @@ class DraftUlkErgonomiController extends Controller
         if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
             return $denied;
         }
-        
-        DB::beginTransaction();
+
+        $noSampel = trim((string) $request->no_sampel, " \t\n\r\0\x0B,");
+        $kategori3 = (string) ($request->kategori_3 ?? '');
+        $category = explode('-', $kategori3)[0] ?? '';
         $categoryLingkunganKerja = [11, 27, 53];
-        $category = explode('-', $request->kategori_3)[0];
-        $sub_category = explode('-', $request->kategori_3)[1];
-        $data_order = OrderDetail::where('no_sampel', $request->no_sampel)
-            ->where('is_active', true)
-            ->first();
-        
-        if (in_array($category, $categoryLingkunganKerja)) {
-            try {
-                // Lingkungan Kerja
-                $data = DraftErgonomiFile::where('no_sampel',$data_order->no_sampel)
+
+        if (!in_array($category, $categoryLingkunganKerja)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Kategori tidak valid untuk reject draft Ergonomi.',
+            ], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $data_order = OrderDetail::where('no_sampel', $noSampel)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$data_order && $request->filled('id')) {
+                $data_order = OrderDetail::where('id', $request->id)
+                    ->where('is_active', true)
                     ->first();
-
-                if ($data != null) {
-                    $data_order->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $data_order->rejected_by = $this->karyawan;
-                    $data_order->status = 0;
-                    $data_order->save();
-
-                    
-                    $data->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $data->rejected_by = $this->karyawan;
-                    // $data->save();
-
-                    $data_history = $data->replicate();
-                    $data_history->setTable((new DraftErgonomiFileHistory())->getTable());
-
-                    $data->delete();
-                    
-                    HistoryAppReject::insert([
-                        'no_lhp' => $data_order->cfr,
-                        'no_sampel' => $data_order->no_sampel,
-                        'kategori_2' => $data_order->kategori_2,
-                        'kategori_3' => $data_order->kategori_3,
-                        'menu' => 'Draft Udara ULK Ergonomi',
-                        'status' => 'reject',
-                        'rejected_at' => Carbon::now(),
-                        'rejected_by' => $this->karyawan
-                    ]);
-                }
-                DB::commit();
-                return response()->json([
-                    'data' => $data,
-                    'status' => true,
-                    'message' => 'Data draft LHP air no sampel ' . $data->no_sampel . ' berhasil di reject'
-                ], 200);
-            } catch (\Exception $th) {
-                DB::rollback();
-                return response()->json([
-                    'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                    'line' => $th->getLine(),
-                    'status' => false
-                ], 500);
             }
+
+            if (!$data_order) {
+                DB::rollBack();
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Data order no sampel ' . $noSampel . ' tidak ditemukan.',
+                ], 404);
+            }
+
+            $now = Carbon::now()->format('Y-m-d H:i:s');
+            $data_order->rejected_at = $now;
+            $data_order->rejected_by = $this->karyawan;
+            $data_order->status = 0;
+            $data_order->is_approve = 0;
+            $data_order->save();
+
+            $data = DraftErgonomiFile::where('no_sampel', $data_order->no_sampel)->first();
+            if ($data) {
+                $data->rejected_at = $now;
+                $data->rejected_by = $this->karyawan;
+
+                $data_history = $data->replicate();
+                $data_history->setTable((new DraftErgonomiFileHistory())->getTable());
+                $data_history->save();
+
+                $data->delete();
+            }
+
+            HistoryAppReject::insert([
+                'no_lhp' => $data_order->cfr,
+                'no_sampel' => $data_order->no_sampel,
+                'kategori_2' => $data_order->kategori_2,
+                'kategori_3' => $data_order->kategori_3,
+                'menu' => 'Draft Udara ULK Ergonomi',
+                'status' => 'reject',
+                'rejected_at' => Carbon::now(),
+                'rejected_by' => $this->karyawan
+            ]);
+
+            DB::commit();
+            return response()->json([
+                'data' => $data_order,
+                'status' => true,
+                'message' => 'Data draft Ergonomi no sampel ' . $data_order->no_sampel . ' berhasil di reject'
+            ], 200);
+        } catch (\Exception $th) {
+            DB::rollback();
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                'line' => $th->getLine(),
+                'status' => false
+            ], 500);
         }
     }
 
