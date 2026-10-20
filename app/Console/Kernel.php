@@ -81,6 +81,8 @@ class Kernel extends ConsoleKernel
         Commands\SyncGreatdayMobileAbsensiCommand::class,
         Commands\ImportGreatdayAssetsFromInternalCommand::class,
         Commands\GaAssetImportFinancialCommand::class,
+        Commands\GaAssetReconcileExcelCommand::class,
+        Commands\GaAssetSmokeMenusCommand::class,
         Commands\QuotationDiscoverCommand::class,
         Commands\QuotationCreateCommand::class,
         Commands\QuotationDispatchCommand::class,
