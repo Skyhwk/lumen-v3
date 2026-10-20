@@ -23,20 +23,37 @@ class PurchaseRequestApprovalController extends Controller
         ], 200);
     }
 
+    private function scopedQuery(string $scope, bool $withRelations = true)
+    {
+        $query = PurchaseRequest::query()
+            ->where('is_active', true)
+            ->whereIn('status', ['Approved', 'Partially Approved']);
+
+        if ($withRelations) {
+            $query->with(['items', 'employee.jabatan', 'employee.divisi']);
+        }
+
+        if ($scope === 'pending') {
+            return $query->where('finance_status', 'Waiting to Delegate');
+        }
+
+        return $query->whereNotIn('finance_status', ['Waiting to Delegate', 'Rejected']);
+    }
+
+    public function tabCounts()
+    {
+        return response()->json([
+            'data' => [
+                'pending' => (int) $this->scopedQuery('pending', false)->count(),
+                'approved' => (int) $this->scopedQuery('approved', false)->count(),
+            ],
+        ], 200);
+    }
+
     public function index(Request $request)
     {
         $scope = $request->input('scope', 'pending');
-
-        $purchaseRequests = PurchaseRequest::with(['items', 'employee.jabatan', 'employee.divisi'])
-            ->where('is_active', true)
-            ->whereIn('status', ['Approved', 'Partially Approved'])
-            ->latest();
-
-        if ($scope === 'pending') {
-            $purchaseRequests = $purchaseRequests->where('finance_status', 'Waiting to Delegate');
-        } else {
-            $purchaseRequests = $purchaseRequests->whereNotIn('finance_status', ['Waiting to Delegate', 'Rejected']);
-        }
+        $purchaseRequests = $this->scopedQuery($scope)->latest();
 
         return DataTables::of($purchaseRequests)
             ->addColumn('item_name', fn($row) => optional($row->items->first())->item_name)
