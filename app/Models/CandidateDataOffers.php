@@ -9,6 +9,10 @@ class CandidateDataOffers extends Model
     protected $table = 'candidate_data_offers';
     protected $guarded = [];
 
+    protected $casts = [
+        'tanggal_mulai_kerja_history' => 'array',
+    ];
+
     public function newRecruitment()
     {
         return $this->belongsTo(NewRecruitment::class, 'new_recruitment_id');

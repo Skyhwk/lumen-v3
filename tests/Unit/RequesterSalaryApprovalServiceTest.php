@@ -284,4 +284,60 @@ class RequesterSalaryApprovalServiceTest extends TestCase
             $this->assertCount(1, $this->hrdNotifications);
         }
     }
+
+    public function testApprovedStatusAllowsFinanceGateEvenWhenHrdDiffersFromUserReference(): void
+    {
+        [$applicant, $offer] = $this->applicant();
+        $offer->update([
+            'requester_salary_status' => 'approved',
+            'sallary_offer_hrd' => 6000000,
+            'sallary_offer_user' => 5000000,
+            'tunjangan_gaji_user' => 500000,
+        ]);
+        CandidateDataOffers::create([
+            'new_recruitment_id' => $applicant->id,
+            'gaji_pokok' => 6000000,
+            'tunjangan_kerja' => 1000000,
+        ]);
+
+        $gate = Service::canSendCandidateOffering($applicant, $offer->fresh());
+        $this->assertTrue($gate['allowed']);
+        $this->assertSame('approved', $gate['status']);
+    }
+
+    public function testMatchingGpButDifferentTunjanganRequiresApproval(): void
+    {
+        [$applicant, $offer] = $this->applicant();
+        $offer->update([
+            'sallary_offer_hrd' => 5000000,
+            'sallary_offer_user' => 5000000,
+            'tunjangan_gaji_user' => 500000,
+        ]);
+        CandidateDataOffers::create([
+            'new_recruitment_id' => $applicant->id,
+            'gaji_pokok' => 5000000,
+            'tunjangan_kerja' => 1000000,
+        ]);
+
+        $this->assertSame('pending', Service::syncAfterHrdSalarySave($applicant, $offer, 5000000));
+        $this->assertFalse(Service::canSendCandidateOffering($applicant, $offer->fresh())['allowed']);
+    }
+
+    public function testResyncAfterCandidateOfferingNegotiatedWhenUserPreviouslyApproved(): void
+    {
+        [$applicant, $offer] = $this->applicant();
+        $offer->update(['requester_salary_status' => 'approved', 'sallary_offer_hrd' => 5000000]);
+        $applicant->update([
+            'meta_history' => json_encode([
+                ['status' => 'finance_approved', 'at' => '2026-01-01 10:00:00'],
+                ['status' => 'candidate_offering_sent', 'at' => '2026-01-02 10:00:00'],
+                ['status' => 'candidate_offering_negotiated', 'at' => '2026-01-03 10:00:00'],
+            ]),
+        ]);
+        $applicant->refresh();
+
+        $this->assertSame('pending', Service::syncAfterHrdSalarySave($applicant, $offer->fresh(), 6000000, 'HRD'));
+        $this->assertSame(1, DecisionSalary::count());
+        $this->assertSame('pending', $offer->fresh()->requester_salary_status);
+    }
 }

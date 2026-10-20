@@ -289,6 +289,8 @@ class FdlEmisiCerobongController extends Controller
                         $orderDetail->save();
                     }
 
+                    FdlOrderDetailService::afterSamplerSubmit($request->no_sample);
+
                     DB::commit();
                     return response()->json([
                         'message' => "Data Sampling EMISI CEROBONG Dengan No Sample $request->no_sample berhasil disimpan oleh $this->karyawan"
@@ -424,6 +426,8 @@ class FdlEmisiCerobongController extends Controller
                         $orderDetail->save();
                     }
 
+                    FdlOrderDetailService::afterSamplerSubmit($request->no_sample);
+
                     DB::commit();
                     $this->resultx = "Data Sampling EMISI CEROBONG Dengan No Sample $request->no_sample berhasil disimpan oleh $this->karyawan";
                     return response()->json([
@@ -551,6 +555,8 @@ class FdlEmisiCerobongController extends Controller
                         $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                         $orderDetail->save();
                     }
+
+                    FdlOrderDetailService::afterSamplerSubmit($request->no_sample);
 
                     DB::commit();
                     return response()->json([

@@ -111,6 +111,7 @@ class NewRecruitment extends Model
             ->whereIn('decision', [
                 DecisionSalary::DECISION_PENDING,
                 DecisionSalary::DECISION_REJECTED,
+                DecisionSalary::DECISION_NEGOTIATED,
                 DecisionSalary::DECISION_APPROVED,
             ])
             ->latest('id');

@@ -106,8 +106,12 @@ class SalaryApprovalController extends Controller
                 $historyAction = 'negotiated';
             }
 
+            $deferHiringLetterToHrd = false;
             if ($decision === 'negotiate' || $decision === 'reject') {
                 $nextStatus = 'internal_sallary_offer';
+            } elseif ($this->shouldDeferHiringLetterToHrd((int) $recruitment->id)) {
+                $deferHiringLetterToHrd = true;
+                $nextStatus = 'salary_offer';
             } else {
                 $nextStatus = 'hired';
             }
@@ -116,6 +120,9 @@ class SalaryApprovalController extends Controller
             $extraData = $decision === 'negotiate'
                 ? ['negotiated_amount' => $amount]
                 : ($decision === 'reject' ? ['reject_reason' => $rejectReason] : []);
+            if ($decision === 'approve' && $deferHiringLetterToHrd) {
+                $extraData['pending_join_date_for_hiring_letter'] = true;
+            }
 
             if ($decision === 'reject') {
                 DB::table('new_recruitment')->where('id', $recruitment->id)->update([
@@ -147,7 +154,7 @@ class SalaryApprovalController extends Controller
                 $extraData
             );
 
-            if ($decision === 'approve') {
+            if ($decision === 'approve' && !$deferHiringLetterToHrd) {
                 $this->sendHiringLetter($recruitment);
             }
 
@@ -164,9 +171,49 @@ class SalaryApprovalController extends Controller
                 'requested_decision' => $decision,
                 'decided_at' => $now->toDateTimeString(),
                 'negotiated_amount' => $amount,
+                'pending_hrd_join_date' => $decision === 'approve' && $deferHiringLetterToHrd,
                 'candidate' => $this->candidate($recruitment, $salaryOffer),
             ]);
         });
+    }
+
+    private function shouldDeferHiringLetterToHrd(int $recruitmentId): bool
+    {
+        $joinDate = $this->resolveScheduledJoinDate($recruitmentId);
+        if (!$joinDate) {
+            return true;
+        }
+
+        return Carbon::today()->startOfDay()->gte($joinDate);
+    }
+
+    private function resolveScheduledJoinDate(int $recruitmentId): ?Carbon
+    {
+        $fromOffer = DB::table('candidate_data_offers')
+            ->where('new_recruitment_id', $recruitmentId)
+            ->value('tanggal_mulai_kerja');
+
+        if (!empty($fromOffer)) {
+            try {
+                return Carbon::parse($fromOffer)->startOfDay();
+            } catch (\Throwable $e) {
+                return null;
+            }
+        }
+
+        $tercepat = DB::table('new_recruitment')
+            ->where('id', $recruitmentId)
+            ->value('tanggal_join_tercepat');
+
+        if (empty($tercepat)) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($tercepat)->startOfDay();
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     private function sendHiringLetter($recruitment)

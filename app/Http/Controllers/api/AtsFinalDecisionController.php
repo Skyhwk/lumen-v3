@@ -544,8 +544,56 @@ class AtsFinalDecisionController extends Controller
                         'reject_reason' => $rejectReason,
                     ];
                 }
+                if ($requesterStatus === RequesterSalaryApprovalService::STATUS_NEGOTIATED) {
+                    $negoReason = null;
+                    $negoEntry = null;
+                    foreach (array_reverse($history) as $entry) {
+                        if (($entry['status'] ?? '') === RequesterSalaryApprovalService::HISTORY_NEGOTIATED) {
+                            $negoEntry = $entry;
+                            $negoReason = trim((string) ($entry['reason'] ?? '')) ?: null;
+                            break;
+                        }
+                    }
+                    if ($negoReason === null) {
+                        $openDecision = DecisionSalary::query()
+                            ->where('new_recruitment_id', $row->id)
+                            ->where('decision', DecisionSalary::DECISION_NEGOTIATED)
+                            ->orderByDesc('id')
+                            ->first();
+                        $negoReason = $openDecision ? trim((string) ($openDecision->reason ?? '')) : null;
+                        $negoReason = $negoReason !== '' ? $negoReason : null;
+                    }
 
-                if ($lastHistoryStatus === 'candidate_offering_sent' && in_array($status, ['salary_offer', 'internal_sallary_offer'], true)) {
+                    return [
+                        'code' => 'requester_salary_negotiated',
+                        'label' => 'Nego User (Re-input HRD)',
+                        'email_sent_at' => $emailSentAt,
+                        'requester_salary_status' => $requesterStatus,
+                        'nego_reason' => $negoReason,
+                        'reject_reason' => $negoReason,
+                        'allow_hrd_transfer_jabatan' => (bool) ($negoEntry['allow_hrd_transfer_jabatan'] ?? false),
+                        'allow_hrd_transfer_divisi' => (bool) ($negoEntry['allow_hrd_transfer_divisi'] ?? false),
+                        'tanggal_join_nego' => $negoEntry['tanggal_join_nego'] ?? null,
+                    ];
+                }
+
+                if (RecruitmentStatusService::isAwaitingCandidateOfferingNegotiateResubmit($row)) {
+                    $readyToResend = RecruitmentStatusService::hasHrdSalaryInputSavedAfterCandidateNegotiate($row);
+                    $nego = RecruitmentStatusService::getCandidateOfferingNegotiateDetails($row) ?: [];
+
+                    return [
+                        'code' => 'candidate_offering_negotiated',
+                        'label' => $readyToResend
+                            ? 'Siap Kirim Ulang ke Kandidat'
+                            : 'Dinegosiasi Kandidat (Re-input HRD)',
+                        'email_sent_at' => $emailSentAt,
+                        'salary_offer_candidate' => $nego['salary_offer_candidate'] ?? optional($offer)->salary_offer_candidate,
+                        'tunjangan_offer_candidate' => $nego['tunjangan_offer_candidate'] ?? optional($offer)->tunjangan_offer_candidate,
+                        'tanggal_mulai_kerja' => $nego['tanggal_mulai_kerja'] ?? optional($row->candidateDataOffer)->tanggal_mulai_kerja,
+                    ];
+                }
+
+                if (RecruitmentStatusService::isAwaitingCandidateOfferingResponse($row)) {
                     return [
                         'code' => 'waiting_candidate_approval',
                         'label' => 'Menunggu Respon Kandidat',
@@ -697,6 +745,14 @@ class AtsFinalDecisionController extends Controller
                     ];
                 }
 
+                if (RecruitmentStatusService::isAwaitingJoinDateForHiringLetter($row)) {
+                    return [
+                        'code' => 'awaiting_join_date',
+                        'label' => 'Disetujui Direktur — Input Tanggal Join',
+                        'email_sent_at' => $emailSentAt,
+                    ];
+                }
+
                 if (RecruitmentStatusService::isReadyToSendDirectorAfterFinanceApprove($row)) {
                     return [
                         'code' => 'finance_approved',
@@ -708,16 +764,7 @@ class AtsFinalDecisionController extends Controller
                 $history = json_decode($row->meta_history ?: '[]', true);
                 $history = is_array($history) ? $history : [];
 
-                $decision = null;
-                if (!empty($history)) {
-                    for ($i = count($history) - 1; $i >= 0; $i--) {
-                        $hStatus = (string) ($history[$i]['status'] ?? '');
-                        if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $hStatus, $m)) {
-                            $decision = $m[1];
-                            break;
-                        }
-                    }
-                }
+                $decision = RecruitmentStatusService::getLatestDirectorSalaryDecision($history);
 
                 if ($decision === 'approved' || $status === 'hired' || $status === 'accepted') {
                     return [
@@ -1337,14 +1384,6 @@ class AtsFinalDecisionController extends Controller
             $wasFinanceResubmit = RecruitmentStatusService::isAwaitingFinanceResubmit($applicant);
             $wasDirectorResubmit = RecruitmentStatusService::isAwaitingDirectorSalaryResubmit($applicant);
 
-            (new RecruitmentStatusService())->update(
-                $applicant->id,
-                'salary_offer',
-                Carbon::now(),
-                'candidate_offering_sent',
-                ['by' => $user]
-            );
-
             if ($wasFinanceResubmit || $wasDirectorResubmit) {
                 SallaryOfferService::upsertActive(
                     (int) $id,
@@ -1355,49 +1394,25 @@ class AtsFinalDecisionController extends Controller
                     ],
                     $user ?? 'HRD'
                 );
+                if ($wasFinanceResubmit) {
+                    RecruitmentStatusService::clearFinanceRejected((int) $id, Carbon::now());
+                }
             }
 
-            $emailSent = false;
-            $emailError = null;
+            (new RecruitmentStatusService())->update(
+                $applicant->id,
+                'finance_review',
+                Carbon::now(),
+                'waiting_approve_finance',
+                ['by' => $user ?? 'HRD']
+            );
 
-            if (empty($applicant->email)) {
-                return response()->json([
-                    'status'  => 422,
-                    'message' => 'Email kandidat tidak tersedia. Penawaran gaji tidak dapat dikirim.',
-                ], 422);
-            }
-
-            try {
-                $applicant->loadMissing([
-                    'candidateDataOffer',
-                    'sallaryOffer',
-                    'personalRequest.masterJabatan',
-                    'personnelRequest.masterJabatan',
-                ]);
-
-                $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant);
-
-                $emailSent = GenerateMessageAtsEmail::sendCandidateOfferingSalaryEmail(
-                    $applicant,
-                    $dataObj,
-                    is_string($user) && $user !== '' ? $user : 'HRD'
-                );
-            } catch (\Exception $e) {
-                $emailError = $e->getMessage();
-                \Log::warning('Candidate salary offer email send failed', ['id' => $id, 'error' => $emailError]);
-            }
-
-            if (!$emailSent) {
-                return response()->json([
-                    'status'  => 500,
-                    'message' => 'Status berhasil diupdate, namun email penawaran gagal dikirim.'
-                        . ($emailError ? ' ' . $emailError : ' Periksa konfigurasi MAIL_NOREPLY_USERNAME / MAIL_USERNAME di server.'),
-                ], 500);
-            }
+            $applicant->loadMissing('personalRequest', 'personnelRequest', 'sallaryOffer');
+            app(AtsNotificationService::class)->salarySubmittedToFinance($applicant);
 
             return response()->json([
                 'status'  => 200,
-                'message' => 'Penawaran gaji berhasil di-approve dan email telah dikirim ke kandidat.',
+                'message' => 'Penawaran gaji berhasil diajukan. Menunggu review dan persetujuan Finance.',
                 'data'    => $applicant->fresh(),
             ], 200);
         }
@@ -1406,7 +1421,9 @@ class AtsFinalDecisionController extends Controller
             $savedOffer = CandidateDataOffers::where('new_recruitment_id', $id)->first();
 
             if ($savedOffer && (float) ($savedOffer->gaji_pokok ?? 0) > 0 && !empty($savedOffer->tanggal_mulai_kerja)) {
-                if (RecruitmentStatusService::isAwaitingCandidateOfferingResubmit($applicant)) {
+                if (RecruitmentStatusService::isAwaitingCandidateOfferingResubmit($applicant)
+                    || RecruitmentStatusService::isAwaitingCandidateOfferingNegotiateResubmit($applicant)
+                ) {
                     $nextStatus = 'salary_offer';
                 } elseif (RecruitmentStatusService::isAwaitingFinanceResubmit($applicant)) {
                     $nextStatus = 'internal_sallary_offer';
@@ -1975,6 +1992,18 @@ class AtsFinalDecisionController extends Controller
             ], 422);
         }
 
+        $awaitingJoinDate = RecruitmentStatusService::isAwaitingJoinDateForHiringLetter($applicant);
+        $savedOffer = CandidateDataOffers::where('new_recruitment_id', $id)->first();
+
+        if (!$awaitingJoinDate && RecruitmentStatusService::getLatestDirectorSalaryDecision(
+            RecruitmentStatusService::parseMetaHistory($applicant)
+        ) !== 'approved') {
+            return response()->json([
+                'status'  => 422,
+                'message' => 'Kandidat belum disetujui Approval (Salary) oleh Direktur.',
+            ], 422);
+        }
+
         $startDate = $request->input('start_date');
 
         if (empty($startDate)) {
@@ -1984,12 +2013,44 @@ class AtsFinalDecisionController extends Controller
             ], 422);
         }
 
-        $gajiPokok       = $this->parseMoneyField($request->input('gaji_pokok'));
-        $tunjanganKerja  = $this->parseMoneyField($request->input('tunjangan_kerja'));
-        $potBpjsKes      = $this->parseMoneyField($request->input('potongan_bpjs_kes'));
-        $potBpjsTk       = $this->parseMoneyField($request->input('potongan_bpjs_tk'));
-        $potPph21        = $this->parseMoneyField($request->input('pot_pph21'));
-        $pencadanganUpah = $this->parseMoneyField($request->input('pencadangan_upah'));
+        if ($awaitingJoinDate) {
+            try {
+                if (Carbon::parse($startDate)->startOfDay()->lte(Carbon::today())) {
+                    return response()->json([
+                        'status'  => 422,
+                        'message' => 'Tanggal join harus setelah hari ini karena tanggal join sebelumnya sudah lewat.',
+                    ], 422);
+                }
+            } catch (\Exception $e) {
+                return response()->json([
+                    'status'  => 422,
+                    'message' => 'Format tanggal mulai kerja tidak valid.',
+                ], 422);
+            }
+        }
+
+        if ($awaitingJoinDate && $savedOffer) {
+            $gajiPokok = $this->parseMoneyField($request->input('gaji_pokok')) ?: (float) ($savedOffer->gaji_pokok ?? 0);
+            $tunjanganKerja = $this->parseMoneyField($request->input('tunjangan_kerja')) ?: (float) ($savedOffer->tunjangan_kerja ?? 0);
+            $potBpjsKes = $this->parseMoneyField($request->input('potongan_bpjs_kes')) ?: (float) ($savedOffer->potongan_bpjs_kes ?? 0);
+            $potBpjsTk = $this->parseMoneyField($request->input('potongan_bpjs_tk')) ?: (float) ($savedOffer->potongan_bpjs_tk ?? 0);
+            $potPph21 = $this->parseMoneyField($request->input('pot_pph21')) ?: (float) ($savedOffer->pot_pph21 ?? 0);
+            $pencadanganUpah = $this->parseMoneyField($request->input('pencadangan_upah')) ?: (float) ($savedOffer->pencadangan_upah ?? 0);
+        } else {
+            $gajiPokok       = $this->parseMoneyField($request->input('gaji_pokok'));
+            $tunjanganKerja  = $this->parseMoneyField($request->input('tunjangan_kerja'));
+            $potBpjsKes      = $this->parseMoneyField($request->input('potongan_bpjs_kes'));
+            $potBpjsTk       = $this->parseMoneyField($request->input('potongan_bpjs_tk'));
+            $potPph21        = $this->parseMoneyField($request->input('pot_pph21'));
+            $pencadanganUpah = $this->parseMoneyField($request->input('pencadangan_upah'));
+        }
+
+        if ($gajiPokok <= 0) {
+            return response()->json([
+                'status'  => 422,
+                'message' => 'Data gaji pokok belum tersedia. Simpan data penawaran gaji terlebih dahulu.',
+            ], 422);
+        }
 
         $user = $this->karyawan;
         $now = Carbon::now();
