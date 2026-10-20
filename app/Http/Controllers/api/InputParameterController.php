@@ -2313,7 +2313,7 @@ class InputParameterController extends Controller
 		}
 	}
 
-	public function HelperGravimetri($request, $stp, $quota_count) {
+	public function HelperGravimetri($request, $stp, $quota_count) { // cuman air dan padatan (gravimetri)
 		// dd($request->all());
 		DB::beginTransaction();
 		try {
@@ -3789,16 +3789,47 @@ class InputParameterController extends Controller
 			}
 
 			$data_lapangan = $data_lapangan->toArray();
-			$pemasangan = json_decode($data_lapangan[0]['pengukuran']);
-			$pengambilan = json_decode($data_lapangan[1]['pengukuran']);
 
-			$luas_botol_raw = $pemasangan->luas_botol;
+			$pemasangan = null;
+			$pengambilan = null;
+			$row_pemasangan = null;
+			$row_pengambilan = null;
+
+			foreach ($data_lapangan as $row) {
+				$pengukuran = json_decode($row['pengukuran']);
+				if (!$pengukuran) {
+					continue;
+				}
+				$keterangan = isset($pengukuran->keterangan) ? trim((string) $pengukuran->keterangan) : null;
+
+				if ($keterangan === 'pemasangan_alat') {
+					$pemasangan = $pengukuran;
+					$row_pemasangan = $row;
+				} elseif ($keterangan === 'pengambilan_alat') {
+					$pengambilan = $pengukuran;
+					$row_pengambilan = $row;
+				} elseif ($pemasangan === null && (isset($pengukuran->luas_botol) || isset($pengukuran->tanggal_pemasangan))) {
+					$pemasangan = $pengukuran;
+					$row_pemasangan = $row;
+				} elseif ($pengambilan === null && (isset($pengukuran->tanggal_selesai) || isset($pengukuran->volume_filtrat))) {
+					$pengambilan = $pengukuran;
+					$row_pengambilan = $row;
+				}
+			}
+
+			if (!$pemasangan || !$pengambilan || !$row_pemasangan || !$row_pengambilan) {
+				return (object)[
+					'message'=> 'Data Lapangan pemasangan/pengambilan alat tidak lengkap untuk parameter : '.$request->parameter.'',
+					'status' => 404
+				];
+			}
+
+			$luas_botol_raw = $pemasangan->luas_botol ?? '';
 
 			$luas_botol = (float) preg_replace('/[^0-9.]/', '', $luas_botol_raw);
 
-			
-			$start = Carbon::parse($pemasangan->tanggal_pemasangan . ' ' . $data_lapangan[0]['waktu_pengukuran']);
-			$end   = Carbon::parse($pengambilan->tanggal_selesai . ' ' . $data_lapangan[1]['waktu_pengukuran']);
+			$start = Carbon::parse($pemasangan->tanggal_pemasangan . ' ' . $row_pemasangan['waktu_pengukuran']);
+			$end   = Carbon::parse($pengambilan->tanggal_selesai . ' ' . $row_pengambilan['waktu_pengukuran']);
 			$jam = $start->diffInHours($end, true);   // selisih dalam jam
 			$selisih_hari = round($jam / 24, 1);          // konversi ke jam desimal
 
