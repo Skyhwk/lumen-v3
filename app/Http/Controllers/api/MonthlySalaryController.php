@@ -206,7 +206,7 @@ class MonthlySalaryController extends Controller
                     $query->whereIn('id_karyawan', $bawahanIds);
                 })
                 ->with(['karyawan' => function ($query) {
-                    $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan', 'is_active');
+                    $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan', 'is_active', 'tgl_mulai_kerja');
                 }, 'department' => function ($query) {
                     $query->select('master_divisi.id', 'nama_divisi');
                 }])
