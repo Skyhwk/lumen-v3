@@ -354,14 +354,11 @@ class FdlLingkunganHidupController extends Controller
                 foreach ($request->param as $en => $ab) {
                     $cek = DetailLingkunganHidup::where('no_sampel', strtoupper(trim($request->no_sample)))->where('parameter', $ab)->get();
                     if ($request->shift_pengambilan !== "Sesaat") {
-                        $nilai_array = array();
-                        foreach ($cek as $key => $value) {
-                            $durasi = $value->shift_pengambilan;
-                            $durasi = explode("-", $durasi);
-                            $durasi = $durasi;
-                            $nilai_array[$key] = str_replace('"', "", $durasi);
-                        }
-                        if (in_array($request->shift_pengambilan, $nilai_array)) {
+                        $nilai_array = $cek->pluck('shift_pengambilan')
+                            ->map(fn ($shift) => FdlLingkunganSharedParameters::normalizeStoredShiftKey($shift))
+                            ->all();
+                        $requestedShift = FdlLingkunganSharedParameters::normalizeStoredShiftKey($request->shift_pengambilan);
+                        if (in_array($requestedShift, $nilai_array, true)) {
                             return response()->json([
                                 'message' => 'Pengambilan' . $ab . ' Shift ' . $request->shift_pengambilan . ' sudah ada !'
                             ], 401);

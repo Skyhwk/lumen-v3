@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\MasterDivisi;
+use App\Models\MasterKaryawan;
 use Illuminate\Http\Request;
 use Laravel\Lumen\Routing\Controller as BaseController;
 
@@ -51,8 +53,60 @@ class Controller extends BaseController
         $this->db = DATE('Y');
 
     }
+    /**
+     * Divisi IT Programming tidak wajib check-in sampler (FDL / apps).
+     */
+    protected function isItProgrammingDivisionMember(): bool
+    {
+        $departmentId = (int) env('ATS_IT_PROGRAMMING_DEPARTMENT_ID', 0);
+        if ($departmentId > 0 && (int) $this->department === $departmentId) {
+            return true;
+        }
+
+        if (!$this->user_id) {
+            return false;
+        }
+
+        $employee = MasterKaryawan::query()
+            ->where('id', $this->user_id)
+            ->first(['department', 'id_department']);
+
+        if (!$employee) {
+            return false;
+        }
+
+        if ($this->isItProgrammingDivisionName((string) ($employee->department ?? ''))) {
+            return true;
+        }
+
+        $divisiName = MasterDivisi::query()
+            ->where('id', $employee->id_department)
+            ->value('nama_divisi');
+
+        return $this->isItProgrammingDivisionName((string) $divisiName);
+    }
+
+    protected function isItProgrammingDivisionName(string $name): bool
+    {
+        $normalized = strtoupper(trim($name));
+
+        if ($normalized === '') {
+            return false;
+        }
+
+        if (in_array($normalized, ['IT SUPPORT & PROGRAMMING', 'IT PROGRAMMING'], true)) {
+            return true;
+        }
+
+        return strpos($normalized, 'IT') !== false && strpos($normalized, 'PROGRAMMING') !== false;
+    }
+
     protected function ensureSamplerCheckedInForSample(Request $request, $field = 'no_sample')
     {
+        if ($this->isItProgrammingDivisionMember()) {
+            return null;
+        }
+
         $sample = $request->input($field) ?: $request->input('no_sampel');
         $sample = strtoupper(trim((string) $sample));
 
