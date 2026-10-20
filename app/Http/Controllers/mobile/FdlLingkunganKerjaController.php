@@ -347,19 +347,11 @@ class FdlLingkunganKerjaController extends Controller
                 foreach ($request->param as $en => $ab) {
                     $cek = DetailLingkunganKerja::where('no_sampel', strtoupper(trim($request->no_sample)))->where('parameter', $ab)->get();
                     if ($request->shift_pengambilan !== "Sesaat") {
-                        $nilai_array = array();
-                        foreach ($cek as $key => $value) {
-                            $durasi = $value->kategori_pengujian;
-                            // Check if $durasi contains a hyphen and has at least two parts
-                            if (strpos($durasi, '-') !== false) {
-                                $durasi_parts = explode("-", $durasi);
-                                if (count($durasi_parts) > 1) {
-                                    $durasi = $durasi_parts[1];
-                                    $nilai_array[$key] = str_replace('"', "", $durasi);
-                                }
-                            }
-                        }
-                        if (in_array($request->shift_pengambilan, $nilai_array)) {
+                        $nilai_array = $cek->pluck('shift_pengambilan')
+                            ->map(fn ($shift) => FdlLingkunganSharedParameters::normalizeStoredShiftKey($shift))
+                            ->all();
+                        $requestedShift = FdlLingkunganSharedParameters::normalizeStoredShiftKey($request->shift_pengambilan);
+                        if (in_array($requestedShift, $nilai_array, true)) {
                             return response()->json([
                                 'message' => 'Pengambilan ' . $ab . ' Shift ' . $request->shift_pengambilan . ' sudah ada !'
                             ], 401);
