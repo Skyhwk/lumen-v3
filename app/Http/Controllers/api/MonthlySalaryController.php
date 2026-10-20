@@ -200,17 +200,19 @@ class MonthlySalaryController extends Controller
                 $headerIds = [$id_header];
             }
             
-            $data = Payroll::whereIn('payroll_header_id', $headerIds)
-                ->where('is_active', true)
+            $data = Payroll::whereIn('payroll.payroll_header_id', $headerIds)
+                ->where('payroll.is_active', true)
                 ->when($bawahanIds !== null, function ($query) use ($bawahanIds) {
-                    $query->whereIn('id_karyawan', $bawahanIds);
+                    $query->whereIn('payroll.id_karyawan', $bawahanIds);
                 })
                 ->with(['karyawan' => function ($query) {
                     $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan', 'is_active', 'tgl_mulai_kerja');
                 }, 'department' => function ($query) {
                     $query->select('master_divisi.id', 'nama_divisi');
                 }])
-                ->orderBy('nik_karyawan', 'asc');
+                ->join('master_karyawan', 'payroll.id_karyawan', '=', 'master_karyawan.id')
+                ->select('payroll.*')
+                ->orderByRaw('master_karyawan.tgl_mulai_kerja IS NULL, master_karyawan.tgl_mulai_kerja ASC');
 
             // Calculate totals
             $totals = Payroll::whereIn('payroll_header_id', $headerIds)
