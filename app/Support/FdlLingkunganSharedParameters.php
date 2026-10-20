@@ -77,7 +77,7 @@ class FdlLingkunganSharedParameters
         }
 
         if ($kateg === '24 Jam') {
-            return 5;
+            return 25;
         }
         if ($kateg === '8 Jam') {
             return 3;
@@ -166,6 +166,64 @@ class FdlLingkunganSharedParameters
         return $count;
     }
 
+    public static function normalizeStoredShiftKey(string $shift): string
+    {
+        $shift = trim($shift);
+        if (in_array($shift, ['Sesaat', 'L1'], true)) {
+            return 'L1';
+        }
+
+        return $shift;
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection<int, object> $detailRows
+     */
+    public static function countDistinctShiftsInRows($detailRows, string $orderParameterLabel): int
+    {
+        $shifts = [];
+        foreach ($detailRows as $row) {
+            if (!self::storedParameterMatchesOrderLabel($row->parameter, $orderParameterLabel)) {
+                continue;
+            }
+            $shifts[self::normalizeStoredShiftKey($row->shift_pengambilan)] = true;
+        }
+
+        return count($shifts);
+    }
+
+    /** Jumlah shift maksimum senyawa volatile (24 jam = L25, selaras LH/LK). */
+    public static function resolveSenyawaExpectedShiftTotal(string $parameterName, string $kategoriPrefix): int
+    {
+        if ($kategoriPrefix === '24 Jam') {
+            return 25;
+        }
+
+        if (str_contains($parameterName, 'PM')) {
+            if ($kategoriPrefix === '8 Jam') {
+                return 8;
+            }
+            if ($kategoriPrefix === '6 Jam') {
+                return 6;
+            }
+        }
+
+        if (str_contains($parameterName, 'TSP')) {
+            if ($kategoriPrefix === '8 Jam') {
+                return 8;
+            }
+        }
+
+        if ($kategoriPrefix === '8 Jam') {
+            return 3;
+        }
+        if ($kategoriPrefix === '3 Jam') {
+            return 3;
+        }
+
+        return 0;
+    }
+
     /**
      * @param \Illuminate\Support\Collection<int, object> $detailRows
      */
@@ -247,7 +305,9 @@ class FdlLingkunganSharedParameters
                 continue;
             }
 
-            if (self::countReadingsInRows($detailRows, $orderParam) >= self::getReadingThreshold($orderParam)) {
+            $threshold = self::getReadingThreshold($orderParam);
+            $shiftNum = (int) ltrim($shift, 'L');
+            if ($shiftNum > $threshold) {
                 continue;
             }
             if (self::detailExistsForShiftInRows($detailRows, $orderParam, $shift)) {
