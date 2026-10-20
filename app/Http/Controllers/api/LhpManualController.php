@@ -29,23 +29,11 @@ class LhpManualController extends Controller
     //     'LHP_LINGKUNGAN_KERJA',
     // ];
 
-    public function index(Request $request)
+    public function index()
     {
         try {
-            $periode = (int) ($request->periode ?: date('Y'));
-
             $query = LhpManual::query()
                 ->active()
-                ->withCount(['orderDetails as total_no_sampel'])
-                ->when($periode >= 2000, function ($builder) use ($periode) {
-                    $builder->where(function ($sub) use ($periode) {
-                        $sub->whereYear('tanggal_lhp', $periode)
-                            ->orWhere(function ($fallback) use ($periode) {
-                                $fallback->whereNull('tanggal_lhp')
-                                    ->whereYear('created_at', $periode);
-                            });
-                    });
-                })
                 ->orderByDesc('id');
 
             return DataTables::of($query)
