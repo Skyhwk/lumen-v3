@@ -519,7 +519,7 @@ class MonitoringSamplerController extends Controller
             return null;
         }
 
-        return Carbon::parse($createdAt)->subHours(7)->format('Y-m-d H:i:s');
+        return Carbon::parse($createdAt)->format('Y-m-d H:i:s');
     }
 
     private function stripKategoriPrefix(string $value): string
