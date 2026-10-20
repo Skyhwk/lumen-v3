@@ -176,12 +176,18 @@ class GaAssetDepreciationService
         ];
     }
 
-    public function quantityMatrix(): array
+    public function quantityMatrix(?int $branchId = null): array
     {
-        $rows = DB::table('ga_assets')
+        $query = DB::table('ga_assets')
             ->where('is_active', 1)
             ->whereNotNull('name')
-            ->where('name', '!=', '')
+            ->where('name', '!=', '');
+
+        if ($branchId !== null && $branchId > 0) {
+            $query->where('branch_id', $branchId);
+        }
+
+        $rows = $query
             ->selectRaw('name, `condition`, acquisition_origin, COUNT(*) as total')
             ->groupBy('name', 'condition', 'acquisition_origin')
             ->orderBy('name')
@@ -243,7 +249,81 @@ class GaAssetDepreciationService
             }
         }
 
-        return ['rows' => $list, 'totals' => $totals];
+        return ['rows' => $list, 'totals' => $totals, 'branch_id' => $branchId];
+    }
+
+    public function quantityMatrixByBranch(): array
+    {
+        $branches = DB::table('master_cabang')
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->get(['id', 'nama_cabang']);
+
+        $branchPayload = [];
+        foreach ($branches as $branch) {
+            $matrix = $this->quantityMatrix((int) $branch->id);
+            $branchPayload[] = [
+                'branch_id' => (int) $branch->id,
+                'nama_cabang' => $branch->nama_cabang,
+                'totals' => $matrix['totals'],
+            ];
+        }
+
+        $overall = $this->quantityMatrix(null);
+
+        $branchTotalsByName = DB::table('ga_assets')
+            ->where('is_active', 1)
+            ->whereNotNull('name')
+            ->where('name', '!=', '')
+            ->selectRaw('name, branch_id, COUNT(*) as total')
+            ->groupBy('name', 'branch_id')
+            ->get();
+
+        $byName = [];
+        foreach ($branchTotalsByName as $item) {
+            $byName[$item->name][(string) $item->branch_id] = (int) $item->total;
+        }
+
+        foreach ($overall['rows'] as &$row) {
+            $row['by_branch'] = $byName[$row['name']] ?? [];
+        }
+        unset($row);
+
+        return [
+            'rows' => $overall['rows'],
+            'totals' => $overall['totals'],
+            'branches' => $branchPayload,
+        ];
+    }
+
+    public function totalAssetAkhirReport(int $year): array
+    {
+        $depReport = $this->report($year);
+        $rows = [];
+        foreach ($depReport['rows'] as $row) {
+            $rows[] = [
+                'category' => $row['category'],
+                'sub_category' => $row['sub_category'],
+                'total_harga' => $row['pembelian'],
+            ];
+        }
+
+        $totals = $depReport['totals'];
+        $pembelian = $totals['pembelian'] ?? '0.00';
+        $penjualan = $totals['penjualan'] ?? '0.00';
+        $transfer = $totals['transfer'] ?? '0.00';
+        $totalAkhir = $this->sub($this->sub($pembelian, $penjualan), $transfer);
+
+        return [
+            'year' => $year,
+            'rows' => $rows,
+            'summary' => [
+                'total_aset' => $pembelian,
+                'total_terjual' => $penjualan,
+                'total_transfer' => $transfer,
+                'total_akhir' => $totalAkhir,
+            ],
+        ];
     }
 
     private function emptyTotalRow(string $category, string $subCategory): array

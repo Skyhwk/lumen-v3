@@ -268,6 +268,42 @@ class GaAssetRegistryController extends Controller
         }
     }
 
+    public function reportDamage(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id' => 'required|integer',
+            'damage_received_date' => 'required|date',
+            'condition' => 'required|in:kendala,rusak,rusak_berat',
+            'condition_note' => 'required|string',
+        ]);
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $conditionNotePlain = trim(strip_tags((string) $request->condition_note));
+        $conditionNotePlain = str_replace("\xc2\xa0", ' ', $conditionNotePlain);
+        if ($conditionNotePlain === '') {
+            return response()->json(['message' => 'Catatan kondisi wajib diisi.'], 422);
+        }
+
+        try {
+            $actor = trim((string) $this->karyawan) ?: 'GA Asset System';
+            $asset = app(GaAssetWriteService::class)->reportDamage($request, $actor);
+
+            return response()->json([
+                'message' => 'Barang rusak berhasil dicatat untuk NO CS ' . $asset->cs_code . '.',
+                'data' => $asset,
+            ]);
+        } catch (\InvalidArgumentException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        } catch (\Throwable $exception) {
+            return response()->json(['message' => 'Gagal mencatat barang rusak: ' . $exception->getMessage()], 500);
+        }
+    }
+
     private function validateAssetPayload(Request $request, bool $isUpdate = false)
     {
         $rules = [

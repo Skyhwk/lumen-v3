@@ -87,6 +87,33 @@ class GaAssetWriteService
         });
     }
 
+    public function reportDamage(Request $request, string $actor): GaAsset
+    {
+        $actor = trim($actor) !== '' ? trim($actor) : 'GA Asset System';
+
+        return DB::transaction(function () use ($request, $actor) {
+            $now = Carbon::now();
+            $asset = GaAsset::where('id', $request->id)->where('is_active', 1)->lockForUpdate()->first();
+            if (!$asset) {
+                throw new \InvalidArgumentException('Aset tidak ditemukan.');
+            }
+
+            $asset->update([
+                'condition' => $request->condition,
+                'condition_note' => $this->nullableTrimmed($request->condition_note),
+                'damage_received_date' => $request->damage_received_date,
+                'version' => ((int) $asset->version) + 1,
+                'updated_by' => $actor,
+                'updated_at' => $now,
+            ]);
+
+            $fresh = $asset->fresh(['kategori', 'subKategori', 'room']);
+            $this->depreciation()->syncAsset($fresh);
+
+            return $fresh->fresh(['kategori', 'subKategori', 'room', 'currentDepreciation']);
+        });
+    }
+
     public function resolveAllocation(Request $request, ?GaAsset $current)
     {
         if ($request->boolean('is_unallocated')) {

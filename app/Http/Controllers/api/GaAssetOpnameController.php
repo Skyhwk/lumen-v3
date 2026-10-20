@@ -7,6 +7,7 @@ use App\Models\GaAsset;
 use App\Models\GaAssetOpname;
 use App\Models\GaAssetOpnameLine;
 use App\Models\GaAssetRoom;
+use App\Services\GaAsset\GaAssetOpnameExportService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -213,6 +214,36 @@ class GaAssetOpnameController extends Controller
                 'not_scanned_sample' => $missing,
             ],
         ]);
+    }
+
+    public function exportExcel(Request $request, GaAssetOpnameExportService $exportService)
+    {
+        $opname = $this->findOpname((int) $request->input('opname_id'));
+        if (!$opname) {
+            return response()->json(['message' => 'Periode opname tidak ditemukan.'], 404);
+        }
+
+        $spreadsheet = $exportService->exportOpnamePeriod($opname);
+        $filename = sprintf(
+            'opname_%s_%02d_%d.xlsx',
+            $opname->branch_id,
+            $opname->period_month,
+            $opname->period_year
+        );
+        $exportService->stream($spreadsheet, $filename);
+    }
+
+    public function exportSoMatrix(Request $request, GaAssetOpnameExportService $exportService)
+    {
+        $branchId = (int) $request->input('branch_id');
+        $year = (int) $request->input('year', date('Y'));
+        if ($branchId < 1 || $year < 2000) {
+            return response()->json(['message' => 'Cabang dan tahun wajib valid.'], 422);
+        }
+
+        $spreadsheet = $exportService->exportSoMatrix($branchId, $year);
+        $filename = sprintf('so_matrix_%d_%d.xlsx', $branchId, $year);
+        $exportService->stream($spreadsheet, $filename);
     }
 
     public function close(Request $request)
