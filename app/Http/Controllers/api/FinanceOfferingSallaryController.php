@@ -68,6 +68,49 @@ class FinanceOfferingSallaryController extends Controller
         return $has;
     }
 
+    private function hasRejectedKandidatColumn(): bool
+    {
+        static $has = null;
+
+        if ($has === null) {
+            $has = Schema::hasColumn('new_recruitment', 'is_rejected_kandidat');
+        }
+
+        return $has;
+    }
+
+    private function applyActiveCandidateFilter($query)
+    {
+        if ($this->hasRejectedKandidatColumn()) {
+            $query->where(function ($q) {
+                $q->where('is_rejected_kandidat', 0)
+                    ->orWhereNull('is_rejected_kandidat');
+            });
+        }
+
+        return $query;
+    }
+
+    private function applyFinanceRejectTabFilter($query)
+    {
+        if ($this->hasRejectFinanceColumn()) {
+            $query->where('is_reject_finance', true);
+            if (Schema::hasColumn('new_recruitment', 'is_reject_finance_by')) {
+                $query->whereNotNull('is_reject_finance_by');
+            }
+            if (Schema::hasColumn('new_recruitment', 'is_reject_finance_at')) {
+                $query->whereNotNull('is_reject_finance_at');
+            }
+        } else {
+            $query->where('meta_history', 'like', '%finance_rejected%');
+        }
+
+        // is_rejected_kandidat = true artinya kandidat sudah tidak aktif, jangan tampilkan.
+        $this->applyActiveCandidateFilter($query);
+
+        return $query;
+    }
+
     private function resolveYear(Request $request): ?int
     {
         if (!$request->filled('year')) {
@@ -92,16 +135,6 @@ class FinanceOfferingSallaryController extends Controller
         });
     }
 
-    private function applyCurrentRejectOutcome($query)
-    {
-        return $query->where(function ($q) {
-            $q->whereRaw('LOWER(COALESCE(status, "")) LIKE ?', ['%reject%']);
-            if ($this->hasRejectFinanceColumn()) {
-                $q->orWhere('is_reject_finance', true);
-            }
-        });
-    }
-
     private function applyNotCurrentRejectOutcome($query)
     {
         $query->whereRaw('LOWER(COALESCE(status, "")) NOT LIKE ?', ['%reject%']);
@@ -115,44 +148,33 @@ class FinanceOfferingSallaryController extends Controller
         return $query;
     }
 
-    private function applyWentThroughFinance($query)
-    {
-        return $query->where(function ($q) {
-            $q->where('meta_history', 'like', '%finance_approved%')
-                ->orWhere('meta_history', 'like', '%finance_rejected%');
-            if ($this->hasRejectFinanceColumn()) {
-                $q->orWhere('is_reject_finance', true);
-            }
-        });
-    }
-
     private function applyTabFilter($query, string $tab)
     {
         if ($tab === 'rejected') {
-            $query->where('status', '!=', 'finance_review');
-            $this->applyWentThroughFinance($query);
-            $this->applyCurrentRejectOutcome($query);
-
-            return $query;
+            return $this->applyFinanceRejectTabFilter($query);
         }
 
         if ($tab === 'processed') {
             $query->where('status', '!=', 'finance_review')
                 ->where('meta_history', 'like', '%finance_approved%');
             $this->applyNotCurrentRejectOutcome($query);
+            $this->applyActiveCandidateFilter($query);
 
             return $query;
         }
 
-        return $query->where('status', 'finance_review');
+        $query->where('status', 'finance_review');
+        $this->applyActiveCandidateFilter($query);
+
+        return $query;
     }
 
     // ─── Index — DataTables list by finance tab ─────────────────────────────
 
     /**
-     * pending = menunggu keputusan Finance
+     * pending = menunggu keputusan Finance (kandidat masih aktif)
      * processed = sudah disetujui Finance dan belum rejected
-     * rejected = ditolak Finance, atau status rejected setelah lewat Finance
+     * rejected = is_reject_finance + by/at terisi, kandidat masih aktif (is_rejected_kandidat = false)
      */
     public function index(Request $request)
     {
