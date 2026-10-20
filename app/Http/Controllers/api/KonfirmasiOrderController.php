@@ -45,6 +45,10 @@ class KonfirmasiOrderController extends Controller
 				->where('is_ready_order', true)
 				->where('konfirmasi_order', false)
 				->orderBy('tanggal_penawaran', 'desc');
+
+			if ($request->filled('year')) {
+				$data->whereYear('tanggal_penawaran', $request->year);
+			}
 		} else if ($request->status == 'kontrak') {
 			$data = QuotationKontrakH::with([
 				'sales',
@@ -62,6 +66,10 @@ class KonfirmasiOrderController extends Controller
 				->where('is_ready_order', true)
 				->where('konfirmasi_order', false)
 				->orderBy('tanggal_penawaran', 'desc');
+
+			if ($request->filled('year')) {
+				$data->whereYear('tanggal_penawaran', $request->year);
+			}
 		}
 
 		$jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
