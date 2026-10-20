@@ -119,6 +119,9 @@ class FinanceOfferingSallaryController extends Controller
             ->addColumn('sallary_offer_user', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_user ?? 0;
             })
+            ->addColumn('tunjangan_gaji_user', function ($row) {
+                return optional($row->sallaryOffer)->tunjangan_gaji_user ?? 0;
+            })
             ->addColumn('sallary_offer_direktur', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_direktur ?? 0;
             })
@@ -204,6 +207,8 @@ class FinanceOfferingSallaryController extends Controller
         DB::beginTransaction();
         try {
             if ($decision === 'approve') {
+                $sendOfferingToCandidate = RecruitmentStatusService::shouldSendCandidateEmailOnFinanceApprove($applicant);
+
                 $activeOffer = SallaryOfferService::getActive((int) $id);
                 $approvedSalary = $request->input('approved_salary')
                     ?? optional($activeOffer)->sallary_offer_hrd
@@ -225,11 +230,90 @@ class FinanceOfferingSallaryController extends Controller
 
                 RecruitmentStatusService::clearFinanceRejected((int) $id, $now);
 
+                if ($sendOfferingToCandidate) {
+                    if (empty($applicant->email)) {
+                        DB::rollBack();
+                        return response()->json([
+                            'status'  => 422,
+                            'message' => 'Email kandidat tidak tersedia. Penawaran gaji tidak dapat dikirim.',
+                        ], 422);
+                    }
+
+                    (new RecruitmentStatusService())->update(
+                        $id,
+                        'salary_offer',
+                        $now,
+                        'finance_approved',
+                        ['by' => $user ?? 'Finance']
+                    );
+
+                    $applicant = $applicant->fresh([
+                        'sallaryOffer',
+                        'candidateDataOffer',
+                        'personalRequest.masterJabatan',
+                        'personnelRequest.masterJabatan',
+                    ]);
+
+                    $emailSent = false;
+                    $emailError = null;
+                    try {
+                        $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant);
+                        $emailSent = GenerateMessageAtsEmail::sendCandidateOfferingSalaryEmail(
+                            $applicant,
+                            $dataObj,
+                            is_string($user) && $user !== '' ? $user : 'Finance'
+                        );
+                    } catch (\Throwable $e) {
+                        $emailError = $e->getMessage();
+                        \Log::warning('Candidate salary offer email failed after finance approve', [
+                            'recruitment_id' => $id,
+                            'error' => $emailError,
+                        ]);
+                    }
+
+                    if (!$emailSent) {
+                        DB::rollBack();
+                        return response()->json([
+                            'status'  => 500,
+                            'message' => 'Persetujuan Finance tercatat, namun email penawaran gagal dikirim ke kandidat.'
+                                . ($emailError ? ' ' . $emailError : ''),
+                        ], 500);
+                    }
+
+                    (new RecruitmentStatusService())->update(
+                        $id,
+                        'salary_offer',
+                        $now,
+                        'candidate_offering_sent',
+                        ['by' => $user ?? 'Finance']
+                    );
+                    (new RecruitmentStatusService())->update(
+                        $id,
+                        'salary_offer',
+                        $now,
+                        'candidate_offering_email_sent',
+                        ['by' => $user ?? 'Finance']
+                    );
+
+                    $applicant = $applicant->fresh(['sallaryOffer', 'personalRequest.masterJabatan']);
+
+                    DB::commit();
+
+                    app(AtsNotificationService::class)->financeDecisionMade($applicant, 'approve');
+
+                    return response()->json([
+                        'status'  => 200,
+                        'message' => 'Persetujuan Finance berhasil diproses. Email penawaran gaji telah dikirim ke kandidat.',
+                        'sent_to_candidate' => true,
+                        'data'    => $applicant,
+                    ], 200);
+                }
+
                 (new RecruitmentStatusService())->update(
-                    $id, 
-                    'internal_sallary_offer', 
-                    $now, 
-                    'finance_approved', 
+                    $id,
+                    'internal_sallary_offer',
+                    $now,
+                    'finance_approved',
                     ['by' => $user ?? 'Finance']
                 );
 
@@ -249,6 +333,7 @@ class FinanceOfferingSallaryController extends Controller
                     'message' => $directorEmailSent
                         ? 'Persetujuan Finance berhasil diproses dan email persetujuan telah dikirim ke Approval (Salary).'
                         : 'Persetujuan Finance berhasil diproses. Email Approval (Salary) belum dikirim karena alamat email belum tersedia.',
+                    'sent_to_candidate' => false,
                     'data'    => $applicant,
                 ], 200);
             }
@@ -270,9 +355,13 @@ class FinanceOfferingSallaryController extends Controller
                     $user ?? 'Finance'
                 );
 
+                $rejectStatus = RecruitmentStatusService::isFinanceReviewBeforeCandidateOffering($applicant)
+                    ? 'salary_offer'
+                    : 'management_decision';
+
                 (new RecruitmentStatusService())->update(
                     $id,
-                    'management_decision',
+                    $rejectStatus,
                     $now,
                     'finance_rejected',
                     [

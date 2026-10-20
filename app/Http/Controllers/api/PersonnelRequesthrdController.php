@@ -731,7 +731,7 @@ class PersonnelRequesthrdController extends Controller
                 'join' => 0,
             ];
 
-            $salaryStatuses = ['internal_sallary_offer', 'salary_offer', 'sallary_offer', 'approved'];
+            $salaryStatuses = RecruitmentStatusService::recruitmentPipelineSalaryOfferStatuses();
 
             $rows = $this->pipelineCandidateQuery($request)
                 ->selectRaw("LOWER(TRIM(COALESCE(nr.status, ''))) as status, COUNT(*) as total")
@@ -775,9 +775,13 @@ class PersonnelRequesthrdController extends Controller
                 }
 
                 if (in_array($status, $salaryStatuses, true)) {
-                    $steps['salary_offer'] += $count;
+                    continue;
                 }
             }
+
+            $steps['salary_offer'] = (int) $this->applyRecruitmentPipelineSalaryOfferFilter(
+                $this->pipelineCandidateQuery($request)
+            )->distinct()->count('nr.id');
 
             if (Schema::hasTable('assessment_attempts')) {
                 $steps['assessment'] = (int) $this->pipelineCandidateQuery($request)
@@ -848,6 +852,8 @@ class PersonnelRequesthrdController extends Controller
                     'nr.email',
                     'nr.no_telepon',
                     'nr.posisi_dilamar',
+                    'nr.meta_history',
+                    'nr.status',
                     'pr.posisi as pr_posisi',
                     'mj.nama_jabatan'
                 )
@@ -858,7 +864,7 @@ class PersonnelRequesthrdController extends Controller
 
             $candidates = $step === 'join'
                 ? $this->mapPipelineJoinCandidates($rows)
-                : $this->mapPipelineDefaultCandidates($rows);
+                : $this->mapPipelineDefaultCandidates($rows, $step);
 
             return response()->json([
                 'status' => 'success',
@@ -876,16 +882,24 @@ class PersonnelRequesthrdController extends Controller
         }
     }
 
-    private function mapPipelineDefaultCandidates($rows)
+    private function mapPipelineDefaultCandidates($rows, ?string $step = null)
     {
-        return $rows->map(function ($row) {
-            return [
+        return $rows->map(function ($row) use ($step) {
+            $item = [
                 'id' => (int) $row->id,
                 'nama_lengkap' => $row->nama_lengkap ?: '-',
                 'email' => $row->email ?: '-',
                 'no_telepon' => $row->no_telepon ?: '-',
                 'posisi_dilamar' => $this->resolvePipelineCandidatePosition($row),
             ];
+
+            if ($step === 'salary_offer') {
+                $pipeline = RecruitmentStatusService::resolvePipelineStatus($row);
+                $item['stage_status_label'] = $pipeline['label'] ?? null;
+                $item['candidate_offering_email_sent_at'] = RecruitmentStatusService::getLatestCandidateOfferingEmailSentAt($row);
+            }
+
+            return $item;
         })->values();
     }
 
@@ -997,10 +1011,20 @@ class PersonnelRequesthrdController extends Controller
             'profile_completion' => ['profile_completion'],
             'interview_user' => ['interview_user'],
             'management_decision' => ['management_decision'],
-            'salary_offer' => ['internal_sallary_offer', 'salary_offer', 'sallary_offer', 'approved'],
+            'salary_offer' => RecruitmentStatusService::recruitmentPipelineSalaryOfferStatuses(),
             'hired' => ['hired'],
             'join' => ['training'],
         ];
+    }
+
+    private function applyRecruitmentPipelineSalaryOfferFilter($query)
+    {
+        $statuses = RecruitmentStatusService::recruitmentPipelineSalaryOfferStatuses();
+        $placeholders = implode(',', array_fill(0, count($statuses), '?'));
+
+        return $query
+            ->whereRaw("LOWER(TRIM(COALESCE(nr.status, ''))) IN ({$placeholders})", $statuses)
+            ->where('nr.meta_history', 'like', '%candidate_offering_sent%');
     }
 
     private function applyPipelineStepFilter($query, $step)
@@ -1016,6 +1040,10 @@ class PersonnelRequesthrdController extends Controller
                     ->whereColumn('aa.recruitment_id', 'nr.id')
                     ->where('aa.status', 'in_progress');
             });
+        }
+
+        if ($step === 'salary_offer') {
+            return $this->applyRecruitmentPipelineSalaryOfferFilter($query);
         }
 
         $statuses = $this->pipelineStepStatuses()[$step] ?? [];

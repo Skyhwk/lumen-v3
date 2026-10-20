@@ -21,6 +21,7 @@ class DecisionSalary extends Model
     public const DECISION_PENDING = 'pending';
     public const DECISION_APPROVED = 'approved';
     public const DECISION_REJECTED = 'rejected';
+    public const DECISION_NEGOTIATED = 'negotiated';
     public const DECISION_SUPERSEDED = 'superseded';
 
     public function newRecruitment()

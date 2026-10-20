@@ -55,6 +55,7 @@ class Kernel extends ConsoleKernel
         Commands\TestCsTicketGeneratorCommand::class,
         Commands\SendKeptManagementDecisionReminders::class,
         Commands\SendCandidateActionReminders::class,
+        Commands\AutoApproveCandidateOffering::class,
         Commands\SendPendingAssessmentInvitations::class,
         Commands\SendInternalAssessmentNalarLogikaPdfCommand::class,
         Commands\RejectOverdueAssessment::class,
@@ -77,12 +78,15 @@ class Kernel extends ConsoleKernel
         Commands\SyncHrSpecialLeaveTypesCommand::class,
         Commands\SyncLeaveAlpaLedgerCommand::class,
         Commands\SyncGreatdayFormAttachmentFilesCommand::class,
+        Commands\SyncGreatdayMobileAbsensiCommand::class,
         Commands\ImportGreatdayAssetsFromInternalCommand::class,
         Commands\QuotationDiscoverCommand::class,
         Commands\QuotationCreateCommand::class,
         Commands\QuotationDispatchCommand::class,
         Commands\QuotationGenerateCommand::class,
+        Commands\UpdateQuotationStatusFromExcelCommand::class,
         Commands\GenerateMonthlyAbsensiCommand::class,
+        Commands\ImportNearHo::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,
@@ -109,6 +113,10 @@ class Kernel extends ConsoleKernel
         //     ->withoutOverlapping();
         $schedule->command('employee-adjustment:apply-scheduled')
             ->dailyAt('07:00')
+            ->timezone('Asia/Jakarta')
+            ->withoutOverlapping(30);
+        $schedule->command('recruitment:auto-approve-candidate-offering')
+            ->dailyAt('23:30')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping(30);
         // $schedule->command('absensi:generate-monthly')
