@@ -1629,6 +1629,7 @@ class SamplerTrackingService
         if ($own) return $own;
         if (!$member->sampler_id) return null;
         // A recorded check-in binds this visit to the journey active at arrival.
+        // A journey can span dates; only a later return closes its departure.
         $checkin = $member->events->where('event_type', 'checkin')->sortBy('event_at')->first();
         $at = $checkin ? $checkin->event_at : $this->now()->toDateTimeString();
         $latest = SamplerTrackingEvent::whereIn('event_type', ['departure', 'return'])
@@ -1636,7 +1637,7 @@ class SamplerTrackingService
             ->whereHas('member', function ($query) use ($member, $date) {
                 $query->where('sampler_id', $member->sampler_id)->where('is_active', true)
                     ->whereHas('session', function ($session) use ($date) {
-                        $session->where('is_active', true)->whereDate('tanggal_sampling', $date);
+                        $session->where('is_active', true)->whereDate('tanggal_sampling', '<=', $date);
                     });
             })
             ->when($checkin, function ($query) use ($checkin) {
