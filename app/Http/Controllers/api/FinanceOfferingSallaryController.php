@@ -18,6 +18,7 @@ use App\Services\OfferingSalaryEmail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Yajra\DataTables\Facades\DataTables;
 
 class FinanceOfferingSallaryController extends Controller
@@ -56,41 +57,119 @@ class FinanceOfferingSallaryController extends Controller
         return $pos ?: '-';
     }
 
-    // ─── Index — DataTables list of candidates in finance_review ────────────
-
-    /**
-     * List candidates with status = finance_review
-     */
-    public function index(Request $request)
+    private function hasRejectFinanceColumn(): bool
     {
-        $tab = $request->input('tab', 'pending');
+        static $has = null;
 
-        $query = NewRecruitment::with([
-            'personalRequest.masterJabatan', 
-            'hrdInterview', 
-            'userInterview', 
-            'sallaryOffer', 
-            'candidateDataOffer', 
-            'candidateProfile'
-        ]);
+        if ($has === null) {
+            $has = Schema::hasColumn('new_recruitment', 'is_reject_finance');
+        }
+
+        return $has;
+    }
+
+    private function resolveYear(Request $request): ?int
+    {
+        if (!$request->filled('year')) {
+            return null;
+        }
+
+        $year = (int) $request->input('year');
+
+        return $year > 2000 ? $year : null;
+    }
+
+    private function applyYearFilter($query, Request $request)
+    {
+        $year = $this->resolveYear($request);
+        if ($year === null) {
+            return $query;
+        }
+
+        return $query->where(function ($sub) use ($year) {
+            $sub->whereYear('created_at', $year)
+                ->orWhereNull('created_at');
+        });
+    }
+
+    private function applyCurrentRejectOutcome($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereRaw('LOWER(COALESCE(status, "")) LIKE ?', ['%reject%']);
+            if ($this->hasRejectFinanceColumn()) {
+                $q->orWhere('is_reject_finance', true);
+            }
+        });
+    }
+
+    private function applyNotCurrentRejectOutcome($query)
+    {
+        $query->whereRaw('LOWER(COALESCE(status, "")) NOT LIKE ?', ['%reject%']);
+        if ($this->hasRejectFinanceColumn()) {
+            $query->where(function ($q) {
+                $q->where('is_reject_finance', false)
+                    ->orWhereNull('is_reject_finance');
+            });
+        }
+
+        return $query;
+    }
+
+    private function applyWentThroughFinance($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('meta_history', 'like', '%finance_approved%')
+                ->orWhere('meta_history', 'like', '%finance_rejected%');
+            if ($this->hasRejectFinanceColumn()) {
+                $q->orWhere('is_reject_finance', true);
+            }
+        });
+    }
+
+    private function applyTabFilter($query, string $tab)
+    {
+        if ($tab === 'rejected') {
+            $query->where('status', '!=', 'finance_review');
+            $this->applyWentThroughFinance($query);
+            $this->applyCurrentRejectOutcome($query);
+
+            return $query;
+        }
 
         if ($tab === 'processed') {
             $query->where('status', '!=', 'finance_review')
-                  ->where(function ($q) {
-                      $q->where('meta_history', 'like', '%finance_approved%')
-                        ->orWhere('meta_history', 'like', '%finance_rejected%');
-                  });
-        } else {
-            $query->where('status', 'finance_review');
+                ->where('meta_history', 'like', '%finance_approved%');
+            $this->applyNotCurrentRejectOutcome($query);
+
+            return $query;
         }
 
-        $query->when($request->filled('year'), function ($q) use ($request) {
-            return $q->where(function ($sub) use ($request) {
-                $sub->whereYear('created_at', $request->year)
-                    ->orWhereNull('created_at');
-            });
-        })
-        ->orderBy('id', 'desc');
+        return $query->where('status', 'finance_review');
+    }
+
+    // ─── Index — DataTables list by finance tab ─────────────────────────────
+
+    /**
+     * pending = menunggu keputusan Finance
+     * processed = sudah disetujui Finance dan belum rejected
+     * rejected = ditolak Finance, atau status rejected setelah lewat Finance
+     */
+    public function index(Request $request)
+    {
+        $tab = strtolower(trim((string) $request->input('tab', 'pending')));
+
+        $query = NewRecruitment::with([
+            'personalRequest.masterJabatan',
+            'hrdInterview',
+            'userInterview',
+            'sallaryOffer',
+            'candidateDataOffer',
+            'candidateProfile'
+        ]);
+
+        $this->applyTabFilter($query, $tab);
+        $this->applyYearFilter($query, $request);
+        $query->orderBy('id', 'desc');
 
         return DataTables::of($query)
             ->addColumn('no_request', function ($row) {
@@ -173,6 +252,23 @@ class FinanceOfferingSallaryController extends Controller
             })
             ->rawColumns([])
             ->make(true);
+    }
+
+    public function tabCounts(Request $request)
+    {
+        $counts = [];
+
+        foreach (['pending', 'processed', 'rejected'] as $tab) {
+            $query = NewRecruitment::query();
+            $this->applyTabFilter($query, $tab);
+            $this->applyYearFilter($query, $request);
+            $counts[$tab] = (int) $query->count();
+        }
+
+        return response()->json([
+            'status' => 200,
+            'data' => $counts,
+        ]);
     }
 
     // ─── Update Finance Decision ─────────────────────────────────────────────
