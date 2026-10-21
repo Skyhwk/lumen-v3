@@ -86,8 +86,7 @@ class BasSampelService
     public static function isCompleted($sample, callable $getStatusSampling)
     {
         if ($sample->kategori_2 === '1-Air') {
-            return DataLapanganAir::where('no_sampel', $sample->no_sampel)
-                ->where('is_blocked', 0)->where('is_rejected', 0)->exists();
+            return DataLapanganAir::where('no_sampel', $sample->no_sampel)->exists();
         }
         if (($sample->kategori_3 ?? null) === '118-Psikologi') {
             return true;
