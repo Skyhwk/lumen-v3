@@ -3276,24 +3276,46 @@ class FixingController extends Controller
         $q = trim((string) $request->input('q', ''));
         $status = trim((string) $request->input('status', ''));
 
-        $query = SalaryAdjustmentRequest::where('is_active', true);
+        $query = DB::connection('mysql')
+            ->table('salary_adjustment_requests as sar')
+            ->leftJoin('master_karyawan as karyawan', 'sar.employee_id', '=', 'karyawan.id')
+            ->leftJoin('master_divisi as d', 'karyawan.id_department', '=', 'd.id')
+            ->leftJoin('master_jabatan as j', 'karyawan.id_jabatan', '=', 'j.id')
+            ->leftJoin('master_karyawan as manager', 'sar.requested_by_id', '=', 'manager.id')
+            ->where('sar.is_active', true);
 
         if ($status !== '') {
-            $query->where('status', $status);
+            $query->where('sar.status', $status);
         }
 
         if ($q !== '') {
             $query->where(function ($w) use ($q) {
-                $w->where('no_document', 'LIKE', "%{$q}%")
-                    ->orWhereHas('karyawan', function ($sub) use ($q) {
-                        $sub->where('nama_lengkap', 'LIKE', "%{$q}%")
-                            ->orWhere('nik_karyawan', 'LIKE', "%{$q}%");
-                    });
+                $w->where('sar.no_document', 'LIKE', "%{$q}%")
+                    ->orWhere('karyawan.nama_lengkap', 'LIKE', "%{$q}%")
+                    ->orWhere('karyawan.nik_karyawan', 'LIKE', "%{$q}%");
             });
         }
 
-        $records = $query->with(['karyawan', 'manager'])
-            ->orderBy('id', 'desc')
+        $records = $query->select([
+                'sar.id',
+                'sar.no_document',
+                'sar.employee_id',
+                'sar.requested_by_id',
+                'sar.jabatan',
+                'sar.status',
+                'sar.request_type',
+                'sar.bulan_efektif',
+                'sar.created_by',
+                'sar.finance_approved_at',
+                'sar.final_eval_approved_at',
+                'sar.created_at',
+                'karyawan.nama_lengkap as karyawan_nama',
+                'karyawan.nik_karyawan',
+                'd.nama_divisi',
+                'j.nama_jabatan',
+                'manager.nama_lengkap as manager_nama',
+            ])
+            ->orderBy('sar.id', 'desc')
             ->limit(50)
             ->get();
 
@@ -3309,14 +3331,23 @@ class FixingController extends Controller
                 ? $defaultEmailBapak
                 : $defaultEmailIbu;
 
+            $createdAtFormatted = '-';
+            if (!empty($row->created_at)) {
+                try {
+                    $createdAtFormatted = Carbon::parse($row->created_at)->format('d-m-Y H:i');
+                } catch (\Throwable $th) {
+                    $createdAtFormatted = (string) $row->created_at;
+                }
+            }
+
             return [
                 'id' => $row->id,
                 'no_document' => $row->no_document,
-                'nama_lengkap' => $row->karyawan->nama_lengkap ?? '-',
-                'nik_karyawan' => $row->karyawan->nik_karyawan ?? '-',
-                'jabatan' => $row->jabatan ?: (optional($row->karyawan->jabatan)->nama_jabatan ?? '-'),
-                'department' => optional($row->karyawan->divisi)->nama_divisi ?? ($row->karyawan->department ?? '-'),
-                'manager_nama' => $row->manager->nama_lengkap ?? $row->created_by,
+                'nama_lengkap' => $row->karyawan_nama ?? '-',
+                'nik_karyawan' => $row->nik_karyawan ?? '-',
+                'jabatan' => $row->jabatan ?: ($row->nama_jabatan ?? '-'),
+                'department' => $row->nama_divisi ?? '-',
+                'manager_nama' => $row->manager_nama ?? $row->created_by,
                 'status' => $row->status,
                 'status_label' => SalaryAdjustmentWorkflowService::statusLabel($row->status),
                 'request_type' => $row->request_type,
@@ -3328,7 +3359,7 @@ class FixingController extends Controller
                 'email_bapak' => $defaultEmailBapak,
                 'finance_approved_at' => $row->finance_approved_at,
                 'final_eval_approved_at' => $row->final_eval_approved_at,
-                'created_at' => $row->created_at ? $row->created_at->format('d-m-Y H:i') : '-',
+                'created_at' => $createdAtFormatted,
             ];
         });
 
