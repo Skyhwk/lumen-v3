@@ -1,10 +1,7 @@
 @php
     use App\Services\SalaryAdjustmentEmailViewData as EmailData;
     $request = $request ?? [];
-    $photoSrc = $request['employee_photo'] ?? '';
-    if ($photoSrc === '' && !empty($request['employee_photo_url'])) {
-        $photoSrc = $request['employee_photo_url'];
-    }
+    $photoSrc = $request['employee_photo_url'] ?? '';
 @endphp
 
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;margin:0 0 24px 0;border:1px solid #e4e4e7;background-color:#fafafa;">
