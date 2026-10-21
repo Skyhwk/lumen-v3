@@ -29,10 +29,26 @@ use App\Services\AnalystFormula;
 
 class FdlKebisinganController extends Controller
 {
+    public function tabCounts()
+    {
+        $base = DataLapanganKebisingan::query();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'pending' => (clone $base)->where(function ($query) {
+                    $query->where('is_approve', 0)->orWhereNull('is_approve');
+                })->count(),
+                'approved' => (clone $base)->where('is_approve', 1)->count(),
+            ],
+        ]);
+    }
+
     public function indexAll(Request $request)
     {
         $this->autoBlock();
         $data = DataLapanganKebisingan::with('detail')->orderBy('id', 'desc');
+        $this->applyApprovalFilter($data, $request);
 
         return Datatables::of($data)
             ->filterColumn('created_by', function ($query, $keyword) {
@@ -489,5 +505,21 @@ class FdlKebisinganController extends Controller
     {
         $tgl = Carbon::now()->subDays(7);
         $data = DataLapanganKebisingan::where('is_blocked', 0)->where('created_at', '<=', $tgl)->update(['is_blocked' => 1, 'blocked_by' => 'System', 'blocked_at' => Carbon::now()->format('Y-m-d H:i:s')]);
+    }
+
+    private function applyApprovalFilter($query, Request $request): void
+    {
+        if (!$request->filled('approval')) {
+            return;
+        }
+
+        if ($request->approval === 'approved') {
+            $query->where('is_approve', 1);
+            return;
+        }
+
+        $query->where(function ($sub) {
+            $sub->where('is_approve', 0)->orWhereNull('is_approve');
+        });
     }
 }

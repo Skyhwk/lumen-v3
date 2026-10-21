@@ -22,183 +22,37 @@ use Yajra\Datatables\Datatables;
 
 class IzinController extends Controller
 {
-    public function indexUnprocessed(Request $request)
+    public function index(Request $request)
     {
-        if (HrTableMode::portalReadsHrTables()) {
-            $data = app(PortalHrdIzinDatatableQuery::class)->unprocessed((int) $request->periode);
-
-            return Datatables::of($data)->make(true);
+        $status = (string) $request->status;
+        if (!in_array($status, $this->izinTabStatuses(), true)) {
+            return Datatables::of(collect())->make(true);
         }
 
-        $permissions = PermissionRequest::query()->toBase()
-            ->from('intilab_apps.permission_requests as pr')
-            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.id')
-            ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
-            ->select(
-                DB::raw("CONCAT('PR-', pr.id) as id"),
-                'pr.no_document',
-                'd.nama_divisi',
-                DB::raw('NULL as special_leave_name'),
-                DB::raw('CASE
-            WHEN pr.status = "Approved Atasan" THEN "APPROVED ATASAN"
-            WHEN pr.status = "Approved HRD" THEN "APPROVED HRD"
-            WHEN pr.status = "Rejected Atasan" THEN "REJECTED ATASAN"
-            WHEN pr.status = "Rejected HRD" THEN "REJECTED HRD"
-            ELSE "WAITING"
-        END as status'),
-                DB::raw('CASE
-            WHEN pr.type = "Event Leave" THEN "kegiatan"
-            WHEN pr.type = "Sick Leave" THEN "sakit"
-            WHEN pr.type = "Late Arrival" THEN "datang_terlambat"
-            ELSE pr.type
-        END as type_document'),
-                'pr.start_date as tanggal_mulai',
-                'pr.end_date as tanggal_selesai',
-                'pr.start_time as jam_mulai',
-                'pr.end_time as jam_selesai',
-                'pr.description as keterangan',
-                'pr.approved_atasan_by',
-                'pr.approved_atasan_at',
-                'pr.approved_hrd_by',
-                'pr.approved_hrd_at',
-                'pr.rejected_atasan_by',
-                'pr.rejected_atasan_at',
-                'pr.rejected_hrd_by',
-                'pr.rejected_hrd_at',
-                'u.nama_lengkap as nama_karyawan',
-                'pr.created_by as nama_pengaju',
-                'pr.attachment as filename',
-                DB::raw('NULL as nama_delegasi'),
-                'pr.created_at as diajukan_pada'
-            )
-            ->whereNull('pr.rejected_atasan_by')
-            ->whereNull('pr.rejected_hrd_by')
-            ->where('pr.status', 'Approved Atasan')
-            ->where('pr.is_active', 1)
-            ->where(function ($query) {
-                 $query->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
-                       ->orWhereNull('u.atasan_langsung');
-            })
-            ->whereNotNull('pr.approved_atasan_by')
-            ->whereNotNull('pr.approved_atasan_at')
-            ->whereYear('pr.created_at', $request->periode);
+        return Datatables::of($this->izinRows($this->izinPeriode($request), $status))->make(true);
+    }
 
-        $data = $permissions->get();
-
-        return Datatables::of($data)->make(true);
+    public function indexUnprocessed(Request $request)
+    {
+        return Datatables::of($this->izinRows($this->izinPeriode($request), WorkflowStatus::APPROVED_ATASAN))->make(true);
     }
 
     public function indexProcessed(Request $request)
     {
-        if (HrTableMode::portalReadsHrTables()) {
-            $data = app(PortalHrdIzinDatatableQuery::class)->processed((int) $request->periode);
-
-            return Datatables::of($data)->make(true);
-        }
-
-         $permissions = PermissionRequest::query()->toBase()
-            ->from('intilab_apps.permission_requests as pr')
-            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.id')
-            ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
-            ->select(
-                DB::raw("CONCAT('PR-', pr.id) as id"),
-                'pr.no_document',
-                'd.nama_divisi',
-                DB::raw('NULL as special_leave_name'),
-                DB::raw('CASE
-            WHEN pr.status = "Approved Atasan" THEN "APPROVED"
-            WHEN pr.status = "Approved HRD" THEN "APPROVED HRD"
-            WHEN pr.status = "Rejected Atasan" THEN "REJECTED"
-            WHEN pr.status = "Rejected HRD" THEN "REJECTED HRD"
-            ELSE "WAITING"
-        END as status'),
-                DB::raw('CASE
-            WHEN pr.type = "Event Leave" THEN "kegiatan"
-            WHEN pr.type = "Sick Leave" THEN "sakit"
-            WHEN pr.type = "Late Arrival" THEN "datang_terlambat"
-            ELSE pr.type
-        END as type_document'),
-                'pr.start_date as tanggal_mulai',
-                'pr.end_date as tanggal_selesai',
-                'pr.start_time as jam_mulai',
-                'pr.end_time as jam_selesai',
-                'pr.description as keterangan',
-                'pr.approved_atasan_by',
-                'pr.approved_atasan_at',
-                'pr.approved_hrd_by',
-                'pr.approved_hrd_at',
-                'pr.rejected_atasan_by',
-                'pr.rejected_atasan_at',
-                'pr.rejected_hrd_by',
-                'pr.rejected_hrd_at',
-                'u.nama_lengkap as nama_karyawan',
-                'pr.created_by as nama_pengaju',
-                'pr.attachment as filename',
-                DB::raw('NULL as nama_delegasi'),
-                'pr.created_at as diajukan_pada'
-            )
-            ->whereNotNull('pr.approved_hrd_by')
-            ->whereNotNull('pr.approved_hrd_at')
-            ->whereNull('pr.rejected_atasan_by')
-            ->whereNull('pr.rejected_hrd_by')
-            ->where('pr.is_active', 1)
-            ->whereYear('pr.created_at', $request->periode)
-            ->whereNotNull('pr.approved_atasan_by');
-
-        $data = $permissions->get();
-
-        return Datatables::of($data)->make(true);
+        return Datatables::of($this->izinRows($this->izinPeriode($request), WorkflowStatus::APPROVED_HRD))->make(true);
     }
 
     public function tabCounts(Request $request)
     {
-        $periode = (int) ($request->periode ?? date('Y'));
-
-        if (HrTableMode::portalReadsHrTables()) {
-            $query = app(PortalHrdIzinDatatableQuery::class);
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'on_progress' => $query->unprocessed($periode)->count(),
-                    'processed' => $query->processed($periode)->count(),
-                ],
-            ]);
+        $periode = $this->izinPeriode($request);
+        $counts = [];
+        foreach ($this->izinTabStatuses() as $key => $status) {
+            $counts[$key] = $this->countIzin($periode, $status);
         }
-
-        $onProgressPermissions = PermissionRequest::query()->toBase()
-            ->from('intilab_apps.permission_requests as pr')
-            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.id')
-            ->whereNull('pr.rejected_atasan_by')
-            ->whereNull('pr.rejected_hrd_by')
-            ->where('pr.status', 'Approved Atasan')
-            ->where('pr.is_active', 1)
-            ->where(function ($query) {
-                $query->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
-                    ->orWhereNull('u.atasan_langsung');
-            })
-            ->whereNotNull('pr.approved_atasan_by')
-            ->whereNotNull('pr.approved_atasan_at')
-            ->whereYear('pr.created_at', $periode)
-            ->count();
-
-        $processedPermissions = PermissionRequest::query()->toBase()
-            ->from('intilab_apps.permission_requests as pr')
-            ->whereNotNull('pr.approved_hrd_by')
-            ->whereNotNull('pr.approved_hrd_at')
-            ->whereNull('pr.rejected_atasan_by')
-            ->whereNull('pr.rejected_hrd_by')
-            ->where('pr.is_active', 1)
-            ->whereYear('pr.created_at', $periode)
-            ->whereNotNull('pr.approved_atasan_by')
-            ->count();
 
         return response()->json([
             'success' => true,
-            'data' => [
-                'on_progress' => $onProgressPermissions,
-                'processed' => $processedPermissions,
-            ],
+            'data' => $counts,
         ]);
     }
 
@@ -516,5 +370,129 @@ class IzinController extends Controller
         }
 
         return (int) $s;
+    }
+
+    private function izinPeriode(Request $request): int
+    {
+        $periode = (int) ($request->periode ?? 0);
+
+        return $periode > 0 ? $periode : (int) date('Y');
+    }
+
+    /** @return array<string, string> */
+    private function izinTabStatuses(): array
+    {
+        return [
+            'pending' => WorkflowStatus::PENDING,
+            'approved_atasan' => WorkflowStatus::APPROVED_ATASAN,
+            'approved_hrd' => WorkflowStatus::APPROVED_HRD,
+            'rejected_hrd' => WorkflowStatus::REJECTED_HRD,
+        ];
+    }
+
+    private function izinRows(int $periode, string $status)
+    {
+        if (HrTableMode::portalReadsHrTables()) {
+            return app(PortalHrdIzinDatatableQuery::class)->byStatus($periode, $status);
+        }
+
+        return $this->legacyPermissionQuery($periode, $status)->get();
+    }
+
+    private function countIzin(int $periode, string $status): int
+    {
+        if (HrTableMode::portalReadsHrTables()) {
+            return app(PortalHrdIzinDatatableQuery::class)->countByStatus($periode, $status);
+        }
+
+        return (int) $this->legacyPermissionQuery($periode, $status)->count();
+    }
+
+    private function legacyPermissionQuery(int $periode, string $status)
+    {
+        $query = PermissionRequest::query()->toBase()
+            ->from('intilab_apps.permission_requests as pr')
+            ->leftJoin('master_karyawan as u', 'pr.employee_id', '=', 'u.id')
+            ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
+            ->select($this->legacyPermissionSelect())
+            ->where('pr.is_active', 1)
+            ->whereYear('pr.created_at', $periode)
+            ->where('pr.status', $status);
+
+        if ($status === WorkflowStatus::APPROVED_ATASAN) {
+            $query->whereNull('pr.rejected_atasan_by')
+                ->whereNull('pr.rejected_hrd_by')
+                ->whereNotNull('pr.approved_atasan_by')
+                ->whereNotNull('pr.approved_atasan_at')
+                ->where(function ($inner) {
+                    $inner->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
+                        ->orWhereNull('u.atasan_langsung');
+                });
+        } elseif ($status === WorkflowStatus::APPROVED_HRD) {
+            $query->whereNotNull('pr.approved_hrd_by')
+                ->whereNotNull('pr.approved_hrd_at')
+                ->whereNull('pr.rejected_atasan_by')
+                ->whereNull('pr.rejected_hrd_by')
+                ->whereNotNull('pr.approved_atasan_by');
+        } elseif ($status === WorkflowStatus::REJECTED_HRD) {
+            $query->whereNotNull('pr.rejected_hrd_by')
+                ->whereNull('pr.rejected_atasan_by')
+                ->where(function ($inner) {
+                    $inner->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
+                        ->orWhereNull('u.atasan_langsung');
+                });
+        } else {
+            $query->whereNull('pr.rejected_atasan_by')
+                ->whereNull('pr.rejected_hrd_by')
+                ->whereNull('pr.approved_hrd_by')
+                ->where(function ($inner) {
+                    $inner->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
+                        ->orWhereNull('u.atasan_langsung');
+                });
+        }
+
+        return $query;
+    }
+
+    private function legacyPermissionSelect(): array
+    {
+        return [
+            DB::raw("CONCAT('PR-', pr.id) as id"),
+            'pr.no_document',
+            'd.nama_divisi',
+            DB::raw('NULL as special_leave_name'),
+            DB::raw('CASE
+                WHEN pr.status = "Pending" THEN "WAITING"
+                WHEN pr.status = "Approved Atasan" THEN "APPROVED ATASAN"
+                WHEN pr.status = "Approved HRD" THEN "APPROVED HRD"
+                WHEN pr.status = "Rejected Atasan" THEN "REJECTED ATASAN"
+                WHEN pr.status = "Rejected HRD" THEN "REJECTED HRD"
+                ELSE "WAITING"
+            END as status'),
+            DB::raw('CASE
+                WHEN pr.type = "Event Leave" THEN "kegiatan"
+                WHEN pr.type = "Sick Leave" THEN "sakit"
+                WHEN pr.type = "Late Arrival" THEN "datang_terlambat"
+                ELSE pr.type
+            END as type_document'),
+            'pr.start_date as tanggal_mulai',
+            'pr.end_date as tanggal_selesai',
+            'pr.start_time as jam_mulai',
+            'pr.end_time as jam_selesai',
+            'pr.description as keterangan',
+            'pr.approved_atasan_by',
+            'pr.approved_atasan_at',
+            'pr.approved_hrd_by',
+            'pr.approved_hrd_at',
+            'pr.rejected_atasan_by',
+            'pr.rejected_atasan_at',
+            'pr.rejected_hrd_by',
+            'pr.rejected_hrd_at',
+            'u.nama_lengkap as nama_karyawan',
+            'pr.created_by as nama_pengaju',
+            'pr.attachment as filename',
+            DB::raw('NULL as nama_delegasi'),
+            'pr.created_at as diajukan_pada',
+        ];
     }
 }

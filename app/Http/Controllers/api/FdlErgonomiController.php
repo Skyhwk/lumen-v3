@@ -28,6 +28,24 @@ class FdlErgonomiController extends Controller
     private const VIDEO_DOKUMENTASI_FOLDER = '/dokumentasi/video_bahaya_ergonomi/';
     private const LEGACY_VIDEO_DOKUMENTASI_FOLDER = '/dokumentasi/sampling/';
 
+    public function tabCounts(Request $request)
+    {
+        $base = DataLapanganErgonomi::query();
+        if ($request->filled('is_active') && Schema::hasColumn('data_lapangan_ergonomi', 'is_active')) {
+            $base->where('is_active', (int) $request->is_active);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'pending' => (clone $base)->where(function ($query) {
+                    $query->where('is_approve', 0)->orWhereNull('is_approve');
+                })->count(),
+                'approved' => (clone $base)->where('is_approve', 1)->count(),
+            ],
+        ]);
+    }
+
     public function index(Request $request)
     {
         try {
@@ -37,6 +55,8 @@ class FdlErgonomiController extends Controller
             if ($request->filled('is_active') && Schema::hasColumn('data_lapangan_ergonomi', 'is_active')) {
                 $data->where('is_active', (int) $request->is_active);
             }
+
+            $this->applyApprovalFilter($data, $request);
 
             return Datatables::of($data)
                 ->filterColumn('created_by', function ($query, $keyword) {
@@ -1337,6 +1357,23 @@ class FdlErgonomiController extends Controller
         }
 
         return $newPath;
+    }
+
+
+    private function applyApprovalFilter($query, Request $request): void
+    {
+        if (!$request->filled('approval')) {
+            return;
+        }
+
+        if ($request->approval === 'approved') {
+            $query->where('is_approve', 1);
+            return;
+        }
+
+        $query->where(function ($sub) {
+            $sub->where('is_approve', 0)->orWhereNull('is_approve');
+        });
     }
 
 }
