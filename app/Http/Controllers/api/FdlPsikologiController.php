@@ -31,11 +31,27 @@ use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 class FdlPsikologiController extends Controller
 {
+    public function tabCounts(Request $request)
+    {
+        $base = DataLapanganPsikologi::query()->where('no_sampel', '<>', null);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'pending' => (clone $base)->where(function ($query) {
+                    $query->where('is_approve', 0)->orWhereNull('is_approve');
+                })->count(),
+                'approved' => (clone $base)->where('is_approve', 1)->count(),
+            ],
+        ]);
+    }
+
     public function index(Request $request)
     {
         $this->autoBlock();
         $data = DataLapanganPsikologi::with('detail')->where('no_sampel', '<>', null)
             ->orderBy('id', 'desc');
+        $this->applyApprovalFilter($data, $request);
         return Datatables::of($data)
         ->filterColumn('detail.tanggal_sampling', function ($query, $keyword) {
             $query->whereHas('detail', function ($q) use ($keyword) {
@@ -652,4 +668,21 @@ class FdlPsikologiController extends Controller
         $tgl = Carbon::now()->subDays(7);
         $data = DataLapanganPsikologi::where('is_blocked', 0)->where('created_at', '<=', $tgl)->update(['is_blocked' => 1, 'blocked_by' => 'System', 'blocked_at' => Carbon::now()->format('Y-m-d H:i:s')]);
     }
+
+    private function applyApprovalFilter($query, Request $request): void
+    {
+        if (!$request->filled('approval')) {
+            return;
+        }
+
+        if ($request->approval === 'approved') {
+            $query->where('is_approve', 1);
+            return;
+        }
+
+        $query->where(function ($sub) {
+            $sub->where('is_approve', 0)->orWhereNull('is_approve');
+        });
+    }
+
 }

@@ -237,11 +237,43 @@ class FdlPartikulatIsokinetikController extends Controller
         }
     }
 
+    public function tabCounts(Request $request)
+    {
+        $models = [
+            1 => DataLapanganIsokinetikSurveiLapangan::class,
+            2 => DataLapanganIsokinetikPenentuanKecepatanLinier::class,
+            3 => DataLapanganIsokinetikBeratMolekul::class,
+            4 => DataLapanganIsokinetikKadarAir::class,
+            5 => DataLapanganIsokinetikPenentuanPartikulat::class,
+            6 => DataLapanganIsokinetikHasil::class,
+        ];
+        $model = $models[(int) $request->method] ?? null;
+        if (!$model) {
+            return response()->json([
+                'success' => true,
+                'data' => ['pending' => 0, 'approved' => 0],
+            ]);
+        }
+        $base = $model::query();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'pending' => (clone $base)->where(function ($query) {
+                    $query->where('is_approve', 0)->orWhereNull('is_approve');
+                })->count(),
+                'approved' => (clone $base)->where('is_approve', 1)->count(),
+            ],
+        ]);
+    }
+
     public function index(Request $request)
     {
         if ($request->method == 1) {
             $this->autoBlock(DataLapanganIsokinetikSurveiLapangan::class);
             $data = DataLapanganIsokinetikSurveiLapangan::with('detail');
+
+            $this->applyApprovalFilter($data, $request);
 
             return Datatables::of($data)
                 ->filterColumn('created_by', function ($query, $keyword) {
@@ -309,6 +341,8 @@ class FdlPartikulatIsokinetikController extends Controller
             $this->autoBlock(DataLapanganIsokinetikPenentuanKecepatanLinier::class);
             $data = DataLapanganIsokinetikPenentuanKecepatanLinier::with('detail','survei');
 
+            $this->applyApprovalFilter($data, $request);
+
             return Datatables::of($data)
                 ->filterColumn('created_by', function ($query, $keyword) {
                     $query->where('created_by', 'like', '%' . $keyword . '%');
@@ -367,6 +401,8 @@ class FdlPartikulatIsokinetikController extends Controller
         } else if ($request->method == 3) {
             $this->autoBlock(DataLapanganIsokinetikBeratMolekul::class);
             $data = DataLapanganIsokinetikBeratMolekul::with('detail','survei');
+
+            $this->applyApprovalFilter($data, $request);
 
             return Datatables::of($data)
                 ->filterColumn('created_by', function ($query, $keyword) {
@@ -436,6 +472,8 @@ class FdlPartikulatIsokinetikController extends Controller
             $this->autoBlock(DataLapanganIsokinetikKadarAir::class);
             $data = DataLapanganIsokinetikKadarAir::with('detail','survei');
 
+            $this->applyApprovalFilter($data, $request);
+
             return Datatables::of($data)
                 ->filterColumn('created_by', function ($query, $keyword) {
                     $query->where('created_by', 'like', '%' . $keyword . '%');
@@ -470,6 +508,8 @@ class FdlPartikulatIsokinetikController extends Controller
         } else if ($request->method == 5) {
             $this->autoBlock(DataLapanganIsokinetikPenentuanPartikulat::class);
             $data = DataLapanganIsokinetikPenentuanPartikulat::with('detail','survei', 'method3');
+
+            $this->applyApprovalFilter($data, $request);
 
             return Datatables::of($data)
                 ->filterColumn('created_by', function ($query, $keyword) {
@@ -535,6 +575,8 @@ class FdlPartikulatIsokinetikController extends Controller
         } else if ($request->method == 6) {
             $this->autoBlock(DataLapanganIsokinetikHasil::class);
             $data = DataLapanganIsokinetikHasil::with('detail','survei','method5');
+
+            $this->applyApprovalFilter($data, $request);
 
             return Datatables::of($data)
                 ->filterColumn('created_by', function ($query, $keyword) {
@@ -1826,6 +1868,23 @@ class FdlPartikulatIsokinetikController extends Controller
     {
         $tgl = Carbon::now()->subDays(3);
         $data = $model::where('is_blocked', false)->orWhere('is_blocked', null)->where('created_at', '<=', $tgl)->update(['is_blocked' => true, 'blocked_by' => 'System', 'blocked_at' => Carbon::now()->format('Y-m-d H:i:s')]);
+    }
+
+
+    private function applyApprovalFilter($query, Request $request): void
+    {
+        if (!$request->filled('approval')) {
+            return;
+        }
+
+        if ($request->approval === 'approved') {
+            $query->where('is_approve', 1);
+            return;
+        }
+
+        $query->where(function ($sub) {
+            $sub->where('is_approve', 0)->orWhereNull('is_approve');
+        });
     }
 
 }
