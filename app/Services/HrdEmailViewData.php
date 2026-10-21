@@ -255,6 +255,38 @@ class HrdEmailViewData
         return $value !== '' ? $value : 'Tidak ada data';
     }
 
+    public static function formatPernahBekerjaPerusahaan($record): array
+    {
+        $raw = null;
+        if (is_array($record)) {
+            $raw = $record['pernah_bekerja_perusahaan'] ?? null;
+        } elseif (is_object($record)) {
+            $raw = $record->pernah_bekerja_perusahaan ?? null;
+        }
+
+        if (is_string($raw)) {
+            $raw = json_decode($raw, true);
+        }
+
+        if (!is_array($raw)) {
+            return [
+                'Pernah bekerja di perusahaan ini' => 'Tidak ada data',
+            ];
+        }
+
+        $pernah = filter_var($raw['pernah'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $rows = [
+            'Pernah bekerja di perusahaan ini' => $pernah ? 'Ya' : 'Tidak',
+        ];
+
+        if ($pernah) {
+            $keterangan = trim((string) ($raw['keterangan'] ?? ''));
+            $rows['Penyebab keluar dari PT ini'] = $keterangan !== '' ? $keterangan : '-';
+        }
+
+        return $rows;
+    }
+
     public static function formatRupiah($value): string
     {
         if ($value === null || $value === '') {
