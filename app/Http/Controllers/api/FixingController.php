@@ -52,6 +52,14 @@ use App\Models\LhpsSinarUVHeader;
 use App\Models\LhpsSwabTesHeader;
 use App\Models\LhpUdaraPsikologiHeader;
 use App\Models\NewRecruitment;
+use App\Models\SalaryAdjustmentRequest;
+use App\Services\SalaryAdjustmentEmailService;
+use App\Services\SalaryAdjustmentWorkflowService;
+use App\Services\SalaryAdjustmentLogService;
+use App\Services\EmployeeAdjustmentTypeRegistry;
+use App\Services\GenerateAssessmentDocumentService;
+use App\Services\GenerateMessageAtsEmail;
+use App\Services\SendEmail;
 // end model LHP
 
 
@@ -3258,5 +3266,182 @@ class FixingController extends Controller
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Mengambil daftar kandidat / karyawan pada Permohonan Penyesuaian Karyawan untuk fixing tools.
+     */
+    public function getSalaryAdjustmentCandidatesForFixing(Request $request)
+    {
+        $q = trim((string) $request->input('q', ''));
+        $status = trim((string) $request->input('status', ''));
+
+        $query = SalaryAdjustmentRequest::where('is_active', true);
+
+        if ($status !== '') {
+            $query->where('status', $status);
+        }
+
+        if ($q !== '') {
+            $query->where(function ($w) use ($q) {
+                $w->where('no_document', 'LIKE', "%{$q}%")
+                    ->orWhereHas('karyawan', function ($sub) use ($q) {
+                        $sub->where('nama_lengkap', 'LIKE', "%{$q}%")
+                            ->orWhere('nik_karyawan', 'LIKE', "%{$q}%");
+                    });
+            });
+        }
+
+        $records = $query->with(['karyawan', 'manager'])
+            ->orderBy('id', 'desc')
+            ->limit(50)
+            ->get();
+
+        $defaultEmailIbu = trim((string) env('EMAIL_DIREKTUR_IBU', ''));
+        $defaultEmailBapak = trim((string) env('EMAIL_DIREKTUR_BAPAK', ''));
+
+        $data = $records->map(function ($row) use ($defaultEmailIbu, $defaultEmailBapak) {
+            $recommendedRole = $row->status === SalaryAdjustmentWorkflowService::STATUS_WAITING_APPROVAL_BAPAK
+                ? SalaryAdjustmentEmailService::ROLE_BAPAK
+                : SalaryAdjustmentEmailService::ROLE_IBU;
+
+            $recommendedEmail = $recommendedRole === SalaryAdjustmentEmailService::ROLE_BAPAK
+                ? $defaultEmailBapak
+                : $defaultEmailIbu;
+
+            return [
+                'id' => $row->id,
+                'no_document' => $row->no_document,
+                'nama_lengkap' => $row->karyawan->nama_lengkap ?? '-',
+                'nik_karyawan' => $row->karyawan->nik_karyawan ?? '-',
+                'jabatan' => $row->jabatan ?: (optional($row->karyawan->jabatan)->nama_jabatan ?? '-'),
+                'department' => optional($row->karyawan->divisi)->nama_divisi ?? ($row->karyawan->department ?? '-'),
+                'manager_nama' => $row->manager->nama_lengkap ?? $row->created_by,
+                'status' => $row->status,
+                'status_label' => SalaryAdjustmentWorkflowService::statusLabel($row->status),
+                'request_type' => $row->request_type,
+                'request_type_label' => EmployeeAdjustmentTypeRegistry::label($row->request_type),
+                'bulan_efektif' => $row->bulan_efektif,
+                'recommended_role' => $recommendedRole,
+                'recommended_email' => $recommendedEmail,
+                'email_ibu' => $defaultEmailIbu,
+                'email_bapak' => $defaultEmailBapak,
+                'finance_approved_at' => $row->finance_approved_at,
+                'final_eval_approved_at' => $row->final_eval_approved_at,
+                'created_at' => $row->created_at ? $row->created_at->format('d-m-Y H:i') : '-',
+            ];
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $data,
+        ], 200);
+    }
+
+    /**
+     * Kirim ulang email persetujuan Direktur beserta attachment PDF evaluasi final untuk Permohonan Penyesuaian Karyawan.
+     */
+    public function reEmailSalaryAdjustmentCandidate(Request $request)
+    {
+        $id = (int) ($request->input('id') ?? 0);
+        if ($id <= 0) {
+            return response()->json(['message' => 'id permohonan wajib diisi'], 400);
+        }
+
+        $record = SalaryAdjustmentRequest::find($id);
+        if (!$record || !$record->is_active) {
+            return response()->json(['message' => 'Data permohonan tidak ditemukan atau sudah tidak aktif'], 404);
+        }
+
+        $roleInput = strtolower(trim((string) $request->input('role', '')));
+        if (in_array($roleInput, [SalaryAdjustmentEmailService::ROLE_IBU, SalaryAdjustmentEmailService::ROLE_BAPAK], true)) {
+            $role = $roleInput;
+        } else {
+            $role = $record->status === SalaryAdjustmentWorkflowService::STATUS_WAITING_APPROVAL_BAPAK
+                ? SalaryAdjustmentEmailService::ROLE_BAPAK
+                : SalaryAdjustmentEmailService::ROLE_IBU;
+        }
+
+        $targetEmail = trim((string) $request->input('target_email', ''));
+        $sender = trim((string) ($request->input('sender') ?: ($this->karyawan ?? 'Programmer Tool')));
+
+        try {
+            $emailService = new SalaryAdjustmentEmailService();
+            $resolvedEmail = $targetEmail !== '' ? $targetEmail : $emailService->resolveRecipient($role);
+
+            if ($resolvedEmail === '') {
+                return response()->json([
+                    'message' => 'Alamat email tujuan Direktur belum dikonfigurasi di sistem (.env)',
+                ], 422);
+            }
+
+            // Kirim ulang email lengkap dengan token approval baru dan attachment PDF ringkasan evaluasi
+            $sent = $emailService->sendForRole($record, $role, $sender, [
+                'email' => $resolvedEmail,
+                'persist_token' => true,
+                'throw' => true,
+            ]);
+
+            $approverLabel = SalaryAdjustmentEmailService::actorLabel($role);
+
+            SalaryAdjustmentLogService::log(
+                $record->id,
+                $record->status,
+                $record->status,
+                're_email',
+                $this->user_id,
+                $this->karyawan,
+                "Kirim ulang email approval ({$approverLabel}) ke {$resolvedEmail} via Fixing Tools oleh {$sender}",
+                [
+                    'role' => $role,
+                    'target_email' => $resolvedEmail,
+                    'trigger' => 'fixing_tools',
+                    'sent_at' => Carbon::now()->toDateTimeString(),
+                ]
+            );
+
+            return response()->json([
+                'status' => 'success',
+                'message' => "Email permohonan ({$approverLabel}) beserta lampiran berkas PDF berhasil dikirim ulang ke {$resolvedEmail}.",
+                'data' => [
+                    'id' => $record->id,
+                    'role' => $role,
+                    'approver_label' => $approverLabel,
+                    'target_email' => $resolvedEmail,
+                    'sent_at' => Carbon::now()->toIso8601String(),
+                ],
+            ], 200);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Gagal mengirim ulang email: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Mengambil daftar kandidat rekrutmen / ATS untuk fixing tools.
+     */
+    public function getRecruitmentCandidatesForFixing(Request $request)
+    {
+        $q = trim((string) $request->input('q', ''));
+
+        $query = NewRecruitment::where('is_active', 1);
+
+        if ($q !== '') {
+            $query->where(function ($w) use ($q) {
+                $w->where('nama_lengkap', 'LIKE', "%{$q}%")
+                    ->orWhere('email', 'LIKE', "%{$q}%")
+                    ->orWhere('posisi_dilamar', 'LIKE', "%{$q}%");
+            });
+        }
+
+        $records = $query->orderBy('id', 'desc')
+            ->limit(50)
+            ->get(['id', 'nama_lengkap', 'email', 'posisi_dilamar', 'status', 'created_at']);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $records,
+        ], 200);
     }
 }
