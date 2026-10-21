@@ -56,3 +56,8 @@
         'Mendapatkan informasi dari' => \App\Services\HrdEmailViewData::formatSumberInformasi($record),
     ],
 ])
+
+<p style="{{ $sectionTitle }}">Riwayat Kerja di Perusahaan Ini</p>
+@include($infoTableView, [
+    'rows' => \App\Services\HrdEmailViewData::formatPernahBekerjaPerusahaan($record),
+])
