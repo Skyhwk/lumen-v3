@@ -9,6 +9,7 @@ use App\Models\PersiapanSampelHeader;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Yajra\Datatables\Datatables;
 
 class MonitoringSamplerController extends Controller
@@ -46,6 +47,7 @@ class MonitoringSamplerController extends Controller
 
             $selesaiLookup = $this->buildSelesaiLookup($existingWork, $periodeAwal, $periodeAkhir);
             $orderDetailsBySampel = $this->loadOrderDetailsBySampel(array_keys($allSampleNos));
+            $trackingLookup = $this->buildTeamTrackingLookup($periodeAwal, $periodeAkhir);
 
             $doneList = [];
             $headerByOrderDate = [];
@@ -186,6 +188,13 @@ class MonitoringSamplerController extends Controller
                     $schedule->sampler = implode(',', $pendingSamplers);
                     $kategori = implode(',', json_decode($schedule->kategori, true) ?? []);
                     $durasiLabel = $this->mapDurasi($schedule->durasi);
+                    $tracking = $this->resolveTeamTracking(
+                        $trackingLookup,
+                        $item->no_order,
+                        $schedule->tanggal,
+                        $schedule->jam_mulai,
+                        $pendingSamplers
+                    );
 
                     $key = $orderHeader->no_document . '|' .
                         $item->no_order . '|' .
@@ -202,6 +211,7 @@ class MonitoringSamplerController extends Controller
                             $groupedData[$key]['durasi'] ?? '-',
                             $durasiLabel
                         );
+                        $groupedData[$key] = $this->mergeTrackingIntoRow($groupedData[$key], $tracking);
                     } else {
                         $groupedData[$key] = [
                             'id_persiapan_sampel_header' => $headerMeta['id_persiapan_sampel_header'],
@@ -213,6 +223,11 @@ class MonitoringSamplerController extends Controller
                             'jumlah_titik' => $headerMeta['jumlah_titik'],
                             'titik_diambil' => $headerMeta['titik_diambil'],
                             'durasi' => $durasiLabel,
+                            'jam_mulai' => $schedule->jam_mulai,
+                            'jam_selesai' => $schedule->jam_selesai,
+                            'estimasi' => $this->formatEstimasi($schedule->jam_mulai, $schedule->jam_selesai),
+                            'checkin_at' => $tracking['checkin_at'],
+                            'checkout_at' => $tracking['checkout_at'],
                             'no_order' => $item->no_order ?? '',
                             'periode' => $periode,
                             'kategori' => $kategori,
@@ -280,6 +295,15 @@ class MonitoringSamplerController extends Controller
                 }
             }
 
+            $trackingLookup = $this->buildTeamTrackingLookup($header->tanggal_sampling, $header->tanggal_sampling);
+            $tracking = $this->resolveTeamTracking(
+                $trackingLookup,
+                $header->no_order,
+                $header->tanggal_sampling,
+                null,
+                explode(',', (string) ($header->sampler_jadwal ?? ''))
+            );
+
             $samples = [];
             foreach ($noSampelList as $noSampel) {
                 $orderDetail = $orderDetails->get($noSampel);
@@ -309,6 +333,8 @@ class MonitoringSamplerController extends Controller
                     'sampler' => $header->sampler_jadwal,
                     'jumlah_titik' => count($samples),
                     'titik_diambil' => collect($samples)->where('is_selesai', true)->count(),
+                    'checkin_at' => $tracking['checkin_at'],
+                    'checkout_at' => $tracking['checkout_at'],
                     'samples' => $samples,
                 ],
             ], 200);
@@ -370,6 +396,208 @@ class MonitoringSamplerController extends Controller
         $key = is_numeric($durasi) ? (int) $durasi : null;
 
         return $key !== null && isset($map[$key]) ? $map[$key] : '-';
+    }
+
+    private function buildTeamTrackingLookup($periodeAwal, $periodeAkhir): array
+    {
+        if (
+            !Schema::hasTable('sampler_tracking_sessions')
+            || !Schema::hasTable('sampler_tracking_events')
+        ) {
+            return ['byJam' => [], 'byDate' => []];
+        }
+
+        $sessionQuery = DB::table('sampler_tracking_sessions as s')
+            ->join('sampler_tracking_events as e', 'e.sampler_tracking_session_id', '=', 's.id')
+            ->whereBetween('s.tanggal_sampling', [$periodeAwal, $periodeAkhir])
+            ->whereIn('e.event_type', ['checkin', 'checkout'])
+            ->groupBy('s.id', 's.no_order', 's.tanggal_sampling', 's.jam_mulai', 's.is_active')
+            ->orderByDesc('s.is_active')
+            ->orderBy('s.id')
+            ->select([
+                's.id',
+                's.no_order',
+                's.tanggal_sampling',
+                's.jam_mulai',
+                's.is_active',
+                DB::raw("MIN(CASE WHEN e.event_type = 'checkin' THEN e.event_at END) as checkin_at"),
+                DB::raw("MIN(CASE WHEN e.event_type = 'checkout' THEN e.event_at END) as checkout_at"),
+            ]);
+
+        $sessions = $sessionQuery->get();
+        if ($sessions->isEmpty()) {
+            return ['byJam' => [], 'byDate' => []];
+        }
+
+        $membersBySession = [];
+        if (Schema::hasTable('sampler_tracking_members')) {
+            $memberRows = DB::table('sampler_tracking_members')
+                ->whereIn('sampler_tracking_session_id', $sessions->pluck('id')->all())
+                ->where('is_active', 1)
+                ->get(['sampler_tracking_session_id', 'sampler_name']);
+
+            foreach ($memberRows as $member) {
+                $name = $this->normalizeSamplerName($member->sampler_name);
+                if ($name === '') {
+                    continue;
+                }
+                $membersBySession[(int) $member->sampler_tracking_session_id][$name] = true;
+            }
+        }
+
+        $byJam = [];
+        $byDate = [];
+
+        foreach ($sessions as $session) {
+            $payload = [
+                'checkin_at' => $session->checkin_at,
+                'checkout_at' => $session->checkout_at,
+                'samplers' => array_keys($membersBySession[(int) $session->id] ?? []),
+                'is_active' => (int) ($session->is_active ?? 0),
+            ];
+
+            $order = trim((string) $session->no_order);
+            $date = $this->normalizeDateOnly($session->tanggal_sampling);
+            if ($order === '' || $date === '') {
+                continue;
+            }
+
+            $jam = $this->normalizeJam($session->jam_mulai);
+            if ($jam !== '') {
+                $jamKey = sprintf('%s|%s|%s', $order, $date, $jam);
+                if (!isset($byJam[$jamKey]) || (int) ($byJam[$jamKey]['is_active'] ?? 0) === 0) {
+                    $byJam[$jamKey] = $payload;
+                }
+            }
+
+            $dateKey = sprintf('%s|%s', $order, $date);
+            $byDate[$dateKey][] = $payload;
+        }
+
+        return ['byJam' => $byJam, 'byDate' => $byDate];
+    }
+
+    private function resolveTeamTracking(array $lookup, $noOrder, $tanggal, $jamMulai, array $samplers): array
+    {
+        $empty = ['checkin_at' => null, 'checkout_at' => null];
+        $order = trim((string) $noOrder);
+        $date = $this->normalizeDateOnly($tanggal);
+        if ($order === '' || $date === '') {
+            return $empty;
+        }
+
+        $jam = $this->normalizeJam($jamMulai);
+        if ($jam !== '') {
+            $jamMatch = $lookup['byJam'][sprintf('%s|%s|%s', $order, $date, $jam)] ?? null;
+            if ($jamMatch) {
+                return [
+                    'checkin_at' => $jamMatch['checkin_at'] ?? null,
+                    'checkout_at' => $jamMatch['checkout_at'] ?? null,
+                ];
+            }
+        }
+
+        $candidates = $lookup['byDate'][sprintf('%s|%s', $order, $date)] ?? [];
+        if ($candidates === []) {
+            return $empty;
+        }
+
+        $targetSamplers = $this->normalizeSamplerList($samplers);
+        if ($targetSamplers === []) {
+            if (count($candidates) === 1) {
+                return [
+                    'checkin_at' => $candidates[0]['checkin_at'] ?? null,
+                    'checkout_at' => $candidates[0]['checkout_at'] ?? null,
+                ];
+            }
+
+            return $empty;
+        }
+
+        $best = null;
+        $bestScore = 0;
+        foreach ($candidates as $candidate) {
+            $overlap = count(array_intersect($targetSamplers, $candidate['samplers'] ?? []));
+            if ($overlap < 1) {
+                continue;
+            }
+            if ($overlap > $bestScore || ($overlap === $bestScore && (int) ($candidate['is_active'] ?? 0) === 1)) {
+                $bestScore = $overlap;
+                $best = $candidate;
+            }
+        }
+
+        if (!$best && count($candidates) === 1) {
+            $best = $candidates[0];
+        }
+
+        return [
+            'checkin_at' => $best['checkin_at'] ?? null,
+            'checkout_at' => $best['checkout_at'] ?? null,
+        ];
+    }
+
+    private function mergeTrackingIntoRow(array $row, array $tracking): array
+    {
+        if (empty($row['checkin_at']) && !empty($tracking['checkin_at'])) {
+            $row['checkin_at'] = $tracking['checkin_at'];
+        }
+        if (empty($row['checkout_at']) && !empty($tracking['checkout_at'])) {
+            $row['checkout_at'] = $tracking['checkout_at'];
+        }
+
+        return $row;
+    }
+
+    private function normalizeDateOnly($value): string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $value, $matches)) {
+            return $matches[1];
+        }
+
+        try {
+            return Carbon::parse($value, 'Asia/Jakarta')->toDateString();
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    private function normalizeJam($value): string
+    {
+        $value = trim((string) $value);
+        if ($value === '' || !preg_match('/^(\d{1,2}):(\d{2})/', $value, $matches)) {
+            return '';
+        }
+
+        return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
+    }
+
+    private function formatEstimasi($jamMulai, $jamSelesai): string
+    {
+        $start = $this->normalizeJam($jamMulai);
+        $end = $this->normalizeJam($jamSelesai);
+
+        if ($start === '' && $end === '') {
+            return '-';
+        }
+
+        return ($start !== '' ? $start : '-') . ' - ' . ($end !== '' ? $end : '-');
+    }
+
+    private function normalizeSamplerName($name): string
+    {
+        return strtolower(trim((string) $name));
+    }
+
+    private function normalizeSamplerList(array $samplers): array
+    {
+        return array_values(array_unique(array_filter(array_map(function ($name) {
+            return $this->normalizeSamplerName($name);
+        }, $samplers))));
     }
 
     private function mergeDurasiLabels(string $existing, string $incoming): string
@@ -527,7 +755,7 @@ class MonitoringSamplerController extends Controller
         return trim((string) preg_replace('/^\d+-/', '', $value));
     }
 
-    /** Bulan berjalan dipotong sampai hari ini (Asia/Jakarta). Bulan lain tetap 1 s/d akhir bulan. */
+    /** Filter per tanggal. Tanggal ke depan dipotong sampai hari ini (Asia/Jakarta). */
     private function resolvePeriodeRange(Request $request): array
     {
         $awal = $request->input('periode_awal');
@@ -535,20 +763,24 @@ class MonitoringSamplerController extends Controller
         $today = Carbon::now('Asia/Jakarta')->startOfDay();
 
         if (!$awal && !$akhir) {
-            $awal = $today->copy()->startOfMonth()->toDateString();
-            $akhir = $today->toDateString();
-            return [$awal, $akhir];
+            return [$today->toDateString(), $today->toDateString()];
         }
 
         try {
-            $start = $awal ? Carbon::parse($awal, 'Asia/Jakarta')->startOfDay() : $today->copy()->startOfMonth();
-            $end = $akhir ? Carbon::parse($akhir, 'Asia/Jakarta')->startOfDay() : $start->copy()->endOfMonth();
+            $start = $awal ? Carbon::parse($awal, 'Asia/Jakarta')->startOfDay() : $today->copy();
+            $end = $akhir ? Carbon::parse($akhir, 'Asia/Jakarta')->startOfDay() : $start->copy();
         } catch (\Throwable $e) {
-            return [$today->copy()->startOfMonth()->toDateString(), $today->toDateString()];
+            return [$today->toDateString(), $today->toDateString()];
         }
 
-        if ($start->isSameMonth($today) && $end->gt($today)) {
+        if ($start->gt($today)) {
+            $start = $today->copy();
+        }
+        if ($end->gt($today)) {
             $end = $today->copy();
+        }
+        if ($end->lt($start)) {
+            $end = $start->copy();
         }
 
         return [$start->toDateString(), $end->toDateString()];
