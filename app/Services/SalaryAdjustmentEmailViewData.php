@@ -113,13 +113,12 @@ class SalaryAdjustmentEmailViewData
             return '';
         }
 
-        $mime = mime_content_type($path) ?: 'image/jpeg';
-        $contents = @file_get_contents($path);
-        if ($contents === false) {
+        $baseUrl = rtrim((string) env('APP_URL_PATH', env('APP_URL', '')), '/');
+        if ($baseUrl === '') {
             return '';
         }
 
-        return 'data:' . $mime . ';base64,' . base64_encode($contents);
+        return $baseUrl . '/Foto_Karyawan/' . basename($path);
     }
 
     public static function employeePhotoUrl(?string $filename): string
