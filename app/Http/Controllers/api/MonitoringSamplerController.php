@@ -223,6 +223,9 @@ class MonitoringSamplerController extends Controller
                             'jumlah_titik' => $headerMeta['jumlah_titik'],
                             'titik_diambil' => $headerMeta['titik_diambil'],
                             'durasi' => $durasiLabel,
+                            'jam_mulai' => $schedule->jam_mulai,
+                            'jam_selesai' => $schedule->jam_selesai,
+                            'estimasi' => $this->formatEstimasi($schedule->jam_mulai, $schedule->jam_selesai),
                             'checkin_at' => $tracking['checkin_at'],
                             'checkout_at' => $tracking['checkout_at'],
                             'no_order' => $item->no_order ?? '',
@@ -571,6 +574,18 @@ class MonitoringSamplerController extends Controller
         }
 
         return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
+    }
+
+    private function formatEstimasi($jamMulai, $jamSelesai): string
+    {
+        $start = $this->normalizeJam($jamMulai);
+        $end = $this->normalizeJam($jamSelesai);
+
+        if ($start === '' && $end === '') {
+            return '-';
+        }
+
+        return ($start !== '' ? $start : '-') . ' - ' . ($end !== '' ? $end : '-');
     }
 
     private function normalizeSamplerName($name): string
