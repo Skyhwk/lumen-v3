@@ -170,7 +170,7 @@ class MonitoringParameterController extends Controller
                 DB::raw('MAX(ssa.created_at) as waktu_scan')
             )
             ->groupBy('od.no_sampel')
-            ->orderBy('od.no_sampel')
+            ->orderByDesc('waktu_scan')
             ->get();
 
         return response()->json([
