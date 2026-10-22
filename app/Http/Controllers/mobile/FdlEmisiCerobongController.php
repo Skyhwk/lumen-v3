@@ -512,16 +512,24 @@ class FdlEmisiCerobongController extends Controller
                     $data->warna_latar                                  = json_encode($warna_latar);
 
                     $kecepatan = array();
-                    if ($request->kecAwal != null && $request->kecAkhir != null) {
-                        $kecepatan[] = 'Kecepatan Awal : ' . $request->kecAwal . '; Kecepatan Akhir : ' . $request->kecAkhir;
+                    $kecAwal = $request->input('kecAwal');
+                    $kecAkhir = $request->input('kecAkhir');
+                    if ($request->filled('kecAwal') || $request->filled('kecAkhir')) {
+                        $kecepatan[] = 'Kecepatan Awal : ' . ($kecAwal ?? '') . '; Kecepatan Akhir : ' . ($kecAkhir ?? '');
                     }
-                    $data->kecepatan_angin                                  = json_encode($kecepatan);
+                    if (count($kecepatan) > 0) {
+                        $data->kecepatan_angin = json_encode($kecepatan);
+                    }
 
                     $arah_angin = array();
-                    if ($request->arahAnginAwal != null && $request->arahAnginAkhir != null) {
-                        $arah_angin[] = 'Arah Angin Awal : ' . $request->arahAnginAwal . '; Arah Angin Akhir : ' . $request->arahAnginAkhir;
+                    $arahAnginAwal = $request->input('arahAnginAwal');
+                    $arahAnginAkhir = $request->input('arahAnginAkhir');
+                    if ($request->filled('arahAnginAwal') || $request->filled('arahAnginAkhir')) {
+                        $arah_angin[] = 'Arah Angin Awal : ' . ($arahAnginAwal ?? '') . '; Arah Angin Akhir : ' . ($arahAnginAkhir ?? '');
                     }
-                    $data->arah_pengamat                                  = json_encode($arah_angin);
+                    if (count($arah_angin) > 0) {
+                        $data->arah_pengamat = json_encode($arah_angin);
+                    }
 
                     $waktu_opas = array();
                     if ($request->waktuAwal != null && $request->waktuAkhir != null) {
@@ -641,8 +649,6 @@ class FdlEmisiCerobongController extends Controller
                     $data->merk                   = NULL;
                     $data->bahan_bakar                  = NULL;
                     $data->cuaca                  = NULL;
-                    $data->kecepatan_angin              = NULL;
-                    $data->arah_pengamat                   = NULL;
                     $data->diameter_cerobong               = NULL;
                     $data->durasi_operasi               = NULL;
                     $data->proses_filtrasi               = NULL;
