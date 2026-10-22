@@ -63,6 +63,7 @@ class HrdEmailViewData
      */
     public static function normalizePersonReferenceList($value): array
     {
+        $value = self::sanitizeJsonColumnValue($value);
         if ($value === null || $value === '') {
             return [];
         }
@@ -120,6 +121,7 @@ class HrdEmailViewData
      */
     public static function normalizePersonRekomendasiList($value): array
     {
+        $value = self::sanitizeJsonColumnValue($value);
         if ($value === null || $value === '') {
             return [];
         }
@@ -264,27 +266,100 @@ class HrdEmailViewData
             $raw = $record->pernah_bekerja_perusahaan ?? null;
         }
 
-        if (is_string($raw)) {
-            $raw = json_decode($raw, true);
-        }
+        $parsed = self::parseYesNoKeteranganField($raw);
 
-        if (!is_array($raw)) {
-            return [
-                'Pernah bekerja di perusahaan ini' => 'Tidak ada data',
-            ];
-        }
-
-        $pernah = filter_var($raw['pernah'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $rows = [
-            'Pernah bekerja di perusahaan ini' => $pernah ? 'Ya' : 'Tidak',
+            'Pernah bekerja di perusahaan ini' => $parsed['pernah'] ? 'Ya' : 'Tidak',
         ];
 
-        if ($pernah) {
-            $keterangan = trim((string) ($raw['keterangan'] ?? ''));
-            $rows['Penyebab keluar dari PT ini'] = $keterangan !== '' ? $keterangan : '-';
+        if ($parsed['pernah']) {
+            $rows['Penyebab keluar dari PT ini'] = $parsed['keterangan'] !== '' ? $parsed['keterangan'] : '-';
         }
 
         return $rows;
+    }
+
+    public static function formatMasalahHukum($record): array
+    {
+        $raw = null;
+        if (is_array($record)) {
+            $raw = $record['masalah_hukum'] ?? null;
+        } elseif (is_object($record)) {
+            $raw = $record->masalah_hukum ?? null;
+        }
+
+        $parsed = self::parseYesNoKeteranganField($raw);
+
+        $rows = [
+            'Pernah terlibat masalah hukum / kriminal' => $parsed['pernah'] ? 'Ya' : 'Tidak',
+        ];
+
+        if ($parsed['pernah']) {
+            $rows['Keterangan masalah hukum'] = $parsed['keterangan'] !== '' ? $parsed['keterangan'] : '-';
+        }
+
+        return $rows;
+    }
+
+    /**
+     * JSON kolom { pernah, keterangan } — null / string "null" = belum pernah.
+     *
+     * @return array{pernah: bool, keterangan: string}
+     */
+    public static function parseYesNoKeteranganField($raw): array
+    {
+        $default = ['pernah' => false, 'keterangan' => ''];
+
+        if (is_array($raw)) {
+            $data = $raw;
+        } else {
+            $raw = self::sanitizeJsonColumnValue($raw);
+            if ($raw === null) {
+                return $default;
+            }
+
+            if (is_string($raw)) {
+                $decoded = json_decode($raw, true);
+                $data = is_array($decoded) ? $decoded : null;
+            } else {
+                $data = null;
+            }
+
+            if (!is_array($data)) {
+                return $default;
+            }
+        }
+
+        $pernah = filter_var($data['pernah'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $keterangan = trim((string) ($data['keterangan'] ?? ''));
+        if (strtolower($keterangan) === 'null') {
+            $keterangan = '';
+        }
+
+        return [
+            'pernah' => $pernah,
+            'keterangan' => $pernah ? $keterangan : '',
+        ];
+    }
+
+    /**
+     * @param mixed $value
+     * @return mixed
+     */
+    public static function sanitizeJsonColumnValue($value)
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (is_string($value)) {
+            $trim = trim($value);
+            if ($trim === '' || strtolower($trim) === 'null') {
+                return null;
+            }
+        }
+
+        return $value;
     }
 
     public static function formatRupiah($value): string

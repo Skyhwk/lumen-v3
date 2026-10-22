@@ -147,6 +147,19 @@ $router->group(['prefix' => 'api/private/decision', 'middleware' => ['cors']], f
 $router->group(['prefix' => 'api/public/recruitment', 'middleware' => ['cors']], function () use ($router) {
     $router->get('jobs', 'api\PublicRecruitmentJobController@index');
     $router->get('jobs/{no_request}', 'api\PublicRecruitmentJobController@show');
+    $router->post('director/overview', 'api\DirectorDecisionController@overview');
+    $router->post('director/decide', 'api\DirectorDecisionController@decide');
+});
+
+$router->group(['prefix' => 'api/approval-app', 'middleware' => ['cors']], function () use ($router) {
+    $router->post('register-device', 'api\ApprovalAppController@registerDevice');
+    $router->get('counts', 'api\ApprovalAppController@counts');
+    $router->get('inbox', 'api\ApprovalAppController@inbox');
+    $router->get('kandidat/{id}', 'api\ApprovalAppController@kandidatDetail');
+    $router->get('kandidat/{id}/assessment-sessions/{sessionId}', 'api\ApprovalAppAssessmentController@sessionResult');
+    $router->get('penyesuaian/detail', 'api\ApprovalAppController@penyesuaianDetail');
+    $router->get('penyesuaian/attendance-daily', 'api\ApprovalAppController@penyesuaianAttendanceDaily');
+    $router->get('penyesuaian/assessment-sessions/{sessionId}', 'api\ApprovalAppAssessmentController@penyesuaianSessionResult');
 });
 
 require __DIR__ . '/greatday.php';

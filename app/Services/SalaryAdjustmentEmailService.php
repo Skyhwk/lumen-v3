@@ -93,6 +93,13 @@ class SalaryAdjustmentEmailService
                 $approvalToken->save();
             }
 
+            if ($role === self::ROLE_IBU && $this->isIbuApprovalEmail($emailTo)) {
+                app(ApprovalAppFcmService::class)->safeNotifyPendingPenyesuaian(
+                    (int) $request->id,
+                    (string) $employeeName
+                );
+            }
+
             return true;
         } catch (\Throwable $e) {
             Log::warning('Salary adjustment approval email failed', [
@@ -116,6 +123,14 @@ class SalaryAdjustmentEmailService
     public function buildDecisionButtons(string $token): object
     {
         $encodedToken = rawurlencode($token);
+        $approvalBase = rtrim((string) config('approval_app.public_url', ''), '/');
+
+        if ($approvalBase !== '') {
+            return (object) [
+                'approve' => "{$approvalBase}/private/decision/{$encodedToken}?decision=approve",
+                'reject' => "{$approvalBase}/private/decision/{$encodedToken}?decision=reject",
+            ];
+        }
 
         return (object) [
             'approve' => FrontendPublicUrl::build("private/decision/{$encodedToken}?decision=approve"),
@@ -173,5 +188,20 @@ class SalaryAdjustmentEmailService
         $normalized = json_decode(json_encode($bundle), true);
 
         return is_array($normalized) ? $normalized : $bundle;
+    }
+
+    private function isIbuApprovalEmail(string $emailTo): bool
+    {
+        $emailTo = strtolower(trim($emailTo));
+        if ($emailTo === '') {
+            return false;
+        }
+
+        $ibuEmail = strtolower(trim((string) env('EMAIL_DIREKTUR_IBU', '')));
+        if ($ibuEmail === '') {
+            return true;
+        }
+
+        return $emailTo === $ibuEmail;
     }
 }

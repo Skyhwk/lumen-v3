@@ -2341,7 +2341,9 @@ class PersonnelRequestController extends Controller
             'Permohonan Persetujuan Kandidat - ' . $recruitment->nama_lengkap,
             $emailContent,
             $assessmentData,
-            $candidateDocumentSendAttachments
+            $candidateDocumentSendAttachments,
+            (int) $recruitment->id,
+            (string) $recruitment->nama_lengkap
         );
     }
 
@@ -2350,7 +2352,9 @@ class PersonnelRequestController extends Controller
         string $subject,
         string $emailContent,
         array $assessmentData = [],
-        array $candidateDocumentAttachments = []
+        array $candidateDocumentAttachments = [],
+        ?int $recruitmentIdForPush = null,
+        ?string $candidateNameForPush = null
     ): array {
         if ($targetEmail === '') {
             throw new \RuntimeException('target_email atau EMAIL_DIREKTUR_IBU belum diisi');
@@ -2375,6 +2379,14 @@ class PersonnelRequestController extends Controller
             }
 
             $emailQuery->send();
+
+            if ($recruitmentIdForPush !== null && $candidateNameForPush !== null) {
+                app(\App\Services\ApprovalAppFcmService::class)->notifyPendingKandidatForIbuEmail(
+                    $targetEmail,
+                    $recruitmentIdForPush,
+                    $candidateNameForPush
+                );
+            }
 
             return [
                 'sent' => true,
@@ -2533,7 +2545,9 @@ class PersonnelRequestController extends Controller
                         $subject,
                         $emailContent,
                         $assessmentData,
-                        $candidateDocumentSendAttachments
+                        $candidateDocumentSendAttachments,
+                        (int) $recruitment->id,
+                        (string) $recruitment->nama_lengkap
                     );
                     $meta = array_merge($meta, $sendResult);
                 } else {

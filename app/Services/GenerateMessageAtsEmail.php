@@ -9,6 +9,11 @@ class GenerateMessageAtsEmail
 {
     private static function portalBaseUrl(): string
     {
+        $approval = rtrim((string) config('approval_app.public_url', ''), '/');
+        if ($approval !== '') {
+            return $approval;
+        }
+
         return rtrim((string) env('PORTALV4', ''), '/');
     }
 
