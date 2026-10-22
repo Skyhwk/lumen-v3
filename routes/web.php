@@ -151,5 +151,19 @@ $router->group(['prefix' => 'api/public/recruitment', 'middleware' => ['cors']],
 
 require __DIR__ . '/greatday.php';
 
+if (env('APP_ENV') === 'local') {
+    $router->get('/dev/dokumen-karyawan/sprj-preview', 'DokumenKaryawanPreviewController@index');
+    $router->get('/dev/dokumen-karyawan/sprj-preview.pdf', 'DokumenKaryawanPreviewController@pdf');
+    $router->get('/dev/dokumen-karyawan/sprj-preview/version', 'DokumenKaryawanPreviewController@version');
+    $router->get('/dev/dokumen-karyawan/coc-preview.pdf', 'DokumenKaryawanPreviewController@cocPdf');
+    $router->get('/dev/dokumen-karyawan/pkkp-preview.pdf', 'DokumenKaryawanPreviewController@pkkpPdf');
+    $router->get('/dev/dokumen-karyawan/spkb-preview.pdf', 'DokumenKaryawanPreviewController@spkbPdf');
+    $router->get('/dev/dokumen-karyawan/spny-preview.pdf', 'DokumenKaryawanPreviewController@spnyPdf');
+    $router->get('/dev/dokumen-karyawan/nda-preview.pdf', 'DokumenKaryawanPreviewController@ndaPdf');
+    $router->get('/dev/dokumen-karyawan/nda-spv-preview.pdf', 'DokumenKaryawanPreviewController@ndaSpvPdf');
+    $router->get('/dev/dokumen-karyawan/pkpp-preview.pdf', 'DokumenKaryawanPreviewController@pkppPdf');
+    $router->get('/dev/dokumen-karyawan/pkpp-sampling-preview.pdf', 'DokumenKaryawanPreviewController@pkppSamplingPdf');
+}
+
 $router->post('/{any:.*}', ['uses' => 'R404Controller@r404']);
 $router->get('/{any:.*}', ['uses' => 'R404Controller@r404']);

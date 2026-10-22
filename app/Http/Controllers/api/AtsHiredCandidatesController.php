@@ -13,15 +13,18 @@ use App\Models\PendidikanKaryawan;
 use App\Models\PengalamanKerjaKaryawan;
 use App\Models\SertifikatKaryawan;
 use App\Models\User;
+use App\Services\GenerateDokumenKaryawanService;
 use App\Services\KaryawanArsipDokumenService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
 use App\Services\RecruitmentStatusService;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Yajra\DataTables\Facades\DataTables;
 use App\Http\Controllers\api\Concerns\OrdersAtsDataTableColumns;
@@ -372,7 +375,7 @@ class AtsHiredCandidatesController extends Controller
         }
 
         try {
-            return DB::transaction(function () use ($request) {
+            $result = DB::transaction(function () use ($request) {
                 $recruitment = $this->findRecruitmentForMigration($request->input('id'), true);
                 if (!$recruitment) {
                     return response()->json(['status' => false, 'message' => 'Data kandidat tidak ditemukan.'], 404);
@@ -412,14 +415,38 @@ class AtsHiredCandidatesController extends Controller
                     return response()->json(['status' => false, 'message' => 'Username sudah digunakan akun sistem lain.'], 400);
                 }
 
-                $result = $this->performEmployeeMigrationFromForm($recruitment, $request);
-
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Data kandidat berhasil dimigrasikan ke Master Karyawan, payroll, arsip dokumen, dan akun sistem.',
-                    'data' => $result,
-                ]);
+                return $this->performEmployeeMigrationFromForm($recruitment, $request);
             });
+
+            if ($result instanceof JsonResponse) {
+                return $result;
+            }
+
+            $dokumenKaryawan = null;
+            $documentWarning = null;
+            try {
+                $dokumenKaryawan = app(GenerateDokumenKaryawanService::class)->generate(
+                    (int) $result['karyawan_id'],
+                    (int) $request->input('id')
+                );
+            } catch (\Throwable $documentError) {
+                $documentWarning = 'Migrasi berhasil, tetapi dokumen karyawan gagal dibuat.';
+                Log::error('Gagal membuat dokumen setelah migrasi karyawan', [
+                    'karyawan_id' => $result['karyawan_id'],
+                    'new_recruitment_id' => $request->input('id'),
+                    'message' => $documentError->getMessage(),
+                ]);
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => $documentWarning
+                    ?: 'Data kandidat berhasil dimigrasikan ke Master Karyawan, payroll, arsip dokumen, akun sistem, dan dokumen karyawan.',
+                'data' => array_merge($result, [
+                    'dokumen_karyawan' => $dokumenKaryawan,
+                    'dokumen_warning' => $documentWarning,
+                ]),
+            ]);
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
