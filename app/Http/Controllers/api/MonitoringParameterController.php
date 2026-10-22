@@ -86,16 +86,7 @@ class MonitoringParameterController extends Controller
             ], 422);
         }
 
-        $parameterNeedle = '%"' . str_replace(['%', '_'], ['\%', '\_'], $parameter) . '"%';
-
-        $rows = DB::table('order_detail as od')
-            ->join('scan_sampel_analis as ssa', function ($join) {
-                $join->on('od.no_sampel', '=', 'ssa.no_sampel')
-                    ->where('ssa.is_active', 1);
-            })
-            ->where('od.is_active', 1)
-            ->where('od.kategori_2', $kategori)
-            ->where('od.parameter', 'like', $parameterNeedle)
+        $rows = $this->monitoringOrderScanQuery($kategori, $parameter)
             ->whereYear('ssa.created_at', $tahun)
             ->whereMonth('ssa.created_at', $bulan)
             ->select(
@@ -106,21 +97,101 @@ class MonitoringParameterController extends Controller
             ->orderBy('tanggal_scan')
             ->get();
 
-        $data = $rows->map(function ($row) {
-            $date = Carbon::parse($row->tanggal_scan);
+        $totalsByDate = $rows->mapWithKeys(function ($row) {
+            $key = Carbon::parse($row->tanggal_scan)->format('Y-m-d');
 
-            return [
-                'tanggal_scan' => $date->format('Y-m-d'),
+            return [$key => (int) $row->total_analisa];
+        });
+
+        $start = Carbon::createFromDate($tahun, $bulan, 1)->startOfDay();
+        $end = $start->copy()->endOfMonth();
+
+        $data = collect();
+        for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
+            $tanggal = $date->format('Y-m-d');
+            $data->push([
+                'tanggal_scan' => $tanggal,
                 'hari' => $this->namaHariIndonesia($date),
-                'total_analisa' => (int) $row->total_analisa,
-            ];
-        })->values();
+                'total_analisa' => $totalsByDate->get($tanggal, 0),
+            ]);
+        }
 
         return response()->json([
             'success' => true,
             'data' => $data,
             'message' => 'Data monitoring parameter berhasil diambil',
         ]);
+    }
+
+    public function detail(Request $request)
+    {
+        $kategori = trim((string) ($request->kategori ?? ''));
+        $parameter = trim((string) ($request->parameter ?? ''));
+        $tanggalScan = trim((string) ($request->tanggal_scan ?? ''));
+
+        if ($kategori === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kategori wajib dipilih',
+                'data' => [],
+            ], 422);
+        }
+
+        if ($parameter === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Parameter wajib dipilih',
+                'data' => [],
+            ], 422);
+        }
+
+        if ($tanggalScan === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tanggal scan wajib diisi',
+                'data' => [],
+            ], 422);
+        }
+
+        try {
+            $tanggal = Carbon::parse($tanggalScan)->format('Y-m-d');
+        } catch (\Throwable $th) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Format tanggal tidak valid',
+                'data' => [],
+            ], 422);
+        }
+
+        $rows = $this->monitoringOrderScanQuery($kategori, $parameter)
+            ->whereDate('ssa.created_at', $tanggal)
+            ->select(
+                'od.no_sampel',
+                DB::raw('MAX(ssa.created_at) as waktu_scan')
+            )
+            ->groupBy('od.no_sampel')
+            ->orderByDesc('waktu_scan')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $rows,
+            'message' => 'Detail nomor sampel berhasil diambil',
+        ]);
+    }
+
+    private function monitoringOrderScanQuery(string $kategori, string $parameter)
+    {
+        $parameterNeedle = '%"' . str_replace(['%', '_'], ['\%', '\_'], $parameter) . '"%';
+
+        return DB::table('order_detail as od')
+            ->join('scan_sampel_analis as ssa', function ($join) {
+                $join->on('od.no_sampel', '=', 'ssa.no_sampel')
+                    ->where('ssa.is_active', 1);
+            })
+            ->where('od.is_active', 1)
+            ->where('od.kategori_2', $kategori)
+            ->where('od.parameter', 'like', $parameterNeedle);
     }
 
     private function namaHariIndonesia(Carbon $date): string

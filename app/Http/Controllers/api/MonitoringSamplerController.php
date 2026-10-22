@@ -237,7 +237,9 @@ class MonitoringSamplerController extends Controller
                 }
             }
 
-            return DataTables::of(collect(array_values($groupedData)))->make(true);
+            return DataTables::of($this->groupMonitoringByTeam(array_values($groupedData)))
+                ->skipPaging()
+                ->make(true);
         } catch (\Exception $ex) {
             return response()->json([
                 'message' => $ex->getMessage(),
@@ -344,6 +346,93 @@ class MonitoringSamplerController extends Controller
                 'line' => $ex->getLine(),
             ], 500);
         }
+    }
+
+    /**
+     * Satu grup = satu tim sampler pada satu tanggal, berisi daftar PT/STPS.
+     */
+    private function groupMonitoringByTeam(array $rows)
+    {
+        return collect($rows)
+            ->map(function ($row) {
+                $row['tim_sampler_key'] = $this->teamSamplerKey($row['sampler'] ?? '');
+                $row['tim_sampler'] = $this->teamSamplerDisplay($row['sampler'] ?? '');
+                return $row;
+            })
+            ->groupBy(function ($row) {
+                return $row['tim_sampler_key'] . '|' . ($row['jadwal'] ?? '');
+            })
+            ->map(function ($group) {
+                $first = $group->first();
+                $listPt = $group
+                    ->sortBy(function ($row) {
+                        return sprintf(
+                            '%s|%s|%s',
+                            $row['jam_mulai'] ?? '',
+                            mb_strtolower((string) ($row['nama_perusahaan'] ?? '')),
+                            (string) ($row['no_stps'] ?? '')
+                        );
+                    })
+                    ->values()
+                    ->all();
+
+                return [
+                    'tim_sampler' => $first['tim_sampler'] ?? '-',
+                    'jadwal' => $first['jadwal'] ?? null,
+                    'jumlah_pt' => count($listPt),
+                    'list_pt' => $listPt,
+                ];
+            })
+            ->sort(function ($a, $b) {
+                $dateCmp = strcmp((string) ($b['jadwal'] ?? ''), (string) ($a['jadwal'] ?? ''));
+                if ($dateCmp !== 0) {
+                    return $dateCmp;
+                }
+
+                return strcasecmp((string) ($a['tim_sampler'] ?? ''), (string) ($b['tim_sampler'] ?? ''));
+            })
+            ->values();
+    }
+
+    private function parseSamplerNames(?string $sampler): array
+    {
+        $seen = [];
+        $names = [];
+        foreach (explode(',', (string) $sampler) as $name) {
+            $name = trim($name);
+            $key = $this->normalizeSamplerName($name);
+            if ($key === '' || isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $names[] = $name;
+        }
+
+        return $names;
+    }
+
+    private function teamSamplerKey(?string $sampler): string
+    {
+        $keys = $this->normalizeSamplerList(explode(',', (string) $sampler));
+        if ($keys === []) {
+            return '-';
+        }
+        sort($keys, SORT_NATURAL);
+
+        return implode(', ', $keys);
+    }
+
+    private function teamSamplerDisplay(?string $sampler): string
+    {
+        $names = $this->parseSamplerNames($sampler);
+        if ($names === []) {
+            return '-';
+        }
+        usort($names, function ($a, $b) {
+            return strcasecmp($a, $b);
+        });
+
+        return implode(', ', $names);
     }
 
     private function noStpsFromHeader($header): string

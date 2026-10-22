@@ -265,7 +265,8 @@ class VerifikasiBotolController extends Controller
                 'data_order' => $data,
                 'data_lapangan' => $lapangan,
                 'data_scan' => $scan,
-                'no_sampel' => $request->no_sampel,
+                'no_sampel' => $data->no_sampel,
+                'penamaan_titik' => $data->keterangan_1,
                 'kategori' => $categoris
             ], 200);
         } catch (\Exception $th) {

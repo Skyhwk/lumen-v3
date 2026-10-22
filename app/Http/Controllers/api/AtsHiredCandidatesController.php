@@ -551,6 +551,7 @@ class AtsHiredCandidatesController extends Controller
             'elemen' => $shioElemen['elemen'] ?? null,
             'foto_selfie' => $recruitment->picture,
             'picture_url' => $pictureUrl,
+            'pernah_bekerja_perusahaan' => $this->normalizePernahBekerjaPerusahaan($recruitment->pernah_bekerja_perusahaan ?? null),
         ];
 
         $contact = [
@@ -636,6 +637,7 @@ class AtsHiredCandidatesController extends Controller
             'email' => $recruitment->email,
             'picture' => $recruitment->picture,
             'picture_url' => $pictureUrl,
+            'pernah_bekerja_perusahaan' => $this->normalizePernahBekerjaPerusahaan($recruitment->pernah_bekerja_perusahaan ?? null),
             'no_telepon' => $recruitment->no_telepon,
             'tgl_kerja' => $startDate,
             'posisi_di_lamar' => $this->resolvePositionName($recruitment),
@@ -737,6 +739,15 @@ class AtsHiredCandidatesController extends Controller
         $karyawan->privilage_cabang = json_encode($privBranches);
         $karyawan->image = $imageName;
         $karyawan->is_active = 1;
+
+        if (Schema::hasColumn('master_karyawan', 'pernah_bekerja_perusahaan')) {
+            $formerEmployee = $this->normalizePernahBekerjaPerusahaan(
+                $recruitment->pernah_bekerja_perusahaan
+                    ?? data_get($request, 'personal.pernah_bekerja_perusahaan')
+            );
+            $karyawan->pernah_bekerja_perusahaan = json_encode($formerEmployee);
+        }
+
         $karyawan->save();
 
         $savedCounts = [
@@ -1103,6 +1114,27 @@ class AtsHiredCandidatesController extends Controller
         }
 
         return $this->mapLegacyPengalamanKerja($recruitment);
+    }
+
+    private function normalizePernahBekerjaPerusahaan($raw): array
+    {
+        if (is_string($raw)) {
+            $raw = json_decode($raw, true);
+        }
+
+        if (!is_array($raw)) {
+            return [
+                'pernah' => false,
+                'keterangan' => null,
+            ];
+        }
+
+        $pernah = filter_var($raw['pernah'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        return [
+            'pernah' => $pernah,
+            'keterangan' => $pernah ? (trim((string) ($raw['keterangan'] ?? '')) ?: null) : null,
+        ];
     }
 
     private function mapLegacyPengalamanKerja($recruitment)

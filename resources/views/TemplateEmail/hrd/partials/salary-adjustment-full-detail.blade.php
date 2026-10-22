@@ -319,7 +319,7 @@
                             <p style="margin:0;font-size:13px;font-weight:700;color:#18181b;">{{ $log['action_label'] ?? $log['action'] ?? '-' }}</p>
                             <p style="margin:4px 0 0 0;font-size:11px;color:#71717a;">{{ EmailData::formatLogTime($log['created_at'] ?? null) }} · {{ $log['actor_name'] ?? 'System' }}</p>
                             @if(!empty($log['notes']))
-                                <p style="margin:6px 0 0 0;font-size:12px;line-height:1.6;color:#52525b;">{{ $log['notes'] }}</p>
+                                <p style="margin:6px 0 0 0;font-size:12px;line-height:1.6;color:#52525b;">{!! $log['notes'] !!}</p>
                             @endif
                         </td>
                     </tr>

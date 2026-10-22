@@ -79,7 +79,12 @@ class SalaryAdjustmentEmailService
                 ->where('subject', $subject)
                 ->where('body', $body)
                 ->where('karyawan', $sender)
-                ->where('attachments', [$pdf['full_path']])
+                ->where('attachment', [
+                    [
+                        'path' => $pdf['path'],
+                        'name' => $pdf['filename'],
+                    ],
+                ])
                 ->noReply()
                 ->send();
 

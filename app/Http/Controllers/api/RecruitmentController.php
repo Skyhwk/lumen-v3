@@ -31,6 +31,7 @@ use App\Services\AtsNotificationService;
 use App\Services\PublicRecruitmentOpenJobService;
 use App\Services\RecruitmentApplicationDraftService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 
 class RecruitmentController extends Controller{
@@ -379,9 +380,30 @@ class RecruitmentController extends Controller{
                 ], 422);
             }
 
+            $pernahBekerjaPerusahaan = $request->input('pernah_bekerja_perusahaan', []);
+            if (is_string($pernahBekerjaPerusahaan)) {
+                $pernahBekerjaPerusahaan = json_decode($pernahBekerjaPerusahaan, true);
+            }
+            $pernahBekerjaPerusahaan = is_array($pernahBekerjaPerusahaan) ? $pernahBekerjaPerusahaan : [];
+
+            $pernahBekerjaDiPerusahaan = filter_var(
+                $pernahBekerjaPerusahaan['pernah'] ?? false,
+                FILTER_VALIDATE_BOOLEAN
+            );
+            $keteranganKeluarPerusahaan = $pernahBekerjaDiPerusahaan
+                ? trim((string) ($pernahBekerjaPerusahaan['keterangan'] ?? ''))
+                : null;
+
+            if ($pernahBekerjaDiPerusahaan && $keteranganKeluarPerusahaan === '') {
+                return response()->json([
+                    'message' => 'Keterangan penyebab keluar dari PT Inti Surya Laboratorium wajib diisi jika memilih Ya.',
+                    'status' => false,
+                ], 422);
+            }
+
             DB::beginTransaction();
 
-            $id = DB::table('new_recruitment')->insertGetId([
+            $recruitmentPayload = [
                 'nama_lengkap' => $namaLengkap,
                 'tempat_lahir' => $request->tempat_lahir,
                 'tanggal_lahir' => $request->tanggal_lahir,
@@ -412,7 +434,16 @@ class RecruitmentController extends Controller{
                 'is_active' => true,
                 'created_at' => DATE('Y-m-d H:i:s'),
                 'updated_at' => DATE('Y-m-d H:i:s'),
-            ]);
+            ];
+
+            if (Schema::hasColumn('new_recruitment', 'pernah_bekerja_perusahaan')) {
+                $recruitmentPayload['pernah_bekerja_perusahaan'] = json_encode([
+                    'pernah' => $pernahBekerjaDiPerusahaan,
+                    'keterangan' => $keteranganKeluarPerusahaan,
+                ]);
+            }
+
+            $id = DB::table('new_recruitment')->insertGetId($recruitmentPayload);
             (new RecruitmentStatusService())->update($id, 'review');
 
             DB::commit();

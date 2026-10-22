@@ -214,11 +214,14 @@ class VerifikasiLabISLController extends Controller
             $data_scanned = array_values($data_scanned);
         }
 
+        $orderDetail = OrderDetail::where('no_sampel', $scan->no_sampel)->first();
+
         return response()->json([
             'message' => 'Botol dengan no sampel tersebut berhasil di dapatkan',
             'status' => '200',
             'data_botol' => $data_botol,
             'no_sampel' => $scan->no_sampel ?? null,
+            'penamaan_titik' => $orderDetail ? $orderDetail->keterangan_1 : null,
             'data_scan' => $data_scanned_analis
         ], 200);
     }

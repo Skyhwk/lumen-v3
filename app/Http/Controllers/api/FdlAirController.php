@@ -40,10 +40,35 @@ use Yajra\Datatables\Datatables;
 
 class FdlAirController extends Controller
 {
+    public function tabCounts()
+    {
+        $base = DataLapanganAir::query();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'pending' => (clone $base)->where(function ($query) {
+                    $query->where('is_approve', 0)->orWhereNull('is_approve');
+                })->count(),
+                'approved' => (clone $base)->where('is_approve', 1)->count(),
+            ],
+        ]);
+    }
+
     public function index(Request $request)
     {
         $this->autoBlock();
         $data = DataLapanganAir::with('detail')->orderBy('id', 'desc');
+
+        if ($request->filled('approval')) {
+            if ($request->approval === 'approved') {
+                $data->where('is_approve', 1);
+            } else {
+                $data->where(function ($query) {
+                    $query->where('is_approve', 0)->orWhereNull('is_approve');
+                });
+            }
+        }
 
         return Datatables::of($data)
             ->filterColumn('created_by', function ($query, $keyword) {
