@@ -20,6 +20,7 @@ use App\Services\RequesterSalaryApprovalService;
 use App\Services\SallaryOfferService;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
+use App\Services\ApprovalAppFcmService;
 use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -1633,6 +1634,12 @@ class AtsFinalDecisionController extends Controller
 
             $emailQuery->send();
 
+            app(ApprovalAppFcmService::class)->notifyPendingKandidatForIbuEmail(
+                $targetEmail,
+                (int) $applicant->id,
+                (string) $applicant->nama_lengkap
+            );
+
             return response()->json([
                 'status'  => 200,
                 'message' => 'Email Pengajuan Ulang permohonan persetujuan kandidat berhasil dikirim ulang.',
@@ -1859,6 +1866,12 @@ class AtsFinalDecisionController extends Controller
             }
 
             $emailQuery->send();
+
+            app(ApprovalAppFcmService::class)->notifyPendingKandidatForIbuEmail(
+                $targetEmail,
+                (int) $applicant->id,
+                (string) $applicant->nama_lengkap
+            );
 
             return response()->json([
                 'status'  => 200,

@@ -12,5 +12,13 @@ return [
         'enabled' => filter_var(env('APPROVAL_FCM_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
         /** Path tetap: storage/app/firebase/intilab-approval.json */
         'credentials_path' => storage_path('app/firebase/intilab-approval.json'),
+        /**
+         * Email device yang login Apps-Approval (pisah koma). Kosong = kirim ke semua device terdaftar.
+         * Contoh: hrd.intilab@gmail.com (EXPO_PUBLIC_GATE_EMAIL)
+         */
+        'device_emails' => array_values(array_unique(array_filter(array_map(
+            static fn (string $part) => strtolower(trim($part)),
+            preg_split('/[,;]+/', (string) env('APPROVAL_APP_DEVICE_EMAILS', ''), -1, PREG_SPLIT_NO_EMPTY) ?: []
+        )))),
     ],
 ];

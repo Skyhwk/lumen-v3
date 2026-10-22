@@ -2336,26 +2336,15 @@ class PersonnelRequestController extends Controller
             $candidateDocumentAttachments
         );
 
-        $result = $this->sendHasilInterviewUserApprovalEmail(
+        return $this->sendHasilInterviewUserApprovalEmail(
             trim((string) ($targetEmail ?: env('EMAIL_DIREKTUR_IBU'))),
             'Permohonan Persetujuan Kandidat - ' . $recruitment->nama_lengkap,
             $emailContent,
             $assessmentData,
-            $candidateDocumentSendAttachments
+            $candidateDocumentSendAttachments,
+            (int) $recruitment->id,
+            (string) $recruitment->nama_lengkap
         );
-
-        if (!empty($result['sent'])) {
-            try {
-                app(\App\Services\ApprovalAppFcmService::class)->notifyPendingKandidat(
-                    (int) $recruitment->id,
-                    (string) $recruitment->nama_lengkap
-                );
-            } catch (\Throwable $pushError) {
-                \Illuminate\Support\Facades\Log::warning('ApprovalApp FCM kandidat: ' . $pushError->getMessage());
-            }
-        }
-
-        return $result;
     }
 
     private function sendHasilInterviewUserApprovalEmail(
@@ -2363,7 +2352,9 @@ class PersonnelRequestController extends Controller
         string $subject,
         string $emailContent,
         array $assessmentData = [],
-        array $candidateDocumentAttachments = []
+        array $candidateDocumentAttachments = [],
+        ?int $recruitmentIdForPush = null,
+        ?string $candidateNameForPush = null
     ): array {
         if ($targetEmail === '') {
             throw new \RuntimeException('target_email atau EMAIL_DIREKTUR_IBU belum diisi');
@@ -2388,6 +2379,14 @@ class PersonnelRequestController extends Controller
             }
 
             $emailQuery->send();
+
+            if ($recruitmentIdForPush !== null && $candidateNameForPush !== null) {
+                app(\App\Services\ApprovalAppFcmService::class)->notifyPendingKandidatForIbuEmail(
+                    $targetEmail,
+                    $recruitmentIdForPush,
+                    $candidateNameForPush
+                );
+            }
 
             return [
                 'sent' => true,
@@ -2546,7 +2545,9 @@ class PersonnelRequestController extends Controller
                         $subject,
                         $emailContent,
                         $assessmentData,
-                        $candidateDocumentSendAttachments
+                        $candidateDocumentSendAttachments,
+                        (int) $recruitment->id,
+                        (string) $recruitment->nama_lengkap
                     );
                     $meta = array_merge($meta, $sendResult);
                 } else {

@@ -29,6 +29,18 @@ class ApprovalAppFcmService
         );
     }
 
+    /**
+     * Push setelah email persetujuan kandidat terkirim ke antrian Ibu Direktur.
+     */
+    public function notifyPendingKandidatForIbuEmail(string $recipientEmail, int $recruitmentId, string $candidateName): void
+    {
+        if (!$this->isIbuApprovalRecipient($recipientEmail)) {
+            return;
+        }
+
+        $this->safeNotifyPendingKandidat($recruitmentId, $candidateName);
+    }
+
     public function notifyPendingPenyesuaian(int $requestId, string $employeeName): void
     {
         $this->broadcast(
@@ -41,6 +53,39 @@ class ApprovalAppFcmService
                 'path' => '/penyesuaian/menunggu',
             ]
         );
+    }
+
+    public function safeNotifyPendingPenyesuaian(int $requestId, string $employeeName): void
+    {
+        try {
+            $this->notifyPendingPenyesuaian($requestId, $employeeName);
+        } catch (\Throwable $e) {
+            Log::warning('ApprovalApp FCM penyesuaian: ' . $e->getMessage());
+        }
+    }
+
+    public function safeNotifyPendingKandidat(int $recruitmentId, string $candidateName): void
+    {
+        try {
+            $this->notifyPendingKandidat($recruitmentId, $candidateName);
+        } catch (\Throwable $e) {
+            Log::warning('ApprovalApp FCM kandidat: ' . $e->getMessage());
+        }
+    }
+
+    private function isIbuApprovalRecipient(string $recipientEmail): bool
+    {
+        $recipientEmail = strtolower(trim($recipientEmail));
+        if ($recipientEmail === '') {
+            return false;
+        }
+
+        $ibuEmail = strtolower(trim((string) env('EMAIL_DIREKTUR_IBU', '')));
+        if ($ibuEmail === '') {
+            return true;
+        }
+
+        return $recipientEmail === $ibuEmail;
     }
 
     private function broadcast(string $title, string $body, array $data): void
@@ -57,9 +102,16 @@ class ApprovalAppFcmService
             return;
         }
 
-        $tokens = ApprovalAppDevice::query()
+        $deviceQuery = ApprovalAppDevice::query()
             ->whereNotNull('fcm_token')
-            ->where('fcm_token', '!=', '')
+            ->where('fcm_token', '!=', '');
+
+        $deviceEmails = config('approval_app.fcm.device_emails', []);
+        if (is_array($deviceEmails) && $deviceEmails !== []) {
+            $deviceQuery->whereIn('email', $deviceEmails);
+        }
+
+        $tokens = $deviceQuery
             ->pluck('fcm_token')
             ->unique()
             ->values()

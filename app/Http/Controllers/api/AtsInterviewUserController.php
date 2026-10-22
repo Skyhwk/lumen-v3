@@ -15,6 +15,7 @@ use App\Services\AtsNotificationService;
 use App\Services\GenerateToken;
 use App\Services\CandidateDocumentAttachmentService;
 use App\Services\GenerateAssessmentDocumentService;
+use App\Services\ApprovalAppFcmService;
 use App\Services\RecruitmentStatusService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -841,6 +842,12 @@ class AtsInterviewUserController extends Controller
                 }
 
                 $emailQuery->send();
+
+                app(ApprovalAppFcmService::class)->notifyPendingKandidatForIbuEmail(
+                    $targetEmail,
+                    (int) $applicant->id,
+                    (string) $applicant->nama_lengkap
+                );
             } finally {
                 $assessmentService->cleanupDocuments($documents);
             }

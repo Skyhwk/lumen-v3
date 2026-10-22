@@ -93,15 +93,11 @@ class SalaryAdjustmentEmailService
                 $approvalToken->save();
             }
 
-            if ($role === self::ROLE_IBU) {
-                try {
-                    app(ApprovalAppFcmService::class)->notifyPendingPenyesuaian(
-                        (int) $request->id,
-                        (string) $employeeName
-                    );
-                } catch (\Throwable $pushError) {
-                    Log::warning('ApprovalApp FCM penyesuaian: ' . $pushError->getMessage());
-                }
+            if ($role === self::ROLE_IBU && $this->isIbuApprovalEmail($emailTo)) {
+                app(ApprovalAppFcmService::class)->safeNotifyPendingPenyesuaian(
+                    (int) $request->id,
+                    (string) $employeeName
+                );
             }
 
             return true;
@@ -192,5 +188,20 @@ class SalaryAdjustmentEmailService
         $normalized = json_decode(json_encode($bundle), true);
 
         return is_array($normalized) ? $normalized : $bundle;
+    }
+
+    private function isIbuApprovalEmail(string $emailTo): bool
+    {
+        $emailTo = strtolower(trim($emailTo));
+        if ($emailTo === '') {
+            return false;
+        }
+
+        $ibuEmail = strtolower(trim((string) env('EMAIL_DIREKTUR_IBU', '')));
+        if ($ibuEmail === '') {
+            return true;
+        }
+
+        return $emailTo === $ibuEmail;
     }
 }
