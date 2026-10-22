@@ -21,6 +21,8 @@ class ApprovalAppCandidateDetailService
             'masterJabatan',
             'hrdInterview',
             'userInterview',
+            'candidateProfile.educations',
+            'candidateProfile.workExperiences',
             'candidateDataOffer',
         ])->find($id);
 
@@ -96,6 +98,7 @@ class ApprovalAppCandidateDetailService
             ] : null,
             'salary_display' => $salaryDisplay,
             'profile_salary' => $profileSalary,
+            'full_profile' => app(ApprovalAppCandidateFullProfileService::class)->build($candidate),
         ];
     }
 
