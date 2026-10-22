@@ -394,6 +394,7 @@ class FdlMedanLMController extends Controller
             'frekuensi_3' => $data->frekuensi_3,
             'frekuensi_30' => $data->frekuensi_30,
             'frekuensi_100' => $data->frekuensi_100,
+            'frekuensi_alat' => $data->frekuensi_alat,
             'koordinat' => $data->titik_koordinat,
             'foto_lokasi' => $data->foto_lokasi_sampel,
             'foto_lain' => $data->foto_lain,
