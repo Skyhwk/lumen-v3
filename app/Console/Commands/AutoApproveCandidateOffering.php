@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 
 class AutoApproveCandidateOffering extends Command
 {
-    protected $signature = 'recruitment:auto-approve-candidate-offering
+    protected $signature = 'autoapproveoffering
                             {--dry-run : Tampilkan kandidat yang akan di-approve tanpa mengubah data}';
 
     protected $description = 'Auto-approve offering salary kandidat yang tidak merespon sampai H+2 pukul 23:00 WIB';
