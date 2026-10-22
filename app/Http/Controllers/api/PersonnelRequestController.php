@@ -2336,13 +2336,26 @@ class PersonnelRequestController extends Controller
             $candidateDocumentAttachments
         );
 
-        return $this->sendHasilInterviewUserApprovalEmail(
+        $result = $this->sendHasilInterviewUserApprovalEmail(
             trim((string) ($targetEmail ?: env('EMAIL_DIREKTUR_IBU'))),
             'Permohonan Persetujuan Kandidat - ' . $recruitment->nama_lengkap,
             $emailContent,
             $assessmentData,
             $candidateDocumentSendAttachments
         );
+
+        if (!empty($result['sent'])) {
+            try {
+                app(\App\Services\ApprovalAppFcmService::class)->notifyPendingKandidat(
+                    (int) $recruitment->id,
+                    (string) $recruitment->nama_lengkap
+                );
+            } catch (\Throwable $pushError) {
+                \Illuminate\Support\Facades\Log::warning('ApprovalApp FCM kandidat: ' . $pushError->getMessage());
+            }
+        }
+
+        return $result;
     }
 
     private function sendHasilInterviewUserApprovalEmail(

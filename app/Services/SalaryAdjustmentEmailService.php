@@ -88,6 +88,17 @@ class SalaryAdjustmentEmailService
                 $approvalToken->save();
             }
 
+            if ($role === self::ROLE_IBU) {
+                try {
+                    app(ApprovalAppFcmService::class)->notifyPendingPenyesuaian(
+                        (int) $request->id,
+                        (string) $employeeName
+                    );
+                } catch (\Throwable $pushError) {
+                    Log::warning('ApprovalApp FCM penyesuaian: ' . $pushError->getMessage());
+                }
+            }
+
             return true;
         } catch (\Throwable $e) {
             Log::warning('Salary adjustment approval email failed', [
@@ -111,6 +122,14 @@ class SalaryAdjustmentEmailService
     public function buildDecisionButtons(string $token): object
     {
         $encodedToken = rawurlencode($token);
+        $approvalBase = rtrim((string) config('approval_app.public_url', ''), '/');
+
+        if ($approvalBase !== '') {
+            return (object) [
+                'approve' => "{$approvalBase}/private/decision/{$encodedToken}?decision=approve",
+                'reject' => "{$approvalBase}/private/decision/{$encodedToken}?decision=reject",
+            ];
+        }
 
         return (object) [
             'approve' => FrontendPublicUrl::build("private/decision/{$encodedToken}?decision=approve"),

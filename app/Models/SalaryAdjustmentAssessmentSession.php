@@ -15,4 +15,9 @@ class SalaryAdjustmentAssessmentSession extends Model
         'answers_json' => 'array',
         'result_json' => 'array',
     ];
+
+    public function assessment()
+    {
+        return $this->belongsTo(SalaryAdjustmentAssessment::class, 'assessment_id');
+    }
 }

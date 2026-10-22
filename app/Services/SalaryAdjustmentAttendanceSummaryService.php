@@ -3,12 +3,19 @@
 namespace App\Services;
 
 use App\Http\Controllers\api\AbsensiController;
+use App\Models\Hr\HrRequest;
 use App\Models\ShiftKaryawan;
+use App\Services\Hr\HrAttendanceDayExcuseLabels;
+use App\Services\Hr\WorkflowStatus;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class SalaryAdjustmentAttendanceSummaryService
 {
     private const LATE_GRACE_MINUTES = 5;
+
+    /** Pengajuan izin / cuti / lembur via portal HR dihitung dari tanggal ini. */
+    public const SYSTEM_REQUESTS_EFFECTIVE_FROM = '2026-10-01';
 
     /** @var array<string, string> */
     private $defaultShiftOut = [
@@ -36,17 +43,18 @@ class SalaryAdjustmentAttendanceSummaryService
         Carbon::setLocale('id');
         $today = Carbon::now('Asia/Jakarta')->toDateString();
         $monthKeys = $this->resolveMonthKeys($months);
-        $periodStart = Carbon::createFromFormat('Y-m', $monthKeys[count($monthKeys) - 1])->startOfMonth();
+        $periodStart = Carbon::createFromFormat('Y-m', $monthKeys[0])->startOfMonth();
         $periodEnd = Carbon::now('Asia/Jakarta')->startOfDay();
 
         /** @var AbsensiController $absensiController */
         $absensiController = app(AbsensiController::class);
 
-        $shiftOutIndex = $this->fetchShiftOutIndex(
-            $employeeId,
-            $periodStart->toDateString(),
-            $periodEnd->toDateString()
-        );
+        $periodFrom = $periodStart->toDateString();
+        $periodTo = $periodEnd->toDateString();
+
+        $shiftOutIndex = $this->fetchShiftOutIndex($employeeId, $periodFrom, $periodTo);
+        $excuseLabels = HrAttendanceDayExcuseLabels::forSingleKaryawan($employeeId, $periodFrom, $periodTo);
+        $overtimeDates = $this->fetchApprovedOvertimeDates($employeeId, $periodFrom, $periodTo);
 
         $allRecords = [];
         $monthly = [];
@@ -54,23 +62,34 @@ class SalaryAdjustmentAttendanceSummaryService
         foreach ($monthKeys as $monthKey) {
             $records = $absensiController->getMonthlyAttendance($employeeId, $monthKey);
             $monthSummary = $this->emptySummary();
+            $monthDaily = [];
 
             foreach ($records as $row) {
-                $enriched = $this->enrichDailyRow($row, $today, $shiftOutIndex);
-                if ($enriched === null) {
+                $processed = $this->processAttendanceRow(
+                    $row,
+                    $today,
+                    $shiftOutIndex,
+                    $excuseLabels,
+                    $overtimeDates
+                );
+                if ($processed === null) {
                     continue;
                 }
 
-                $allRecords[] = $enriched;
-                $this->accumulateSummary($monthSummary, $enriched);
+                $monthDaily[] = $processed;
+                $allRecords[] = $processed;
+                $this->accumulateSummary($monthSummary, $processed);
             }
+
+            usort($monthDaily, fn ($left, $right) => strcmp($right['tanggal'], $left['tanggal']));
 
             $monthly[] = [
                 'month' => $monthKey,
                 'label' => Carbon::createFromFormat('Y-m', $monthKey)->translatedFormat('F Y'),
                 'summary' => $monthSummary,
+                'daily' => $monthDaily,
                 'attendance_days' => $monthSummary['hadir'],
-                'total_records' => count(array_filter($records, fn ($row) => !empty($row['masuk'] ?? ''))),
+                'total_records' => count($monthDaily),
             ];
         }
 
@@ -95,7 +114,133 @@ class SalaryAdjustmentAttendanceSummaryService
                 'late' => '',
                 'overtime' => '',
             ],
+            'system_effective_from' => self::SYSTEM_REQUESTS_EFFECTIVE_FROM,
+            'system_effective_note' => 'Pengajuan izin, cuti, dan lembur melalui system HR efektif per Oktober 2026. '
+                . 'Bulan sebelum Oktober hanya menampilkan hadir, lembur (absensi), dan alpha dari mesin absensi.',
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function buildMonthDaily(int $employeeId, string $monthKey): array
+    {
+        Carbon::setLocale('id');
+        $monthKey = trim($monthKey);
+        if (!preg_match('/^\d{4}-\d{2}$/', $monthKey)) {
+            return [];
+        }
+
+        $today = Carbon::now('Asia/Jakarta')->toDateString();
+        $monthStart = Carbon::createFromFormat('Y-m', $monthKey)->startOfMonth();
+        $monthEnd = $monthStart->copy()->endOfMonth();
+        $periodEnd = Carbon::now('Asia/Jakarta')->startOfDay();
+        if ($monthEnd->gt($periodEnd)) {
+            $monthEnd = $periodEnd;
+        }
+
+        $periodFrom = $monthStart->toDateString();
+        $periodTo = $monthEnd->toDateString();
+
+        /** @var AbsensiController $absensiController */
+        $absensiController = app(AbsensiController::class);
+
+        $shiftOutIndex = $this->fetchShiftOutIndex($employeeId, $periodFrom, $periodTo);
+        $excuseLabels = HrAttendanceDayExcuseLabels::forSingleKaryawan($employeeId, $periodFrom, $periodTo);
+        $overtimeDates = $this->fetchApprovedOvertimeDates($employeeId, $periodFrom, $periodTo);
+
+        $records = $absensiController->getMonthlyAttendance($employeeId, $monthKey);
+        $monthDaily = [];
+
+        foreach ($records as $row) {
+            $processed = $this->processAttendanceRow(
+                $row,
+                $today,
+                $shiftOutIndex,
+                $excuseLabels,
+                $overtimeDates
+            );
+            if ($processed === null) {
+                continue;
+            }
+            $monthDaily[] = $processed;
+        }
+
+        usort($monthDaily, fn ($left, $right) => strcmp($right['tanggal'], $left['tanggal']));
+
+        return $monthDaily;
+    }
+
+    /**
+     * Semua hari kalender untuk tampilan list (termasuk akhir pekan / libur).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function buildMonthDailyForDisplay(int $employeeId, string $monthKey): array
+    {
+        Carbon::setLocale('id');
+        $monthKey = trim($monthKey);
+        if (!preg_match('/^\d{4}-\d{2}$/', $monthKey)) {
+            return [];
+        }
+
+        $today = Carbon::now('Asia/Jakarta')->toDateString();
+        $monthStart = Carbon::createFromFormat('Y-m', $monthKey)->startOfMonth();
+        $monthEnd = $monthStart->copy()->endOfMonth();
+        $periodEnd = Carbon::now('Asia/Jakarta')->startOfDay();
+        if ($monthEnd->gt($periodEnd)) {
+            $monthEnd = $periodEnd;
+        }
+
+        $periodFrom = $monthStart->toDateString();
+        $periodTo = $monthEnd->toDateString();
+
+        /** @var AbsensiController $absensiController */
+        $absensiController = app(AbsensiController::class);
+
+        $shiftOutIndex = $this->fetchShiftOutIndex($employeeId, $periodFrom, $periodTo);
+        $excuseLabels = HrAttendanceDayExcuseLabels::forSingleKaryawan($employeeId, $periodFrom, $periodTo);
+        $overtimeDates = $this->fetchApprovedOvertimeDates($employeeId, $periodFrom, $periodTo);
+
+        $records = $absensiController->getMonthlyAttendance($employeeId, $monthKey);
+        $recordsByDate = [];
+        foreach ($records as $row) {
+            $dateKey = (string) ($row['tanggal'] ?? '');
+            if ($dateKey === '') {
+                continue;
+            }
+            if (isset($row['karyawan_id']) && (int) $row['karyawan_id'] > 0 && (int) $row['karyawan_id'] !== $employeeId) {
+                continue;
+            }
+            $recordsByDate[$dateKey] = $row;
+        }
+
+        $monthDaily = [];
+        $year = (int) $monthStart->format('Y');
+        $monthNum = (int) $monthStart->format('m');
+        $lastDay = (int) cal_days_in_month(CAL_GREGORIAN, $monthNum, $year);
+
+        for ($day = 1; $day <= $lastDay; $day++) {
+            $tanggal = sprintf('%04d-%02d-%02d', $year, $monthNum, $day);
+            if ($tanggal > $today) {
+                continue;
+            }
+
+            $row = $recordsByDate[$tanggal] ?? $this->syntheticMonthDayRow($tanggal);
+            $display = $this->processAttendanceDisplayRow(
+                $row,
+                $today,
+                $shiftOutIndex,
+                $excuseLabels,
+                $overtimeDates
+            );
+            if ($display === null) {
+                continue;
+            }
+            $monthDaily[] = $display;
+        }
+
+        return $monthDaily;
     }
 
     private function resolveMonthKeys(int $months): array
@@ -127,8 +272,118 @@ class SalaryAdjustmentAttendanceSummaryService
         return $index;
     }
 
-    private function enrichDailyRow(array $row, string $today, array $shiftOutIndex): ?array
+    private function processAttendanceDisplayRow(
+        array $row,
+        string $today,
+        array $shiftOutIndex,
+        array $excuseLabels,
+        array $overtimeDates
+    ): ?array {
+        $tanggal = $row['tanggal'] ?? '';
+        if ($tanggal === '' || $tanggal > $today) {
+            return null;
+        }
+
+        $shift = strtoupper(trim((string) ($row['shift'] ?? '')));
+        $hari = (string) ($row['hari'] ?? '');
+        $hasPunch = $this->rowHasAttendancePunch($row);
+
+        if ($this->isWeekendDayName($hari) && !$hasPunch) {
+            return $this->buildDisplayDayRow($row, 'weekend', 'Akhir pekan', '—', null, null, null);
+        }
+
+        $processed = $this->processAttendanceRow($row, $today, $shiftOutIndex, $excuseLabels, $overtimeDates);
+        if ($processed === null) {
+            if (in_array($shift, ['LIBUR', 'OFF'], true)) {
+                $label = $shift === 'LIBUR' ? 'Libur' : 'OFF';
+
+                return $this->buildDisplayDayRow($row, 'workday', $label, $label, null, null, null);
+            }
+
+            return null;
+        }
+
+        $category = (string) ($processed['day_category'] ?? 'workday');
+        $dayKind = in_array($category, ['izin', 'cuti', 'alpa'], true) ? $category : 'workday';
+
+        return array_merge($processed, [
+            'day_kind' => $dayKind,
+            'shift_label' => $processed['shift'] ?? ($shift ?: 'SHREGULAR'),
+            'date_label' => $this->formatDisplayDateLabel($tanggal),
+        ]);
+    }
+
+    private function rowHasAttendancePunch(array $row): bool
     {
+        $masuk = trim((string) ($row['masuk'] ?? ''));
+        $keluar = trim((string) ($row['keluar'] ?? ''));
+
+        return $masuk !== '' || $keluar !== '';
+    }
+
+    private function isWeekendDayName(string $hari): bool
+    {
+        return in_array($hari, ['Sabtu', 'Minggu'], true);
+    }
+
+    private function syntheticMonthDayRow(string $tanggal): array
+    {
+        Carbon::setLocale('id');
+        $date = Carbon::parse($tanggal);
+
+        return [
+            'tanggal' => $tanggal,
+            'hari' => ucfirst($date->translatedFormat('dddd')),
+            'masuk' => '',
+            'keluar' => '',
+            'selisih' => '',
+            'jam_kerja' => '',
+            'shift' => '',
+        ];
+    }
+
+    private function buildDisplayDayRow(
+        array $row,
+        string $dayKind,
+        string $status,
+        string $shiftLabel,
+        ?string $masuk,
+        ?string $keluar,
+        ?string $keterangan
+    ): array {
+        $tanggal = (string) ($row['tanggal'] ?? '');
+
+        return [
+            'tanggal' => $tanggal,
+            'hari' => $row['hari'] ?? '',
+            'date_label' => $this->formatDisplayDateLabel($tanggal),
+            'shift' => $shiftLabel,
+            'shift_label' => $shiftLabel,
+            'day_kind' => $dayKind,
+            'jam_masuk' => $masuk,
+            'jam_keluar' => $keluar,
+            'selisih' => null,
+            'status' => $status,
+            'keterangan' => $keterangan,
+        ];
+    }
+
+    private function formatDisplayDateLabel(string $tanggal): string
+    {
+        try {
+            return Carbon::parse($tanggal)->translatedFormat('j F Y');
+        } catch (\Throwable $e) {
+            return $tanggal;
+        }
+    }
+
+    private function processAttendanceRow(
+        array $row,
+        string $today,
+        array $shiftOutIndex,
+        array $excuseLabels,
+        array $overtimeDates
+    ): ?array {
         $tanggal = $row['tanggal'] ?? '';
         if ($tanggal === '' || $tanggal > $today) {
             return null;
@@ -149,22 +404,73 @@ class SalaryAdjustmentAttendanceSummaryService
             return null;
         }
 
+        $excuse = trim((string) ($excuseLabels[$tanggal] ?? ''));
+        $usesSystemRequests = $tanggal >= self::SYSTEM_REQUESTS_EFFECTIVE_FROM;
+        $systemLembur = $usesSystemRequests && isset($overtimeDates[$tanggal]);
+
         if ($masuk === '') {
-            return null;
+            if ($usesSystemRequests && $excuse !== '') {
+                $kind = $this->classifyExcuseLabel($excuse);
+
+                return $this->buildDailyPayload(
+                    $row,
+                    $shift ?: 'SHREGULAR',
+                    '',
+                    '',
+                    '',
+                    $kind === 'cuti' ? 'Cuti' : 'Izin',
+                    false,
+                    false,
+                    true,
+                    $kind,
+                    $excuse,
+                    false
+                );
+            }
+
+            return $this->buildDailyPayload(
+                $row,
+                $shift ?: 'SHREGULAR',
+                '',
+                '',
+                '',
+                'Alpha',
+                false,
+                false,
+                true,
+                'alpa',
+                $excuse !== '' ? $excuse : null,
+                false
+            );
         }
 
         $lateMinutes = $this->parseLateMinutesFromSelisih($selisih);
         $isLate = $lateMinutes !== null && $lateMinutes > self::LATE_GRACE_MINUTES;
-        $isOvertime = $this->isOvertimeDay($shift, $keluar, $shiftOutIndex[$tanggal] ?? null);
+        $punchOvertime = $this->isOvertimeDay($shift, $keluar, $shiftOutIndex[$tanggal] ?? null);
+        $isOvertime = $usesSystemRequests ? ($systemLembur || $punchOvertime) : $punchOvertime;
+
         $status = $isLate ? 'Telat' : 'Hadir';
         if ($isOvertime) {
             $status .= ' + Lembur';
         }
-        if ($masuk !== '' && $keluar === '') {
+        if ($keluar === '') {
             $status = 'Tidak lengkap';
         }
 
-        return $this->buildDailyPayload($row, $shift ?: 'SHREGULAR', $masuk, $keluar, $selisih, $status, $isLate, $isOvertime, true);
+        return $this->buildDailyPayload(
+            $row,
+            $shift ?: 'SHREGULAR',
+            $masuk,
+            $keluar,
+            $selisih,
+            $status,
+            $isLate,
+            $isOvertime,
+            true,
+            'hadir',
+            $excuse !== '' ? $excuse : null,
+            $systemLembur
+        );
     }
 
     private function buildDailyPayload(
@@ -176,7 +482,10 @@ class SalaryAdjustmentAttendanceSummaryService
         string $status,
         bool $isLate,
         bool $isOvertime,
-        bool $countsAsEligible
+        bool $countsAsEligible,
+        string $dayCategory,
+        ?string $keterangan,
+        bool $systemLembur
     ): array {
         return [
             'tanggal' => $row['tanggal'] ?? '',
@@ -187,10 +496,60 @@ class SalaryAdjustmentAttendanceSummaryService
             'selisih' => $selisih !== '' ? $selisih : null,
             'jam_kerja' => trim((string) ($row['jam_kerja'] ?? '')) ?: null,
             'status' => $status,
+            'keterangan' => $keterangan,
             'is_late' => $isLate,
             'is_overtime' => $isOvertime,
+            'system_lembur' => $systemLembur,
+            'day_category' => $dayCategory,
             'counts_as_eligible' => $countsAsEligible,
         ];
+    }
+
+    private function classifyExcuseLabel(string $label): string
+    {
+        $normalized = mb_strtolower($label);
+        if (str_contains($normalized, 'cuti') || str_contains($normalized, 'pengganti hari libur')) {
+            return 'cuti';
+        }
+
+        return 'izin';
+    }
+
+    /** @return array<string, true> */
+    private function fetchApprovedOvertimeDates(int $employeeId, string $fromYmd, string $toYmd): array
+    {
+        $rows = DB::table('hr_overtime_participant as op')
+            ->join('hr_request as hr', 'hr.id', '=', 'op.request_id')
+            ->join('hr_overtime_detail as od', 'od.request_id', '=', 'hr.id')
+            ->where('op.karyawan_id', $employeeId)
+            ->where('op.is_active', true)
+            ->where('hr.request_type', HrRequest::TYPE_OVERTIME)
+            ->where('hr.is_active', true)
+            ->whereIn('hr.status', WorkflowStatus::formsStatApprovedOvertimeStatuses())
+            ->where('od.end_date', '>=', self::SYSTEM_REQUESTS_EFFECTIVE_FROM)
+            ->where('od.start_date', '<=', $toYmd)
+            ->where('od.end_date', '>=', $fromYmd)
+            ->get(['od.start_date', 'od.end_date']);
+
+        $dates = [];
+        foreach ($rows as $row) {
+            try {
+                $cursor = Carbon::parse($row->start_date)->startOfDay();
+                $last = Carbon::parse($row->end_date)->startOfDay();
+            } catch (\Throwable $e) {
+                continue;
+            }
+
+            while ($cursor->lte($last)) {
+                $ymd = $cursor->toDateString();
+                if ($ymd >= self::SYSTEM_REQUESTS_EFFECTIVE_FROM && $ymd >= $fromYmd && $ymd <= $toYmd) {
+                    $dates[$ymd] = true;
+                }
+                $cursor->addDay();
+            }
+        }
+
+        return $dates;
     }
 
     private function isOvertimeDay(string $shift, string $keluar, ?array $shiftMeta): bool
@@ -232,22 +591,26 @@ class SalaryAdjustmentAttendanceSummaryService
 
     private function accumulateSummary(array &$summary, array $row): void
     {
-        $shift = strtoupper(trim((string) ($row['shift'] ?? '')));
-        $status = (string) ($row['status'] ?? '');
-
         if (empty($row['counts_as_eligible'])) {
             return;
         }
 
         $summary['eligible_days']++;
 
-        if (!empty($row['jam_masuk'])) {
+        $category = (string) ($row['day_category'] ?? '');
+        if ($category === 'hadir') {
             $summary['hadir']++;
+        } elseif ($category === 'izin') {
+            $summary['izin']++;
+        } elseif ($category === 'cuti') {
+            $summary['cuti']++;
+        } elseif ($category === 'alpa') {
+            $summary['alpa']++;
         }
 
         if (!empty($row['is_late'])) {
             $summary['telat']++;
-        } elseif (!empty($row['jam_masuk'])) {
+        } elseif ($category === 'hadir') {
             $summary['tepat_waktu']++;
         }
 
@@ -255,7 +618,7 @@ class SalaryAdjustmentAttendanceSummaryService
             $summary['lembur']++;
         }
 
-        if ($status === 'Tidak lengkap') {
+        if (($row['status'] ?? '') === 'Tidak lengkap') {
             $summary['tidak_lengkap']++;
         }
     }
@@ -265,10 +628,13 @@ class SalaryAdjustmentAttendanceSummaryService
         return [
             'eligible_days' => 0,
             'hadir' => 0,
+            'izin' => 0,
+            'cuti' => 0,
+            'lembur' => 0,
+            'alpa' => 0,
             'alpha' => 0,
             'telat' => 0,
             'tepat_waktu' => 0,
-            'lembur' => 0,
             'libur' => 0,
             'off' => 0,
             'tidak_lengkap' => 0,
