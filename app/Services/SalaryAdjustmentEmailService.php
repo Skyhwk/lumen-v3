@@ -64,29 +64,28 @@ class SalaryAdjustmentEmailService
         $bundle = $this->normalizeBundleForView(
             (new SalaryAdjustmentEvaluationService())->buildBundle($request)
         );
-        $documentService = new SalaryAdjustmentDocumentService();
-        $pdf = null;
+        $attachmentService = new SalaryAdjustmentEmailAttachmentService();
+        $attachmentPack = ['documents' => [], 'cleanup_dirs' => []];
 
         try {
-            $pdf = $documentService->generateSummaryPdf($bundle);
+            $attachmentPack = $attachmentService->build($request, $bundle);
             $buttons = $this->buildDecisionButtons($token);
             $approverLabel = $this->approverLabel($role);
             $employeeName = $bundle['request']['nama_lengkap'] ?? 'Karyawan';
             $subject = 'Permohonan Penyesuaian Karyawan - ' . $approverLabel . ' - ' . $employeeName;
             $body = $this->renderApprovalBody($bundle, $role, $buttons);
 
-            SendEmail::where('to', $emailTo)
+            $emailQuery = SendEmail::where('to', $emailTo)
                 ->where('subject', $subject)
                 ->where('body', $body)
                 ->where('karyawan', $sender)
-                ->where('attachment', [
-                    [
-                        'path' => $pdf['path'],
-                        'name' => $pdf['filename'],
-                    ],
-                ])
-                ->noReply()
-                ->send();
+                ->noReply();
+
+            if (!empty($attachmentPack['attachments'])) {
+                $emailQuery->where('attachment', $attachmentPack['attachments']);
+            }
+
+            $emailQuery->send();
 
             if ($approvalToken) {
                 $approvalToken->email_sent_at = Carbon::now();
@@ -107,9 +106,7 @@ class SalaryAdjustmentEmailService
 
             return false;
         } finally {
-            if ($pdf) {
-                $documentService->cleanup($pdf['batch_dir'] ?? null);
-            }
+            $attachmentService->cleanup($attachmentPack);
         }
     }
 
