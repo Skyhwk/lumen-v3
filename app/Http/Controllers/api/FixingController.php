@@ -3415,22 +3415,6 @@ class FixingController extends Controller
 
             $approverLabel = SalaryAdjustmentEmailService::actorLabel($role);
 
-            SalaryAdjustmentLogService::log(
-                $record->id,
-                $record->status,
-                $record->status,
-                're_email',
-                $this->user_id,
-                $this->karyawan,
-                "Kirim ulang email approval ({$approverLabel}) ke {$resolvedEmail} via Fixing Tools oleh {$sender}",
-                [
-                    'role' => $role,
-                    'target_email' => $resolvedEmail,
-                    'trigger' => 'fixing_tools',
-                    'sent_at' => Carbon::now()->toDateTimeString(),
-                ]
-            );
-
             return response()->json([
                 'status' => 'success',
                 'message' => "Email permohonan ({$approverLabel}) beserta lampiran berkas PDF berhasil dikirim ulang ke {$resolvedEmail}.",
