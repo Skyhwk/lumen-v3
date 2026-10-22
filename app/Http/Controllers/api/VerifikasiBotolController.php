@@ -131,7 +131,7 @@ class VerifikasiBotolController extends Controller
 
                 $persiapan = PersiapanSampelDetail::where('no_sampel', $request->no_sampel)->first();
                 $data = OrderDetail::where('no_sampel', $request->no_sampel)->first();
-                $scan = ScanBotol::where('no_sampel', $request->no_sampel)->first();
+                $scan = ScanSampelTc::where('no_sampel', $request->no_sampel)->first() ?: ScanBotol::where('no_sampel', $request->no_sampel)->first();
                 $dataDisplay = json_decode($data->persiapan);
                 $parameters = $persiapan ? json_decode($persiapan->parameters) : null;
 
@@ -237,9 +237,12 @@ class VerifikasiBotolController extends Controller
             }
 
             if ($scan) {
-                $scanData = json_decode($scan->data, true);
-                $scan->data = array_values($scanData);
-                $scan->filename = json_decode($scan->filename);
+                $rawScanData = isset($scan->data) ? $scan->data : ($scan->data_detail ?? null);
+                $scanData = is_string($rawScanData) ? json_decode($rawScanData, true) : (is_array($rawScanData) ? $rawScanData : []);
+                $scan->data = is_array($scanData) ? array_values($scanData) : [];
+                if (isset($scan->filename) && is_string($scan->filename)) {
+                    $scan->filename = json_decode($scan->filename, true);
+                }
             }
 
             if ($data->kategori_2 == '4-Udara') {
@@ -259,6 +262,10 @@ class VerifikasiBotolController extends Controller
                 }, [])
             );
 
+            $rawParameters = isset($data->parameter) ? $data->parameter : null;
+            $parameterList = is_string($rawParameters) ? json_decode($rawParameters, true) : (is_array($rawParameters) ? $rawParameters : []);
+            $totalParameter = is_array($parameterList) ? count($parameterList) : 0;
+
             return response()->json([
                 'message' => 'Data berhasil didapatkan',
                 'data' => $dataDisplay,
@@ -267,6 +274,7 @@ class VerifikasiBotolController extends Controller
                 'data_scan' => $scan,
                 'no_sampel' => $data->no_sampel,
                 'penamaan_titik' => $data->keterangan_1,
+                'total_parameter' => $totalParameter,
                 'kategori' => $categoris
             ], 200);
         } catch (\Exception $th) {
