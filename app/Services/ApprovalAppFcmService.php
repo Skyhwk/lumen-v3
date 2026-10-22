@@ -44,7 +44,7 @@ class ApprovalAppFcmService
     public function notifyPendingPenyesuaian(int $requestId, string $employeeName): void
     {
         $this->broadcast(
-            'Permintaan penyesuaian gaji',
+            'Permintaan penyesuaian karyawan',
             $employeeName . ' menunggu persetujuan Anda.',
             [
                 'type' => 'approval_pending',
