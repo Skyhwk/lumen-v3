@@ -19,27 +19,6 @@ class ReleaseAppsTcController extends Controller
         return response()->json(['success' => true, 'data' => $releaseSystem], 200);
     }
 
-    public function currentVersion()
-    {
-        $release = ReleaseSystem::where('system', 'TC Scan')
-            ->where('is_main', true)
-            ->orderBy('id', 'desc')
-            ->first(['patch', 'proses_at', 'done_at']);
-
-        if (!$release || !$release->patch) {
-            return response()->json(['success' => true, 'data' => null], 200);
-        }
-
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'system' => 'TC Scan',
-                'patch' => $release->patch,
-                'released_at' => $release->done_at ?: $release->proses_at,
-            ],
-        ], 200);
-    }
-
     public function switchPatch(Request $request)
     {
         if (!isset($request->data['patch']) || $request->data['patch'] == null) {
