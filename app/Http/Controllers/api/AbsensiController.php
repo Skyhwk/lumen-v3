@@ -249,7 +249,7 @@ class AbsensiController extends Controller
 
             $month = $periode['month'];
             $year = $periode['year'];
-            $lastDay = cal_days_in_month(CAL_GREGORIAN, (int) $month, (int) $year);
+            $lastDay = self::daysInMonth((int) $month, (int) $year);
 
             $data = self::buildMonthlyAbsensiData(
                 $cekKaryawan->id,
@@ -1655,7 +1655,7 @@ class AbsensiController extends Controller
 
             $year = $periode['year'];
             $month = $periode['month'];
-            $lastDay = cal_days_in_month(CAL_GREGORIAN, (int) $month, (int) $year);
+            $lastDay = self::daysInMonth((int) $month, (int) $year);
             $deptId = $request->id_department ?: $request->idDivisi;
             $path = self::getAbsensiExportPath();
 
@@ -1836,7 +1836,7 @@ class AbsensiController extends Controller
 
         $monthNum = $periode['month'];
         $year = $periode['year'];
-        $lastDay = cal_days_in_month(CAL_GREGORIAN, (int) $monthNum, (int) $year);
+        $lastDay = self::daysInMonth((int) $monthNum, (int) $year);
 
         $rows = $this->buildMonthlyAbsensiDataForKaryawans($karyawans, $year, $monthNum, $lastDay);
         $nikToId = $karyawans->pluck('id', 'nik_karyawan');
@@ -1847,5 +1847,13 @@ class AbsensiController extends Controller
         unset($row);
 
         return $rows;
+    }
+
+    /**
+     * Jumlah hari dalam bulan tanpa ext-calendar (sering belum terpasang di Docker lokal).
+     */
+    private static function daysInMonth(int $month, int $year): int
+    {
+        return (int) date('t', mktime(0, 0, 0, $month, 1, $year));
     }
 }
