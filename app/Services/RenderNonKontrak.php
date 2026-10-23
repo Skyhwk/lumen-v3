@@ -456,6 +456,7 @@ class RenderNonKontrak
                     </tr>'
                 );
                 $hargaTransportasiPerdiem += $data->harga_transportasi * $data->transportasi;
+                $i++;
             }
             $perdiem_24 = "";
             $total_perdiem = 0;
@@ -469,9 +470,6 @@ class RenderNonKontrak
                 $total_perdiem += $data->{'harga_24jam_personil_total'};
             }
             if ($data->perdiem_jumlah_orang > 0 && $data->harga_perdiem_personil_total != null) {
-                if ($data->transportasi > 0 && $data->harga_transportasi_total != null) {
-                    $i = $i + 1;
-                }
                 $pdf->WriteHTML(
                     '<tr>
                         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
@@ -482,6 +480,7 @@ class RenderNonKontrak
                     </tr>'
                 );
                 $hargaTransportasiPerdiem += ($data->harga_perdiem_personil_total + $total_perdiem);
+                $i++;
             }
 
             $transportAmount = 0;
@@ -525,20 +524,7 @@ class RenderNonKontrak
                 $biaya_lain = [];
             }
             if (!empty($biaya_lain)) {
-                $u = '';
                 foreach ($biaya_lain as $k => $v) {
-                    if ($data->perdiem_jumlah_orang > 0 && $data->harga_perdiem_personil_total != null) {
-                        $i = $i + 1;
-                    } else {
-                        if ($u == $i) {
-                            $i = $i + 1;
-                        } else {
-                            if (count(json_decode($data->data_pendukung_sampling)) == 0) {
-                                $i = $i + 1;
-                            }
-                        }
-                    }
-
                     if ($lang != 'id') {
                         $v->deskripsi = str_replace('Perdiem', 'Manpower', $v->deskripsi);
                         $tranlator = new Translator();
@@ -554,7 +540,7 @@ class RenderNonKontrak
                             <td style="font-size: 13px; text-align:right;padding: 5px;">' . self::rupiah($v->total_biaya) . '</td>
                         </tr>'
                     );
-                    $u = $i;
+                    $i++;
                 }
             }
             $totalBiayaLain = (float) ($data->total_biaya_lain ?? 0);
