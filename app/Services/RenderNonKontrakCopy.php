@@ -446,6 +446,7 @@ class RenderNonKontrakCopy
                         <td style="font-size: 13px; text-align:right; padding: 5px;">' . self::rupiah($data->harga_transportasi * $data->transportasi) . '</td>
                     </tr>'
                 );
+                $i++;
             }
             $perdiem_24 = "";
             $total_perdiem = 0;
@@ -459,9 +460,6 @@ class RenderNonKontrakCopy
                 $total_perdiem += $data->{'harga_24jam_personil_total'};
             }
             if ($data->perdiem_jumlah_orang > 0 && $data->harga_perdiem_personil_total != null) {
-                if ($data->transportasi > 0 && $data->harga_transportasi_total != null) {
-                    $i = $i + 1;
-                }
                 $pdf->WriteHTML(
                     '<tr>
                         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
@@ -471,23 +469,11 @@ class RenderNonKontrakCopy
                         <td style="font-size: 13px; text-align:right; padding: 5px;">' . self::rupiah($data->harga_perdiem_personil_total + $total_perdiem) . '</td>
                     </tr>'
                 );
+                $i++;
             }
             $biaya_lain = json_decode($data->biaya_lain);
             if ($biaya_lain != null) {
-                $u = '';
                 foreach ($biaya_lain as $k => $v) {
-                    if ($data->perdiem_jumlah_orang > 0 && $data->harga_perdiem_personil_total != null) {
-                        $i = $i + 1;
-                    } else {
-                        if ($u == $i) {
-                            $i = $i + 1;
-                        } else {
-                            if (count(json_decode($data->data_pendukung_sampling)) == 0) {
-                                $i = $i + 1;
-                            }
-                        }
-                    }
-
                     if ($lang != 'id') {
                         $v->deskripsi = str_replace('Perdiem', 'Manpower', $v->deskripsi);
                         $tranlator = new Translator();
@@ -503,7 +489,7 @@ class RenderNonKontrakCopy
                             <td style="font-size: 13px; text-align:right;padding: 5px;">' . self::rupiah($v->total_biaya) . '</td>
                         </tr>'
                     );
-                    $u = $i;
+                    $i++;
                 }
             }
             $biaya_preparasi = json_decode($data->biaya_preparasi_padatan);
