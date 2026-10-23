@@ -98,6 +98,12 @@ class RekeningKaryawanController extends Controller
                 $data->karyawan = $oldData->karyawan;
                 $data->nik_karyawan = $oldData->nik_karyawan;
                 $data->id_karyawan = $oldData->id_karyawan;
+                $data->cabang_bank = $request->exists('cabang_bank')
+                    ? $request->cabang_bank
+                    : $oldData->cabang_bank;
+                $data->nama_pemilik_rekening = $request->exists('nama_pemilik_rekening')
+                    ? $request->nama_pemilik_rekening
+                    : $oldData->nama_pemilik_rekening;
 
                 $message = 'BPJS TK data updated successfully';
 

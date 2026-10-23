@@ -23,7 +23,7 @@
     .sign .role { font-style: italic; font-size: 10pt; padding-top: 0.6mm; }
 </style>
 
-<p class="perihal">Perihal : <strong>Komitmen Integritas dan Kepatuhan Terhadap Kebijakan Anti Korupsi, Kolusi, Nepotisme (Anti KKN), dan Gratifikasi</strong></p>
+<p class="perihal">Perihal : <strong style="text-decoration:underline;">Komitmen Integritas dan Kepatuhan Terhadap Kebijakan Anti Korupsi, Kolusi, Nepotisme (Anti KKN), dan Gratifikasi</strong></p>
 
 <p>Yang bertanda tangan di bawah ini :</p>
 

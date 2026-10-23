@@ -24,14 +24,14 @@
     .sign .role { font-style: italic; font-size: 10.5pt; padding-top: 0.6mm; }
 </style>
 
-<p class="perihal">Perihal : <strong>Kepatuhan terhadap Peraturan Perusahaan (<u>Non Sampling</u>)</strong></p>
+<p class="perihal">Perihal : <strong><u>Kepatuhan terhadap Peraturan Perusahaan (<span style="font-style:italic;">Non Sampling</span>)</u></strong></p>
 
 <p>Saya yang bertanda tangan di bawah ini :</p>
 
 <table class="identity">
-    <tr><td class="label">Nama Lengkap / NIK</td><td class="sep">:</td><td>{{ $namaNik }}</td></tr>
-    <tr><td class="label">Posisi</td><td class="sep">:</td><td>{{ $posisi }}</td></tr>
-    <tr><td class="label">Divisi / Sub-Divisi</td><td class="sep">:</td><td>{{ $divisi }}</td></tr>
+    <tr><td class="label">Nama Lengkap / NIK</td><td class="sep">:</td><td></td></tr>
+    <tr><td class="label">Posisi</td><td class="sep">:</td><td></td></tr>
+    <tr><td class="label">Divisi / Sub-Divisi</td><td class="sep">:</td><td></td></tr>
 </table>
 
 <p>Dengan ini saya telah membaca, mengetahui, menyetujui, serta akan melaksanakan dengan sebaik-baiknya seluruh ketentuan perusahaan yang terdapat dalam :</p>
@@ -45,7 +45,7 @@
     <tr>
         <td class="num">1.</td>
         <td class="body">
-            <div class="title">Peraturan Umum No. : Per-Um/09/22-VII</div>
+            <div class="title"><strong>Peraturan Umum No. : Per-Um/09/22-VII</strong></div>
             <table class="parts">
                 <tr><td class="letter">a.</td><td>Bagian I – Kewajiban dan Larangan</td></tr>
                 <tr><td class="letter">b.</td><td>Bagian II – Kehadiran</td></tr>
@@ -60,7 +60,7 @@
     <tr>
         <td class="num">2.</td>
         <td class="body">
-            <div class="title">Peraturan Penampilan No. Per-PK/09/22-VIII</div>
+            <div class="title"><strong>Peraturan Penampilan No. Per-PK/09/22-VIII</strong></div>
             <div class="title" style="font-weight:normal; padding-top:0;">Bagian A - Karyawan yang berhubungan / berinteraksi dengan pihak eksternal selain personel yang melakukan kegiatan pengujian (<em>Sampling</em>).</div>
         </td>
         <td class="ttd"></td>
@@ -68,7 +68,7 @@
     <tr>
         <td class="num">3.</td>
         <td class="body">
-            <div class="title">Peraturan Perusahaan terkait Karyawan Pelatihan (SK Direktur No. : ISL/SK-Dir/23-XII/003)</div>
+            <div class="title"><strong>Peraturan Perusahaan terkait Karyawan Pelatihan (SK Direktur No. : ISL/SK-Dir/23-XII/003)</strong></div>
             <table class="parts">
                 <tr><td class="letter">a.</td><td>Bagian A – Jenis Status Karyawan</td></tr>
                 <tr><td class="letter">b.</td><td>Bagian B – Cuti Khusus</td></tr>
@@ -80,7 +80,7 @@
     </tr>
 </table>
 
-<p>Dengan ini saya juga menyatakan dengan sebenar-benarnya bahwa saya telah membaca, mengetahui, menyetujui, serta akan melaksanakan dengan sebaik-baiknya <strong>keseluruhan peraturan</strong> tersebut di atas tanpa terkecuali. Apabila terjadi pelanggaran peraturan perusahaan, maka saya bersedia dikenakan sanksi (-sanksi) berdasarkan peraturan, penilaian dan/atau pertimbangan perusahaan.</p>
+<p>Dengan ini saya juga menyatakan dengan sebenar-benarnya bahwa saya telah membaca, mengetahui, menyetujui, serta akan melaksanakan dengan sebaik-baiknya <strong><u>keseluruhan peraturan</u></strong> tersebut di atas tanpa terkecuali. Apabila terjadi pelanggaran peraturan perusahaan, maka saya bersedia dikenakan sanksi (-sanksi) berdasarkan peraturan, penilaian dan/atau pertimbangan perusahaan.</p>
 
 <table class="sign">
     <tr><td>Tangerang, {{ $tanggalPengesahan }}</td></tr>

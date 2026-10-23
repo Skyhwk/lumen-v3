@@ -1492,7 +1492,88 @@ class GenerateDokumenKaryawanService
             'tanggalPencadanganSelesai' => $periodePencadangan['selesai'],
             'bulanPenggajianPencadangan' => $pengembalianPencadangan['penggajian'],
             'bulanDiterimaPencadangan' => $pengembalianPencadangan['diterima'],
+            'hariRaya' => $this->hariRayaKeagamaan($karyawan, $data['recruitment'], $data['salary'] ?? null),
+            'metodePembayaran' => $this->labelMetodePembayaran(optional($salary)->metode_pembayaran_gaji),
+            'rekeningGaji' => $this->barisRekeningGaji($data['rekening'] ?? null),
+            'jumlahHariKerja' => $this->angkaPayroll(optional($salary)->jumlah_hari_kerja, 1),
+            'jadwalPenggajian' => $this->angkaPayroll(optional($salary)->jadwal_penggajian, 0),
         ];
+    }
+
+    private function labelMetodePembayaran($metode): string
+    {
+        $metode = strtolower(trim((string) $metode));
+        if ($metode === 'tunai') {
+            return 'tunai (cash)';
+        }
+        if ($metode === 'transfer') {
+            return 'transfer';
+        }
+
+        return 'tunai (cash) / transfer';
+    }
+
+    private function barisRekeningGaji($rekening): array
+    {
+        $fields = [
+            'Nama Bank' => 'nama_bank',
+            'Nomor Rekening' => 'no_rekening',
+            'Cabang Bank' => 'cabang_bank',
+            'Nama Pemilik Rekening' => 'nama_pemilik_rekening',
+        ];
+        $rows = [];
+        foreach ($fields as $label => $field) {
+            $value = trim((string) optional($rekening)->{$field});
+            if ($value !== '') {
+                $rows[] = ['label' => $label, 'value' => $value];
+            }
+        }
+
+        return $rows;
+    }
+
+    private function angkaPayroll($value, int $min): ?int
+    {
+        if ($value === null || trim((string) $value) === '' || !is_numeric($value)) {
+            return null;
+        }
+
+        $number = (int) $value;
+        return $number >= $min ? $number : null;
+    }
+
+    private function hariRayaKeagamaan($karyawan, $recruitment, $salary = null): string
+    {
+        $jadwal = trim((string) optional($salary)->jadwal_pembayaran_thr);
+        if ($jadwal !== '') {
+            return $jadwal;
+        }
+
+        $agama = trim((string) ($karyawan->agama ?? ''));
+        if ($agama === '') {
+            $recruitment->loadMissing('candidateProfile');
+            $agama = trim((string) (
+                ($recruitment->agama ?? null)
+                ?: optional($recruitment->candidateProfile)->agama
+            ));
+        }
+
+        $map = [
+            'islam' => 'Idul Fitri',
+            'muslim' => 'Idul Fitri',
+            'protestan' => 'Natal',
+            'kristen' => 'Natal',
+            'kristen protestan' => 'Natal',
+            'katolik' => 'Natal',
+            'kristen katolik' => 'Natal',
+            'hindu' => 'Nyepi',
+            'buddha' => 'Waisak',
+            'budha' => 'Waisak',
+            'konghucu' => 'Imlek',
+            'khonghucu' => 'Imlek',
+        ];
+
+        return $map[strtolower($agama)] ?? '-';
     }
 
     private function periodePencadangan($pencadangan, ?Carbon $contractStart, ?Carbon $contractEnd): array
@@ -1531,23 +1612,23 @@ class GenerateDokumenKaryawanService
 
         $tenor = max(1, (int) $pencadangan->tenor);
         $tipe = strtolower(trim((string) ($pencadangan->tipe_pengembalian ?? 'setelah_potongan')));
-        $refundStart = null;
+        $payrollMonth = null;
 
         if ($tipe === 'setelah_kontrak' && $contractEnd) {
-            $refundStart = $contractEnd->copy()->addMonth()->startOfMonth();
+            $payrollMonth = $contractEnd->copy()->startOfMonth();
         } elseif (!empty($pencadangan->bulan_efektif)) {
-            $refundStart = Carbon::parse($pencadangan->bulan_efektif)->startOfMonth()->addMonths($tenor);
+            $payrollMonth = Carbon::parse($pencadangan->bulan_efektif)
+                ->startOfMonth()
+                ->addMonths($tenor - 1);
         }
 
-        if (!$refundStart) {
+        if (!$payrollMonth) {
             return $empty;
         }
 
-        $lastPayroll = $refundStart->copy()->addMonths($tenor - 1);
-
         return [
-            'penggajian' => $this->formatBulanIndonesia($lastPayroll),
-            'diterima' => $this->formatBulanIndonesia($lastPayroll->copy()->addMonth()),
+            'penggajian' => $this->formatBulanIndonesia($payrollMonth),
+            'diterima' => $this->formatBulanIndonesia($payrollMonth->copy()->addMonth()),
         ];
     }
 

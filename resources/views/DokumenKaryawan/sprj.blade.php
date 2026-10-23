@@ -208,8 +208,8 @@
     <tr>
         <td class="number">3.</td>
         <td>
-            Karyawan berhak atas Tunjangan Hari Raya (THR) sesuai pilihan hari raya keagamaan dan
-            ketentuan dalam Ketetapan Perusahaan tentang Tunjangan Hari Raya (THR).
+            Karyawan berhak atas Tunjangan Hari Raya (THR) sesuai penentuan pilihan hari raya keagamaan dan
+            pengaturan <strong>Perusahaan</strong>, yaitu pada <strong>{{ $hariRaya }}</strong>, serta sesuai dengan ketentuan dalam Ketetapan Perusahaan tentang Tunjangan Hari Raya (THR).
         </td>
     </tr>
     <tr>
@@ -329,12 +329,18 @@
         <td class="letter">a.</td>
         <td>
             Pembayaran upah masa pelatihan (selain fee) diberikan oleh <strong>Perusahaan</strong> 1 (satu) kali setiap bulan dengan
-            metode pembayaran yang disepakati <strong>Para Pihak</strong>, yaitu dengan tunai (cash) / transfer pada:
+            metode pembayaran yang disepakati <strong>Para Pihak</strong>, yaitu dengan <strong>{{ $metodePembayaran }}</strong>@if(!empty($rekeningGaji)) pada:
             <table class="identity">
-                <tr><td class="label">Nama Bank</td><td class="separator">:</td><td></td></tr>
-                <tr><td class="label">Nomor Rekening</td><td class="separator">:</td><td></td></tr>
-                <tr><td class="label">Nama Pemilik Rekening</td><td class="separator">:</td><td></td></tr>
+                @foreach($rekeningGaji as $baris)
+                    <tr>
+                        <td class="label" style="width:52mm;">{{ $baris['label'] }}</td>
+                        <td class="separator">:</td>
+                        <td>{{ $baris['value'] }}</td>
+                    </tr>
+                @endforeach
             </table>
+            @else.
+            @endif
         </td>
     </tr>
     <tr>
@@ -354,9 +360,16 @@
     <tr>
         <td class="letter">d.</td>
         <td>
-            Pembayaran akan diberikan sejumlah hari kerja setelah hari kerja pertama bulan berikutnya / pada tanggal
-            yang ditentukan <strong>Perusahaan</strong> di bulan berikutnya. Apabila tanggal tersebut jatuh bertepatan dengan hari libur,
-            pembayaran akan diberikan pada hari kerja sebelumnya / berikutnya sesuai ketentuan <strong>Perusahaan</strong>.
+            @if($jumlahHariKerja !== null && $jadwalPenggajian !== null)
+                Pembayaran akan diberikan {{ $jumlahHariKerja }} hari kerja setelah hari kerja pertama bulan
+                berikutnya (H+{{ $jadwalPenggajian }}), atau jika tanggal tersebut
+                jatuh bertepatan dengan hari libur, maka pembayaran akan diberikan pada hari kerja
+                berikutnya.
+            @else
+                Pembayaran akan diberikan sejumlah hari kerja setelah hari kerja pertama bulan berikutnya / pada tanggal
+                yang ditentukan <strong>Perusahaan</strong> di bulan berikutnya. Apabila tanggal tersebut jatuh bertepatan dengan hari libur,
+                pembayaran akan diberikan pada hari kerja sebelumnya / berikutnya sesuai ketentuan <strong>Perusahaan</strong>.
+            @endif
         </td>
     </tr>
     @if($pencadangan && (float) $pencadangan->nominal > 0)
