@@ -847,8 +847,9 @@ class MasterKaryawanController extends Controller
             '6' => 'jenis_kelamin',
             '7' => 'status_pernikahan',
             '8' => 'status_karyawan',
-            '9' => 'tgl_mulai_kerja',
-            '10' => 'tgl_berakhir_kontrak',
+            '9' => 'grade',
+            '10' => 'tgl_mulai_kerja',
+            '11' => 'tgl_berakhir_kontrak',
         ];
 
         $search = $request->input('column_search', []);
