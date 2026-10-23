@@ -230,8 +230,26 @@ trait RenderNonKontrak
                 $kategori2 = explode("-", $a->kategori_2);
                 $penamaan_titik = "";
                 $kategori2Value = isset($kategori2[1]) ? $kategori2[1] : '';
-                if ($a->penamaan_titik != null || $a->penamaan_titik != "") {
-                    $penamaan_titik = "(" . \htmlspecialchars_decode(implode(', ', $a->penamaan_titik)) . ")";
+                if (!empty($a->penamaan_titik)) {
+                    if (is_array($a->penamaan_titik)) {
+                        $titik_arr = [];
+                        foreach ($a->penamaan_titik as $val) {
+                            if (is_object($val)) {
+                                foreach ((array)$val as $k_val => $v_val) {
+                                    if ($v_val !== "" && $v_val !== " " && $v_val !== "-") {
+                                        $titik_arr[] = $v_val;
+                                    }
+                                }
+                            } elseif (is_string($val) && $val !== "" && $val !== " " && $val !== "-") {
+                                $titik_arr[] = $val;
+                            }
+                        }
+                        if (!empty($titik_arr)) {
+                            $penamaan_titik = "(" . \htmlspecialchars_decode(implode(', ', $titik_arr)) . ")";
+                        }
+                    } elseif (is_string($a->penamaan_titik) && $a->penamaan_titik !== " " && $a->penamaan_titik !== "-") {
+                        $penamaan_titik = "(" . \htmlspecialchars_decode($a->penamaan_titik) . ")";
+                    }
                 }
 
                 $pdf->WriteHTML(
@@ -308,6 +326,7 @@ trait RenderNonKontrak
                         <td style="font-size: 13px; text-align:right; padding: 5px;">' . self::rupiah($data->harga_transportasi * $data->transportasi) . '</td>
                     </tr>'
                 );
+                $i++;
             }
             $perdiem_24 = "";
             $total_perdiem = 0;
@@ -321,9 +340,6 @@ trait RenderNonKontrak
                     $total_perdiem + $data->{'harga_24jam_personil_total'};
             }
             if ($data->perdiem_jumlah_orang > 0 && $data->harga_perdiem_personil_total != null) {
-                if ($data->transportasi > 0 && $data->harga_transportasi_total != null) {
-                    $i = $i + 1;
-                }
                 $pdf->WriteHTML(
                     '<tr>
                         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
@@ -333,18 +349,11 @@ trait RenderNonKontrak
                         <td style="font-size: 13px; text-align:right; padding: 5px;">' . self::rupiah($data->harga_perdiem_personil_total + $total_perdiem) . '</td>
                     </tr>'
                 );
+                $i++;
             }
             $biaya_lain = json_decode($data->biaya_lain);
             if ($biaya_lain != null) {
-                $u = '';
                 foreach ($biaya_lain as $k => $v) {
-                    if ($data->perdiem_jumlah_orang > 0 && $data->harga_perdiem_personil_total != null) {
-                        $i = $i + 1;
-                    } else {
-                        if ($u == $i) {
-                            $i = $i + 1;
-                        }
-                    }
                     $pdf->WriteHTML(
                         '<tr>
                             <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
@@ -354,22 +363,22 @@ trait RenderNonKontrak
                             <td style="font-size: 13px; text-align:right;padding: 5px;">' . self::rupiah($v->total_biaya) . '</td>
                         </tr>'
                     );
-                    $u = $i;
+                    $i++;
                 }
             }
             $biaya_preparasi = json_decode($data->biaya_preparasi_padatan);
             if ($biaya_preparasi != null) {
-                // $i = $i + 1;
                 foreach ($biaya_preparasi as $k => $v) {
                     $pdf->WriteHTML(
                         '<tr>
-                            <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i++ . '</td>
+                            <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
                             <td style="font-size: 13px;padding: 5px;">Biaya : ' . $v->deskripsi . '</td>
                             <td style="font-size: 13px; text-align:right;padding: 5px;"></td>
                             <td style="font-size: 13px; text-align:right;padding: 5px;">' . self::rupiah($v->harga) . '</td>
                             <td style="font-size: 13px; text-align:right;padding: 5px;">' . self::rupiah($v->harga) . '</td>
                         </tr>'
                     );
+                    $i++;
                 }
             }
             $pdf->WriteHTML("</tbody></table>");
@@ -747,7 +756,7 @@ trait RenderNonKontrak
         }
     }
 
-    protected function tanggal_indonesia($tanggal, $mode)
+    protected function tanggal_indonesia($tanggal, $mode = null)
     {
         $bulan = [
             1 => "Januari",
