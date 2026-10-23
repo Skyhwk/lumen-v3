@@ -20,6 +20,7 @@ use RuntimeException;
 class GenerateDokumenKaryawanService
 {
     private const DOCUMENT_BASE_DIR = 'dokumen/dokumen-karyawan';
+    private const PAGE_BACKGROUND = 'images/dokumen-karyawan-page-background.png';
 
     private $temporaryBackgroundPath;
 
@@ -634,7 +635,7 @@ class GenerateDokumenKaryawanService
         $pdf->SetHTMLFooter($footerHtml);
         $pdf->SetHTMLFooter($footerHtml, 'E');
 
-        $pdf->SetWatermarkImage($this->pageBackgroundWithNote(resource_path('images/coc-page-background.png')), 1, [210, 297], [0, 0]);
+        $pdf->SetWatermarkImage($this->documentPageBackground(), 1, [210, 297], [0, 0]);
         $pdf->showWatermarkImage = true;
 
         $pdf->WriteHTML($html);
@@ -678,7 +679,7 @@ class GenerateDokumenKaryawanService
         $pdf->SetHTMLFooter($footerHtml);
         $pdf->SetHTMLFooter($footerHtml, 'E');
 
-        $pdf->SetWatermarkImage($this->pageBackgroundWithNote(resource_path('images/pkkp-page-background.png')), 1, [210, 297], [0, 0]);
+        $pdf->SetWatermarkImage($this->documentPageBackground(), 1, [210, 297], [0, 0]);
         $pdf->showWatermarkImage = true;
         $pdf->WriteHTML($html);
 
@@ -721,7 +722,7 @@ class GenerateDokumenKaryawanService
         $pdf->SetHTMLFooter($footerHtml);
         $pdf->SetHTMLFooter($footerHtml, 'E');
 
-        $pdf->SetWatermarkImage($this->pageBackgroundWithNote(resource_path('images/spkb-page-background.png')), 1, [210, 297], [0, 0]);
+        $pdf->SetWatermarkImage($this->documentPageBackground(), 1, [210, 297], [0, 0]);
         $pdf->showWatermarkImage = true;
         $pdf->WriteHTML($html);
 
@@ -780,7 +781,7 @@ class GenerateDokumenKaryawanService
         $pdf->SetHTMLFooter($footerHtml);
         $pdf->SetHTMLFooter($footerHtml, 'E');
 
-        $pdf->SetWatermarkImage($this->pageBackgroundWithNote(resource_path('images/spny-page-background.png')), 1, [210, 297], [0, 0]);
+        $pdf->SetWatermarkImage($this->documentPageBackground(), 1, [210, 297], [0, 0]);
         $pdf->showWatermarkImage = true;
         $pdf->WriteHTML($html);
 
@@ -839,7 +840,7 @@ class GenerateDokumenKaryawanService
         $pdf->SetHTMLFooter($footerHtml);
         $pdf->SetHTMLFooter($footerHtml, 'E');
 
-        $pdf->SetWatermarkImage($this->pageBackgroundWithNote(resource_path('images/nda-page-background.png')), 1, [210, 297], [0, 0]);
+        $pdf->SetWatermarkImage($this->documentPageBackground(), 1, [210, 297], [0, 0]);
         $pdf->showWatermarkImage = true;
         $pdf->WriteHTML($html);
 
@@ -893,13 +894,18 @@ class GenerateDokumenKaryawanService
         $pdf->SetHTMLFooter($footerHtml);
         $pdf->SetHTMLFooter($footerHtml, 'E');
 
-        $pdf->SetWatermarkImage($this->pageBackgroundWithNote(resource_path('images/sprj-page-background.png')), 1, [210, 297], [0, 0]);
+        $pdf->SetWatermarkImage($this->documentPageBackground(), 1, [210, 297], [0, 0]);
         $pdf->showWatermarkImage = true;
         $pdf->WriteHTML($html);
         $pdf->SetHTMLFooter($footerLastHtml);
         $pdf->SetHTMLFooter($footerLastHtml, 'E');
 
         return $pdf;
+    }
+
+    private function documentPageBackground(): string
+    {
+        return $this->pageBackgroundWithNote(resource_path(self::PAGE_BACKGROUND));
     }
 
     private function pageBackgroundWithNote(string $source): string
