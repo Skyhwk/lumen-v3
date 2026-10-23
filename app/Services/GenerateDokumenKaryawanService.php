@@ -42,135 +42,6 @@ class GenerateDokumenKaryawanService
         ];
     }
 
-    public function previewSprj(int $karyawanId, int $newRecruitmentId): string
-    {
-        $data = $this->prepareData($karyawanId, $newRecruitmentId);
-
-        try {
-            $pdf = $this->renderSprjPdf($data, 'PREVIEW-SPRJ', $this->peekPengesahanNumber());
-
-            return $pdf->Output('', Destination::STRING_RETURN);
-        } finally {
-            $this->clearTemporaryBackground();
-        }
-    }
-
-    public function previewCoc(int $karyawanId, int $newRecruitmentId): string
-    {
-        $data = $this->prepareData($karyawanId, $newRecruitmentId);
-
-        try {
-            $pdf = $this->renderCocPdf($data);
-
-            return $pdf->Output('', Destination::STRING_RETURN);
-        } finally {
-            $this->clearTemporaryBackground();
-        }
-    }
-
-    public function previewPkkp(int $karyawanId, int $newRecruitmentId): string
-    {
-        $data = $this->prepareData($karyawanId, $newRecruitmentId);
-
-        try {
-            $pdf = $this->renderPkkpPdf($data, $this->peekPkkpNumber());
-
-            return $pdf->Output('', Destination::STRING_RETURN);
-        } finally {
-            $this->clearTemporaryBackground();
-        }
-    }
-
-    public function previewSpkb(int $karyawanId, int $newRecruitmentId): string
-    {
-        $data = $this->prepareData($karyawanId, $newRecruitmentId);
-
-        try {
-            $pdf = $this->renderSpkbPdf($data, $this->peekPkkpNumber());
-
-            return $pdf->Output('', Destination::STRING_RETURN);
-        } finally {
-            $this->clearTemporaryBackground();
-        }
-    }
-
-    public function previewSpny(int $karyawanId, int $newRecruitmentId): string
-    {
-        $data = $this->prepareData($karyawanId, $newRecruitmentId);
-
-        try {
-            $pdf = $this->renderSpnyPdf($data, $this->peekDocumentNumber('SPNY', 'ISL-09-SPNY-', 4));
-
-            return $pdf->Output('', Destination::STRING_RETURN);
-        } finally {
-            $this->clearTemporaryBackground();
-        }
-    }
-
-    public function previewPkpp(int $karyawanId, int $newRecruitmentId): string
-    {
-        $data = $this->prepareData($karyawanId, $newRecruitmentId);
-
-        try {
-            $pdf = $this->renderSpnyPdf(
-                $data,
-                $this->peekDocumentNumber('SPNY', 'ISL-09-SPNY-', 4),
-                'DokumenKaryawan.pkpp'
-            );
-
-            return $pdf->Output('', Destination::STRING_RETURN);
-        } finally {
-            $this->clearTemporaryBackground();
-        }
-    }
-
-    public function previewPkppSampling(int $karyawanId, int $newRecruitmentId): string
-    {
-        $data = $this->prepareData($karyawanId, $newRecruitmentId);
-
-        try {
-            $pdf = $this->renderSpnyPdf(
-                $data,
-                $this->peekDocumentNumber('SPNY', 'ISL-09-SPNY-', 4),
-                'DokumenKaryawan.pkpp-sampling'
-            );
-
-            return $pdf->Output('', Destination::STRING_RETURN);
-        } finally {
-            $this->clearTemporaryBackground();
-        }
-    }
-
-    public function previewNda(int $karyawanId, int $newRecruitmentId): string
-    {
-        $data = $this->prepareData($karyawanId, $newRecruitmentId);
-
-        try {
-            $pdf = $this->renderNdaPdf($data, $this->peekDocumentNumber('NDA', 'ISL-11-SPRJ-', 4));
-
-            return $pdf->Output('', Destination::STRING_RETURN);
-        } finally {
-            $this->clearTemporaryBackground();
-        }
-    }
-
-    public function previewNdaSpv(int $karyawanId, int $newRecruitmentId): string
-    {
-        $data = $this->prepareData($karyawanId, $newRecruitmentId);
-
-        try {
-            $pdf = $this->renderNdaPdf(
-                $data,
-                $this->peekDocumentNumber('NDA', 'ISL-11-SPRJ-', 4),
-                'DokumenKaryawan.nda-spv'
-            );
-
-            return $pdf->Output('', Destination::STRING_RETURN);
-        } finally {
-            $this->clearTemporaryBackground();
-        }
-    }
-
     private function generateSprj(array $data): array
     {
         if (
@@ -1221,22 +1092,6 @@ class GenerateDokumenKaryawanService
         return $directory;
     }
 
-    private function peekDocumentNumber(string $documentType, string $prefix, int $padding = 4): string
-    {
-        $year = (int) date('Y');
-        $lastNumber = 0;
-
-        if (Schema::hasTable('employee_document_sequences')) {
-            $lastNumber = (int) EmployeeDocumentSequence::where('document_type', $documentType)
-                ->where('year', $year)
-                ->value('last_number');
-        }
-
-        return $prefix
-            . substr((string) $year, -2)
-            . str_pad((string) ($lastNumber + 1), $padding, '0', STR_PAD_LEFT);
-    }
-
     private function nextDocumentNumber(
         string $documentType,
         string $prefix,
@@ -1326,20 +1181,6 @@ class GenerateDokumenKaryawanService
         });
     }
 
-    private function peekPengesahanNumber(): string
-    {
-        $now = Carbon::now();
-        $lastNumber = 0;
-
-        if (Schema::hasTable('employee_document_sequences')) {
-            $lastNumber = (int) EmployeeDocumentSequence::where('document_type', 'LPD.INT')
-                ->where('year', $now->year)
-                ->value('last_number');
-        }
-
-        return $this->formatNomorPengesahan((int) $now->year, (int) $now->month, $lastNumber + 1);
-    }
-
     private function formatNomorPengesahan(int $year, int $month, int $number): string
     {
         $roman = [
@@ -1397,20 +1238,6 @@ class GenerateDokumenKaryawanService
                 'number' => (int) $sequence->last_number,
             ];
         });
-    }
-
-    private function peekPkkpNumber(): string
-    {
-        $now = Carbon::now();
-        $lastNumber = 0;
-
-        if (Schema::hasTable('employee_document_sequences')) {
-            $lastNumber = (int) EmployeeDocumentSequence::where('document_type', 'PKKP')
-                ->where('year', $now->year)
-                ->value('last_number');
-        }
-
-        return $this->formatNomorPkkp((int) $now->year, (int) $now->month, $lastNumber + 1);
     }
 
     private function formatNomorPkkp(int $year, int $month, int $number): string
