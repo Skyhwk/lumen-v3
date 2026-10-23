@@ -117,7 +117,14 @@ class Handler extends ExceptionHandler
             'exception' => get_class($exception),
             'file' => $exception->getFile(),
             'line' => $exception->getLine(),
-            'trace' => collect($exception->getTrace())->take(25)->values()->all(),
+            'trace' => collect($exception->getTrace())->take(25)->map(function (array $frame) {
+                return [
+                    'file' => $frame['file'] ?? null,
+                    'line' => $frame['line'] ?? null,
+                    'function' => $frame['function'] ?? null,
+                    'class' => $frame['class'] ?? null,
+                ];
+            })->values()->all(),
         ], $status);
     }
 

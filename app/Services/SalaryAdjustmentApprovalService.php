@@ -65,6 +65,7 @@ class SalaryAdjustmentApprovalService
         return [
             'result' => 'ready',
             'approver_role' => $approvalToken->approver_role,
+            'request' => $this->presentRequest($record),
         ];
     }
 

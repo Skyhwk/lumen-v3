@@ -8,6 +8,8 @@ use App\Models\QuotationKontrakD;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use App\Models\OrderHeader;
 use App\Models\MasterKaryawan;
+use App\Models\MasterPelanggan;
+use App\Models\PicPelanggan;
 use App\Models\GenerateLink;
 use App\Models\Invoice;
 use App\Services\GenerateToken;
@@ -265,14 +267,12 @@ class GenerateInvoiceController extends Controller
         return response()->json($users);
     }
 
-    public function getEmailCC(Request $request)
+    public function getEmailBCC(Request $request)
     {
-        // dd($request->all());
         $emails = ['billing@intilab.com'];
-        $cek = explode("/", $request->document)[1];
+        $cek = explode('/', $request->document)[1];
         if ($cek === 'QTC') {
             $salesIds = QuotationKontrakH::where('no_document', $request->document)->pluck('sales_id');
-            // dd($salesIds);
         } else {
             $salesIds = QuotationNonKontrak::where('no_document', $request->document)->pluck('sales_id');
         }
@@ -282,7 +282,36 @@ class GenerateInvoiceController extends Controller
             $emailsAtasan = $atasan->where('grade', 'SUPERVISOR')->pluck('email')->toArray();
             $emails = array_merge($emails, $emailsSales, $emailsAtasan);
         }
-        // dd($emails);
+
+        return response()->json($emails);
+    }
+
+    public function getEmailCC(Request $request)
+    {
+        $emails = [];
+        $cek = explode('/', (string) $request->document)[1] ?? '';
+        $quotation = $cek === 'QTC'
+            ? QuotationKontrakH::where('no_document', $request->document)->first(['pelanggan_ID'])
+            : QuotationNonKontrak::where('no_document', $request->document)->first(['pelanggan_ID']);
+
+        $pelangganId = trim((string) ($quotation->pelanggan_ID ?? ''));
+        if ($pelangganId !== '') {
+            $masterPelanggan = MasterPelanggan::where('id_pelanggan', $pelangganId)->first(['id']);
+            if ($masterPelanggan) {
+                $emails = PicPelanggan::where('pelanggan_id', $masterPelanggan->id)
+                    ->where('type_pic', 'billing')
+                    ->where('is_active', true)
+                    ->pluck('email_pic')
+                    ->map(function ($email) {
+                        return trim((string) $email);
+                    })
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
+        }
+
         return response()->json($emails);
     }
 
