@@ -4,7 +4,8 @@ return [
     /**
      * URL publik Apps-Approval (tanpa trailing slash).
      * Contoh: https://apps.intilab.com/apps-approval
-     * Kosong = link email tetap memakai PORTALV4 / FRONTEND_URL.
+     * Hanya untuk email/tombol persetujuan Ibu Direktur & penyesuaian karyawan — bukan email ke kandidat (penawaran gaji tetap PORTALV4).
+     * Kosong = link persetujuan direktur memakai PORTALV4.
      */
     'public_url' => rtrim((string) env('APPROVAL_APP_PUBLIC_URL', ''), '/'),
 
