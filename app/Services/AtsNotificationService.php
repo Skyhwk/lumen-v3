@@ -350,13 +350,13 @@ class AtsNotificationService
     {
         $candidate = $this->candidateName($recruitment);
         $normalized = strtolower($decision);
-        $title = 'Keputusan Gaji Direktur';
+        $title = 'Keputusan Gaji';
         if ($normalized === 'approve') {
-            $message = "Direktur menyetujui gaji kandidat {$candidate}.";
+            $message = "Approval Salary kandidat {$candidate} disetujui.";
         } elseif ($normalized === 'negotiate' || $normalized === 'negotiated') {
-            $message = "Direktur menegosiasi gaji kandidat {$candidate}. HRD perlu tindak lanjut.";
+            $message = "Approval Salary kandidat {$candidate} dinegosiasikan.";
         } else {
-            $message = "Direktur menolak gaji kandidat {$candidate}.";
+            $message = "Approval Salary kandidat {$candidate} ditolak.";
         }
 
         $this->notifyHrdTeam($title, $message, self::URL_FINAL_DECISION);
