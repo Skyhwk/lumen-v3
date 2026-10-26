@@ -7,6 +7,7 @@ use App\Models\AlamatPelanggan;
 use App\Models\AlamatPelangganBackup;
 use App\Models\KontakPelanggan;
 use App\Models\KontakPelangganBackup;
+use App\Models\MasterKaryawan;
 use App\Models\MasterPelanggan;
 use App\Models\MasterPelangganBackup;
 use App\Models\PicPelanggan;
@@ -47,10 +48,46 @@ class BackupMasterPelangganController extends Controller
             ->make(true);
     }
 
+    public function getSales(Request $request)
+    {
+        $keyword = $request->get('term');
+
+        $data = MasterKaryawan::where('is_active', true)
+            ->whereIn('id_jabatan', [24, 148])
+            ->when($keyword, function ($q) use ($keyword) {
+                $q->where('nama_lengkap', 'like', "%{$keyword}%");
+            })
+            ->orderBy('nama_lengkap')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'text' => $item->nama_lengkap,
+                ];
+            });
+
+        return response()->json([
+            'results' => $data,
+        ]);
+    }
+
     public function restore(Request $request)
     {
         if ($request->id === null || $request->id === '') {
             return response()->json(['message' => 'ID wajib diisi.'], 422);
+        }
+
+        if ($request->sales_id === null || $request->sales_id === '') {
+            return response()->json(['message' => 'Sales penanggung jawab wajib dipilih.'], 422);
+        }
+
+        $sales = MasterKaryawan::where('id', (int) $request->sales_id)
+            ->where('is_active', true)
+            ->whereIn('id_jabatan', [24, 148])
+            ->first();
+
+        if (!$sales) {
+            return response()->json(['message' => 'Sales penanggung jawab tidak valid.'], 422);
         }
 
         $backupMaster = MasterPelangganBackup::find((int) $request->id);
@@ -69,6 +106,9 @@ class BackupMasterPelangganController extends Controller
             $master = $backupMaster->replicate();
             $master->setTable((new MasterPelanggan())->getTable());
             $master->id = null;
+            $master->sales_id = $sales->id;
+            $master->sales_penanggung_jawab = $sales->nama_lengkap;
+            $master->updated_by = $this->karyawan;
             $master->save();
 
             $newPelangganId = $master->id;
