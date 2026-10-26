@@ -22,7 +22,7 @@
 <table class="info-table">
     <tr><td class="info-label">Nama Karyawan</td><td class="info-value">: {{ $employee_name }}</td></tr>
     @if($managerName !== '')
-        <tr><td class="info-label">Manager Pengaju</td><td class="info-value">: {{ $managerName }}</td></tr>
+        <tr><td class="info-label">Manager</td><td class="info-value">: {{ $managerName }}</td></tr>
     @endif
     <tr><td class="info-label">Interpretasi</td><td class="info-value">: {{ $kpi['interpretation'] ?? '-' }}</td></tr>
 </table>
