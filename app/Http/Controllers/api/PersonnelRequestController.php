@@ -253,19 +253,24 @@ class PersonnelRequestController extends Controller
                 abort(422, 'Kategori soal HR tidak valid.');
             }
 
-            $availableQuestions = \App\Models\Question::query()
-                ->where('question_category_id', $category->id)
-                ->where('question_scope', 'hr')
-                ->where('status', '!=', 'retired')
-                ->where('is_active', 1)
-                ->count();
+            $categoryName = strtoupper(trim((string) $category->name));
+            $isPsychometric = in_array($categoryName, ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK'], true);
 
-            if ($availableQuestions < 1) {
-                abort(422, 'Kategori "' . $category->name . '" belum memiliki soal HR aktif.');
-            }
+            if (!$isPsychometric) {
+                $availableQuestions = \App\Models\Question::query()
+                    ->where('question_category_id', $category->id)
+                    ->where('question_scope', 'hr')
+                    ->where('status', '!=', 'retired')
+                    ->where('is_active', 1)
+                    ->count();
 
-            if ((int) $config['question_count'] > $availableQuestions) {
-                abort(422, 'Jumlah soal kategori "' . $category->name . '" tidak boleh melebihi soal tersedia (' . $availableQuestions . ' soal).');
+                if ($availableQuestions < 1) {
+                    abort(422, 'Kategori "' . $category->name . '" belum memiliki soal HR aktif.');
+                }
+
+                if ((int) $config['question_count'] > $availableQuestions) {
+                    abort(422, 'Jumlah soal kategori "' . $category->name . '" tidak boleh melebihi soal tersedia (' . $availableQuestions . ' soal).');
+                }
             }
 
             if (!empty($config['has_time_limit']) && (int) $config['duration_minutes'] < 1) {
