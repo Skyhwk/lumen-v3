@@ -39,6 +39,17 @@ class QuotationPromoPresentationTest extends TestCase
         $this->assertSame($source, QuotationPromoPresentation::forPdf($source, (object) ['metode' => 'labeling', 'nama_diskon' => 'Label saja']));
     }
 
+    public function testHargaParameterKeepsStoredPricesWithoutSeparateDiscount()
+    {
+        $source = (object) ['promo_id' => 4, 'grand_total' => 210000,
+            'data_pendukung_sampling' => json_encode([['harga_satuan' => 70000, 'harga_total' => 210000, 'jumlah_titik' => 3]])];
+        $this->assertSame($source, QuotationPromoPresentation::forPdf($source, (object) [
+            'metode' => 'parameter_khusus',
+            'nama_diskon' => 'Parameter Khusus',
+            'konfigurasi' => ['parameters' => [['parameter_id' => 1, 'harga' => 20000]]],
+        ]));
+    }
+
     public function testPercentageOnlyLabelsStoredDiscountWithoutReapplyingIt()
     {
         $source = (object) ['promo_id' => 1, 'total_discount_promo' => 180000, 'total_dpp' => 720000, 'grand_total' => 1000000];

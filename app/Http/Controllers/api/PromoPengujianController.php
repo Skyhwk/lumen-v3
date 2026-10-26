@@ -52,6 +52,50 @@ class PromoPengujianController extends Controller {
         return ['data_pendukung_sampling' => array_values($items)];
     }
 
+    private function hargaParameterKonfigurasi($items)
+    {
+        if (is_string($items)) {
+            $items = json_decode($items, true);
+        }
+        $items = is_array($items) ? ($items['parameters'] ?? $items) : [];
+        if (!is_array($items) || count($items) < 1) {
+            throw new \InvalidArgumentException('Minimal satu parameter dengan harga wajib diisi.');
+        }
+
+        $seen = [];
+        $normalized = [];
+        foreach ($items as $index => $item) {
+            if (!is_array($item)) {
+                throw new \InvalidArgumentException('Format list parameter promo tidak valid.');
+            }
+
+            $parameterId = $item['parameter_id'] ?? $item['id'] ?? null;
+            $harga = $item['harga'] ?? null;
+            if (!is_numeric($parameterId) || (int) $parameterId < 1) {
+                throw new \InvalidArgumentException('Parameter pada baris ke-' . ($index + 1) . ' wajib dipilih.');
+            }
+            if (!is_numeric($harga) || $harga < 0) {
+                throw new \InvalidArgumentException('Harga parameter pada baris ke-' . ($index + 1) . ' wajib diisi minimal 0.');
+            }
+
+            $id = (int) $parameterId;
+            if (isset($seen[$id])) {
+                throw new \InvalidArgumentException('Parameter tidak boleh diduplikasi dalam list promo.');
+            }
+            $seen[$id] = true;
+
+            $normalized[] = [
+                'kategori_id' => isset($item['kategori_id']) && is_numeric($item['kategori_id']) ? (int) $item['kategori_id'] : null,
+                'kategori_nama' => $item['kategori_nama'] ?? null,
+                'parameter_id' => $id,
+                'nama_parameter' => $item['nama_parameter'] ?? $item['nama_lab'] ?? null,
+                'harga' => +$harga,
+            ];
+        }
+
+        return ['parameters' => array_values($normalized)];
+    }
+
     public function index(Request $request) {
         $query = DB::table('promo_pengujian')
             ->select('id', 'kode_promo', 'metode', 'nama_diskon', 'konfigurasi')
@@ -218,6 +262,23 @@ class PromoPengujianController extends Controller {
                 'parameter_ids' => $parameterIds,
                 'jumlah_titik'  => is_numeric($jumlahTitik) ? +$jumlahTitik : $jumlahTitik,
             ];
+        } else if ($metode === 'parameter_khusus' || $metode === 'harga_parameter') {
+            if (empty($kodePromo) || empty($namaDiskon)) {
+                return response()->json([
+                    'message' => 'Kode promo dan nama promo tidak boleh kosong'
+                ], 422);
+            }
+
+            $rawKonfigurasi = $request->input('konfigurasi');
+            if (is_string($rawKonfigurasi)) {
+                $rawKonfigurasi = json_decode($rawKonfigurasi, true) ?? [];
+            }
+            $parameterList = $request->input('parameters', $rawKonfigurasi['parameters'] ?? $rawKonfigurasi);
+            try {
+                $konfigurasi = $this->hargaParameterKonfigurasi($parameterList);
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
         } else {
             return response()->json([
                 'message' => 'Metode promo belum didukung'
@@ -392,6 +453,24 @@ class PromoPengujianController extends Controller {
                 'parameter_ids' => $parameterIds,
                 'jumlah_titik'  => is_numeric($jumlahTitik) ? +$jumlahTitik : $jumlahTitik,
             ];
+        } else if ($metode === 'parameter_khusus' || $metode === 'harga_parameter') {
+            if (empty($kodePromo) || empty($namaDiskon)) {
+                return response()->json([
+                    'message' => 'Kode promo dan nama promo tidak boleh kosong'
+                ], 422);
+            }
+
+            $rawKonfigurasi = $request->input('konfigurasi');
+            if (is_string($rawKonfigurasi)) {
+                $rawKonfigurasi = json_decode($rawKonfigurasi, true) ?? [];
+            }
+            $defaultList = is_array($konfigurasi) ? ($konfigurasi['parameters'] ?? $konfigurasi) : [];
+            $parameterList = $request->input('parameters', $rawKonfigurasi['parameters'] ?? $rawKonfigurasi ?: $defaultList);
+            try {
+                $konfigurasi = $this->hargaParameterKonfigurasi($parameterList);
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
         } else {
             return response()->json([
                 'message' => 'Metode promo belum didukung'
@@ -449,6 +528,29 @@ class PromoPengujianController extends Controller {
 
             $data->kategori_nama = $kategori ? $kategori->nama_kategori : null;
             $data->parameters_detail = $parameters;
+        }
+
+        if (in_array($data->metode, ['parameter_khusus', 'harga_parameter'], true) && is_array($data->konfigurasi)) {
+            $items = $data->konfigurasi['parameters'] ?? [];
+            $paramIds = array_values(array_filter(array_column($items, 'parameter_id')));
+            $kategoriIds = array_values(array_filter(array_column($items, 'kategori_id')));
+            $parameters = $paramIds ? Parameter::whereIn('id', $paramIds)->select('id', 'nama_lab', 'id_kategori', 'nama_kategori')->get()->keyBy('id') : collect();
+            $kategoris = $kategoriIds ? MasterKategori::whereIn('id', $kategoriIds)->select('id', 'nama_kategori')->get()->keyBy('id') : collect();
+
+            foreach ($items as &$item) {
+                $parameter = $parameters[$item['parameter_id'] ?? null] ?? null;
+                $kategori = $kategoris[$item['kategori_id'] ?? null] ?? null;
+                if ($parameter && empty($item['nama_parameter'])) {
+                    $item['nama_parameter'] = $parameter->nama_lab;
+                }
+                if ($kategori && empty($item['kategori_nama'])) {
+                    $item['kategori_nama'] = $kategori->nama_kategori;
+                }
+            }
+            unset($item);
+
+            $data->konfigurasi['parameters'] = $items;
+            $data->parameters_detail = $items;
         }
 
         return response()->json([
@@ -513,12 +615,19 @@ class PromoPengujianController extends Controller {
     public function getParameter(Request $request)
     {
         try {
-            $query = Parameter::with('hargaParameter')
-                ->whereHas('hargaParameter')
+            $kategoriId = $request->input('id_kategori');
+            $hargaScope = function ($q) use ($kategoriId) {
+                if ($kategoriId !== null && $kategoriId !== '') {
+                    $q->where('id_kategori', $kategoriId);
+                }
+            };
+
+            $query = Parameter::with(['hargaParameter' => $hargaScope])
+                ->whereHas('hargaParameter', $hargaScope)
                 ->where('is_active', true);
 
-            if ($request->filled('id_kategori')) {
-                $query->where('id_kategori', $request->id_kategori);
+            if ($kategoriId !== null && $kategoriId !== '') {
+                $query->where('id_kategori', $kategoriId);
             }
 
             $data = $query->get();
@@ -608,6 +717,13 @@ class PromoPengujianController extends Controller {
         if ($status === 'aktif' && in_array($promo->metode, ['paket_pengujian', 'pengujian_free_pengujian'], true)) {
             try {
                 $normalized = $this->paketKonfigurasi($promo->konfigurasi, $promo->metode);
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        }
+        if ($status === 'aktif' && in_array($promo->metode, ['parameter_khusus', 'harga_parameter'], true)) {
+            try {
+                $normalized = $this->hargaParameterKonfigurasi($promo->konfigurasi);
             } catch (\InvalidArgumentException $e) {
                 return response()->json(['message' => $e->getMessage()], 422);
             }

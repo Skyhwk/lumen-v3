@@ -451,7 +451,7 @@ class RequestQuotationController extends Controller
                 \App\Services\QuotationPromo::validateRows($payload->_promo, $rows);
                 if ($payload->_promo) {
                     foreach ($rows as $row) {
-                        \App\Services\QuotationPromo::parameterPrices($row, $payload->informasi_pelanggan->tgl_penawaran);
+                        \App\Services\QuotationPromo::parameterPrices($row, $payload->informasi_pelanggan->tgl_penawaran, $payload->_promo);
                     }
                 }
             }

@@ -8,7 +8,7 @@ class QuotationPromoPresentation
     {
         if (empty($source->promo_id)) return [$source, $details];
         $promo = $promo ?? \Illuminate\Support\Facades\DB::table('promo_pengujian')->where('id', $source->promo_id)->first();
-        if (!$promo || $promo->metode === 'labeling') return [$source, $details];
+        if (!$promo || in_array($promo->metode, ['labeling', 'parameter_khusus', 'harga_parameter'], true)) return [$source, $details];
         $header = clone $source;
         $views = [];
         $headerRows = [];
