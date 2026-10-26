@@ -86,14 +86,14 @@ class MonitoringParameterController extends Controller
             ], 422);
         }
 
-        $rows = $this->monitoringOrderScanQuery($kategori, $parameter)
-            ->whereYear('ssa.created_at', $tahun)
-            ->whereMonth('ssa.created_at', $bulan)
+        $rows = $this->monitoringOrderFtcQuery($kategori, $parameter)
+            ->whereYear('ftc.ftc_laboratory', $tahun)
+            ->whereMonth('ftc.ftc_laboratory', $bulan)
             ->select(
-                DB::raw('DATE(ssa.created_at) as tanggal_scan'),
+                DB::raw('DATE(ftc.ftc_laboratory) as tanggal_scan'),
                 DB::raw('COUNT(DISTINCT od.no_sampel) as total_analisa')
             )
-            ->groupBy(DB::raw('DATE(ssa.created_at)'))
+            ->groupBy(DB::raw('DATE(ftc.ftc_laboratory)'))
             ->orderBy('tanggal_scan')
             ->get();
 
@@ -163,11 +163,11 @@ class MonitoringParameterController extends Controller
             ], 422);
         }
 
-        $rows = $this->monitoringOrderScanQuery($kategori, $parameter)
-            ->whereDate('ssa.created_at', $tanggal)
+        $rows = $this->monitoringOrderFtcQuery($kategori, $parameter)
+            ->whereDate('ftc.ftc_laboratory', $tanggal)
             ->select(
                 'od.no_sampel',
-                DB::raw('MAX(ssa.created_at) as waktu_scan')
+                DB::raw('MAX(ftc.ftc_laboratory) as waktu_scan')
             )
             ->groupBy('od.no_sampel')
             ->orderByDesc('waktu_scan')
@@ -180,14 +180,14 @@ class MonitoringParameterController extends Controller
         ]);
     }
 
-    private function monitoringOrderScanQuery(string $kategori, string $parameter)
+    private function monitoringOrderFtcQuery(string $kategori, string $parameter)
     {
         $parameterNeedle = '%"' . str_replace(['%', '_'], ['\%', '\_'], $parameter) . '"%';
 
         return DB::table('order_detail as od')
-            ->join('scan_sampel_analis as ssa', function ($join) {
-                $join->on('od.no_sampel', '=', 'ssa.no_sampel')
-                    ->where('ssa.is_active', 1);
+            ->join('t_ftc as ftc', function ($join) {
+                $join->on('od.no_sampel', '=', 'ftc.no_sample')
+                    ->whereNotNull('ftc.ftc_laboratory');
             })
             ->where('od.is_active', 1)
             ->where('od.kategori_2', $kategori)

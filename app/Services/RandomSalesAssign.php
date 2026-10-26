@@ -228,27 +228,34 @@ class RandomSalesAssign
             $AssignToSalesExecutive = collect($AssignToSalesExecutive);
             $bankDataToAssign = collect([]);
             // Check Bank Data
-            $bankData = MasterPelanggan::where('is_active', true)
-                ->whereNull('sales_id')
-                ->whereNull('sales_penanggung_jawab')
-                ->count();
+            // $bankData = MasterPelanggan::where('is_active', true)
+            //     ->whereNull('sales_id')
+            //     ->whereNull('sales_penanggung_jawab')
+            //     ->count();
 
-            if ($bankData < 5000) {
-                $remainingSlotBankData = 5000 - $bankData;
-                $tirtipercen = floor($allDataNeedAssign->count() * 0.3);
-                $assignToBankData = 0;
-                if ($tirtipercen > $remainingSlotBankData) {
-                    $assignToBankData = $remainingSlotBankData;
-                } else {
-                    $assignToBankData = $tirtipercen;
-                }
-                // dump(count($allDataNeedAssign));
+            // if ($bankData < 5000) {
+            //     $remainingSlotBankData = 5000 - $bankData;
+            //     $tirtipercen = floor($allDataNeedAssign->count() * 0.3);
+            //     $assignToBankData = 0;
+            //     if ($tirtipercen > $remainingSlotBankData) {
+            //         $assignToBankData = $remainingSlotBankData;
+            //     } else {
+            //         $assignToBankData = $tirtipercen;
+            //     }
+            //     // dump(count($allDataNeedAssign));
 
-                $bankDataToAssign = $allDataNeedAssign->take($assignToBankData);
-                $allDataNeedAssign = $allDataNeedAssign->slice($assignToBankData)->values();
+            //     $bankDataToAssign = $allDataNeedAssign->take($assignToBankData);
+            //     $allDataNeedAssign = $allDataNeedAssign->slice($assignToBankData)->values();
 
-                // dd(count($bankDataToAssign), count($allDataNeedAssign));
-            }
+            //     // dd(count($bankDataToAssign), count($allDataNeedAssign));
+            // }
+
+            // Sementara: semua kandidat (sales baru + sales executive) masuk bank data
+            $bankDataToAssign = $allDataNeedAssign
+                ->merge($AssignToSalesExecutive)
+                ->values();
+            $allDataNeedAssign = collect([]);
+            $AssignToSalesExecutive = collect([]);
 
             Log::channel('reassign_customer')->info("Finish Progress sorting All data Pelanggan \n | Assign To New Sales " . count($AssignToSalesNewByCheckingAll) . "\n | Not Re-Assign To Sales New " . count($NotReAssign) . "\n", [
                 'timestamp' => Carbon::now()->toDateTimeString(),
@@ -282,8 +289,8 @@ class RandomSalesAssign
                 $allDataNeedAssign
             ) {
                 self::assignToBankData(collect($bankDataToAssign) ?? []);
-                self::assignToSalesExecutive($AssignToSalesExecutive);
-                self::assignToNewSales($allDataNeedAssign);
+                // self::assignToSalesExecutive($AssignToSalesExecutive);
+                // self::assignToNewSales($allDataNeedAssign);
             });
             Log::channel('reassign_customer')->info("=== FINISH REASSIGN === ");
 
