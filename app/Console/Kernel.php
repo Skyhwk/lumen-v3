@@ -60,6 +60,8 @@ class Kernel extends ConsoleKernel
         Commands\SendInternalAssessmentNalarLogikaPdfCommand::class,
         Commands\RejectOverdueAssessment::class,
         Commands\RollbackOverdueAssessment::class,
+        Commands\RollbackDirectorManagementDecision::class,
+        Commands\RollbackDirectorSalaryDecision::class,
         Commands\ApplyScheduledEmployeeAdjustments::class,
         Commands\CustomerServiceAutoCloseCommand::class,
         Commands\CustomerServiceAutoArchiveCommand::class,

@@ -7,14 +7,60 @@ use App\Services\RecruitmentPictureService;
 
 class GenerateMessageAtsEmail
 {
-    private static function portalBaseUrl(): string
+    /** Portal rekrutmen (PORTALV4): salary-decision, candidate-offering, assessment, dll. */
+    private static function recruitmentCandidatePortalBaseUrl(): string
+    {
+        $portal = rtrim((string) env('PORTALV4', 'https://portal.intilab.com'), '/');
+        $absolute = self::normalizeAbsoluteEmailBaseUrl($portal);
+
+        return $absolute !== '' ? $absolute : 'https://portal.intilab.com';
+    }
+
+    /**
+     * Apps-Approval untuk email persetujuan kandidat (approve/reject/keep) ke Ibu Direktur.
+     * Bukan untuk salary-decision (tetap portal).
+     */
+    private static function directorApprovalEmailBaseUrl(): string
     {
         $approval = rtrim((string) config('approval_app.public_url', ''), '/');
         if ($approval !== '') {
-            return $approval;
+            $absolute = self::normalizeAbsoluteEmailBaseUrl($approval);
+
+            return $absolute !== '' ? $absolute : self::recruitmentCandidatePortalBaseUrl();
         }
 
-        return rtrim((string) env('PORTALV4', ''), '/');
+        return self::recruitmentCandidatePortalBaseUrl();
+    }
+
+    /** Hindari href relatif (mis. ../../apps-approval) di klien email. */
+    private static function normalizeAbsoluteEmailBaseUrl(string $base): string
+    {
+        $base = rtrim(trim($base), '/');
+        if ($base === '') {
+            return '';
+        }
+        if (preg_match('#^https?://#i', $base)) {
+            return $base;
+        }
+
+        $fallback = rtrim((string) env('PORTALV4', 'https://portal.intilab.com'), '/');
+        $parts = parse_url(preg_match('#^https?://#i', $fallback) ? $fallback : 'https://portal.intilab.com');
+        $origin = ($parts['scheme'] ?? 'https') . '://' . ($parts['host'] ?? 'portal.intilab.com');
+        if (!empty($parts['port'])) {
+            $origin .= ':' . $parts['port'];
+        }
+
+        if (str_starts_with($base, '/')) {
+            return $origin . $base;
+        }
+
+        if (preg_match('#(^|/)apps-approval/?$#', $base)) {
+            return $origin . '/apps-approval';
+        }
+
+        $stripped = ltrim(preg_replace('#(\.\./)+#', '', $base), './');
+
+        return $origin . '/' . $stripped;
     }
 
     /** Label ke kandidat: {grade_master_karyawan} - {divisi_alias}. */
@@ -97,7 +143,7 @@ class GenerateMessageAtsEmail
 
     private static function directorDecisionButtons($recruitment): object
     {
-        $portalUrl = self::portalBaseUrl();
+        $portalUrl = self::directorApprovalEmailBaseUrl();
         $encodedToken = $recruitment->token_approval;
 
         return (object) [
@@ -109,7 +155,7 @@ class GenerateMessageAtsEmail
 
     public static function buildCandidateOfferingButtons($recruitment, $token = null): object
     {
-        $portalUrl = self::portalBaseUrl();
+        $portalUrl = self::recruitmentCandidatePortalBaseUrl();
         $encodedToken = $token ?? $recruitment->token;
         $canNegotiate = !CandidateOfferingDecisionService::hasNegotiatedOnce($recruitment);
 
@@ -709,13 +755,13 @@ class GenerateMessageAtsEmail
 
     public static function buildSalaryDecisionButtons($recruitment, $token = null): object
     {
-        $portalUrl = self::portalBaseUrl();
-        $encodedToken = $token ?? $recruitment->token_approval ?? '';
+        $portalUrl = self::recruitmentCandidatePortalBaseUrl();
+        $encodedToken = rawurlencode((string) ($token ?? $recruitment->token_approval ?? ''));
 
-        // Approval (Salary) Direktur: hanya Approve & Reject (negosiasi hanya di offering kandidat).
+        // Persetujuan penawaran gaji Direktur — halaman di PORTALV4, bukan Apps-Approval.
         return (object) [
-            'approve'   => $portalUrl ? "{$portalUrl}/public/recruitment/salary-decision/{$encodedToken}?decision=approve" : '',
-            'reject'    => $portalUrl ? "{$portalUrl}/public/recruitment/salary-decision/{$encodedToken}?decision=reject" : '',
+            'approve'   => $portalUrl && $encodedToken !== '' ? "{$portalUrl}/public/recruitment/salary-decision/{$encodedToken}?decision=approve" : '',
+            'reject'    => $portalUrl && $encodedToken !== '' ? "{$portalUrl}/public/recruitment/salary-decision/{$encodedToken}?decision=reject" : '',
             'negotiate' => '',
         ];
     }
