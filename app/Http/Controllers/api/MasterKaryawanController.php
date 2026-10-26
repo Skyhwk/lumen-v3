@@ -29,6 +29,15 @@ use App\Helpers\ShioElemenHelper;
 
 class MasterKaryawanController extends Controller
 {
+    /** Kolom filter select2: cocokkan persis, bukan LIKE (hindari Male ikut match Female). */
+    private const KARYAWAN_EXACT_SEARCH_COLUMNS = [
+        'department',
+        'jenis_kelamin',
+        'status_pernikahan',
+        'status_karyawan',
+        'grade',
+    ];
+
     public function index(Request $request)
     {
         $data = MasterKaryawan::with([
@@ -166,6 +175,11 @@ class MasterKaryawanController extends Controller
                     })
                     ->all();
             })
+            ->filterColumn('department', $this->exactColumnFilter('department'))
+            ->filterColumn('jenis_kelamin', $this->exactColumnFilter('jenis_kelamin'))
+            ->filterColumn('status_pernikahan', $this->exactColumnFilter('status_pernikahan'))
+            ->filterColumn('status_karyawan', $this->exactColumnFilter('status_karyawan'))
+            ->filterColumn('grade', $this->exactColumnFilter('grade'))
             ->rawColumns(['personal', 'contact', 'employee', 'access'])
             ->make(true);
     }
@@ -863,7 +877,28 @@ class MasterKaryawanController extends Controller
                 continue;
             }
 
-            $query->where($column, 'like', '%' . addcslashes($value, '%_\\') . '%');
+            $this->applyKaryawanColumnFilter($query, $column, $value);
         }
+    }
+
+    private function applyKaryawanColumnFilter($query, string $column, string $value): void
+    {
+        if (in_array($column, self::KARYAWAN_EXACT_SEARCH_COLUMNS, true)) {
+            $query->where($column, $value);
+            return;
+        }
+
+        $query->where($column, 'like', '%' . addcslashes($value, '%_\\') . '%');
+    }
+
+    private function exactColumnFilter(string $column): \Closure
+    {
+        return function ($query, $keyword) use ($column) {
+            $keyword = trim((string) $keyword);
+            if ($keyword === '') {
+                return;
+            }
+            $query->where($column, $keyword);
+        };
     }
 }
