@@ -78,9 +78,41 @@ class QuotationPromoTest extends TestCase
         $this->assertEquals(450000, QuotationPromo::rowPrice($promo, $this->row(5), 150000, [100000, 50000], $used)[1]);
     }
 
-    public function testManualDiscountPrecedesPromoForEachBasis()
+    public function testPromoReducesOriginalBasesBeforeOtherDiscounts()
     {
-        // Analysis 1m - manual 10% = 900k; transport 200k; perdiem 100k; preparation 50k.
+        foreach ([
+            'analisa' => ['air' => 800000, 'transport' => 200000, 'perdiem' => 100000, 'discount' => 200000],
+            'transport' => ['air' => 1000000, 'transport' => 160000, 'perdiem' => 100000, 'discount' => 40000],
+            'perdiem' => ['air' => 1000000, 'transport' => 200000, 'perdiem' => 80000, 'discount' => 20000],
+            'global' => ['air' => 800000, 'transport' => 160000, 'perdiem' => 80000, 'discount' => 260000],
+        ] as $basis => $expected) {
+            $promo = (object) ['metode' => 'persentase', 'kode_promo' => 'TEST', 'nama_diskon' => 'Test', 'konfigurasi' => ['dasar_diskon' => $basis, 'persentase' => 20]];
+            $model = new stdClass();
+            $air = 1000000; $udara = 0; $emisi = 0; $padatan = 0; $swab = 0; $tanah = 0; $pangan = 0;
+            $transport = 200000; $perdiem = 100000; $jam = 0; $discount = 0;
+            QuotationPromo::reduceQuoteBases($promo, $model, $air, $udara, $emisi, $padatan, $swab, $tanah, $pangan, $transport, $perdiem, $jam, null, $discount);
+            $this->assertEquals($expected['air'], $air, $basis);
+            $this->assertEquals($expected['transport'], $transport, $basis);
+            $this->assertEquals($expected['perdiem'], $perdiem, $basis);
+            $this->assertEquals($expected['discount'], $discount, $basis);
+            $this->assertEquals($expected['discount'], $model->total_discount_promo, $basis);
+        }
+    }
+
+    public function testOtherDiscountUsesPromoReducedRemainder()
+    {
+        $promo = (object) ['metode' => 'persentase', 'kode_promo' => 'TEST', 'nama_diskon' => 'Test', 'konfigurasi' => ['dasar_diskon' => 'analisa', 'persentase' => 20]];
+        $model = new stdClass();
+        $air = 1000000; $udara = 0; $emisi = 0; $padatan = 0; $swab = 0; $tanah = 0; $pangan = 0;
+        $transport = 0; $perdiem = 0; $jam = 0; $discount = 0;
+        QuotationPromo::reduceQuoteBases($promo, $model, $air, $udara, $emisi, $padatan, $swab, $tanah, $pangan, $transport, $perdiem, $jam, null, $discount);
+        $manual = round($air * 0.1, 2);
+        $this->assertEquals(80000, $manual);
+        $this->assertEquals(280000, $discount + $manual);
+    }
+
+    public function testPercentageAppliesToProvidedDpp()
+    {
         foreach (['analisa' => 180000, 'transport' => 40000, 'perdiem' => 20000, 'global' => 240000] as $basis => $expected) {
             $promo = (object) ['metode' => 'persentase', 'kode_promo' => 'TEST', 'nama_diskon' => 'Test', 'konfigurasi' => ['dasar_diskon' => $basis, 'persentase' => 20]];
             $model = new stdClass();

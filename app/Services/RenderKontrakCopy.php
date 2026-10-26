@@ -610,6 +610,7 @@ class RenderKontrakCopy
                             <td style="text-align:right;padding:5px;">' . self::rupiah($data->grand_total) . '</td>
                         </tr> '
             );
+            QuotationPromoPresentation::contractDiscountRow($pdf, $data);
             if ($data->total_discount_air > 0) {
                 $pdf->WriteHTML(
                     ' <tr>
@@ -743,7 +744,6 @@ class RenderKontrakCopy
                     </tr> '
                 );
             }
-            QuotationPromoPresentation::contractDiscountRow($pdf, $data);
             if ($data->total_dpp != $data->grand_total) {
                 $pdf->WriteHTML(
                     ' <tr>
@@ -1383,6 +1383,7 @@ class RenderKontrakCopy
                                 <td style="text-align:right;padding:5px;" width="39%">' . self::rupiah($v->grand_total) . '</td>
                             </tr> '
                 );
+                QuotationPromoPresentation::contractDiscountRow($pdf, $v);
                 if (
                     $v->discount_air != null &&
                     $v->total_discount_air != "0.00"
@@ -1542,7 +1543,6 @@ class RenderKontrakCopy
                     }
                 }
 
-                QuotationPromoPresentation::contractDiscountRow($pdf, $v);
                 if ($v->total_dpp != $v->grand_total) {
                     $pdf->WriteHTML(
                         ' <tr>
@@ -2106,6 +2106,7 @@ class RenderKontrakCopy
                 '<td style="font-size: 8px; text-align:right; padding: 5px;"><b>' . self::rupiah($total_harga_pengujian) . "</b></td></tr>"
             );
 
+            QuotationPromoPresentation::contractDiscountRow($pdf, $data, $detail);
             // DISCOUNT AIR
             if ($data->total_discount_air > 0) {
                 $pdf->WriteHTML(
@@ -2406,7 +2407,6 @@ class RenderKontrakCopy
             }
 
             // TOTAL HARGA SETELAH DISCOUNT
-            QuotationPromoPresentation::contractDiscountRow($pdf, $data, $detail);
             if ($data->total_dpp != $data->grand_total) {
                 $pdf->WriteHTML(
                     '<tr><td style="text-align:center;font-size: 8px;"><b>' . strtoupper(__('QTC.total.price_after_discount')) . '</b></td>'

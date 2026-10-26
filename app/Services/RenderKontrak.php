@@ -624,6 +624,14 @@ class RenderKontrak
                             <td style="text-align:right;padding:5px;">' . self::rupiah($data->grand_total) . '</td>
                         </tr> '
             );
+            if ($data->total_discount_promo > 0) {
+                $pdf->WriteHTML(
+                    ' <tr>
+                        <td style="text-align:center;padding:5px;">' . QuotationPromoPresentation::discountLabel($data) . '</td>
+                        <td style="text-align:right;padding:5px;">' . self::rupiah($data->total_discount_promo) . '</td>
+                    </tr> '
+                );
+            }
             if ($data->total_discount_air > 0) {
                 $pdf->WriteHTML(
                     ' <tr>
@@ -758,15 +766,6 @@ class RenderKontrak
                 );
             }
 
-            if ($data->total_discount_promo > 0) {
-                $disc_promo = json_decode($data->discount_promo);
-                $pdf->WriteHTML(
-                    ' <tr>
-                        <td style="text-align:center;padding:5px;">' . QuotationPromoPresentation::discountLabel($data) . '</td>
-                        <td style="text-align:right;padding:5px;">' . self::rupiah($data->total_discount_promo) . '</td>
-                    </tr> '
-                );
-            }
             if ($data->total_dpp != $data->grand_total) {
                 $pdf->WriteHTML(
                     ' <tr>
@@ -1405,6 +1404,14 @@ class RenderKontrak
                                 <td style="text-align:right;padding:5px;" width="39%">' . self::rupiah($v->grand_total) . '</td>
                             </tr> '
                 );
+                if ($v->total_discount_promo > 0) {
+                    $pdf->WriteHTML(
+                        ' <tr>
+                            <td style="text-align:center;padding:5px;">' . QuotationPromoPresentation::discountLabel($v) . '</td>
+                            <td style="text-align:right;padding:5px;">' . self::rupiah($v->total_discount_promo) . '</td>
+                        </tr> '
+                    );
+                }
                 if (
                     $v->discount_air != null &&
                     $v->total_discount_air != "0.00"
@@ -1562,16 +1569,6 @@ class RenderKontrak
                             );
                         }
                     }
-                }
-
-                if ($v->total_discount_promo > 0) {
-                    $disc_promo = json_decode($v->discount_promo);
-                    $pdf->WriteHTML(
-                        ' <tr>
-                            <td style="text-align:center;padding:5px;">' . QuotationPromoPresentation::discountLabel($v) . '</td>
-                            <td style="text-align:right;padding:5px;">' . self::rupiah($v->total_discount_promo) . '</td>
-                        </tr> '
-                    );
                 }
 
                 if ($v->total_dpp != $v->grand_total) {
@@ -2097,6 +2094,25 @@ class RenderKontrak
                 '<td style="font-size: 8px; text-align:right; padding: 5px;"><b>' . self::rupiah($total_harga_pengujian) . "</b></td></tr>"
             );
 
+            // PROMO DISCOUNT
+            if ($data->total_discount_promo > 0) {
+                $pdf->WriteHTML(
+                    '<tr>
+                    <td style="text-align:center;font-size: 8px;">' . QuotationPromoPresentation::discountLabel($data) . '</td>'
+                );
+                $total_discount_promo = 0;
+                foreach ($detail as $key => $value) {
+                    $pdf->WriteHTML(
+                        '<td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($value->total_discount_promo) . "</td>"
+                    );
+                    $total_discount_promo += $value->total_discount_promo;
+
+                }
+                $pdf->WriteHTML(
+                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($total_discount_promo) . "</td></tr>"
+                );
+            }
+
             // DISCOUNT AIR
             if ($data->total_discount_air > 0) {
                 $pdf->WriteHTML(
@@ -2393,26 +2409,6 @@ class RenderKontrak
                 }
                 $pdf->WriteHTML(
                     ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($total_custom_discount) . "</td></tr>"
-                );
-            }
-
-            // PROMO DISCOUNT
-            if ($data->total_discount_promo > 0) {
-                $disc_promo = json_decode($data->discount_promo);
-                $pdf->WriteHTML(
-                    '<tr>
-                    <td style="text-align:center;font-size: 8px;">' . QuotationPromoPresentation::discountLabel($data) . '</td>'
-                );
-                $total_discount_promo = 0;
-                foreach ($detail as $key => $value) {
-                    $pdf->WriteHTML(
-                        '<td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($value->total_discount_promo) . "</td>"
-                    );
-                    $total_discount_promo += $value->total_discount_promo;
-
-                }
-                $pdf->WriteHTML(
-                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($total_discount_promo) . "</td></tr>"
                 );
             }
 

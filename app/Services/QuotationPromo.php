@@ -131,6 +131,89 @@ class QuotationPromo
         $header->save();
     }
 
+    public static function reduceQuoteBases($promo, $model, &$harga_air, &$harga_udara, &$harga_emisi, &$harga_padatan, &$harga_swab_test, &$harga_tanah, &$harga_pangan, &$transport, &$perdiem, &$jam, $outside, &$discountTotal)
+    {
+        $bases = [
+            'air' => (float) $harga_air,
+            'udara' => (float) $harga_udara,
+            'emisi' => (float) $harga_emisi,
+            'padatan' => (float) $harga_padatan,
+            'swab_test' => (float) $harga_swab_test,
+            'tanah' => (float) $harga_tanah,
+            'pangan' => (float) $harga_pangan,
+            'transportasi' => (float) $transport,
+            'perdiem' => (float) $perdiem,
+            'perdiem24jam' => (float) $jam,
+        ];
+        self::takeBeforeDiscounts($promo, $model, $bases, $outside, $discountTotal);
+        $harga_air = $bases['air'];
+        $harga_udara = $bases['udara'];
+        $harga_emisi = $bases['emisi'];
+        $harga_padatan = $bases['padatan'];
+        $harga_swab_test = $bases['swab_test'];
+        $harga_tanah = $bases['tanah'];
+        $harga_pangan = $bases['pangan'];
+        $transport = $bases['transportasi'];
+        $perdiem = $bases['perdiem'];
+        $jam = $bases['perdiem24jam'];
+    }
+
+    public static function takeBeforeDiscounts($promo, $model, array &$bases, $outside, &$discountTotal)
+    {
+        if (!$promo) return;
+        $model->kode_promo = $promo->kode_promo;
+        if ($promo->metode !== 'persentase') return;
+        $rate = (float) ($promo->konfigurasi['persentase'] ?? 0);
+        $basis = $promo->konfigurasi['dasar_diskon'] ?? '';
+        if ($rate <= 0 || $rate > 100 || !in_array($basis, ['analisa', 'transport', 'perdiem', 'global'], true)) {
+            throw new \InvalidArgumentException('Konfigurasi persentase promo tidak valid.');
+        }
+        $analysisKeys = ['air', 'udara', 'emisi', 'padatan', 'swab_test', 'tanah', 'pangan'];
+        $analysis = 0;
+        foreach ($analysisKeys as $key) $analysis += (float) ($bases[$key] ?? 0);
+        $buckets = [
+            'analisa' => max(0, $analysis),
+            'transportasi' => (float) ($bases['transportasi'] ?? 0),
+            'perdiem' => (float) ($bases['perdiem'] ?? 0),
+            'perdiem24jam' => (float) ($bases['perdiem24jam'] ?? 0),
+        ];
+        $included = ['analisa' => ['analisa'], 'transport' => ['transportasi'], 'perdiem' => ['perdiem', 'perdiem24jam'], 'global' => array_keys($buckets)];
+        $discount = 0;
+        foreach ($included[$basis] as $key) {
+            $amount = round(max(0, $buckets[$key]) * $rate / 100, 2);
+            if ($amount <= 0) continue;
+            if ($key === 'analisa') {
+                self::scaleBases($bases, $analysisKeys, $amount);
+            } else {
+                $bases[$key] = round(max(0, (float) ($bases[$key] ?? 0) - $amount), 2);
+            }
+            $discount += $amount;
+        }
+        $discountTotal += $discount;
+        $model->total_discount_promo = $discount;
+        $model->discount_promo = json_encode(['deskripsi_promo_discount' => $promo->nama_diskon, 'jumlah_promo_discount' => $rate, 'dasar_diskon' => $basis]);
+    }
+
+    private static function scaleBases(array &$bases, array $keys, $amount)
+    {
+        $total = 0;
+        foreach ($keys as $key) $total += (float) ($bases[$key] ?? 0);
+        if ($total <= 0 || $amount <= 0) return;
+        $amount = min($amount, $total);
+        $left = $amount;
+        $last = $keys[array_key_last($keys)];
+        foreach ($keys as $key) {
+            $current = (float) ($bases[$key] ?? 0);
+            if ($key === $last) {
+                $bases[$key] = round(max(0, $current - $left), 2);
+                break;
+            }
+            $share = round($current / $total * $amount, 2);
+            $bases[$key] = round(max(0, $current - $share), 2);
+            $left = round($left - $share, 2);
+        }
+    }
+
     public static function percentage($promo, $model, &$dpp, &$outsideNet, &$discountTotal, array $costs, $outside)
     {
         if (!$promo) return;
