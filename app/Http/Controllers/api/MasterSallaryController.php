@@ -140,6 +140,10 @@ class MasterSallaryController extends Controller
                 $masterSallary->karyawan = $oldMasterSallary->karyawan;
                 $masterSallary->nik_karyawan = $oldMasterSallary->nik_karyawan;
                 $masterSallary->id_karyawan = $oldMasterSallary->id_karyawan;
+                $masterSallary->jadwal_pembayaran_thr = $oldMasterSallary->jadwal_pembayaran_thr;
+                $masterSallary->metode_pembayaran_gaji = $oldMasterSallary->metode_pembayaran_gaji;
+                $masterSallary->jumlah_hari_kerja = $oldMasterSallary->jumlah_hari_kerja;
+                $masterSallary->jadwal_penggajian = $oldMasterSallary->jadwal_penggajian;
 
                 $message = 'Master Sallary data updated successfully';
             } else {

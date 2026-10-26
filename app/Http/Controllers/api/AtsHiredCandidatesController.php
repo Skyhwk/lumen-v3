@@ -13,15 +13,18 @@ use App\Models\PendidikanKaryawan;
 use App\Models\PengalamanKerjaKaryawan;
 use App\Models\SertifikatKaryawan;
 use App\Models\User;
+use App\Services\GenerateDokumenKaryawanService;
 use App\Services\KaryawanArsipDokumenService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
 use App\Services\RecruitmentStatusService;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Yajra\DataTables\Facades\DataTables;
 use App\Http\Controllers\api\Concerns\OrdersAtsDataTableColumns;
@@ -367,12 +370,16 @@ class AtsHiredCandidatesController extends Controller
         if ($tipePengembalian !== null && !in_array($tipePengembalian, ['setelah_potongan', 'setelah_kontrak'], true)) {
             return response()->json(['status' => false, 'message' => 'Tipe pengembalian tidak valid.'], 422);
         }
+        $payrollSettingsError = $this->validatePayrollSettings($request);
+        if ($payrollSettingsError !== null) {
+            return response()->json(['status' => false, 'message' => $payrollSettingsError], 422);
+        }
         if (!$request->id) {
             return response()->json(['status' => false, 'message' => 'Data kandidat wajib dipilih.'], 422);
         }
 
         try {
-            return DB::transaction(function () use ($request) {
+            $result = DB::transaction(function () use ($request) {
                 $recruitment = $this->findRecruitmentForMigration($request->input('id'), true);
                 if (!$recruitment) {
                     return response()->json(['status' => false, 'message' => 'Data kandidat tidak ditemukan.'], 404);
@@ -412,14 +419,38 @@ class AtsHiredCandidatesController extends Controller
                     return response()->json(['status' => false, 'message' => 'Username sudah digunakan akun sistem lain.'], 400);
                 }
 
-                $result = $this->performEmployeeMigrationFromForm($recruitment, $request);
-
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Data kandidat berhasil dimigrasikan ke Master Karyawan, payroll, arsip dokumen, dan akun sistem.',
-                    'data' => $result,
-                ]);
+                return $this->performEmployeeMigrationFromForm($recruitment, $request);
             });
+
+            if ($result instanceof JsonResponse) {
+                return $result;
+            }
+
+            $dokumenKaryawan = null;
+            $documentWarning = null;
+            try {
+                $dokumenKaryawan = app(GenerateDokumenKaryawanService::class)->generate(
+                    (int) $result['karyawan_id'],
+                    (int) $request->input('id')
+                );
+            } catch (\Throwable $documentError) {
+                $documentWarning = 'Migrasi berhasil, tetapi dokumen karyawan gagal dibuat.';
+                Log::error('Gagal membuat dokumen setelah migrasi karyawan', [
+                    'karyawan_id' => $result['karyawan_id'],
+                    'new_recruitment_id' => $request->input('id'),
+                    'message' => $documentError->getMessage(),
+                ]);
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => $documentWarning
+                    ?: 'Data kandidat berhasil dimigrasikan ke Master Karyawan, payroll, arsip dokumen, akun sistem, dan dokumen karyawan.',
+                'data' => array_merge($result, [
+                    'dokumen_karyawan' => $dokumenKaryawan,
+                    'dokumen_warning' => $documentWarning,
+                ]),
+            ]);
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
@@ -609,6 +640,7 @@ class AtsHiredCandidatesController extends Controller
             'tunjangan_kerja' => $tunjangan,
             'potongan_bpjs_kes' => $bpjsKes,
             'potongan_bpjs_tk' => $bpjsTk,
+            'sumber_potongan_bpjs_tk' => 'gaji_pokok',
             'pot_pph21' => $pph21,
             'pencadangan_upah' => $pencadangan,
             'no_bpjs_ks' => optional($profile)->no_bpjs_ks,
@@ -900,21 +932,29 @@ class AtsHiredCandidatesController extends Controller
         $noBpjsKs = data_get($request, 'payroll.no_bpjs_ks') ?: optional($profile)->no_bpjs_ks;
         $noBpjsTk = data_get($request, 'payroll.no_bpjs_tk') ?: optional($profile)->no_bpjs_tk;
 
+        $payrollSettings = $this->payrollSettingsPayload($request);
         $payrollCounts = [
             'master_sallary' => 0,
+            'rekening_karyawan' => 0,
             'bpjs_kesehatan' => 0,
             'bpjs_tk' => 0,
             'pph_21' => 0,
             'pencadangan_upah' => 0,
         ];
 
-        if ($gajiPokok > 0) {
-            $this->upsertPayroll('master_sallary', $karyawan->id, $nikKaryawan, $namaKaryawan, [
-                'gaji_pokok' => $gajiPokok,
-                'tunjangan_kerja' => $tunjangan,
-                'bulan_efektif' => $effectiveMonth,
-            ], $now);
-            $payrollCounts['master_sallary'] = 1;
+        $this->upsertPayroll('master_sallary', $karyawan->id, $nikKaryawan, $namaKaryawan, array_merge([
+            'gaji_pokok' => $gajiPokok,
+            'tunjangan_kerja' => $tunjangan,
+            'bulan_efektif' => $effectiveMonth,
+        ], $payrollSettings), $now);
+        $payrollCounts['master_sallary'] = 1;
+
+        if ($payrollSettings['metode_pembayaran_gaji'] === 'transfer') {
+            $rekening = $this->payrollRekeningPayload($request);
+            if ($rekening !== []) {
+                $this->upsertPayroll('rekening_karyawan', $karyawan->id, $nikKaryawan, $namaKaryawan, $rekening, $now);
+                $payrollCounts['rekening_karyawan'] = 1;
+            }
         }
 
         if ($bpjsKes > 0 || !empty($noBpjsKs)) {
@@ -936,6 +976,7 @@ class AtsHiredCandidatesController extends Controller
                 'no_bpjs_tk' => $noBpjsTk,
                 'potongan_karyawan' => 0.03,
                 'nominal_potongan_karyawan' => $bpjsTk,
+                'sumber_potongan' => data_get($request, 'payroll.sumber_potongan_bpjs_tk'),
                 'potongan_kantor' => 0.01,
                 'nominal_potongan_kantor' => $gajiPokok * 0.01,
                 'bulan_efektif' => $effectiveMonth,
@@ -1274,6 +1315,111 @@ class AtsHiredCandidatesController extends Controller
         } catch (\Exception $e) {
             return '';
         }
+    }
+
+    private function validatePayrollSettings(Request $request): ?string
+    {
+        $thr = trim((string) data_get($request, 'payroll.jadwal_pembayaran_thr', ''));
+        if ($thr === '') {
+            return 'Jadwal pembayaran THR wajib diisi.';
+        }
+        if (mb_strlen($thr) > 100) {
+            return 'Jadwal pembayaran THR maksimal 100 karakter.';
+        }
+
+        $metode = trim((string) data_get($request, 'payroll.metode_pembayaran_gaji', ''));
+        if (!in_array($metode, ['tunai', 'transfer'], true)) {
+            return 'Metode pembayaran gaji harus Tunai atau Transfer.';
+        }
+
+        $sumberPotonganBpjsTk = trim((string) data_get($request, 'payroll.sumber_potongan_bpjs_tk', ''));
+        if (!in_array($sumberPotonganBpjsTk, ['gaji_pokok', 'umr_kota', 'lainnya'], true)) {
+            return 'Sumber potongan BPJS Ketenagakerjaan harus Gaji Pokok, UMR Kota, atau Lainnya.';
+        }
+
+        $hariKerjaError = $this->validatePayrollInteger(
+            data_get($request, 'payroll.jumlah_hari_kerja'),
+            'Jumlah hari kerja per bulan',
+            1,
+            31
+        );
+        if ($hariKerjaError !== null) {
+            return $hariKerjaError;
+        }
+
+        $jadwalError = $this->validatePayrollInteger(
+            data_get($request, 'payroll.jadwal_penggajian'),
+            'Jadwal penggajian',
+            0,
+            99
+        );
+        if ($jadwalError !== null) {
+            return $jadwalError;
+        }
+
+        if ($metode === 'transfer') {
+            $limits = [
+                'nama_bank' => [255, 'Nama bank'],
+                'cabang_bank' => [150, 'Cabang bank'],
+                'nomor_rekening' => [40, 'Nomor rekening'],
+                'nama_pemilik_rekening' => [150, 'Nama pemilik rekening'],
+            ];
+            foreach ($limits as $field => $rule) {
+                $value = trim((string) data_get($request, 'payroll.' . $field, ''));
+                if (mb_strlen($value) > $rule[0]) {
+                    return $rule[1] . ' maksimal ' . $rule[0] . ' karakter.';
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function validatePayrollInteger($value, string $label, int $min, int $max): ?string
+    {
+        if ($value === null || trim((string) $value) === '') {
+            return $label . ' wajib diisi.';
+        }
+        if (!preg_match('/^\d+$/', trim((string) $value))) {
+            return $label . ' harus berupa angka.';
+        }
+
+        $number = (int) $value;
+        if ($number < $min || $number > $max) {
+            return $label . ' harus antara ' . $min . ' dan ' . $max . '.';
+        }
+
+        return null;
+    }
+
+    private function payrollSettingsPayload(Request $request): array
+    {
+        return [
+            'jadwal_pembayaran_thr' => trim((string) data_get($request, 'payroll.jadwal_pembayaran_thr')),
+            'metode_pembayaran_gaji' => trim((string) data_get($request, 'payroll.metode_pembayaran_gaji')),
+            'jumlah_hari_kerja' => (int) data_get($request, 'payroll.jumlah_hari_kerja'),
+            'jadwal_penggajian' => (int) data_get($request, 'payroll.jadwal_penggajian'),
+        ];
+    }
+
+    private function payrollRekeningPayload(Request $request): array
+    {
+        $rekening = [
+            'nama_bank' => $this->nullablePayrollText(data_get($request, 'payroll.nama_bank')),
+            'cabang_bank' => $this->nullablePayrollText(data_get($request, 'payroll.cabang_bank')),
+            'no_rekening' => $this->nullablePayrollText(data_get($request, 'payroll.nomor_rekening')),
+            'nama_pemilik_rekening' => $this->nullablePayrollText(data_get($request, 'payroll.nama_pemilik_rekening')),
+        ];
+
+        return array_filter($rekening, function ($value) {
+            return $value !== null;
+        });
+    }
+
+    private function nullablePayrollText($value): ?string
+    {
+        $text = trim((string) $value);
+        return $text === '' ? null : $text;
     }
 
     private function parseNumeric($value)
