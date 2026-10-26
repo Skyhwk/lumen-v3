@@ -48,7 +48,7 @@ class QuotationPromo
             $subtotal = 0;
             foreach ($selected as $source) {
                 $row = clone $source;
-                $prices = $priceResolver ? $priceResolver($row, $date) : self::parameterPrices($row, $date)[0];
+                $prices = $priceResolver ? $priceResolver($row, $date) : self::parameterPrices($row, $date, $promo)[0];
                 $unit = !empty($row->is_paket_analisa) ? (float) $row->harga_satuan : array_sum($prices);
                 $normal = !empty($row->is_paket_analisa) ? (float) $row->harga_total : null;
                 [$row->harga_satuan, $row->harga_total] = self::rowPrice($promo, $row, $unit, $prices, $used, $normal);
@@ -69,14 +69,21 @@ class QuotationPromo
         return [array_values($result), round($total, 2)];
     }
 
-    public static function parameterPrices($row, $date)
+    public static function parameterPrices($row, $date, $promo = null)
     {
+        $overrides = self::hargaParameterMap($promo);
         $prices = [];
         $volumes = [];
         foreach ($row->parameter as $parameter) {
+            $parameterId = explode(';', $parameter)[0];
             $price = \App\Models\HargaParameter::where('id_kategori', explode('-', $row->kategori_1)[0])
-                ->where('id_parameter', explode(';', $parameter)[0])->where('tanggal_berlaku', '<=', $date)
+                ->where('id_parameter', $parameterId)->where('tanggal_berlaku', '<=', $date)
                 ->where('is_active', 1)->orderBy('tanggal_berlaku', 'desc')->first();
+            if (array_key_exists((string) $parameterId, $overrides)) {
+                $prices[] = $overrides[(string) $parameterId];
+                $volumes[] = (float) ($price->volume ?? 0);
+                continue;
+            }
             if (!$price && empty($row->is_promo)) throw new \InvalidArgumentException('Harga parameter belum tersedia untuk tanggal penawaran. Periksa master harga.');
             $prices[] = (float) ($price->harga ?? 0);
             $volumes[] = (float) ($price->volume ?? 0);
@@ -175,10 +182,35 @@ class QuotationPromo
             if ((int) ($promo->konfigurasi['jumlah_titik'] ?? 0) < 1 || empty($promo->konfigurasi['parameter_ids']) || empty($promo->konfigurasi['kategori_id'])) {
                 throw new \InvalidArgumentException('Konfigurasi Free Parameter tidak valid.');
             }
+        } elseif (self::isParameterKhusus($promo)) {
+            if (!self::hargaParameterMap($promo)) {
+                throw new \InvalidArgumentException('Konfigurasi Parameter Khusus tidak valid.');
+            }
         } elseif (!in_array($promo->metode, ['paket_pengujian', 'pengujian_free_pengujian', 'labeling'], true)) {
             throw new \InvalidArgumentException('Jenis promo tidak didukung.');
         }
         return $promo;
+    }
+
+    public static function isParameterKhusus($promo)
+    {
+        return $promo && in_array($promo->metode ?? null, ['parameter_khusus', 'harga_parameter'], true);
+    }
+
+    public static function hargaParameterMap($promo)
+    {
+        if (!self::isParameterKhusus($promo)) return [];
+        $items = $promo->konfigurasi['parameters'] ?? $promo->konfigurasi ?? [];
+        if (!is_array($items)) return [];
+        $map = [];
+        foreach ($items as $item) {
+            if (!is_array($item) && !is_object($item)) continue;
+            $item = (array) $item;
+            $id = $item['parameter_id'] ?? $item['id'] ?? null;
+            if ($id === null || $id === '' || !isset($item['harga']) || !is_numeric($item['harga']) || $item['harga'] < 0) continue;
+            $map[(string) $id] = (float) $item['harga'];
+        }
+        return $map;
     }
 
     private static function signature($row)
@@ -242,6 +274,24 @@ class QuotationPromo
                 }
             }
             throw new \InvalidArgumentException('Konfigurasi paket promo tidak cocok.');
+        }
+        if (self::isParameterKhusus($promo) && empty($row->is_paket_analisa)) {
+            $overrides = self::hargaParameterMap($promo);
+            if ($overrides) {
+                $prices = $parameterPrices;
+                $changed = false;
+                foreach ((array) ($row->parameter ?? []) as $index => $parameter) {
+                    $parameterId = (string) explode(';', $parameter)[0];
+                    if (array_key_exists($parameterId, $overrides)) {
+                        $prices[$index] = $overrides[$parameterId];
+                        $changed = true;
+                    }
+                }
+                if ($changed) {
+                    $unit = array_sum($prices);
+                    return [$unit, round($unit * max(0, $quantity), 2)];
+                }
+            }
         }
         if ($promo->metode === 'free_parameter' && !$freeUsed) {
             $config = $promo->konfigurasi;

@@ -146,7 +146,7 @@ class CreateNonKontrakJob extends Job
                     }
 
                     if ($payload->_promo ?? null) {
-                        [$harga_db, $volume_db] = \App\Services\QuotationPromo::parameterPrices($item, $payload->informasi_pelanggan->tgl_penawaran);
+                        [$harga_db, $volume_db] = \App\Services\QuotationPromo::parameterPrices($item, $payload->informasi_pelanggan->tgl_penawaran, $payload->_promo ?? null);
                     }
                     $harga_pertitik = (object) [
                         'volume' => array_sum($volume_db),

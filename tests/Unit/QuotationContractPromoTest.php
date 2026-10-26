@@ -143,6 +143,7 @@ class QuotationContractPromoTest extends TestCase
     {
         $details = collect([]); $header = (object) ['promo_id' => 1];
         $this->assertSame([$header, $details], QuotationPromoPresentation::forContractPdf($header, $details, (object) ['metode' => 'labeling']));
+        $this->assertSame([$header, $details], QuotationPromoPresentation::forContractPdf($header, $details, (object) ['metode' => 'parameter_khusus']));
         $header->promo_id = null;
         $this->assertSame([$header, $details], QuotationPromoPresentation::forContractPdf($header, $details));
     }

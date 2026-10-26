@@ -331,7 +331,7 @@ class CreateKontrakJob extends Job
                     }
 
                     if ($payload->_promo ?? null) {
-                        [$harga_parameter, $volume_parameter] = \App\Services\QuotationPromo::parameterPrices($sampling, $payload->informasi_pelanggan->tgl_penawaran);
+                        [$harga_parameter, $volume_parameter] = \App\Services\QuotationPromo::parameterPrices($sampling, $payload->informasi_pelanggan->tgl_penawaran, $payload->_promo ?? null);
                     }
                     $vol_db = array_sum($volume_parameter);
                     $har_db = array_sum($harga_parameter);

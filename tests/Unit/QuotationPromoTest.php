@@ -133,6 +133,38 @@ class QuotationPromoTest extends TestCase
         }
     }
 
+    public function testHargaParameterOverridesListedPricesWithoutTitikQuota()
+    {
+        $promo = (object) ['metode' => 'parameter_khusus', 'kode_promo' => 'TEST', 'konfigurasi' => ['parameters' => [
+            ['parameter_id' => 1, 'harga' => 25000],
+            ['parameter_id' => 2, 'harga' => 10000],
+        ]]];
+        $used = false;
+        $this->assertEquals([35000, 70000], QuotationPromo::rowPrice($promo, $this->row(2), 150000, [100000, 50000], $used));
+        $this->assertEquals([35000, 175000], QuotationPromo::rowPrice($promo, $this->row(5), 150000, [100000, 50000], $used));
+        $this->assertFalse($used);
+    }
+
+    public function testHargaParameterOnlyOverridesListedParameters()
+    {
+        $promo = (object) ['metode' => 'parameter_khusus', 'konfigurasi' => ['parameters' => [
+            ['parameter_id' => 1, 'harga' => 20000],
+        ]]];
+        $used = false;
+        $this->assertEquals([70000, 210000], QuotationPromo::rowPrice($promo, $this->row(3), 150000, [100000, 50000], $used));
+    }
+
+    public function testHargaParameterDoesNotChangePaketAnalisa()
+    {
+        $promo = (object) ['metode' => 'parameter_khusus', 'konfigurasi' => ['parameters' => [
+            ['parameter_id' => 1, 'harga' => 1],
+        ]]];
+        $row = $this->row(3);
+        $row->is_paket_analisa = true;
+        $used = false;
+        $this->assertEquals([400000, 400000], QuotationPromo::rowPrice($promo, $row, 400000, [100000, 50000], $used, 400000));
+    }
+
     public function testPercentageDoesNotRepriceExistingAnalysisPackage()
     {
         $used = false;
