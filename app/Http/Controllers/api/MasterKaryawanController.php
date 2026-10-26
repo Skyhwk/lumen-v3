@@ -54,9 +54,7 @@ class MasterKaryawanController extends Controller
             'kontak_darurat' => function ($query) {
                 $query->where('is_active', true);
             },
-        ])->where('is_active', true);
-
-        $this->excludeHiddenKaryawanFromFrontend($data);
+        ])->where('is_active', true)->where('grade', '!=', 'DIRECTOR');
 
         if ($request->filled('id_cabang') && $request->id_cabang !== 'all') {
             $data->where('id_cabang', (int) $request->id_cabang);

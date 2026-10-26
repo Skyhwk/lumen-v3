@@ -21,7 +21,7 @@ class PengalamanKerjaKaryawanController extends Controller
 {
     public function index(Request $request)
     {
-        $data = MasterKaryawan::with(['pengalaman_kerja'])->where('is_active', true);
+        $data = MasterKaryawan::with(['pengalaman_kerja'])->where('is_active', true)->where('grade','!=','DIRECTOR');
         return Datatables::of($data)->make(true);
     }
 
