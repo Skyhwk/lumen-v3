@@ -16,6 +16,7 @@ use App\Models\CategorySample;
 use App\Models\SampelDiantar;
 use App\Models\Mdl;
 use App\Http\Controllers\Controller;
+use App\Services\WsFinalAirParameterService;
 use App\Models\DataLimbah;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -66,6 +67,27 @@ class WsFinalAirController extends Controller
 
 		$data = $data->get();
 
+		$noOrders = $data->pluck('no_order')->unique()->toArray();
+
+		if (!empty($noOrders)) {
+			$sampelDiantars = SampelDiantar::with('detail')
+				->whereIn('no_order', $noOrders)
+				->get();
+
+			$data->each(function ($item) use ($sampelDiantars) {
+				$query = $sampelDiantars->where('no_order', $item->no_order);
+
+				if (!empty($item->periode)) {
+					$query = $query->where('periode_kontrak', $item->periode);
+				}
+
+				$item->setRelation(
+					'sampelDiantar',
+					$query->first()
+				);
+			});
+		}
+
 		if ($request->has('uji_status')) {
 			$noSampel = $data->pluck('no_sampel')->toArray();
 			$models = [
@@ -74,7 +96,7 @@ class WsFinalAirController extends Controller
 				Titrimetri::class,
 				Subkontrak::class,
 			];
-	
+
 			$subQuery = collect($models)
 				->flatMap(function ($model) use ($noSampel) {
 					$instance = new $model;
@@ -86,74 +108,26 @@ class WsFinalAirController extends Controller
 					return $model::where('is_active', true)->whereIn('no_sampel', $noSampel)->get(['no_sampel', 'parameter']);
 				})
 				->groupBy('no_sampel')
-				->map(fn ($items) => $items->pluck('parameter')->implode(','));
-	
-			$parameterExcluded = [
-				'ph', 'suhu', 'suhu (na)', 'dhl', 'debit air', 'debit air (m3/ton)', 
-				'debit air (m3/hari)', 'debit air (l/orang/hari)', 'debit air (l/kg)', 
-				'debit air (l/l)', 'debit air (m3/l)', 'debit air (l/hari)', 
-				'debit air (m3/dtk)', 'debit air (l/dtk)', 'debit air (l/jam)'
-			];
-	
-			$data = $data->filter(function($item) use ($subQuery, $parameterExcluded, $request) {
-				$paramRaw = json_decode($item->parameter, true);
-				$paramAll = collect(is_array($paramRaw) ? $paramRaw : [])
-					->map(function ($p) {
-						$parts = explode(';', $p);
-						return isset($parts[1]) ? trim($parts[1]) : trim($p);
-					});
-				
-				$paramTested = collect();
-				if ($subQuery->has($item->no_sampel)) {
-					$paramTested = collect(explode(',', $subQuery[$item->no_sampel]))
-						->map(fn ($p) => trim($p));
-				}
-	
-				$belumDiuji = $paramAll
-					->diff($paramTested)
-					->reject(fn ($p) => in_array(strtolower($p), $parameterExcluded))
-					->values();
-	
-				$validTotalParams = $paramAll->reject(fn ($p) => in_array(strtolower($p), $parameterExcluded));
-				$totalCount = $validTotalParams->count();
-				$testedCount = $totalCount - $belumDiuji->count();
-				$item->progress = $testedCount . ' / ' . $totalCount;
-	
-				$isLengkap = $belumDiuji->isEmpty();
-	
+				->map(fn ($items) => $items->pluck('parameter')->filter()->values()->all());
+
+			$data = $data->filter(function ($item) use ($subQuery, $request) {
+				$paramAll = WsFinalAirParameterService::parseOrderParameters($item->parameter);
+				$labParams = $subQuery->get($item->no_sampel, []);
+				$parametersDiUji = WsFinalAirParameterService::buildParametersDiUji($labParams, $item);
+				$summary = WsFinalAirParameterService::summarize($paramAll, $parametersDiUji);
+
+				$item->progress = $summary['tested'] . ' / ' . $summary['total'];
+				$isLengkap = $summary['belum_diuji']->isEmpty();
+
 				$statusFilter = $request->get('uji_status');
 				if ($statusFilter === 'lengkap') {
 					return $isLengkap;
 				} elseif ($statusFilter === 'belum_lengkap') {
 					return !$isLengkap;
 				}
-	
+
 				return true;
 			})->values();
-		}
-
-
-		$noOrders = $data->pluck('no_order')->unique()->toArray();
-		
-		if (!empty($noOrders)) {
-			$sampelDiantars = SampelDiantar::with('detail')
-				->whereIn('no_order', $noOrders)
-				->get();
-
-			$data->each(function ($item) use ($sampelDiantars) {
-				$query = $sampelDiantars->where('no_order', $item->no_order);
-
-				// kalau periode order_detail ada
-				if (!empty($item->periode)) {
-					$query = $query->where('periode_kontrak', $item->periode);
-				}
-
-				// override relasi sampelDiantar
-				$item->setRelation(
-					'sampelDiantar',
-					$query->first()
-				);
-			});
 		}
 
 		return Datatables::of($data)->make(true);
@@ -1027,6 +1001,49 @@ class WsFinalAirController extends Controller
 
 		return response()->json([
 			'data' => $data
+		]);
+	}
+
+	/**
+	 * Daftar parameter belum diuji — logika sama ModalEvaluation (lab + lapangan/SD).
+	 */
+	public function getEvaluasiParameter(Request $request)
+	{
+		if (!$request->no_sampel) {
+			return response()->json(['message' => 'no_sampel wajib diisi'], 422);
+		}
+
+		$orderDetail = OrderDetail::with('dataLapanganAir', 'sampelDiantar.detail')
+			->where('no_sampel', $request->no_sampel)
+			->first();
+
+		if (!$orderDetail) {
+			return response()->json(['message' => 'Order detail tidak ditemukan'], 404);
+		}
+
+		$labParams = [];
+		if ($request->filled('lab_parameters')) {
+			$decoded = json_decode($request->lab_parameters, true);
+			if (is_array($decoded)) {
+				$labParams = array_values(array_filter($decoded, fn ($p) => $p !== null && $p !== ''));
+			}
+		}
+
+		$paramAll = WsFinalAirParameterService::parseOrderParameters($orderDetail->parameter);
+		$parametersDiUji = WsFinalAirParameterService::buildParametersDiUji($labParams, $orderDetail);
+		$summary = WsFinalAirParameterService::summarize($paramAll, $parametersDiUji);
+
+		$mapRow = fn ($row) => [
+			'id' => $row['id'],
+			'value' => $row['value'],
+			'select_id' => $row['id'] . ',' . $row['value'],
+		];
+
+		return response()->json([
+			'parameter_semua' => $paramAll->map($mapRow)->values(),
+			'parameter_belum_diuji' => $summary['belum_diuji']->map($mapRow)->values(),
+			'parameters_di_uji' => $parametersDiUji,
+			'progress' => $summary['tested'] . ' / ' . $summary['total'],
 		]);
 	}
 
