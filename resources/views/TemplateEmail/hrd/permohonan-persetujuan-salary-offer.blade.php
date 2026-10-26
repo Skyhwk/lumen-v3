@@ -84,6 +84,24 @@
     @endif
 </table>
 
+@php
+    $cdo = $data->candidateDataOffer ?? $data->candidate_data_offer ?? null;
+    $tanggalJoinDisplay = $tanggalJoinFormatted
+        ?? ($cv['tanggalJoinFormatted'] ?? null)
+        ?? \App\Services\HrdEmailViewData::formatTanggalJoin(optional($cdo)->tanggal_mulai_kerja);
+@endphp
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:0;background:#eff6ff;border:1px solid #93c5fd;border-radius:14px;overflow:hidden;margin:0 0 24px 0;">
+    <tr>
+        <td style="width:33.33%;padding:12px 16px;vertical-align:middle;">
+            <div style="font-size:12px;color:#1e40af;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">Tanggal Join</div>
+        </td>
+        <td style="width:33.33%;padding:12px 16px;vertical-align:middle;">
+            <div style="font-size:14px;color:#0f172a;font-weight:600;">{{ $tanggalJoinDisplay ?: '-' }}</div>
+        </td>
+        <td style="width:33.33%;padding:12px 16px;vertical-align:middle;"></td>
+    </tr>
+</table>
+
 @if(!empty($data->resubmit_reason))
     @php
         $resubmitAt = '-';

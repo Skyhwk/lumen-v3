@@ -53,6 +53,16 @@
 @include('TemplateEmail.hrd.partials.info-table', ['rows' => $reviewRows])
 
 @php
+    $tanggalJoinDisplay = $tanggalJoinFormatted
+        ?? \App\Services\HrdEmailViewData::resolveTanggalJoin($data ?? null);
+@endphp
+
+<p style="{{ $sectionTitle }}">Join Date</p>
+@include('TemplateEmail.hrd.partials.info-table', ['rows' => [
+    'Tanggal Join' => $tanggalJoinDisplay ?: '-',
+]])
+
+@php
     $personalRows = [
         'Nationality' => $data->kebangsaan ?? '-',
         'Birth Place' => $data->tempat_lahir ?? '-',
