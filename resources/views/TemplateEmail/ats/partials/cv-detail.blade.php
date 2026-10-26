@@ -36,6 +36,16 @@
 
 
 @php
+    $tanggalJoinDisplay = $tanggalJoinFormatted
+        ?? \App\Services\HrdEmailViewData::resolveTanggalJoin($data ?? null);
+@endphp
+
+<p style="{{ $sectionTitle }}">Tanggal Join</p>
+@include('TemplateEmail.ats.partials.info-table', ['rows' => [
+    'Tanggal Join' => $tanggalJoinDisplay ?: '-',
+]])
+
+@php
     $personalRows = [
         'Nationality' => $data->kebangsaan ?? '-',
         'Birth Place' => $data->tempat_lahir ?? '-',

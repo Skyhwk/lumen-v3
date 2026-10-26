@@ -2075,6 +2075,13 @@ class GenerateMessageAtsEmail
             $skill = is_string($recruitment->skill) ? json_decode($recruitment->skill, true) : ($recruitment->skill ?? []);
             $referensiList = \App\Services\HrdEmailViewData::normalizePersonReferenceList($recruitment->referensi ?? null);
             $rekomendasiList = \App\Services\HrdEmailViewData::normalizePersonRekomendasiList($recruitment->rekomendasi ?? null);
+
+            $hrdInterview = \Illuminate\Support\Facades\DB::table('recruitment_interviews')
+                ->where('new_recruitment_id', $recruitment->id)
+                ->where('stage', 'hrd')
+                ->where('is_active', 1)
+                ->orderBy('id', 'desc')
+                ->first();
     
             $cv = [
                 'data' => $dataCv,
@@ -2092,6 +2099,7 @@ class GenerateMessageAtsEmail
                 'sertifikat' => \App\Services\HrdEmailViewData::decodeJsonField($recruitment->sertifikat ?? null),
                 'kursus' => \App\Services\HrdEmailViewData::decodeJsonField($recruitment->kursus ?? null),
                 'salaryFormatted' => \App\Services\HrdEmailViewData::formatRupiah($recruitment->salary_user ?? null),
+                'tanggalJoinFormatted' => HrdEmailViewData::resolveTanggalJoin($recruitment, $interview, $hrdInterview),
             ];
 
             $umur = '-';
@@ -2131,13 +2139,6 @@ class GenerateMessageAtsEmail
                 'no_hp' => $recruitment->no_telepon ?? null,
                 'email' => $recruitment->email ?? null,
             ]);
-
-            $hrdInterview = \Illuminate\Support\Facades\DB::table('recruitment_interviews')
-                ->where('new_recruitment_id', $recruitment->id)
-                ->where('stage', 'hrd')
-                ->where('is_active', 1)
-                ->orderBy('id', 'desc')
-                ->first();
 
             if (empty($assessmentAttachments)) {
                 $assessmentAttachments = app(GenerateAssessmentDocumentService::class)
