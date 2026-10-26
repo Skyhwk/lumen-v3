@@ -66,15 +66,7 @@
     $reviewUserRows = [
         'Catatan' => !empty($catatanUserClean) ? $catatanUserClean : '-',
     ];
-    $cdo = $data->candidateDataOffer ?? $data->candidate_data_offer ?? null;
-    $tanggalJoinDisplay = $tanggalJoinFormatted
-        ?? \App\Services\HrdEmailViewData::formatTanggalJoin(optional($cdo)->tanggal_mulai_kerja);
 @endphp
-
-<p style="{{ $sectionTitle }}">Tanggal Join</p>
-@include('TemplateEmail.hrd.partials.info-table-salary-offer', ['rows' => [
-    'Tanggal Join' => $tanggalJoinDisplay ?: '-',
-]])
 
 <p style="{{ $sectionTitle }}">Hasil Interview HRD</p>
 @include('TemplateEmail.hrd.partials.info-table-salary-offer', ['rows' => $reviewHrdRows])
