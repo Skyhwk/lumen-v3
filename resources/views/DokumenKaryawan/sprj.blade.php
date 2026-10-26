@@ -2,7 +2,7 @@
     body {
         font-family: Arial, sans-serif;
         font-size: 11pt;
-        line-height: 1.35;
+        line-height: 1.50;
         color: #111;
         text-align: justify;
     }
@@ -58,17 +58,17 @@
     .page-break { page-break-after: always; }
 </style>
 
-<p>
+<div>
     Pada hari ini, {{ $hariPerjanjian }}, tanggal
     {{ $tanggalPerjanjian }}, yang bertanda tangan di bawah ini:
-</p>
+</div>
 
 <table class="section-row">
     <tr>
         <td class="roman">I.</td>
         <td>
-            <strong>{{ $penanggungJawab['nama'] ?: '-' }}</strong>,
-            <strong>{{ $penanggungJawab['jabatan'] ?: '-' }}</strong>, dalam hal ini bertindak
+            <strong>{{ $namaPenanggungJawab }}</strong>,
+            <strong>{{ $jabatanPenanggungJawab }}</strong>, dalam hal ini bertindak
             untuk dan atas nama PT INTI SURYA LABORATORIUM, berkedudukan di Ruko Icon Business
             Park Blok O No. 5-6, Jl. Raya Cisauk, Sampora, Cisauk, Kabupaten Tangerang.
             <br>(Selanjutnya dalam <strong>Perjanjian</strong> Masa Pelatihan ini disebut sebagai <strong>“Perusahaan”</strong>).
@@ -80,28 +80,27 @@
     <tr>
         <td class="roman" rowspan="6">II.</td>
         <td class="label">Nama / NIK</td><td class="separator">:</td>
-        <td></td>
+        <td>{{ $namaNik }}</td>
     </tr>
     <tr>
         <td class="label">No. KTP</td><td class="separator">:</td>
-        <td></td>
+        <td>{{ $noKtp }}</td>
     </tr>
     <tr>
         <td class="label">Tempat, Tanggal Lahir</td><td class="separator">:</td>
-        <td>
-        </td>
+        <td>{{ $tempatTanggalLahir }}</td>
     </tr>
     <tr>
         <td class="label">Jenis Kelamin</td><td class="separator">:</td>
-        <td></td>
+        <td>{{ $jenisKelamin }}</td>
     </tr>
     <tr>
         <td class="label">Alamat Saat Ini</td><td class="separator">:</td>
-        <td></td>
+        <td>{{ $alamatKaryawan }}</td>
     </tr>
     <tr>
         <td class="label">E-mail</td><td class="separator">:</td>
-        <td></td>
+        <td>{{ $emailKaryawan }}</td>
     </tr>
 </table>
 
@@ -300,15 +299,18 @@
 </table>
 <table class="salary">
     <tr><td colspan="3" class="section">Penerimaan (Per Bulan)</td></tr>
-    <tr><td>Gaji Pokok</td><td class="separator">:</td><td class="amount"></td></tr>
-    <tr><td>Tunjangan Kerja (Tidak Tetap)</td><td class="separator">:</td><td class="amount"></td></tr>
+    <tr><td>Gaji Pokok</td><td class="separator">:</td><td class="amount">Rp {{ number_format($gajiPokok, 0, ',', '.') }}</td></tr>
+    <tr><td>Tunjangan Kerja (Tidak Tetap)</td><td class="separator">:</td><td class="amount">Rp {{ number_format($tunjangan, 0, ',', '.') }}</td></tr>
     <tr><td colspan="3" class="section">Pengurangan (Per Bulan)</td></tr>
-    <tr><td>BPJS Kesehatan</td><td class="separator">:</td><td class="amount"></td></tr>
-    <tr><td>BPJS Ketenagakerjaan</td><td class="separator">:</td><td class="basis"><table class="basis-line"><tr><td class="basis-gap">&nbsp;</td><td class="basis-source">dari Gaji Pokok / UMR Kota / Lainnya</td></tr></table></td></tr>
-    @if($pencadangan && (float) $pencadangan->nominal > 0)
-        <tr><td>Pencadangan Upah</td><td class="separator">:</td><td class="amount"></td></tr>
-    @endif
-    <tr><td class="section">Total Upah Diterima</td><td class="separator">:</td><td class="amount section"></td></tr>
+    {{-- <tr><td>BPJS Kesehatan</td><td class="separator">:</td><td class="amount">Rp {{ number_format($bpjsKes, 0, ',', '.') }}</td></tr> --}}
+    <tr><td>BPJS Ketenagakerjaan</td><td class="separator">:</td><td class="basis"><table class="basis-line"><tr><td class="basis-gap">Rp {{ number_format($bpjsTk, 0, ',', '.') }}</td><td class="basis-source">dari {{ $sumberPotonganBpjsTk }}</td></tr></table></td></tr>
+    {{-- <tr><td>PPh 21</td><td class="separator">:</td><td class="amount">Rp {{ number_format($pph21, 0, ',', '.') }}</td></tr> --}}
+    {{-- @if($pencadangan && (float) $pencadangan->nominal > 0)
+        <tr><td>Pencadangan Upah</td><td class="separator">:</td><td class="amount">Rp {{ number_format((float) $pencadangan->nominal, 0, ',', '.') }}</td></tr>
+    @endif --}}
+    <tr><td>Lainnya</td><td class="separator">:</td><td class="basis"><table class="basis-line"><tr><td class="basis-gap">Rp {{ number_format($totalPotongan - $bpjsTk, 0, ',', '.') }}</td></tr></table></td></tr>
+
+    <tr><td class="section">Total Upah Diterima</td><td class="separator">:</td><td class="amount section">Rp {{ number_format($totalUpah, 0, ',', '.') }}</td></tr>
 </table>
 @if($pencadangan && (float) $pencadangan->nominal > 0)
     <p>
@@ -400,7 +402,7 @@
     </tr>
     <tr>
         <td class="letter">c.</td>
-        <td><strong>Perusahaan</strong> memutuskan tidak memperpanjang jangka waktu Perjanjian; atau</td>
+        <td><strong>Perusahaan</strong> memutuskan tidak memperpanjang jangka waktu <strong>Perjanjian</strong> (dengan / tanpa alasan apapun); atau</td>
     </tr>
     <tr>
         <td class="letter">d.</td>
@@ -414,7 +416,7 @@
         <td class="number">1.</td>
         <td>
             <strong>Para Pihak</strong> sepakat menyelesaikan segala perselisihan yang timbul sehubungan dengan pelaksanaan
-            Perjanjian ini secara musyawarah untuk mufakat.
+            <strong>Perjanjian</strong> ini secara musyawarah untuk mufakat.
         </td>
     </tr>
     <tr>
@@ -469,11 +471,11 @@
         <td class="signature-space"></td>
     </tr>
     <tr>
-        <td><strong><u>{{ $penanggungJawab['nama'] ?: '-' }}</u></strong></td>
+        <td><strong><u>{{ $namaPenanggungJawab }}</u></strong></td>
         <td><strong><u>{{ $karyawan->nama_lengkap }}</u></strong></td>
     </tr>
     <tr>
-        <td>{{ $penanggungJawab['jabatan'] ?: '-' }}</td>
+        <td>{{ $jabatanPenanggungJawab }}</td>
         <td>Karyawan Pelatihan</td>
     </tr>
 </table>

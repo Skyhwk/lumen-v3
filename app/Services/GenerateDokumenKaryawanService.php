@@ -10,6 +10,7 @@ use App\Models\MasterKaryawan;
 use App\Models\MasterSallary;
 use App\Models\NewRecruitment;
 use App\Models\PencadanganUpah;
+use App\Models\PPH21;
 use App\Models\RekeningKaryawan;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -614,7 +615,7 @@ class GenerateDokumenKaryawanService
         $logo = public_path('isl_logo.png');
         $headerHtml =
             '<table width="100%" style="font-family:calibri,sans-serif; border-collapse:collapse;">'
-            . '<tr><td style="padding:0 14mm;">'
+            . '<tr><td style="padding:0;">'
             . '<table width="100%" style="border-collapse:collapse; border-bottom:0.4px solid #9a9a9a;">'
             . '<tr><td colspan="2" style="text-align:right; font-size:8pt; color:#666; padding:0 0 1mm;">Page {PAGENO} of {nbpg}</td></tr>'
             . '<tr>'
@@ -802,10 +803,11 @@ class GenerateDokumenKaryawanService
             'format' => 'A4',
             'margin_left' => 16,
             'margin_right' => 16,
-            'margin_top' => 36,
+            'margin_top' => 5,
             'margin_bottom' => 22,
             'margin_header' => 7,
             'margin_footer' => 8,
+            'setAutoTopMargin' => 'stretch',
             'fontDir' => array_merge($fontDirs, ['C:/Windows/Fonts']),
             'fontdata' => $fontData + [
                 'calibri' => [
@@ -827,7 +829,8 @@ class GenerateDokumenKaryawanService
             . '<td style="border-bottom:0.6px solid #111; text-align:center; padding:0 0 1.4mm 10mm;">'
             . '<div style="text-align:center; font-size:13pt; font-weight:bold; line-height:1.15;">PERJANJIAN KERAHASIAAN &amp;<br>NON-KOMPETISI</div>'
             . '<div style="text-align:center; font-size:10pt; font-weight:bold; margin-top:1mm;">No. : ' . e($noDokumen) . '</div>'
-            . '</td></tr></table>';
+            . '</td></tr>'
+            . '<tr><td colspan="2" style="height:3mm; font-size:1pt; line-height:1pt;">&nbsp;</td></tr></table>';
         $pdf->SetHTMLHeader($headerHtml);
         $pdf->SetHTMLHeader($headerHtml, 'E');
 
@@ -865,7 +868,7 @@ class GenerateDokumenKaryawanService
 
         $logo = public_path('isl_logo.png');
         $headerHtml =
-            '<table width="100%" style="font-family:Arial,sans-serif; border-collapse:collapse; border-bottom:0.4px solid #9a9a9a;">'
+            '<table width="100%" style="width:100%; font-family:Arial,sans-serif; border-collapse:collapse;">'
             . '<tr>'
             . '<td width="34%" style="padding:2mm 0 3mm;"><img src="' . $logo . '" style="width:55mm;"></td>'
             . '<td width="55%" style="padding-left:40mm; text-align:center; vertical-align:middle; color:#111; white-space:nowrap;">'
@@ -873,7 +876,9 @@ class GenerateDokumenKaryawanService
             . '<div style="font-size:12px; color:#111; font-weight:bold;">No. : ' . e($noDokumen) . '</div></td>'
             . '<td width="8%" style="text-align:right; vertical-align:top; padding-top:1mm; font-size:10px; color:#555;">'
             . 'Page {PAGENO} of {nbpg}</td>'
-            . '</tr></table>';
+            . '</tr>'
+            . '<tr><td colspan="3" style="border-bottom:0.4px solid #9a9a9a; height:0; line-height:0; padding:0;"></td></tr>'
+            . '</table>';
         $pdf->SetHTMLHeader($headerHtml);
 
         $footerAddress =
@@ -887,9 +892,11 @@ class GenerateDokumenKaryawanService
             . '<tr><td style="border:0.5px solid #777; height:8mm; text-align:center; vertical-align:bottom; font-weight:bold;">Perusahaan</td>'
             . '<td style="border:0.5px solid #777; height:8mm; text-align:center; vertical-align:bottom; font-weight:bold;">Karyawan</td></tr>'
             . '</table></td>';
-        $footerHtml = '<table width="100%" style="font-family:Arial,sans-serif; border-top:0.4px solid #9a9a9a;">'
+        $footerHtml = '<table width="100%" style="width:100%; font-family:Arial,sans-serif; border-collapse:collapse;">'
+            . '<tr><td colspan="3" style="border-top:0.4px solid #9a9a9a; height:0; line-height:0; padding:0;"></td></tr>'
             . '<tr><td width="25%"></td>' . $footerAddress . $footerBoxes . '</tr></table>';
-        $footerLastHtml = '<table width="100%" style="font-family:Arial,sans-serif; border-top:0.4px solid #9a9a9a;">'
+        $footerLastHtml = '<table width="100%" style="width:100%; font-family:Arial,sans-serif; border-collapse:collapse;">'
+            . '<tr><td colspan="3" style="border-top:0.4px solid #9a9a9a; height:0; line-height:0; padding:0;"></td></tr>'
             . '<tr><td width="25%"></td>' . $footerAddress . '<td width="25%"></td></tr></table>';
         $pdf->SetHTMLFooter($footerHtml);
         $pdf->SetHTMLFooter($footerHtml, 'E');
@@ -1309,6 +1316,10 @@ class GenerateDokumenKaryawanService
                 ->where('is_active', 1)
                 ->orderByDesc('id')
                 ->first(),
+            'pph_21' => PPH21::where('id_karyawan', $karyawan->id)
+                ->where('is_active', 1)
+                ->orderByDesc('id')
+                ->first(),
             'pencadangan_upah' => PencadanganUpah::where('id_karyawan', $karyawan->id)
                 ->where('is_active', 1)
                 ->orderByDesc('id')
@@ -1372,7 +1383,8 @@ class GenerateDokumenKaryawanService
         $recruitment = $data['recruitment'];
         $nik = trim((string) ($karyawan->nik_karyawan ?: ''));
         $nama = $view['namaLengkap'];
-        $gender = strtoupper(trim((string) ($karyawan->jenis_kelamin ?: $recruitment->jenis_kelamin)));
+        $genderRaw = trim((string) ($karyawan->jenis_kelamin ?: $recruitment->jenis_kelamin));
+        $gender = strtoupper($genderRaw);
         $genderLabel = [
             'L' => 'Laki-laki',
             'P' => 'Perempuan',
@@ -1389,7 +1401,7 @@ class GenerateDokumenKaryawanService
             'noDokumen' => $noDokumen,
             'namaNik' => $nama . ' / ' . ($nik !== '' ? $nik : '-'),
             'noKtp' => $view['noKtp'],
-            'jenisKelamin' => $genderLabel[$gender] ?? ($gender !== '' ? $karyawan->jenis_kelamin : '-'),
+            'jenisKelamin' => $genderLabel[$gender] ?? ($genderRaw !== '' ? $genderRaw : '-'),
             'tempatTanggalLahir' => $view['tempatTanggalLahir'],
             'alamat' => $view['alamatLengkap'],
             'namaKaryawan' => $nama,
@@ -1435,6 +1447,13 @@ class GenerateDokumenKaryawanService
         }
         $posisi = ($karyawan->getAttributes()['jabatan'] ?? null)
             ?: (optional($karyawan->getRelation('jabatan'))->nama_jabatan ?: null);
+        $mulaiKontrak = $karyawan->tgl_mulai_kerja ? Carbon::parse($karyawan->tgl_mulai_kerja)->startOfDay() : null;
+        $akhirKontrak = $karyawan->tgl_berakhir_kontrak ? Carbon::parse($karyawan->tgl_berakhir_kontrak)->startOfDay() : null;
+        $jangkaWaktuNonKompetisi = '-';
+        if ($mulaiKontrak && $akhirKontrak && $akhirKontrak->gt($mulaiKontrak)) {
+            $tahun = max(1, (int) round($mulaiKontrak->diffInMonths($akhirKontrak) / 12));
+            $jangkaWaktuNonKompetisi = $tahun . ' (' . $this->terbilang($tahun) . ')';
+        }
 
         return [
             'noDokumen' => $noDokumen,
@@ -1450,13 +1469,21 @@ class GenerateDokumenKaryawanService
             'namaKaryawan' => $view['namaKaryawan'],
             'jabatanKaryawan' => $posisi ?: '-',
             'jangkaWaktu' => '2 (dua)',
+            'jangkaWaktuNonKompetisi' => $jangkaWaktuNonKompetisi,
         ];
     }
 
     private function buildSprjViewData(array $data, string $noDokumen, string $noPengesahan): array
     {
         $karyawan = $data['karyawan'];
+        $recruitment = $data['recruitment'];
         $salary = $data['salary'];
+        $identity = $this->buildSpkbViewData($data, $noDokumen);
+        $penanggungJawab = $data['penanggung_jawab'];
+        $jabatanPenanggungJawab = $penanggungJawab['jabatan'] ?? null;
+        if (is_object($jabatanPenanggungJawab)) {
+            $jabatanPenanggungJawab = $jabatanPenanggungJawab->nama_jabatan ?? null;
+        }
         $startDate = $karyawan->tgl_mulai_kerja ? Carbon::parse($karyawan->tgl_mulai_kerja) : null;
         $endDate = $karyawan->tgl_berakhir_kontrak ? Carbon::parse($karyawan->tgl_berakhir_kontrak) : null;
         $duration = $startDate && $endDate ? max(1, $startDate->diffInMonths($endDate)) : null;
@@ -1464,7 +1491,9 @@ class GenerateDokumenKaryawanService
         $tunjangan = (float) optional($salary)->tunjangan_kerja;
         $bpjsKes = (float) optional($data['bpjs_kesehatan'])->nominal_potongan_karyawan;
         $bpjsTk = (float) optional($data['bpjs_tk'])->nominal_potongan_karyawan;
-        $totalPotongan = $bpjsKes + $bpjsTk;
+        $pph21 = (float) optional($data['pph_21'])->pajak_bulanan;
+        $pencadangan = (float) optional($data['pencadangan_upah'])->nominal;
+        $totalPotongan = $bpjsKes + $bpjsTk + $pph21 + $pencadangan;
         $periodePencadangan = $this->periodePencadangan($data['pencadangan_upah'], $startDate, $endDate);
         $pengembalianPencadangan = $this->jadwalPengembalianPencadangan($data['pencadangan_upah'], $endDate);
 
@@ -1472,8 +1501,17 @@ class GenerateDokumenKaryawanService
             'noDokumen' => $noDokumen,
             'noPengesahan' => $noPengesahan,
             'karyawan' => $karyawan,
-            'recruitment' => $data['recruitment'],
-            'penanggungJawab' => $data['penanggung_jawab'],
+            'recruitment' => $recruitment,
+            'penanggungJawab' => $penanggungJawab,
+            'namaPenanggungJawab' => $penanggungJawab['nama'] ?: '-',
+            'jabatanPenanggungJawab' => $jabatanPenanggungJawab ?: '-',
+            'namaNik' => $identity['namaNik'],
+            'noKtp' => $identity['noKtp'],
+            'tempatTanggalLahir' => $identity['tempatTanggalLahir'],
+            'jenisKelamin' => $identity['jenisKelamin'],
+            'alamatKaryawan' => $identity['alamat'],
+            'emailKaryawan' => $karyawan->email_pribadi
+                ?: ($karyawan->email ?: ($recruitment->email ?: '-')),
             'salary' => $salary,
             'rekening' => $data['rekening'],
             'pencadangan' => $data['pencadangan_upah'],
@@ -1487,6 +1525,11 @@ class GenerateDokumenKaryawanService
             'tunjangan' => $tunjangan,
             'bpjsKes' => $bpjsKes,
             'bpjsTk' => $bpjsTk,
+            'sumberPotonganBpjsTk' => $this->labelSumberPotonganBpjsTk(
+                optional($data['bpjs_tk'])->sumber_potongan
+            ),
+            'pph21' => $pph21,
+            'totalPotongan' => $totalPotongan,
             'totalUpah' => max(0, $gajiPokok + $tunjangan - $totalPotongan),
             'tanggalPencadanganMulai' => $periodePencadangan['mulai'],
             'tanggalPencadanganSelesai' => $periodePencadangan['selesai'],
@@ -1498,6 +1541,17 @@ class GenerateDokumenKaryawanService
             'jumlahHariKerja' => $this->angkaPayroll(optional($salary)->jumlah_hari_kerja, 1),
             'jadwalPenggajian' => $this->angkaPayroll(optional($salary)->jadwal_penggajian, 0),
         ];
+    }
+
+    private function labelSumberPotonganBpjsTk($sumber): string
+    {
+        $labels = [
+            'gaji_pokok' => 'Gaji Pokok',
+            'umr_kota' => 'UMR Kota',
+            'lainnya' => 'Lainnya',
+        ];
+
+        return $labels[strtolower(trim((string) $sumber))] ?? 'Gaji Pokok';
     }
 
     private function labelMetodePembayaran($metode): string

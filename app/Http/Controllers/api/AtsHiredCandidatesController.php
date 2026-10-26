@@ -640,6 +640,7 @@ class AtsHiredCandidatesController extends Controller
             'tunjangan_kerja' => $tunjangan,
             'potongan_bpjs_kes' => $bpjsKes,
             'potongan_bpjs_tk' => $bpjsTk,
+            'sumber_potongan_bpjs_tk' => 'gaji_pokok',
             'pot_pph21' => $pph21,
             'pencadangan_upah' => $pencadangan,
             'no_bpjs_ks' => optional($profile)->no_bpjs_ks,
@@ -975,6 +976,7 @@ class AtsHiredCandidatesController extends Controller
                 'no_bpjs_tk' => $noBpjsTk,
                 'potongan_karyawan' => 0.03,
                 'nominal_potongan_karyawan' => $bpjsTk,
+                'sumber_potongan' => data_get($request, 'payroll.sumber_potongan_bpjs_tk'),
                 'potongan_kantor' => 0.01,
                 'nominal_potongan_kantor' => $gajiPokok * 0.01,
                 'bulan_efektif' => $effectiveMonth,
@@ -1328,6 +1330,11 @@ class AtsHiredCandidatesController extends Controller
         $metode = trim((string) data_get($request, 'payroll.metode_pembayaran_gaji', ''));
         if (!in_array($metode, ['tunai', 'transfer'], true)) {
             return 'Metode pembayaran gaji harus Tunai atau Transfer.';
+        }
+
+        $sumberPotonganBpjsTk = trim((string) data_get($request, 'payroll.sumber_potongan_bpjs_tk', ''));
+        if (!in_array($sumberPotonganBpjsTk, ['gaji_pokok', 'umr_kota', 'lainnya'], true)) {
+            return 'Sumber potongan BPJS Ketenagakerjaan harus Gaji Pokok, UMR Kota, atau Lainnya.';
         }
 
         $hariKerjaError = $this->validatePayrollInteger(

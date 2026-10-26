@@ -1,15 +1,16 @@
 <style>
-    body { font-family: calibri, sans-serif; font-size: 11pt; line-height: 1.28; color: #111; }
-    p { margin: 0 0 2.2mm; text-align: justify; }
+    body { font-family: calibri, sans-serif; font-size: 11pt; line-height: 1.50; color: #111; }
+    p { margin: 0 0 2.7mm; text-align: justify; }
     .perihal { text-align: left; margin: 0 0 3mm; }
     .identity { width: 100%; border-collapse: collapse; margin: 1mm 0 3mm; }
     .identity td { vertical-align: top; padding: 0.45mm 0; text-align: left; border: none; }
     .identity .label { width: 46mm; }
     .identity .sep { width: 4mm; }
     .clause { width: 100%; border-collapse: collapse; margin-bottom: 1.4mm; }
-    .clause td { vertical-align: top; text-align: justify; padding: 0.25mm 0; border: none; }
-    .clause .number { width: 7mm; text-align: left; }
-    .clause .letter { width: 12mm; padding-left: 6mm; text-align: left; }
+    .clause td { vertical-align: top; text-align: justify; padding: 0.45mm 0; border: none; }
+    .clause .mark { text-align: left; white-space: nowrap; padding-right: 2.4mm; }
+    .clause .number { width: 10mm; }
+    .clause .letter { width: 8mm; }
     .contact { width: 100%; border-collapse: collapse; margin-top: 1mm; }
     .contact td { border: none; padding: 0.4mm 0; text-align: left; vertical-align: top; }
     .contact .bullet { width: 6mm; }
@@ -17,7 +18,7 @@
     .contact .sep { width: 4mm; }
     .sign { width: 70mm; border-collapse: collapse; margin-top: 6mm; }
     .sign td { text-align: left; border: none; padding: 0; }
-    .sign .space { height: 18mm; }
+    .sign .space { height: 24mm; }
     .name-line { border-collapse: collapse; }
     .name-line td { font-weight: bold; border: none; border-bottom: 0.6px solid #111; padding: 0 0 0.3mm; text-align: left; }
     .sign .role { font-style: italic; font-size: 10pt; padding-top: 0.6mm; }
@@ -28,43 +29,44 @@
 <p>Yang bertanda tangan di bawah ini :</p>
 
 <table class="identity">
-    <tr><td class="label">Nama / NIK</td><td class="sep">:</td><td></td></tr>
-    <tr><td class="label">Tempat, Tanggal Lahir</td><td class="sep">:</td><td></td></tr>
-    <tr><td class="label">No. KTP</td><td class="sep">:</td><td></td></tr>
-    <tr><td class="label">Posisi / Divisi</td><td class="sep">:</td><td></td></tr>
-    <tr><td class="label">Alamat</td><td class="sep">:</td><td></td></tr>
+    <tr><td class="label">Nama / NIK</td><td class="sep">:</td><td>{{ $namaNik }}</td></tr>
+    <tr><td class="label">Tempat, Tanggal Lahir</td><td class="sep">:</td><td>{{ $tempatTanggalLahir }}</td></tr>
+    <tr><td class="label">No. KTP</td><td class="sep">:</td><td>{{ $noKtp }}</td></tr>
+    <tr><td class="label">Posisi / Divisi</td><td class="sep">:</td><td>{{ $posisiDivisi }}</td></tr>
+    <tr><td class="label">Alamat</td><td class="sep">:</td><td>{{ $alamat }}</td></tr>
 </table>
 
 <p>Dengan ini saya menyatakan dengan sebenar-benarnya, bahwa saya berkomitmen untuk :</p>
 
 <table class="clause">
+    <colgroup><col style="width:10mm;"><col style="width:8mm;"><col></colgroup>
     <tr>
-        <td class="number">1.</td>
-        <td>Mematuhi peraturan perundang-undangan, peraturan dan kebijakan perusahaan terkait Anti KKN dan Gratifikasi, termasuk, namun tidak terbatas pada, ketentuan mengenai suap, penyalahgunaan aset perusahaan, penerimaan suap, uang pelicin (<em>facilitation payment</em>), pembayaran kembali (<em>kickback</em>), penggelapan, pemerasan, benturan kepentingan dalam pengadaan barang dan jasa, maupun bentuk lain yang dikategorikan sebagai tindak pidana KKN dan gratifikasi.</td>
+        <td class="mark number">1.</td>
+        <td colspan="2">Mematuhi peraturan perundang-undangan, peraturan dan kebijakan perusahaan terkait Anti KKN dan Gratifikasi, termasuk, namun tidak terbatas pada, ketentuan mengenai suap, penyalahgunaan aset perusahaan, penerimaan suap, uang pelicin (<em>facilitation payment</em>), pembayaran kembali (<em>kickback</em>), penggelapan, pemerasan, benturan kepentingan dalam pengadaan barang dan jasa, maupun bentuk lain yang dikategorikan sebagai tindak pidana KKN dan gratifikasi.</td>
     </tr>
     <tr>
-        <td class="number">2.</td>
-        <td>Tidak melakukan dan/atau membiarkan adanya praktik KKN dan gratifikasi dalam lingkungan internal perusahaan maupun dalam hubungan perusahaan dengan pihak eksternal, sesuai dengan prinsip-prinsip yang terkandung dalam peraturan perundang-undangan dan kebijakan perusahaan yang berlaku.</td>
+        <td class="mark number">2.</td>
+        <td colspan="2">Tidak melakukan dan/atau membiarkan adanya praktik KKN dan gratifikasi dalam lingkungan internal perusahaan maupun dalam hubungan perusahaan dengan pihak eksternal, sesuai dengan prinsip-prinsip yang terkandung dalam peraturan perundang-undangan dan kebijakan perusahaan yang berlaku.</td>
     </tr>
     <tr>
-        <td class="number">3.</td>
-        <td>Menjaga integritas dan profesionalisme dalam setiap pelaksanaan tugas dan tanggung jawab.</td>
+        <td class="mark number">3.</td>
+        <td colspan="2">Menjaga integritas dan profesionalisme dalam setiap pelaksanaan tugas dan tanggung jawab.</td>
     </tr>
     <tr>
-        <td class="number">4.</td>
-        <td>Tidak memberikan, menjanjikan, menawarkan, meminta, atau menerima suap, gratifikasi, komisi tidak sah, hadiah, fasilitas, atau bentuk keuntungan apa pun yang berkaitan dengan jabatan atau pekerjaan baik secara langsung maupun tidak langsung.</td>
+        <td class="mark number">4.</td>
+        <td colspan="2">Tidak memberikan, menjanjikan, menawarkan, meminta, atau menerima suap, gratifikasi, komisi tidak sah, hadiah, fasilitas, atau bentuk keuntungan apa pun yang berkaitan dengan jabatan atau pekerjaan baik secara langsung maupun tidak langsung.</td>
     </tr>
     <tr>
-        <td class="number">5.</td>
-        <td>Menolak dan tidak terlibat dalam pemberian dan/atau penerimaan gratifikasi dalam bentuk apapun (termasuk uang tunai maupun elektronik, barang, jasa, komisi, saham, <em>voucher</em>, tiket, fasilitas, perjalanan, dan/atau bentuk lainnya) yang dapat memengaruhi atau berpotensi memengaruhi independensi dan/atau keputusan maupun tindakan dalam pelaksanaan pekerjaan.</td>
+        <td class="mark number">5.</td>
+        <td colspan="2">Menolak dan tidak terlibat dalam pemberian dan/atau penerimaan gratifikasi dalam bentuk apapun (termasuk uang tunai maupun elektronik, barang, jasa, komisi, saham, <em>voucher</em>, tiket, fasilitas, perjalanan, dan/atau bentuk lainnya) yang dapat memengaruhi atau berpotensi memengaruhi independensi dan/atau keputusan maupun tindakan dalam pelaksanaan pekerjaan.</td>
     </tr>
     <tr>
-        <td class="number">6.</td>
-        <td>Melaporkan secara langsung kepada atasan langsung dan Manajer divisi masing-masing apabila mengetahui, menyaksikan, dan/atau memiliki indikasi <strong style="text-decoration:underline;">praktik KKN</strong> dari pihak manapun (internal dan/atau eksternal).</td>
+        <td class="mark number">6.</td>
+        <td colspan="2">Melaporkan secara langsung kepada atasan langsung dan Manajer divisi masing-masing apabila mengetahui, menyaksikan, dan/atau memiliki indikasi <strong style="text-decoration:underline;">praktik KKN</strong> dari pihak manapun (internal dan/atau eksternal).</td>
     </tr>
     <tr>
-        <td class="number">7.</td>
-        <td>
+        <td class="mark number">7.</td>
+        <td colspan="2">
             Melaporkan secara langsung kepada pihak perusahaan apabila mengetahui, menyaksikan, dan/atau memiliki indikasi penerimaan maupun penawaran <strong style="text-decoration:underline;">gratifikasi dalam bentuk apapun dan dari pihak manapun</strong> (internal dan/atau eksternal), yaitu :
             <table class="contact">
                 <tr>
@@ -83,23 +85,26 @@
         </td>
     </tr>
     <tr>
-        <td class="number">8.</td>
-        <td>Melaporkan <strong>paling lambat dalam waktu 1 x 24 (dua puluh empat) jam</strong> sejak saya mengetahui, menyaksikan, dan/atau memiliki indikasi praktik KKN termasuk penerimaan maupun tawaran dan/atau pemberian gratifikasi sesuai ketentuan pada poin (6) dan poin (7) surat pernyataan ini.</td>
+        <td class="mark number">8.</td>
+        <td colspan="2">Melaporkan <strong>paling lambat dalam waktu 1 x 24 (dua puluh empat) jam</strong> sejak saya mengetahui, menyaksikan, dan/atau memiliki indikasi praktik KKN termasuk penerimaan maupun tawaran dan/atau pemberian gratifikasi sesuai ketentuan pada poin (6) dan poin (7) surat pernyataan ini.</td>
     </tr>
     <tr>
-        <td class="number">9.</td>
-        <td>Apabila saya melanggar pernyataan ini dan/atau kebijakan perusahaan terkait Anti KKN dan Gratifikasi, maka saya :</td>
+        <td class="mark number">9.</td>
+        <td colspan="2">Apabila saya melanggar pernyataan ini dan/atau kebijakan perusahaan terkait Anti KKN dan Gratifikasi, maka saya :</td>
     </tr>
     <tr>
-        <td class="letter" style="width:12mm; padding-left:6mm;">a.</td>
+        <td class="mark number">&nbsp;</td>
+        <td class="mark letter">a.</td>
         <td>Bertanggung jawab penuh secara pribadi di hadapan hukum dan melepaskan tanggung jawab perusahaan dari akibat pelanggaran tersebut;</td>
     </tr>
     <tr>
-        <td class="letter" style="width:12mm; padding-left:6mm;">b.</td>
+        <td class="mark number">&nbsp;</td>
+        <td class="mark letter">b.</td>
         <td>Bersedia dikenakan sanksi apapun (termasuk Pemutusan Hubungan Kerja / PHK tanpa hormat) sesuai dengan penilaian dan pertimbangan pihak perusahaan sampai dengan digugat pada jalur hukum (secara perdata dan/atau pidana), serta melepaskan hak untuk menuntut apapun kepada perusahaan / pihak perusahaan manapun; dan/atau</td>
     </tr>
     <tr>
-        <td class="letter" style="width:12mm; padding-left:6mm;">c.</td>
+        <td class="mark number">&nbsp;</td>
+        <td class="mark letter">c.</td>
         <td>Bersedia dikenakan penggantian seluruh biaya yang timbul berkaitan dengan pelanggaran (termasuk seluruh biaya yang berkenaan dengan peradilan) dan/atau ganti kerugian (materil dan/atau imateril) kepada perusahaan.</td>
     </tr>
 </table>

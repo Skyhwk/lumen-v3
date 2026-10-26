@@ -10,15 +10,10 @@
     .rules td { border: 0.6px solid #111; vertical-align: middle; padding: 1.3mm 1.6mm; }
     .rules .head { text-align: center; font-weight: bold; }
     .rules .num { width: 12mm; text-align: center; font-weight: bold; }
-    .rules .ttd { width: 36mm; }
-    .rules .body { padding: 0; }
-    .rules .title { padding: 1.3mm 1.6mm; font-weight: bold; }
-    .parts { width: 100%; border-collapse: collapse; }
-    .parts td { border: none; border-top: 0.6px solid #111; padding: 1.15mm 1.6mm; vertical-align: middle; text-align: left; }
-    .parts .letter { width: 8mm; padding-right: 0; }
+    .rules .ttd { width: 46mm; height: 14mm; }
     .sign { width: 70mm; border-collapse: collapse; margin-top: 5mm; }
     .sign td { text-align: left; border: none; padding: 0; }
-    .sign .space { height: 16mm; }
+    .sign .space { height: 24mm; }
     .name-line { border-collapse: collapse; }
     .name-line td { font-weight: bold; border: none; border-bottom: 0.6px solid #111; padding: 0 0 0.3mm; text-align: left; }
     .sign .role { font-style: italic; font-size: 10.5pt; padding-top: 0.6mm; }
@@ -43,40 +38,51 @@
         <td class="ttd head">Tanda Tangan</td>
     </tr>
     <tr>
-        <td class="num">1.</td>
-        <td class="body">
-            <div class="title">Peraturan Umum No. : Per-Um/09/22-VII</div>
-            <table class="parts">
-                <tr><td class="letter">a.</td><td>Bagian I – Kewajiban dan Larangan</td></tr>
-                <tr><td class="letter">b.</td><td>Bagian II – Kehadiran</td></tr>
-                <tr><td class="letter">c.</td><td>Bagian III – Upah Kerja</td></tr>
-                <tr><td class="letter">d.</td><td>Bagian IV – Fasilitas Kerja dan Aset Perusahaan</td></tr>
-                <tr><td class="letter">e.</td><td>Bagian V – Surat Peringatan</td></tr>
-                <tr><td class="letter">f.</td><td>Bagian VI – Berakhirnya Hubungan Kerja</td></tr>
-            </table>
-        </td>
-        <td class="ttd"></td>
+        <td class="num" rowspan="6">1.</td>
+        <td><strong>Peraturan Umum No. : Per-Um/09/22-VII</strong><br>a. Bagian I – Kewajiban dan Larangan</td>
+        <td class="ttd">&nbsp;</td>
+    </tr>
+    <tr>
+        <td>b. Bagian II – Kehadiran</td>
+        <td class="ttd">&nbsp;</td>
+    </tr>
+    <tr>
+        <td>c. Bagian III – Upah Kerja</td>
+        <td class="ttd">&nbsp;</td>
+    </tr>
+    <tr>
+        <td>d. Bagian IV – Fasilitas Kerja dan Aset Perusahaan</td>
+        <td class="ttd">&nbsp;</td>
+    </tr>
+    <tr>
+        <td>e. Bagian V – Surat Peringatan</td>
+        <td class="ttd">&nbsp;</td>
+    </tr>
+    <tr>
+        <td>f. Bagian VI – Berakhirnya Hubungan Kerja</td>
+        <td class="ttd">&nbsp;</td>
     </tr>
     <tr>
         <td class="num">2.</td>
-        <td class="body">
-            <div class="title">Peraturan Penampilan No. Per-PK/09/22-VIII</div>
-            <div class="title" style="font-weight:normal; padding-top:0;">Bagian B – Karyawan yang Melakukan Kegiatan <em>Sampling</em></div>
-        </td>
-        <td class="ttd"></td>
+        <td><strong>Peraturan Penampilan No. Per-PK/09/22-VIII</strong><br>Bagian B – Karyawan yang Melakukan Kegiatan <em>Sampling</em></td>
+        <td class="ttd">&nbsp;</td>
     </tr>
     <tr>
-        <td class="num">3.</td>
-        <td class="body">
-            <div class="title">Peraturan Perusahaan terkait Karyawan Pelatihan (SK Direktur No. : ISL/SK-Dir/23-XII/003)</div>
-            <table class="parts">
-                <tr><td class="letter">a.</td><td>Bagian A – Jenis Status Karyawan</td></tr>
-                <tr><td class="letter">b.</td><td>Bagian B – Cuti Khusus</td></tr>
-                <tr><td class="letter">c.</td><td>Bagian C – Cuti Tahunan</td></tr>
-                <tr><td class="letter">d.</td><td>Bagian D – Pengakhiran Hubungan Kerja</td></tr>
-            </table>
-        </td>
-        <td class="ttd"></td>
+        <td class="num" rowspan="4">3.</td>
+        <td><strong>Peraturan Perusahaan terkait Karyawan Pelatihan (SK Direktur No. : ISL/SK-Dir/23-XII/003)</strong><br>a. Bagian A – Jenis Status Karyawan</td>
+        <td class="ttd">&nbsp;</td>
+    </tr>
+    <tr>
+        <td>b. Bagian B – Cuti Khusus</td>
+        <td class="ttd">&nbsp;</td>
+    </tr>
+    <tr>
+        <td>c. Bagian C – Cuti Tahunan</td>
+        <td class="ttd">&nbsp;</td>
+    </tr>
+    <tr>
+        <td>d. Bagian D – Pengakhiran Hubungan Kerja</td>
+        <td class="ttd">&nbsp;</td>
     </tr>
 </table>
 

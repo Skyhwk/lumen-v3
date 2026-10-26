@@ -51,6 +51,8 @@
 
 <p class="closing">Pelanggaran atas butir-butir <em>Code of Conduct</em> di atas, saya bersedia menerima sanksi sesuai dengan peraturan perusahaan dan atau perundangan yang berlaku.</p>
 
+<div style="height: 1.35em; line-height: 1.35em;">&nbsp;</div>
+
 <p>Bahwa saya menyatakan, menyetujui, dan menandatangani Aturan Perilaku Perusahaan dalam keadaan sehat jasmani dan rohani, dalam keadaan sadar, dan tidak dipengaruhi oleh tekanan apapun juga.</p>
 
 <table class="sign">

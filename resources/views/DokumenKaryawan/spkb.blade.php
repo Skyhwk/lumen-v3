@@ -2,10 +2,10 @@
     body {
         font-family: calibri, sans-serif;
         font-size: 10pt;
-        line-height: 1.28;
+        line-height: 1.50;
         color: #111;
     }
-    p { margin: 0 0 1.8mm; text-align: justify; }
+    p { margin: 0 0 2mm; text-align: justify; }
     .head { width: 100%; border-collapse: collapse; margin-bottom: 2mm; }
     .head td { vertical-align: middle; border: none; padding: 0; }
     .head .logo, .head .title-cell { border-bottom: 0.6px solid #111; padding: 0 0 1.4mm; }
@@ -33,7 +33,7 @@
     .clause .number { width: 7mm; text-align: left; }
     .sign { width: 72mm; border-collapse: collapse; margin-top: 3mm; }
     .sign td { text-align: center; border: none; padding: 0; }
-    .sign .space { height: 14mm; }
+    .sign .space { height: 24mm; }
     .sign .name { font-weight: bold; }
 </style>
 
@@ -50,11 +50,11 @@
 <p>Saya yang bertanda tangan di bawah ini :</p>
 
 <table class="identity">
-    <tr><td class="label">Nama / NIK</td><td class="sep">:</td><td></td></tr>
-    <tr><td class="label">No. KTP</td><td class="sep">:</td><td></td></tr>
-    <tr><td class="label">Jenis Kelamin</td><td class="sep">:</td><td></td></tr>
-    <tr><td class="label">Tempat / Tanggal Lahir</td><td class="sep">:</td><td></td></tr>
-    <tr><td class="label">Alamat</td><td class="sep">:</td><td></td></tr>
+    <tr><td class="label">Nama / NIK</td><td class="sep">:</td><td>{{ $namaNik }}</td></tr>
+    <tr><td class="label">No. KTP</td><td class="sep">:</td><td>{{ $noKtp }}</td></tr>
+    <tr><td class="label">Jenis Kelamin</td><td class="sep">:</td><td>{{ $jenisKelamin }}</td></tr>
+    <tr><td class="label">Tempat / Tanggal Lahir</td><td class="sep">:</td><td>{{ $tempatTanggalLahir }}</td></tr>
+    <tr><td class="label">Alamat</td><td class="sep">:</td><td>{{ $alamat }}</td></tr>
 </table>
 
 <p>Dengan ini menyatakan bahwa saya berjanji untuk tidak melanggar peraturan dan larangan yang berlaku di PT Inti Surya Laboratorium, yaitu yang temasuk tetapi tidak terbatas pada :</p>
