@@ -13,6 +13,10 @@ class NewRecruitment extends Model
         'pendidikan' => 'array',
         'pengalaman_kerja' => 'array',
         'referensi' => 'array',
+        'rekomendasi' => 'array',
+        'masalah_hukum' => 'array',
+        'pernah_bekerja_perusahaan' => 'array',
+        'bypass' => 'array',
         'tanggal_join_tercepat' => 'date',
         'is_reject_finance' => 'boolean',
         'is_rejected_kandidat' => 'boolean',
@@ -80,6 +84,37 @@ class NewRecruitment extends Model
     {
         return $this->hasOne(SallaryOffer::class, 'new_recruitment_id')
             ->where('is_active', true)
+            ->latest('id');
+    }
+
+    public function decisionSalaries()
+    {
+        return $this->hasMany(DecisionSalary::class, 'new_recruitment_id')
+            ->orderByDesc('id');
+    }
+
+    public function pendingDecisionSalary()
+    {
+        return $this->hasOne(DecisionSalary::class, 'new_recruitment_id')
+            ->where('decision', DecisionSalary::DECISION_PENDING)
+            ->latest('id');
+    }
+
+    /**
+     * Putaran nego aktif di tab User:
+     * - pending: menunggu keputusan User
+     * - rejected: menunggu HRD re-input
+     * - approved: tetap tampil sampai HRD kirim offering ke kandidat
+     */
+    public function openDecisionSalary()
+    {
+        return $this->hasOne(DecisionSalary::class, 'new_recruitment_id')
+            ->whereIn('decision', [
+                DecisionSalary::DECISION_PENDING,
+                DecisionSalary::DECISION_REJECTED,
+                DecisionSalary::DECISION_NEGOTIATED,
+                DecisionSalary::DECISION_APPROVED,
+            ])
             ->latest('id');
     }
 

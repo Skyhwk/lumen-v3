@@ -7,6 +7,14 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * Migrasi soal_psikotes ke bank questions + question_categories (scope default saja).
+ *
+ *   php artisan db:seed --class=LegacyPsychotestQuestionSeeder
+ *
+ * Opsional tanpa hapus replace (PowerShell):
+ *   $env:LEGACY_PSYCHOTEST_SKIP_DELETE = "true"; php artisan db:seed --class=LegacyPsychotestQuestionSeeder
+ */
 class LegacyPsychotestQuestionSeeder extends Seeder
 {
     private const CREATED_BY = 'LegacyPsychotestQuestionSeeder';
@@ -28,35 +36,121 @@ class LegacyPsychotestQuestionSeeder extends Seeder
         if (!Schema::hasTable('soal_psikotes') || !Schema::hasTable('question_categories')
             || !Schema::hasTable('questions') || !Schema::hasTable('question_options')
             || !Schema::hasTable('scale_types')) {
+            if ($this->command) {
+                $this->command->warn('LegacyPsychotestQuestionSeeder: tabel bank soal belum lengkap, seed dibatalkan.');
+            }
+
             return;
         }
 
-        DB::transaction(function () {
-            $legacyRows = DB::table('soal_psikotes')
-                ->whereNotIn('kategori_soal', ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK'])
-                ->orderBy('id')
-                ->get();
+        $skipDelete = filter_var(env('LEGACY_PSYCHOTEST_SKIP_DELETE', false), FILTER_VALIDATE_BOOLEAN);
 
+        $legacyRows = DB::table('soal_psikotes')
+            ->whereNotIn('kategori_soal', ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK', 'IST'])
+            ->orderBy('id')
+            ->get();
+
+        $plannedCategories = [];
+        foreach ($legacyRows->groupBy(fn ($row) => $this->categoryName($row)) as $name => $rows) {
+            $plannedCategories[$name] = $rows->count();
+        }
+
+        $defaultCategoryIds = DB::table('question_categories')
+            ->where('category_scope', 'default')
+            ->pluck('id');
+        $questionsToReplace = $defaultCategoryIds->isEmpty()
+            ? 0
+            : (int) DB::table('questions')
+                ->where('created_by', self::CREATED_BY)
+                ->whereIn('question_category_id', $defaultCategoryIds->all())
+                ->count();
+
+        $this->logLine('Rencana migrasi: ' . count($plannedCategories) . ' kategori default, ' . $legacyRows->count() . ' soal.');
+        foreach ($plannedCategories as $name => $count) {
+            $this->logLine('  - ' . $name . ': ' . $count . ' soal');
+        }
+        if ($skipDelete) {
+            $this->logLine('LEGACY_PSYCHOTEST_SKIP_DELETE=true → tidak menghapus soal Legacy sebelumnya.');
+        } elseif ($questionsToReplace > 0) {
+            $this->logLine('Akan replace ' . $questionsToReplace . ' soal Legacy di kategori scope default.');
+        } else {
+            $this->logLine('Tidak ada soal Legacy sebelumnya yang perlu dihapus (run pertama).');
+        }
+
+        $insertedQuestions = 0;
+        $skippedCategories = 0;
+        $deletedQuestions = 0;
+
+        DB::transaction(function () use (
+            $legacyRows,
+            $plannedCategories,
+            $skipDelete,
+            &$insertedQuestions,
+            &$skippedCategories,
+            &$deletedQuestions
+        ) {
             $categoryIds = [];
-            foreach ($legacyRows->groupBy(fn ($row) => $this->categoryName($row)) as $name => $rows) {
-                $categoryIds[$name] = $this->ensureCategory($name, $rows->count());
+            foreach ($plannedCategories as $name => $count) {
+                $categoryId = $this->ensureDefaultScopeCategory($name, $count);
+                if ($categoryId === null) {
+                    $skippedCategories++;
+                    continue;
+                }
+                $categoryIds[$name] = $categoryId;
             }
 
-            foreach ($categoryIds as $categoryId) {
-                $questionIds = DB::table('questions')
-                    ->where('question_category_id', $categoryId)
-                    ->where('created_by', self::CREATED_BY)
-                    ->pluck('id');
-                if ($questionIds->isNotEmpty()) {
-                    DB::table('question_options')->whereIn('question_id', $questionIds)->delete();
-                    DB::table('questions')->whereIn('id', $questionIds)->delete();
+            if (!$skipDelete) {
+                foreach ($categoryIds as $categoryId) {
+                    if (!$this->isDefaultScopeCategoryId($categoryId)) {
+                        continue;
+                    }
+                    $questionIds = DB::table('questions')
+                        ->where('question_category_id', $categoryId)
+                        ->where('created_by', self::CREATED_BY)
+                        ->pluck('id');
+                    if ($questionIds->isNotEmpty()) {
+                        DB::table('question_options')->whereIn('question_id', $questionIds)->delete();
+                        DB::table('questions')->whereIn('id', $questionIds)->delete();
+                        $deletedQuestions += $questionIds->count();
+                    }
                 }
             }
 
             foreach ($legacyRows as $row) {
-                $this->migrateQuestion($row, $categoryIds[$this->categoryName($row)]);
+                $name = $this->categoryName($row);
+                if (!isset($categoryIds[$name])) {
+                    continue;
+                }
+                $this->migrateQuestion($row, $categoryIds[$name]);
+                $insertedQuestions++;
             }
         });
+
+        $message = 'LegacyPsychotestQuestionSeeder: ' . $insertedQuestions . ' soal dimigrasi (scope default).';
+        if ($deletedQuestions > 0) {
+            $message .= ' Replace ' . $deletedQuestions . ' soal Legacy lama.';
+        }
+        if ($skippedCategories > 0) {
+            $message .= ' ' . $skippedCategories . ' kategori dilewati (nama sudah dipakai scope non-default).';
+        }
+        $this->logLine($message, 'info');
+    }
+
+    private function logLine(string $message, string $level = 'line'): void
+    {
+        if (!$this->command) {
+            return;
+        }
+
+        if ($level === 'warn') {
+            $this->command->warn($message);
+        } elseif ($level === 'info') {
+            $this->command->info($message);
+        } elseif ($level === 'error') {
+            $this->command->error($message);
+        } else {
+            $this->command->line($message);
+        }
     }
 
     private function categoryName($row): string
@@ -68,9 +162,18 @@ class LegacyPsychotestQuestionSeeder extends Seeder
         return ucwords(strtolower((string) $row->kategori_soal));
     }
 
-    private function ensureCategory(string $name, int $count): int
+    /**
+     * Buat/update kategori hanya jika category_scope = default.
+     * Kategori dengan nama sama tapi scope lain tidak diubah.
+     */
+    private function ensureDefaultScopeCategory(string $name, int $count): ?int
     {
         $now = Carbon::now();
+        $existingByName = DB::table('question_categories')->where('name', $name)->first();
+        if ($existingByName && !$this->isDefaultScope($existingByName->category_scope ?? null)) {
+            return null;
+        }
+
         $category = DB::table('question_categories')
             ->where('name', $name)
             ->where('category_scope', 'default')
@@ -91,6 +194,7 @@ class LegacyPsychotestQuestionSeeder extends Seeder
 
         if ($category) {
             DB::table('question_categories')->where('id', $category->id)->update($payload);
+
             return (int) $category->id;
         }
 
@@ -98,6 +202,18 @@ class LegacyPsychotestQuestionSeeder extends Seeder
             'name' => $name,
             'created_at' => $now,
         ]));
+    }
+
+    private function isDefaultScopeCategoryId(int $categoryId): bool
+    {
+        $category = DB::table('question_categories')->where('id', $categoryId)->first();
+
+        return $category && $this->isDefaultScope($category->category_scope ?? null);
+    }
+
+    private function isDefaultScope($scope): bool
+    {
+        return strtolower(trim((string) ($scope ?? ''))) === 'default';
     }
 
     private function migrateQuestion($row, int $categoryId): void

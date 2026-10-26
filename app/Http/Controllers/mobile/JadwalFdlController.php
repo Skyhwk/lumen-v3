@@ -82,12 +82,19 @@ class JadwalFdlController extends Controller
             return $item;
         })
         ->filter(function ($item) use ($samplerLogin) {
-            $samplers = collect(explode(',', $item->sampler))
-                ->map(function ($sampler) {
-                    return strtolower(trim($sampler));
-                });
+            $login = strtolower(trim((string) $samplerLogin));
+            if ($login === '') {
+                return false;
+            }
 
-            return $samplers->contains(strtolower($samplerLogin));
+            $samplers = collect(explode(',', (string) ($item->sampler ?? '')))
+                ->map(fn ($sampler) => strtolower(trim($sampler)));
+
+            if ($samplers->contains($login)) {
+                return true;
+            }
+
+            return strtolower(trim((string) ($item->driver ?? ''))) === $login;
         })
         ->groupBy('kendaraan')
         ->map(function ($group) {

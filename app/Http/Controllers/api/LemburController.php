@@ -11,12 +11,17 @@ use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
 use App\Services\GetAtasan;
 use App\Services\GetBawahan;
+use App\Services\Hr\HrTableMode;
+use App\Services\Hr\Portal\PortalOvertimeDatatableQuery;
+use App\Services\Hr\PortalHrSync;
 use App\Services\Notification;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
+use App\Services\Greatday\FirebaseService;
+use App\Services\Greatday\GreatdayOvertimeAccess;
+use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -28,6 +33,14 @@ class LemburController extends Controller
 {
     public function indexUnprocessed(Request $request)
     {
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalOvertimeDatatableQuery::class)->hrdUnprocessed((int) $request->periode);
+
+            return Datatables::of($data)->make(true);
+        }
+
+        $this->ensureOvertimeGroupConcatLimit();
+
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
@@ -46,7 +59,7 @@ class LemburController extends Controller
                         ELSE "Pending" 
                     END as status'),
 
-                DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
+                DB::raw($this->overtimeKaryawanGroupConcatSql()),
                 DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
                 'overtime_requests.approved_hrd_by',
@@ -77,15 +90,19 @@ class LemburController extends Controller
             ->whereNull('overtime_requests.rejected_hrd_by')
             ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
-            ->transform(function ($item) {
-                $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
-                return $item;
-            });
+            ->transform(fn ($item) => $this->mapOvertimeRowKaryawan($item));
         return Datatables::of($data)->make(true);
     }
 
     public function indexProcessed(Request $request)
     {
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalOvertimeDatatableQuery::class)->hrdProcessed((int) $request->periode);
+
+            return Datatables::of($data)->make(true);
+        }
+
+        $this->ensureOvertimeGroupConcatLimit();
 
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
@@ -105,7 +122,7 @@ class LemburController extends Controller
                                 ELSE "Pending" 
                             END as status'),
 
-                DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
+                DB::raw($this->overtimeKaryawanGroupConcatSql()),
                 DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
                 'overtime_requests.approved_hrd_by',
@@ -137,16 +154,21 @@ class LemburController extends Controller
             ->whereNull('overtime_requests.rejected_finance_by')
             ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
-            ->transform(function ($item) {
-                $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
-                return $item;
-            });
+            ->transform(fn ($item) => $this->mapOvertimeRowKaryawan($item));
 
         return Datatables::of($data)->make(true);
     }
 
     public function indexUnprocessedFinance(Request $request)
     {
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalOvertimeDatatableQuery::class)->financeUnprocessed((int) $request->periode);
+
+            return Datatables::of($data)->make(true);
+        }
+
+        $this->ensureOvertimeGroupConcatLimit();
+
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
@@ -165,7 +187,7 @@ class LemburController extends Controller
                                 ELSE "Pending" 
                             END as status'),
 
-                DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
+                DB::raw($this->overtimeKaryawanGroupConcatSql()),
                 DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
                 'overtime_requests.approved_hrd_by',
@@ -196,10 +218,7 @@ class LemburController extends Controller
             ->whereNull('overtime_requests.rejected_finance_by')
             ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
-            ->transform(function ($item) {
-                $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
-                return $item;
-            });
+            ->transform(fn ($item) => $this->mapOvertimeRowKaryawan($item));
 
 
         return Datatables::of($data)->make(true);
@@ -208,6 +227,14 @@ class LemburController extends Controller
 
     public function indexProcessedFinance(Request $request)
     {
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalOvertimeDatatableQuery::class)->financeProcessed((int) $request->periode);
+
+            return Datatables::of($data)->make(true);
+        }
+
+        $this->ensureOvertimeGroupConcatLimit();
+
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
@@ -226,7 +253,7 @@ class LemburController extends Controller
                                 ELSE "Pending" 
                             END as status'),
 
-                DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
+                DB::raw($this->overtimeKaryawanGroupConcatSql()),
                 DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
                 'overtime_requests.approved_hrd_by',
@@ -257,10 +284,7 @@ class LemburController extends Controller
             ->whereNull('overtime_requests.rejected_finance_by')
             ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
-            ->transform(function ($item) {
-                $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
-                return $item;
-            });
+            ->transform(fn ($item) => $this->mapOvertimeRowKaryawan($item));
 
         return Datatables::of($data)->make(true);
     }
@@ -268,6 +292,19 @@ class LemburController extends Controller
     public function indexByOwner(Request $request)
     {
         $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
+
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalOvertimeDatatableQuery::class)->ownerUnprocessed((int) $request->periode, $bawahan);
+
+            return Datatables::of($data)
+                ->addColumn('can_approve', function ($row) {
+                    return $this->grade == 'MANAGER' || $this->grade == 'SENIOR MANAGER';
+                })
+                ->make(true);
+        }
+
+        $this->ensureOvertimeGroupConcatLimit();
+
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
@@ -286,7 +323,7 @@ class LemburController extends Controller
                                 ELSE "Pending" 
                             END as status'),
 
-                DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
+                DB::raw($this->overtimeKaryawanGroupConcatSql()),
                 DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
                 'overtime_requests.approved_hrd_by',
@@ -318,14 +355,11 @@ class LemburController extends Controller
             ->whereIn('overtime_requests.created_by', $bawahan)
             ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
-            ->transform(function ($item) {
-                $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
-                return $item;
-            });
+            ->transform(fn ($item) => $this->mapOvertimeRowKaryawan($item));
 
         return Datatables::of($data)
             ->addColumn('can_approve', function ($row) {
-                return $this->grade == 'MANAGER' ? true : false;
+                return $this->grade == 'MANAGER' || $this->grade == 'SENIOR MANAGER' ? true : false;
             })
             ->make(true);
     }
@@ -333,6 +367,19 @@ class LemburController extends Controller
     public function indexByOwnerProcessed(Request $request)
     {
         $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
+
+        if (HrTableMode::portalReadsHrTables()) {
+            $data = app(PortalOvertimeDatatableQuery::class)->ownerProcessed((int) $request->periode, $bawahan);
+
+            return Datatables::of($data)
+                ->addColumn('can_approve', function ($row) {
+                    return $this->grade == 'MANAGER' || $this->grade == 'SENIOR MANAGER';
+                })
+                ->make(true);
+        }
+
+        $this->ensureOvertimeGroupConcatLimit();
+
         $data = OvertimeRequest::on('intilab_apps')
             ->leftJoin('intilab_apps.overtime_request_members as fd', 'fd.no_document', '=', 'overtime_requests.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'overtime_requests.department_id')
@@ -351,7 +398,7 @@ class LemburController extends Controller
                                 ELSE "Pending" 
                             END as status'),
 
-                DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
+                DB::raw($this->overtimeKaryawanGroupConcatSql()),
                 DB::raw("COUNT(DISTINCT fd.employee_id) as total_karyawan"),
 
                 'overtime_requests.approved_hrd_by',
@@ -385,20 +432,108 @@ class LemburController extends Controller
             ->whereIn('overtime_requests.created_by', $bawahan)
             ->whereYear('overtime_requests.start_date', $request->periode)
             ->get()
-            ->transform(function ($item) {
-                $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
-                return $item;
-            });
+            ->transform(fn ($item) => $this->mapOvertimeRowKaryawan($item));
 
         return Datatables::of($data)
             ->addColumn('can_approve', function ($row) {
-                return $this->grade == 'MANAGER' ? true : false;
+                return $this->grade == 'MANAGER' || $this->grade == 'SENIOR MANAGER' ? true : false;
             })
             ->make(true);
     }
 
+    public function tabCountsByOwner(Request $request)
+    {
+        $periode = $request->periode ?? date('Y');
+        $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
+        $base = OvertimeRequest::on('intilab_apps')
+            ->whereIn('created_by', $bawahan ?: [''])
+            ->whereYear('start_date', $periode);
+
+        $onProgress = (clone $base)
+            ->whereNull('approved_finance_by')
+            ->whereNull('approved_hrd_by')
+            ->count();
+        $processed = (clone $base)
+            ->where(function ($query) {
+                $query->whereNotNull('approved_finance_by')
+                    ->orWhereNotNull('approved_hrd_by');
+            })
+            ->count();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'on_progress' => $onProgress,
+                'processed' => $processed,
+            ],
+        ]);
+    }
+
+    public function tabCountsHrd(Request $request)
+    {
+        $periode = $request->periode ?? date('Y');
+        $base = OvertimeRequest::on('intilab_apps')
+            ->whereNotNull('approved_atasan_by')
+            ->whereNull('rejected_atasan_by')
+            ->whereNull('rejected_hrd_by')
+            ->whereYear('start_date', $periode);
+
+        $onProgress = (clone $base)
+            ->whereNull('approved_hrd_by')
+            ->whereNull('approved_finance_by')
+            ->count();
+        $processed = (clone $base)
+            ->whereNotNull('approved_hrd_by')
+            ->whereNull('rejected_finance_by')
+            ->count();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'on_progress' => $onProgress,
+                'processed' => $processed,
+            ],
+        ]);
+    }
+
+    public function tabCountsFinance(Request $request)
+    {
+        $periode = $request->periode ?? date('Y');
+        $base = OvertimeRequest::on('intilab_apps')
+            ->whereNotNull('approved_atasan_by')
+            ->whereNotNull('approved_hrd_by')
+            ->whereNull('rejected_atasan_by')
+            ->whereNull('rejected_hrd_by')
+            ->whereNull('rejected_finance_by')
+            ->whereYear('start_date', $periode);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'on_progress' => (clone $base)->whereNull('approved_finance_by')->count(),
+                'processed' => (clone $base)->whereNotNull('approved_finance_by')->count(),
+            ],
+        ]);
+    }
+
+    public function overtimeSubmitAccess(Request $request)
+    {
+        $employee = $this->user_id ? MasterKaryawan::find($this->user_id) : null;
+        $canCreate = $employee && GreatdayOvertimeAccess::canCreate($employee);
+
+        return response()->json([
+            'success' => true,
+            'can_create' => $canCreate,
+            'message' => $canCreate ? null : GreatdayOvertimeAccess::denyCreateMessage(),
+        ], 200);
+    }
+
     public function getListKaryawan(Request $request)
     {
+        if ($deny = $this->denyUnlessOvertimeCreator()) {
+            return $deny;
+        }
+
         $getBawahan = GetBawahan::where('id', $this->user_id)->get();
         $getAtasan = GetAtasan::where('id', $this->user_id)->get();
         $allKaryawan = collect([$getBawahan, $getAtasan])
@@ -423,6 +558,10 @@ class LemburController extends Controller
 
     public function updateLembur(Request $request)
     {
+        if ($deny = $this->denyUnlessOvertimeCreator()) {
+            return $deny;
+        }
+
         DB::beginTransaction();
         try {
             $header = OvertimeRequest::on('intilab_apps')->find($request->id);
@@ -434,10 +573,26 @@ class LemburController extends Controller
                 ], 404);
             }
 
+            $memberIds = collect($request->data ?? [])
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn ($id) => $id > 0)
+                ->unique()
+                ->values()
+                ->all();
+
+            if ($memberIds === []) {
+                DB::rollback();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pilih minimal satu anggota lembur',
+                ], 422);
+            }
+
             $exist = OvertimeRequestMembers::on('intilab_apps')
                 ->leftJoin('intilab_apps.overtime_requests as h', 'h.no_document', '=', 'overtime_request_members.no_document')
                 ->where('h.start_date', $request->tanggal_lembur)
-                ->whereIn('overtime_request_members.employee_id', $request->data)
+                ->whereIn('overtime_request_members.employee_id', $memberIds)
                 ->whereNull('h.rejected_atasan_by')
                 ->where('h.no_document', '!=', $header->no_document)
                 ->get();
@@ -464,7 +619,7 @@ class LemburController extends Controller
             OvertimeRequestMembers::on('intilab_apps')->where('no_document', $header->no_document)->delete();
 
             $details = [];
-            foreach ($request->data as $detail) {
+            foreach ($memberIds as $detail) {
                 $details[] = [
                     'overtime_request_id' => $header->id,
                     'no_document' => $header->no_document,
@@ -507,12 +662,30 @@ class LemburController extends Controller
 
     public function createLembur(Request $request)
     {
+        if ($deny = $this->denyUnlessOvertimeCreator()) {
+            return $deny;
+        }
+
+        $memberIds = collect($request->data ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($memberIds === []) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pilih minimal satu anggota lembur',
+            ], 422);
+        }
+
         DB::beginTransaction();
         try {
             $exist = OvertimeRequestMembers::on('intilab_apps')
                 ->leftJoin('intilab_apps.overtime_requests as h', 'h.no_document', '=', 'overtime_request_members.no_document')
                 ->where('h.start_date', $request->tanggal_lembur)
-                ->whereIn('overtime_request_members.employee_id', $request->data)
+                ->whereIn('overtime_request_members.employee_id', $memberIds)
                 ->whereNull('h.rejected_atasan_by')
                 ->get();
 
@@ -545,7 +718,7 @@ class LemburController extends Controller
             ]);
 
             $details = [];
-            foreach ($request->data as $detail) {
+            foreach ($memberIds as $detail) {
                 $details[] = [
                     'overtime_request_id' => $header->id,
                     'no_document' => $no_document,
@@ -585,7 +758,7 @@ class LemburController extends Controller
                     ->send();
             }
 
-            $users = collect($request->data)
+            $users = collect($memberIds)
                 ->filter(fn($id) => (int) $id !== (int) $this->user_id)
                 ->values()
                 ->toArray();
@@ -605,6 +778,8 @@ class LemburController extends Controller
                 'WOOHOOO!, Kamu termasuk dalam tim lembur pada ' . Carbon::parse($request->tanggal_lembur)->formatLocalized('%d %B %Y', 'id_ID') . '!',
                 'Waktu: ' . $request->jam_mulai . ' - ' . $request->jam_selesai . ' WIB (' . $request->keterangan . ')',
             );
+
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $header->id);
 
             DB::commit();
             return response()->json([
@@ -657,6 +832,8 @@ class LemburController extends Controller
             $formHeader->rejected_finance_at = null;
             $formHeader->save();
 
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $formHeader->id);
+
             $userId = GetAtasan::where('nama_lengkap', $formHeader->created_by)->get()->pluck('id')->toArray();
 
             $message = 'Form lembur telah di approve';
@@ -708,6 +885,8 @@ class LemburController extends Controller
             $formHeader->reject_hrd_reason = $request->keterangan;
             $formHeader->save();
 
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $formHeader->id);
+
             $message = 'Form lembur telah di reject';
             $userId = GetAtasan::where('nama_lengkap', $formHeader->created_by)->get()->pluck('id')->toArray();
 
@@ -755,6 +934,8 @@ class LemburController extends Controller
             $formHeader->approved_atasan_at = Carbon::now()->format('Y-m-d H:i:s');
             $formHeader->save();
 
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $formHeader->id);
+
             $message = 'Form lembur telah di approve';
             $userId = GetAtasan::where('nama_lengkap', $formHeader->created_by)->get()->pluck('id')->toArray();
 
@@ -797,6 +978,8 @@ class LemburController extends Controller
             $formHeader->rejected_atasan_at = Carbon::now()->format('Y-m-d H:i:s');
             $formHeader->reject_atasan_reason = $request->keterangan;
             $formHeader->save();
+
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $formHeader->id);
 
             $message = 'Form lembur telah di reject';
             $userId = GetAtasan::where('nama_lengkap', $formHeader->created_by)->get()->pluck('id')->toArray();
@@ -843,6 +1026,8 @@ class LemburController extends Controller
             $formHeader->approved_finance_at = Carbon::now()->format('Y-m-d H:i:s');
             $formHeader->save();
 
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $formHeader->id);
+
             $message = 'Form lembur telah di approve';
             $userId = GetAtasan::where('nama_lengkap', $formHeader->created_by)->get()->pluck('id')->toArray();
             Notification::whereIn('id', $userId)
@@ -887,6 +1072,8 @@ class LemburController extends Controller
             $formHeader->reject_finance_reason = $request->keterangan;
             $formHeader->save();
 
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $formHeader->id);
+
             $message = 'Form lembur telah di reject';
             $userId = GetAtasan::where('nama_lengkap', $formHeader->created_by)->get()->pluck('id')->toArray();
             Notification::whereIn('id', $userId)
@@ -929,23 +1116,85 @@ class LemburController extends Controller
 
     private function sendNotificationLembur($users, $title, $body)
     {
-        $payload = [
-            'data[title]' => $title,
-            'data[body]'  => $body,
-            'data[url]'   => '/form-lembur',
-            'data[type]'  => 'lembur',
-        ];
-
-        foreach ($users as $index => $userId) {
-            $payload["users[$index]"] = $userId;
+        $userIds = array_values(array_unique(array_filter(array_map('intval', (array) $users))));
+        if ($userIds === []) {
+            return;
         }
 
-        Http::asForm()
-            ->withHeaders([
-                'Accept' => 'application/json',
-                'x-slice' => env('APPS_NOTIFICATION_SLICE'),
-            ])
-            ->withToken(env('APPS_INTERNAL_TOKEN'))
-            ->post('https://apps.intilab.com/android-attendance/api/route', $payload);
+        try {
+            app(FirebaseService::class)->sendNotifications($userIds, [
+                'title' => $title,
+                'body' => $body,
+                'url' => '/form-lembur',
+                'type' => 'lembur',
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('sendNotificationLembur failed', [
+                'users' => $userIds,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function denyUnlessOvertimeCreator()
+    {
+        if (!$this->user_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akun tidak terhubung ke data karyawan.',
+            ], 403);
+        }
+
+        $employee = MasterKaryawan::find($this->user_id);
+        if (!$employee || !GreatdayOvertimeAccess::canCreate($employee)) {
+            return response()->json([
+                'success' => false,
+                'message' => GreatdayOvertimeAccess::denyCreateMessage(),
+            ], 403);
+        }
+
+        return null;
+    }
+
+    private function ensureOvertimeGroupConcatLimit(): void
+    {
+        DB::connection('intilab_apps')->statement('SET SESSION group_concat_max_len = 65535');
+    }
+
+    private function overtimeKaryawanGroupConcatSql(): string
+    {
+        return "GROUP_CONCAT(DISTINCT JSON_OBJECT(
+            'id', COALESCE(u.id, fd.employee_id),
+            'nama', COALESCE(u.nama_lengkap, '-'),
+            'jabatan', COALESCE(u.grade, '-')
+        ) ORDER BY COALESCE(u.nama_lengkap, '') SEPARATOR '|') as karyawan";
+    }
+
+    private function mapOvertimeRowKaryawan($item)
+    {
+        $item->karyawan = $this->decodeOvertimeKaryawanPipe($item->karyawan ?? null);
+
+        return $item;
+    }
+
+    private function decodeOvertimeKaryawanPipe(?string $raw): array
+    {
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+
+        $karyawan = [];
+        foreach (explode('|', $raw) as $chunk) {
+            if ($chunk === '') {
+                continue;
+            }
+            $decoded = json_decode($chunk);
+            if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
+                continue;
+            }
+            $karyawan[] = $decoded;
+        }
+
+        return $karyawan;
     }
 }

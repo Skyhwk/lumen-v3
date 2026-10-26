@@ -5,6 +5,7 @@ use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
 
 class Payroll extends Sector{
+    protected $casts = ['deduction_snapshot' => 'array'];
     protected $table = 'payroll';
     protected $guard = [];
 
@@ -61,6 +62,11 @@ class Payroll extends Sector{
             'nik_karyawan',            // Local key di model ini (Payroll) ke model perantara (MasterKaryawan)
             'id_department'           // Local key di model perantara (MasterKaryawan) ke model tujuan (MasterDivisi)
         )->withDefault();  // Menggunakan withDefault() agar jika tidak ada data, mengembalikan instance kosong dari MasterDivisi
+    }
+
+    public function payrollHeader()
+    {
+        return $this->belongsTo(PayrollHeader::class, 'payroll_header_id', 'id');
     }
 
 }

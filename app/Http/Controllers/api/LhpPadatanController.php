@@ -23,6 +23,8 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
+use App\Helpers\DraftLhpRejectHelper;
+
 class LhpPadatanController extends Controller
 {
     public function index(Request $request){
@@ -31,6 +33,9 @@ class LhpPadatanController extends Controller
     }
 
     public function handleReject(Request $request) {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $header = LhpsPadatanHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();

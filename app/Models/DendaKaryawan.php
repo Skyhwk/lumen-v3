@@ -12,6 +12,7 @@ class DendaKaryawan extends Sector{
     protected $fillable = [
         'karyawan',
         'nik_karyawan',
+        'id_karyawan',
         'kode_denda',
         'total_denda',
         'tenor',
@@ -31,4 +32,9 @@ class DendaKaryawan extends Sector{
     ];
 
     public $timestamps = false;
+
+    public function masterKaryawan()
+    {
+        return $this->belongsTo(MasterKaryawan::class, 'id_karyawan', 'id');
+    }
 }

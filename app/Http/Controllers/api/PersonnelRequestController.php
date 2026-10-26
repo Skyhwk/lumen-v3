@@ -4,12 +4,14 @@ namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question};
+use App\Models\{PersonnelRequest,NewRecruitment,MasterKaryawan,MasterDivisi,MasterJabatan,MasterCabang,RecruitmentInterview,Question,DecisionSalary};
 use App\Services\SallaryOfferService;
 use App\Services\GenerateAssessmentDocumentService;
 use App\Services\CandidateDocumentAttachmentService;
-use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService,RecruitmentStatusService};
+use App\Services\RecruitmentDecisionActionTelegramService;
+use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService,RecruitmentStatusService,RequesterSalaryApprovalService,RecruitmentManagerAccess};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
+use App\Helpers\ShioElemenHelper;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -147,13 +149,18 @@ class PersonnelRequestController extends Controller
         foreach ($raw as $item) {
             if (is_array($item) && isset($item['id'])) {
                 $hasTimeLimit = $this->parseFormBoolean($item['has_time_limit'] ?? false);
-                $configs[] = [
+                $config = [
                     'id' => (int) $item['id'],
                     'name' => trim((string) ($item['name'] ?? '')),
                     'question_count' => max(1, (int) ($item['question_count'] ?? 1)),
                     'duration_minutes' => $hasTimeLimit ? max(1, (int) ($item['duration_minutes'] ?? 30)) : 0,
                     'has_time_limit' => $hasTimeLimit,
+                    'nilai_minimum' => max(0, (int) ($item['nilai_minimum'] ?? 0)),
                 ];
+                if (($item['type'] ?? $item['question_scope'] ?? '') === 'hr') {
+                    $config['type'] = 'hr';
+                }
+                $configs[] = $config;
             } elseif (is_numeric($item)) {
                 $configs[] = [
                     'id' => (int) $item,
@@ -161,6 +168,7 @@ class PersonnelRequestController extends Controller
                     'question_count' => 10,
                     'duration_minutes' => 0,
                     'has_time_limit' => false,
+                    'nilai_minimum' => 0,
                 ];
             }
         }
@@ -221,6 +229,64 @@ class PersonnelRequestController extends Controller
         $configs = $this->normalizeAssessmentCategoryConfigs($value);
 
         return empty($configs) ? null : $this->enrichAssessmentCategoryConfigs($configs);
+    }
+
+    private function validatedHrAssessmentCategoryPayload(Request $request): ?array
+    {
+        $configs = array_values(array_filter(
+            $this->normalizeAssessmentCategoryConfigs($request->input('assesment_question_category')),
+            fn ($config) => ($config['type'] ?? '') === 'hr'
+        ));
+        if (!$configs) {
+            return [];
+        }
+
+        foreach ($configs as $config) {
+            $category = \App\Models\QuestionCategory::query()
+                ->where('id', $config['id'])
+                ->where('category_scope', 'hr')
+                ->where('is_active', true)
+                ->where('is_show', 1)
+                ->first();
+
+            if (!$category) {
+                abort(422, 'Kategori soal HR tidak valid.');
+            }
+
+            $availableQuestions = \App\Models\Question::query()
+                ->where('question_category_id', $category->id)
+                ->where('question_scope', 'hr')
+                ->where('status', '!=', 'retired')
+                ->where('is_active', 1)
+                ->count();
+
+            if ($availableQuestions < 1) {
+                abort(422, 'Kategori "' . $category->name . '" belum memiliki soal HR aktif.');
+            }
+
+            if ((int) $config['question_count'] > $availableQuestions) {
+                abort(422, 'Jumlah soal kategori "' . $category->name . '" tidak boleh melebihi soal tersedia (' . $availableQuestions . ' soal).');
+            }
+
+            if (!empty($config['has_time_limit']) && (int) $config['duration_minutes'] < 1) {
+                abort(422, 'Durasi test HR kategori "' . $category->name . '" wajib diisi minimal 1 menit apabila batas waktu aktif.');
+            }
+        }
+
+        return $configs;
+    }
+
+    private function combinedAssessmentCategoryPayload(Request $request): array
+    {
+        $userConfigs = array_values(array_filter(
+            $this->normalizeAssessmentCategoryConfigs($request->input('assesment_question_category')),
+            fn ($config) => ($config['type'] ?? '') !== 'hr'
+        ));
+
+        return array_merge(
+            $this->enrichAssessmentCategoryConfigs($userConfigs),
+            $this->enrichAssessmentCategoryConfigs($this->validatedHrAssessmentCategoryPayload($request))
+        );
     }
 
     private function ownedPersonnelRequestQuery()
@@ -317,12 +383,18 @@ class PersonnelRequestController extends Controller
             return;
         }
 
-        $configs = $this->normalizeAssessmentCategoryConfigs($request->input('assesment_question_category'));
+        $configs = array_values(array_filter(
+            $this->normalizeAssessmentCategoryConfigs($request->input('assesment_question_category')),
+            fn ($config) => ($config['type'] ?? '') !== 'hr'
+        ));
         if (empty($configs)) {
             abort(422, 'Kategori soal wajib dipilih apabila tes teknis diaktifkan.');
         }
 
-        $hierarchyNames = $this->managerHierarchyNames();
+        $allowedNames = $this->managerHierarchyNames();
+        if ($this->isRecruitmentManager() && (int) $request->input('divisi') > 0) {
+            $allowedNames = RecruitmentManagerAccess::namesInDivisi((int) $request->input('divisi'));
+        }
 
         foreach ($configs as $config) {
             $categoryId = (int) $config['id'];
@@ -335,9 +407,9 @@ class PersonnelRequestController extends Controller
             }
 
             $category = \App\Models\QuestionCategory::where('id', $categoryId)
-                ->where(function ($query) use ($hierarchyNames) {
-                    $query->whereIn('owner_karyawan', $hierarchyNames)
-                          ->orWhereIn('assigned_manager', $hierarchyNames);
+                ->where(function ($query) use ($allowedNames) {
+                    $query->whereIn('owner_karyawan', $allowedNames)
+                          ->orWhereIn('assigned_manager', $allowedNames);
                 })
                 ->first();
 
@@ -450,6 +522,776 @@ class PersonnelRequestController extends Controller
         }
 
         return $query;
+    }
+
+    private function candidateActionCategoryConstants(): array
+    {
+        return [
+            'shortlisted' => [
+                'assessment',
+                'screening',
+                'approved',
+                'interview_hrd',
+                'profile_completion',
+                'interview_user',
+            ],
+            'excluded_shortlisted' => [
+                'management_decision',
+                'internal_sallary_offer',
+                'salary_offer',
+                'sallary_offer',
+                'hired',
+                'rejected',
+                'finance_review',
+                'training',
+            ],
+            'terminal' => ['rejected', 'void', 'hired', 'selesai', 'pr_rejected'],
+        ];
+    }
+
+    private function isCandidateTerminalStatus($row, string $status): bool
+    {
+        $constants = $this->candidateActionCategoryConstants();
+
+        return in_array($status, $constants['terminal'], true)
+            || (int) ($row->is_rejected_kandidat ?? 0) === 1;
+    }
+
+    private function isReadyToScheduleUserInterview(string $status, bool $profileDone, $userInterview): bool
+    {
+        return !($userInterview && $userInterview->id)
+            && ($status === 'interview_user' || ($status === 'profile_completion' && $profileDone));
+    }
+
+    private function belongsToShortlistedCandidate($row, string $status): bool
+    {
+        $constants = $this->candidateActionCategoryConstants();
+
+        return in_array($status, $constants['shortlisted'], true)
+            && !in_array($status, $constants['excluded_shortlisted'], true)
+            && !$this->isCandidateTerminalStatus($row, $status);
+    }
+
+    private function isUserInterviewDecisionPending($row, $userInterview): bool
+    {
+        if (!$userInterview || !$userInterview->id) {
+            return false;
+        }
+
+        $approved = $row->is_approve_interview_user ?? 0;
+
+        return !($approved === 1 || $approved === true || $approved === '1');
+    }
+
+    private function resolveCandidateActionCategory($row): ?string
+    {
+        $status = strtolower(trim((string) ($row->status ?? '')));
+        $userInterview = $row->userInterview ?? null;
+        $profileDone = $row->candidateProfile !== null;
+
+        $intDateStr = '';
+        if ($userInterview && !empty($userInterview->tgl_interview)) {
+            try {
+                $intDateStr = Carbon::parse($userInterview->tgl_interview)->format('Y-m-d');
+            } catch (\Throwable $e) {
+                $intDateStr = '';
+            }
+        }
+
+        $todayStr = Carbon::today()->format('Y-m-d');
+
+        if ($this->isUserInterviewDecisionPending($row, $userInterview)) {
+            if ($intDateStr === $todayStr) {
+                return 'today_scheduled';
+            }
+
+            if ($intDateStr > $todayStr) {
+                return 'scheduled';
+            }
+
+            return 'overdue';
+        }
+
+        if ($this->isReadyToScheduleUserInterview($status, $profileDone, $userInterview)) {
+            return 'unscheduled';
+        }
+
+        if ($this->belongsToShortlistedCandidate($row, $status)) {
+            return 'shortlisted';
+        }
+
+        return null;
+    }
+
+    private function scopeExcludeRejectedKandidat($query)
+    {
+        return $query->whereRaw('COALESCE(is_rejected_kandidat, 0) = 0');
+    }
+
+    private function ownedCandidateBaseQuery()
+    {
+        $ownedRequestIds = $this->ownedPersonnelRequestQuery()->pluck('id');
+
+        return NewRecruitment::query()
+            ->with([
+                'personnelRequest.detailCabang',
+                'personnelRequest.detailDivisi',
+                'personnelRequest.detailPosisi',
+                'userInterview',
+                'hrdInterview',
+                'candidateProfile',
+            ])
+            ->where('is_active', 1)
+            ->where('is_rejected_kandidat', 0)
+            ->whereIn('personnel_request_id', $ownedRequestIds->isEmpty() ? [-1] : $ownedRequestIds);
+    }
+
+    private function approvedCandidatePipelineStatuses(): array
+    {
+        return [
+            'management_decision',
+            'internal_sallary_offer',
+            'salary_offer',
+            'sallary_offer',
+            'finance_review',
+            'waiting_approve_finance',
+            'approved',
+            'selesai',
+        ];
+    }
+
+    private function resolveApprovedCandidateIds(): array
+    {
+        return $this->scopeExcludeRejectedKandidat(
+            $this->ownedCandidateBaseQuery()
+                ->whereIn('status', $this->approvedCandidatePipelineStatuses())
+        )
+            ->orderByDesc('id')
+            ->pluck('id')
+            ->values()
+            ->all();
+    }
+
+    private function candidateStatusDisplayLabel($row): string
+    {
+        return RecruitmentStatusService::resolveApprovedCandidateUserStatusLabel($row);
+    }
+
+    private function resolveCandidateActionIds(?string $category): array
+    {
+        if (!$category) {
+            return [];
+        }
+
+        if ($category === 'salary_approval') {
+            return $this->resolveSalaryApprovalIds();
+        }
+
+        if ($category === 'approved_candidate') {
+            return $this->resolveApprovedCandidateIds();
+        }
+
+        return $this->ownedCandidateBaseQuery()
+            ->orderByDesc('id')
+            ->get()
+            ->filter(function ($row) use ($category) {
+                return $this->resolveCandidateActionCategory($row) === $category;
+            })
+            ->pluck('id')
+            ->values()
+            ->all();
+    }
+
+    private function resolveSalaryApprovalIds(): array
+    {
+        $ownedRequestIds = $this->ownedPersonnelRequestQuery()->pluck('id');
+        if ($ownedRequestIds->isEmpty()) {
+            return [];
+        }
+
+        // pending / rejected / approved (approved stay sampai HRD kirim offering ke kandidat)
+        $openDecisions = DecisionSalary::query()
+            ->whereIn('personnel_request_id', $ownedRequestIds)
+            ->whereHas('sallaryOffer', function ($query) {
+                $query->where('is_active', true)->whereIn('requester_salary_status', [
+                    RequesterSalaryApprovalService::STATUS_PENDING,
+                    RequesterSalaryApprovalService::STATUS_REJECTED,
+                    RequesterSalaryApprovalService::STATUS_APPROVED,
+                ]);
+            })
+            ->whereIn('decision', [
+                DecisionSalary::DECISION_PENDING,
+                DecisionSalary::DECISION_REJECTED,
+                DecisionSalary::DECISION_NEGOTIATED,
+                DecisionSalary::DECISION_APPROVED,
+            ])
+            ->whereIn('id', function ($q) {
+                $q->selectRaw('MAX(id)')
+                    ->from('decision_salary')
+                    ->whereIn('decision', [
+                        DecisionSalary::DECISION_PENDING,
+                        DecisionSalary::DECISION_REJECTED,
+                        DecisionSalary::DECISION_NEGOTIATED,
+                        DecisionSalary::DECISION_APPROVED,
+                    ])
+                    ->groupBy('new_recruitment_id');
+            })
+            ->orderByDesc('id')
+            ->get(['id', 'new_recruitment_id', 'decision', 'decided_at']);
+
+        if ($openDecisions->isEmpty()) {
+            return [];
+        }
+
+        $recruitments = NewRecruitment::query()
+            ->whereIn('id', $openDecisions->pluck('new_recruitment_id')->unique()->values())
+            ->get(['id', 'meta_history'])
+            ->keyBy('id');
+
+        return $openDecisions
+            ->filter(function ($decision) use ($recruitments) {
+                if (in_array($decision->decision, [
+                    DecisionSalary::DECISION_PENDING,
+                    DecisionSalary::DECISION_REJECTED,
+                ], true)) {
+                    return true;
+                }
+
+                // approved: hilang dari tab setelah HRD approve & kirim offering ke kandidat
+                $row = $recruitments->get($decision->new_recruitment_id);
+                if (!$row) {
+                    return true;
+                }
+
+                return !$this->hasCandidateOfferingSentAfterDecision($row, $decision->decided_at);
+            })
+            ->pluck('new_recruitment_id')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function hasCandidateOfferingSentAfterDecision($recruitment, $decidedAt): bool
+    {
+        $history = RecruitmentStatusService::parseMetaHistory($recruitment);
+        if (empty($history)) {
+            return false;
+        }
+
+        $cutoff = null;
+        if ($decidedAt) {
+            try {
+                $cutoff = Carbon::parse($decidedAt);
+            } catch (\Throwable $e) {
+                $cutoff = null;
+            }
+        }
+
+        foreach (array_reverse($history) as $entry) {
+            if ((string) ($entry['status'] ?? '') !== 'candidate_offering_sent') {
+                continue;
+            }
+
+            if (!$cutoff) {
+                return true;
+            }
+
+            $at = $entry['at'] ?? null;
+            if (!$at) {
+                return true;
+            }
+
+            try {
+                if (Carbon::parse($at)->greaterThanOrEqualTo($cutoff)) {
+                    return true;
+                }
+            } catch (\Throwable $e) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Tab counts untuk Personnel Request user view
+     */
+    public function tabCounts()
+    {
+        try {
+            $onProgress = $this->applyCompletionFilter(
+                $this->ownedPersonnelRequestQuery(),
+                'on_progress'
+            )->count();
+
+            $completed = $this->applyCompletionFilter(
+                $this->ownedPersonnelRequestQuery(),
+                'completed'
+            )->count();
+
+            $candidateCounts = [
+                'shortlisted' => 0,
+                'unscheduled' => 0,
+                'scheduled' => 0,
+                'today_scheduled' => 0,
+                'overdue' => 0,
+                'salary_approval' => count($this->resolveSalaryApprovalIds()),
+                'approved_candidate' => count($this->resolveApprovedCandidateIds()),
+            ];
+
+            $this->ownedCandidateBaseQuery()
+                ->orderByDesc('id')
+                ->get()
+                ->each(function ($row) use (&$candidateCounts) {
+                    $category = $this->resolveCandidateActionCategory($row);
+                    if ($category && isset($candidateCounts[$category]) && $category !== 'salary_approval') {
+                        $candidateCounts[$category]++;
+                    }
+                });
+
+            return response()->json([
+                'data' => array_merge([
+                    'on_progress' => $onProgress,
+                    'completed' => $completed,
+                ], $candidateCounts),
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * DataTables kandidat yang perlu tindakan user (pengganti Kanban)
+     */
+    public function candidateActionIndex(Request $request)
+    {
+        try {
+            $category = $request->input('action_category');
+            $allowed = ['shortlisted', 'unscheduled', 'scheduled', 'today_scheduled', 'overdue', 'salary_approval', 'approved_candidate'];
+            if (!in_array($category, $allowed, true)) {
+                return response()->json(['message' => 'Kategori tindakan kandidat tidak valid.'], 422);
+            }
+
+            $ids = $this->resolveCandidateActionIds($category);
+
+            $data = NewRecruitment::query()
+                ->with([
+                    'personnelRequest.detailCabang',
+                    'personnelRequest.detailDivisi',
+                    'personnelRequest.detailPosisi',
+                    'userInterview',
+                    'hrdInterview',
+                    'candidateProfile',
+                    'sallaryOffer',
+                    'candidateDataOffer',
+                    'pendingDecisionSalary',
+                    'openDecisionSalary',
+                ])
+                ->where('is_rejected_kandidat', 0)
+                ->whereIn('id', $ids ?: [-1]);
+
+            if ($category === 'approved_candidate') {
+                $this->scopeExcludeRejectedKandidat($data);
+                $data->whereNotIn('status', ['hired', 'training']);
+            }
+
+            $data->orderByDesc('id');
+
+            return Datatables::of($data)
+                ->addColumn('no_request', function ($row) {
+                    return optional($row->personnelRequest)->no_request ?? '-';
+                })
+                ->addColumn('posisi_divisi', function ($row) {
+                    $pr = $row->personnelRequest;
+                    $posisi = optional($pr->detailPosisi)->nama_jabatan ?? $pr->posisi ?? '-';
+                    $divisi = optional($pr->detailDivisi)->nama_divisi ?? $pr->divisi ?? '-';
+
+                    return "{$posisi}|||{$divisi}";
+                })
+                ->addColumn('has_completed_profile', function ($row) {
+                    return $row->candidateProfile !== null;
+                })
+                ->addColumn('interview_schedule', function ($row) {
+                    return optional($row->userInterview)->tgl_interview;
+                })
+                ->addColumn('action_category', function ($row) use ($category) {
+                    if ($category === 'salary_approval') {
+                        return 'salary_approval';
+                    }
+                    if ($category === 'approved_candidate') {
+                        return 'approved_candidate';
+                    }
+
+                    return $this->resolveCandidateActionCategory($row);
+                })
+                ->addColumn('status_display', function ($row) {
+                    return $this->candidateStatusDisplayLabel($row);
+                })
+                ->addColumn('pipeline_status_label', function ($row) {
+                    $pipeline = RecruitmentStatusService::resolvePipelineStatus($row);
+
+                    return $pipeline['label'] ?? null;
+                })
+                ->addColumn('decision_salary_id', function ($row) {
+                    return optional($row->openDecisionSalary)->id
+                        ?? optional($row->pendingDecisionSalary)->id;
+                })
+                ->addColumn('decision_salary_decision', function ($row) {
+                    return optional($row->openDecisionSalary)->decision
+                        ?? optional($row->pendingDecisionSalary)->decision;
+                })
+                ->addColumn('user_amount', function ($row) {
+                    return optional($row->openDecisionSalary)->user_amount
+                        ?? optional($row->pendingDecisionSalary)->user_amount
+                        ?? optional($row->sallaryOffer)->sallary_offer_user
+                        ?? 0;
+                })
+                ->addColumn('tunjangan_gaji_user', function ($row) {
+                    return optional($row->sallaryOffer)->tunjangan_gaji_user ?? 0;
+                })
+                ->addColumn('hrd_amount', function ($row) {
+                    return optional($row->openDecisionSalary)->hrd_amount
+                        ?? optional($row->pendingDecisionSalary)->hrd_amount
+                        ?? optional($row->sallaryOffer)->sallary_offer_hrd
+                        ?? 0;
+                })
+                ->addColumn('pencadangan_upah', function ($row) {
+                    return optional($row->openDecisionSalary)->pencadangan_upah
+                        ?? optional($row->pendingDecisionSalary)->pencadangan_upah
+                        ?? optional($row->candidateDataOffer)->pencadangan_upah
+                        ?? 0;
+                })
+                ->addColumn('decision_round', function ($row) {
+                    return optional($row->openDecisionSalary)->round
+                        ?? optional($row->pendingDecisionSalary)->round
+                        ?? null;
+                })
+                ->addColumn('requester_salary_status', function ($row) {
+                    return optional($row->sallaryOffer)->requester_salary_status
+                        ?? RequesterSalaryApprovalService::STATUS_NOT_REQUIRED;
+                })
+                ->addColumn('decision_reason', function ($row) {
+                    return optional($row->openDecisionSalary)->reason;
+                })
+                ->filterColumn('no_request', function ($q, $keyword) {
+                    $q->whereHas('personnelRequest', function ($pr) use ($keyword) {
+                        $pr->where('no_request', 'like', "%{$keyword}%");
+                    });
+                })
+                ->filterColumn('nama_lengkap', fn($q, $k) => $q->where('nama_lengkap', 'like', "%{$k}%"))
+                ->filterColumn('posisi_divisi', function ($q, $keyword) {
+                    $q->where(function ($sub) use ($keyword) {
+                        $sub->where('posisi_dilamar', 'like', "%{$keyword}%")
+                            ->orWhereHas('personnelRequest', function ($pr) use ($keyword) {
+                                $pr->where('posisi', 'like', "%{$keyword}%")
+                                    ->orWhere('divisi', 'like', "%{$keyword}%")
+                                    ->orWhereHas('detailPosisi', fn($p) => $p->where('nama_jabatan', 'like', "%{$keyword}%"))
+                                    ->orWhereHas('detailDivisi', fn($d) => $d->where('nama_divisi', 'like', "%{$keyword}%"));
+                            });
+                    });
+                })
+                ->filterColumn('status', fn($q, $k) => $q->where('status', 'like', "%{$k}%"))
+                ->filterColumn('status_display', function ($q, $keyword) {
+                    $q->where('status', 'like', "%{$keyword}%");
+                })
+                ->addColumn('usia', function ($row) {
+                    $birthYear = $this->extractCandidateBirthYear($row);
+                    if ($birthYear) {
+                        return (Carbon::now()->year - $birthYear) . ' thn';
+                    }
+
+                    return '-';
+                })
+                ->filterColumn('usia', function ($q, $keyword) {
+                    $this->filterCandidateUsiaColumn($q, $keyword);
+                })
+                ->addColumn('display_shio', function ($row) {
+                    $shioElemen = $this->resolveCandidateShioElemen($row);
+
+                    return !empty($shioElemen['shio']) ? $shioElemen['shio'] : '-';
+                })
+                ->filterColumn('display_shio', function ($q, $keyword) {
+                    $this->whereAnyExistingNewRecruitmentLike($q, [
+                        'shio',
+                        'tempat_tanggal_lahir',
+                        'tempat_lahir',
+                        'tanggal_lahir',
+                    ], $keyword);
+                })
+                ->addColumn('display_elemen', function ($row) {
+                    $shioElemen = $this->resolveCandidateShioElemen($row);
+
+                    return !empty($shioElemen['elemen']) ? $shioElemen['elemen'] : '-';
+                })
+                ->filterColumn('display_elemen', function ($q, $keyword) {
+                    $this->whereAnyExistingNewRecruitmentLike($q, [
+                        'elemen',
+                        'tempat_tanggal_lahir',
+                        'tempat_lahir',
+                        'tanggal_lahir',
+                    ], $keyword);
+                })
+                ->filterColumn('nilai_kecocokan', fn($q, $k) => $q->where('nilai_kecocokan', 'like', "%{$k}%"))
+                ->make(true);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Preview detail putaran nego gaji (read-only untuk User).
+     */
+    public function requesterSalaryPreview(Request $request)
+    {
+        try {
+            $recruitment = $this->findOwnedRecruitment($request->input('new_recruitment_id'));
+            if (!$recruitment) {
+                return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+            }
+
+            $recruitment->load([
+                'sallaryOffer',
+                'candidateDataOffer',
+                'personnelRequest.detailPosisi',
+                'appliedPositionJabatan',
+            ]);
+
+            $pending = null;
+            if ($request->filled('decision_salary_id')) {
+                $pending = DecisionSalary::query()
+                    ->where('id', $request->input('decision_salary_id'))
+                    ->where('new_recruitment_id', $recruitment->id)
+                    ->first();
+            }
+            if (!$pending) {
+                $pending = RequesterSalaryApprovalService::getPendingForRecruitment((int) $recruitment->id);
+            }
+            // Setelah reject / negotiated, putaran tetap ditampilkan di tab User sampai HRD re-input / User approve
+            if (!$pending) {
+                $pending = DecisionSalary::query()
+                    ->where('new_recruitment_id', $recruitment->id)
+                    ->whereIn('decision', [DecisionSalary::DECISION_REJECTED, DecisionSalary::DECISION_NEGOTIATED])
+                    ->orderByDesc('id')
+                    ->first();
+            }
+
+            $historyEntries = json_decode($recruitment->meta_history ?: '[]', true);
+            $historyEntries = is_array($historyEntries) ? $historyEntries : [];
+            $lastNegoHistory = null;
+            foreach (array_reverse($historyEntries) as $entry) {
+                if (($entry['status'] ?? '') === RequesterSalaryApprovalService::HISTORY_NEGOTIATED) {
+                    $lastNegoHistory = $entry;
+                    break;
+                }
+            }
+
+            $posisiName = optional($recruitment->personnelRequest->detailPosisi)->nama_jabatan
+                ?? optional($recruitment->appliedPositionJabatan)->nama_jabatan
+                ?? optional($recruitment->personnelRequest)->posisi
+                ?? null;
+
+            if (!$posisiName || is_numeric($posisiName)) {
+                $rawPosisi = $recruitment->posisi_dilamar;
+                $posisiName = (!empty($rawPosisi) && !is_numeric($rawPosisi)) ? $rawPosisi : '-';
+            }
+
+            $recruitment->setAttribute('posisi_name', $posisiName);
+
+            return response()->json([
+                'data' => [
+                    'recruitment' => $recruitment,
+                    'decision_salary' => $pending,
+                    'sallary_offer' => $recruitment->sallaryOffer,
+                    'candidate_data_offer' => $recruitment->candidateDataOffer,
+                    'posisi_name' => $posisiName,
+                    'allow_hrd_transfer_jabatan' => (bool) ($lastNegoHistory['allow_hrd_transfer_jabatan'] ?? false),
+                    'allow_hrd_transfer_divisi' => (bool) ($lastNegoHistory['allow_hrd_transfer_divisi'] ?? false),
+                    'tanggal_join_nego' => $lastNegoHistory['tanggal_join_nego'] ?? null,
+                ],
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json(['message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * User approve / reject mismatch gaji (decision_salary).
+     */
+    public function submitRequesterSalaryDecision(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $recruitment = $this->findOwnedRecruitment($request->input('new_recruitment_id'));
+            if (!$recruitment) {
+                DB::rollBack();
+                return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+            }
+
+            $decision = strtolower(trim((string) $request->input('decision')));
+            if ($decision === 'nego') {
+                $decision = 'negotiate';
+            }
+            if (!in_array($decision, ['approve', 'approved', 'reject', 'rejected', 'negotiate'], true)) {
+                DB::rollBack();
+                return response()->json(['message' => 'Keputusan tidak valid.'], 422);
+            }
+
+            if (in_array($decision, ['approve', 'approved'], true)) {
+                $normalized = DecisionSalary::DECISION_APPROVED;
+            } elseif ($decision === 'negotiate') {
+                $normalized = DecisionSalary::DECISION_NEGOTIATED;
+            } else {
+                $normalized = DecisionSalary::DECISION_REJECTED;
+            }
+
+            $row = null;
+            if ($request->filled('decision_salary_id')) {
+                $row = DecisionSalary::query()
+                    ->where('id', $request->input('decision_salary_id'))
+                    ->where('new_recruitment_id', $recruitment->id)
+                    ->pending()
+                    ->first();
+            }
+            if (!$row) {
+                if ($request->filled('decision_salary_id')) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'Putaran approval sudah diproses atau berubah. Silakan muat ulang data.'], 422);
+                }
+                $row = RequesterSalaryApprovalService::getPendingForRecruitment((int) $recruitment->id);
+            }
+            if (!$row) {
+                DB::rollBack();
+                return response()->json(['message' => 'Tidak ada pengajuan gaji yang menunggu approval.'], 404);
+            }
+
+            $pokokNormalized = null;
+            if ($request->exists('sallary_offer_user')) {
+                $pokokNormalized = RequesterSalaryApprovalService::normalizeAmount(
+                    $request->input('sallary_offer_user')
+                );
+                if ($pokokNormalized === null) {
+                    DB::rollBack();
+                    return response()->json([
+                        'message' => 'Gaji Pokok User wajib diisi.',
+                    ], 422);
+                }
+            }
+
+            $tunjanganNormalized = null;
+            if ($request->exists('tunjangan_gaji_user') && SallaryOfferService::hasTunjanganGajiUserColumn()) {
+                $tunjanganNormalized = RequesterSalaryApprovalService::normalizeAmount(
+                    $request->input('tunjangan_gaji_user'),
+                    true
+                );
+                if ($tunjanganNormalized === null) {
+                    $tunjanganNormalized = 0;
+                }
+            }
+
+            $activeOffer = SallaryOfferService::getActive((int) $recruitment->id);
+            if ($activeOffer && $pokokNormalized !== null) {
+                $offerUpdate = [
+                    'sallary_offer_user' => $pokokNormalized,
+                    'updated_by' => $this->karyawan,
+                ];
+                if ($tunjanganNormalized !== null) {
+                    $offerUpdate['tunjangan_gaji_user'] = $tunjanganNormalized;
+                }
+                $activeOffer->update($offerUpdate);
+            }
+
+            $joinRaw = trim((string) $request->input('tanggal_join', ''));
+            $normalizedJoin = $joinRaw !== '' ? RecruitmentInterview::normalizeTanggalJoin($joinRaw) : null;
+
+            $cdo = $recruitment->candidateDataOffer;
+            $hrdTunjangan = $cdo
+                ? (RequesterSalaryApprovalService::normalizeAmount($cdo->tunjangan_kerja, true) ?? 0)
+                : 0;
+            $userTunjangan = $tunjanganNormalized !== null
+                ? $tunjanganNormalized
+                : (RequesterSalaryApprovalService::normalizeAmount(optional($activeOffer)->tunjangan_gaji_user, true) ?? 0);
+
+            $extraHistory = array_filter([
+                'allow_hrd_transfer_jabatan' => $request->boolean('allow_hrd_transfer_jabatan') ?: null,
+                'allow_hrd_transfer_divisi' => $request->boolean('allow_hrd_transfer_divisi') ?: null,
+                'tanggal_join_nego' => $normalizedJoin,
+                'user_tunjangan_amount' => $normalized === DecisionSalary::DECISION_NEGOTIATED ? $userTunjangan : null,
+                'hrd_tunjangan_amount' => $normalized === DecisionSalary::DECISION_NEGOTIATED ? $hrdTunjangan : null,
+            ], static function ($value) {
+                return $value !== null && $value !== false && $value !== '';
+            });
+
+            if ($normalized === DecisionSalary::DECISION_NEGOTIATED && RecruitmentInterview::hasTanggalJoinColumn()) {
+                if ($normalizedJoin !== null) {
+                    $interview = RecruitmentInterview::where('new_recruitment_id', $recruitment->id)
+                        ->where('stage', 'user')
+                        ->where('is_active', 1)
+                        ->orderByDesc('id')
+                        ->first();
+                    if ($interview) {
+                        $interview->update([
+                            'tanggal_join' => $normalizedJoin,
+                            'updated_by' => $this->getEffectiveKaryawanName(),
+                        ]);
+                    }
+                }
+            }
+
+            $saved = RequesterSalaryApprovalService::recordDecision(
+                $row,
+                $normalized,
+                $this->karyawan,
+                $request->input('reason'),
+                $extraHistory
+            );
+
+            DB::commit();
+
+            $message = $normalized === DecisionSalary::DECISION_APPROVED
+                ? 'Gaji HRD disetujui. HRD dapat melanjutkan kirim offering ke kandidat.'
+                : ($normalized === DecisionSalary::DECISION_NEGOTIATED
+                    ? 'Usulan negosiasi gaji berhasil dikirim ke HRD.'
+                    : 'Gaji HRD ditolak. HRD perlu menginput ulang penawaran.');
+
+            return response()->json([
+                'message' => $message,
+                'data' => $saved,
+            ], 200);
+        } catch (\InvalidArgumentException $e) {
+            DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json(['message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Riwayat putaran nego gaji User ↔ HRD.
+     */
+    public function requesterSalaryApprovalHistory(Request $request)
+    {
+        try {
+            $recruitment = $this->findOwnedRecruitment($request->input('new_recruitment_id'));
+            if (!$recruitment) {
+                return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+            }
+
+            $history = RequesterSalaryApprovalService::historyForRecruitment((int) $recruitment->id);
+
+            return response()->json(['data' => $history], 200);
+        } catch (\Throwable $th) {
+            return response()->json(['message' => $th->getMessage()], 500);
+        }
     }
 
     /**
@@ -650,8 +1492,13 @@ class PersonnelRequestController extends Controller
 
             $useUserAssessment = $this->validatedUserAssessmentFlag($request);
             $this->syncUserAssessmentCategoryConfig($request);
-            $assessmentCategoryConfigs = $this->assessmentCategoryPayload($request->assesment_question_category) ?? [];
-            $legacyAssessmentFields = $this->legacyUserAssessmentFieldsFromConfigs($assessmentCategoryConfigs);
+            $assessmentCategoryConfigs = $this->combinedAssessmentCategoryPayload($request);
+            $legacyAssessmentFields = $this->legacyUserAssessmentFieldsFromConfigs(
+                array_values(array_filter(
+                    $assessmentCategoryConfigs,
+                    fn ($config) => ($config['type'] ?? '') !== 'hr'
+                ))
+            );
 
             // === DEV MODE: Otomatis membaca konfigurasi dari .env ===
             // Menggunakan helper agar logic impersonasi lebih tersentralisasi
@@ -727,8 +1574,13 @@ class PersonnelRequestController extends Controller
 
             $useUserAssessment = $this->validatedUserAssessmentFlag($request);
             $this->syncUserAssessmentCategoryConfig($request);
-            $assessmentCategoryConfigs = $this->assessmentCategoryPayload($request->assesment_question_category) ?? [];
-            $legacyAssessmentFields = $this->legacyUserAssessmentFieldsFromConfigs($assessmentCategoryConfigs);
+            $assessmentCategoryConfigs = $this->combinedAssessmentCategoryPayload($request);
+            $legacyAssessmentFields = $this->legacyUserAssessmentFieldsFromConfigs(
+                array_values(array_filter(
+                    $assessmentCategoryConfigs,
+                    fn ($config) => ($config['type'] ?? '') !== 'hr'
+                ))
+            );
 
             $data->update([
                 'request_type'              => $request->request_type,
@@ -816,9 +1668,77 @@ class PersonnelRequestController extends Controller
             return response()->json(['message' => 'Data personel request tidak ditemukan'], 404);
         }
 
+        $data->load(['detailCabang', 'detailDivisi', 'detailPosisi']);
+        $data->loadCount([
+            'newRecruitments as total_pelamar' => function ($query) {
+                $this->constrainCountedApplicants($query);
+            },
+            'newRecruitments as total_hired' => function ($query) {
+                $query->where('status', 'hired');
+            },
+            'newRecruitments as total_keterima' => function ($query) {
+                $query->whereIn('status', ['completed', 'hired', 'training', 'HIRED', 'Training']);
+            },
+        ]);
+
         app(UserAssessmentCategoryService::class)->appendLegacyConfigFields($data);
 
         return response()->json($data, 200);
+    }
+
+    /**
+     * Detail kandidat milik personnel request user (untuk modal detail kandidat)
+     */
+    public function candidateDetail(Request $request)
+    {
+        $id = $request->input('id');
+        if (!$id) {
+            return response()->json(['message' => 'ID kandidat tidak ditemukan'], 400);
+        }
+
+        $ownedRequestIds = $this->ownedPersonnelRequestQuery()->pluck('id');
+        if ($ownedRequestIds->isEmpty()) {
+            return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+        }
+
+        $candidate = NewRecruitment::with([
+            'personalRequest.masterJabatan',
+            'personalRequest.masterDivisi',
+            'personalRequest.detailDivisi',
+            'personalRequest.detailPosisi',
+            'appliedPositionJabatan',
+            'masterJabatan',
+            'hrdInterview',
+            'userInterview',
+            'candidateProfile',
+        ])
+            ->whereIn('personnel_request_id', $ownedRequestIds)
+            ->find($id);
+
+        if (!$candidate) {
+            return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+        }
+
+        $pictureService = app(RecruitmentPictureService::class);
+        $personnelRequest = $candidate->personalRequest;
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'candidate' => $this->formatCandidatePreviewItem($candidate, $pictureService),
+                'request' => $personnelRequest ? [
+                    'id' => $personnelRequest->id,
+                    'no_request' => $personnelRequest->no_request,
+                    'posisi' => optional($personnelRequest->detailPosisi)->nama_jabatan
+                        ?: optional($personnelRequest->masterJabatan)->nama_jabatan
+                        ?: $personnelRequest->posisi,
+                    'divisi' => optional($personnelRequest->detailDivisi)->nama_divisi
+                        ?: optional($personnelRequest->masterDivisi)->nama_divisi
+                        ?: ($personnelRequest->divisi_alias ?: $personnelRequest->divisi),
+                    'minimum_matching' => $personnelRequest->minimum_matching,
+                ] : null,
+            ],
+        ], 200);
     }
 
     /**
@@ -836,34 +1756,41 @@ class PersonnelRequestController extends Controller
     /**
      * Helper to get allowed employee IDs based on hierarchy
      */
-    private function getAllowedEmployeeIds()
+    private function getEffectiveKaryawanId()
     {
-        // === DEV MODE: Otomatis membaca konfigurasi dari .env ===
-        // Fitur ini otomatis MATI jika APP_ENV='production' di .env
         $isDevMode = env('APP_ENV') !== 'production' && env('DEV_BYPASS_USER_ID') !== null;
-        $devUserId = env('DEV_BYPASS_USER_ID'); // Ambil dari .env
-        
-        $userId = $this->user_id;
+        $devUserId = env('DEV_BYPASS_USER_ID');
 
         if ($isDevMode && $devUserId) {
-            $userId = $devUserId;
+            return (int) $devUserId;
         }
 
-        // Get hierarchy (manager + all subordinates up to 3 levels deep)
-        
-        $bawahanAll = GetBawahanAll::where('id', $userId)->get();
-        
+        return (int) $this->user_id;
+    }
+
+    private function isRecruitmentManager(): bool
+    {
+        return RecruitmentManagerAccess::forKaryawanId($this->getEffectiveKaryawanId());
+    }
+
+    private function getAllowedEmployeeIds()
+    {
+        $bawahanAll = GetBawahanAll::where('id', $this->getEffectiveKaryawanId())->get();
+
         return $bawahanAll->pluck('id')->toArray();
     }
 
     public function getKaryawan()
     {
         try {
-            $allowedIds = $this->getAllowedEmployeeIds();
+            $listQuery = MasterKaryawan::select('user_id', 'nik_karyawan', 'nama_lengkap', 'id_department', 'id_jabatan', 'id_cabang', 'grade')
+                ->where('is_active', true);
 
-            $list = MasterKaryawan::select('user_id', 'nik_karyawan', 'nama_lengkap', 'id_department', 'id_jabatan', 'id_cabang', 'grade')
-                ->where('is_active', true)
-                ->whereIn('id', $allowedIds)
+            if (!$this->isRecruitmentManager()) {
+                $listQuery->whereIn('id', $this->getAllowedEmployeeIds());
+            }
+
+            $list = $listQuery
                 ->orderBy('nama_lengkap')
                 ->get()
                 ->map(function ($k) {
@@ -891,11 +1818,14 @@ class PersonnelRequestController extends Controller
     public function getGrade()
     {
         try {
-            $allowedIds = $this->getAllowedEmployeeIds();
+            $gradeQuery = MasterKaryawan::select('grade')
+                ->where('is_active', true);
 
-            $grades = MasterKaryawan::select('grade')
-                ->where('is_active', true)
-                ->whereIn('id', $allowedIds)
+            if (!$this->isRecruitmentManager()) {
+                $gradeQuery->whereIn('id', $this->getAllowedEmployeeIds());
+            }
+
+            $grades = $gradeQuery
                 ->whereNotNull('grade')
                 ->where('grade', '!=', '')
                 ->distinct()
@@ -915,11 +1845,15 @@ class PersonnelRequestController extends Controller
     public function getDivisi()
     {
         try {
-            $allowedIds = $this->getAllowedEmployeeIds();
-            $allowedDivisiIds = MasterKaryawan::whereIn('id', $allowedIds)->whereNotNull('id_department')->pluck('id_department')->unique()->toArray();
+            $divisiQuery = MasterDivisi::where('is_active', 1);
 
-            $divisi = MasterDivisi::where('is_active', 1)
-                ->whereIn('id', $allowedDivisiIds)
+            if (!$this->isRecruitmentManager()) {
+                $allowedIds = $this->getAllowedEmployeeIds();
+                $allowedDivisiIds = MasterKaryawan::whereIn('id', $allowedIds)->whereNotNull('id_department')->pluck('id_department')->unique()->toArray();
+                $divisiQuery->whereIn('id', $allowedDivisiIds);
+            }
+
+            $divisi = $divisiQuery
                 ->orderBy('nama_divisi')
                 ->get()
                 ->map(fn($d) => ['id' => $d->id, 'text' => $d->nama_divisi]);
@@ -942,7 +1876,7 @@ class PersonnelRequestController extends Controller
 
             if ($divisiId) {
                 $query->where('id_divisi', $divisiId);
-            } else {
+            } elseif (!$this->isRecruitmentManager()) {
                 $allowedIds = $this->getAllowedEmployeeIds();
                 $allowedDivisiIds = MasterKaryawan::whereIn('id', $allowedIds)
                     ->where('is_active',1)->whereNotNull('id_department')->pluck('id_department')->unique()->toArray();
@@ -1040,9 +1974,10 @@ class PersonnelRequestController extends Controller
             if ($hrds->isNotEmpty()) {
                 // Siapkan data untuk template email
                 $dataArray = (object)[
+                    'nama_user'         => $this->karyawan ?? 'User',
                     'nama_kandidat'     => $recruitment->nama_lengkap,
                     'divisi'            => $recruitment->personnelRequest->detailDivisi->nama_divisi ?? $recruitment->personnelRequest->divisi,
-                    'posisi'            => $recruitment->personnelRequest->detailPosisi->nama_jabatan ?? $recruitment->personnelRequest->posisi,
+                    'posisi'            => GenerateMessageAtsEmail::posisiLabelInternal($recruitment),
                     'cabang'            => $recruitment->personnelRequest->detailCabang->nama_cabang ?? $recruitment->personnelRequest->lokasi_penempatan_cabang,
                     'tgl_interview'     => $request->tgl_interview,
                     'jenis_interview'   => $request->jenis_interview,
@@ -1052,7 +1987,6 @@ class PersonnelRequestController extends Controller
                 foreach ($hrds as $user) {
                     if (!$user->email) continue; // Skip jika tidak ada email
 
-                    $dataArray->nama_user = $user->nama_lengkap;
                     $bodyEmail = GenerateMessageAtsEmail::bodyEmailHrdSchaduled($dataArray);
                     
                     SendEmail::where('to', $user->email)
@@ -1087,6 +2021,86 @@ class PersonnelRequestController extends Controller
     }
 
     /**
+     * Kembalikan kandidat dari tab Terlewat ke tahap HR Interview untuk ditinjau ulang HRD.
+     */
+    public function returnCandidateToHrd(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $recruitment = $this->findOwnedRecruitment($request->new_recruitment_id);
+            if (!$recruitment) {
+                return response()->json(['message' => 'Data kandidat tidak ditemukan'], 404);
+            }
+
+            $recruitment->load(['userInterview', 'candidateProfile', 'hrdInterview']);
+
+            if ($this->resolveCandidateActionCategory($recruitment) !== 'overdue') {
+                return response()->json([
+                    'message' => 'Kandidat hanya dapat dikembalikan ke HRD dari tab Terlewat.',
+                ], 422);
+            }
+
+            $reason = trim((string) ($request->input('reason') ?? ''));
+            if ($reason === '') {
+                return response()->json(['message' => 'Alasan pengembalian wajib diisi.'], 422);
+            }
+
+            $user = $this->getEffectiveKaryawanName();
+            $now = Carbon::now();
+
+            RecruitmentInterview::where('new_recruitment_id', $recruitment->id)
+                ->where('stage', 'user')
+                ->where('is_active', 1)
+                ->update([
+                    'is_active' => 0,
+                    'updated_by' => $user,
+                ]);
+
+            (new RecruitmentStatusService())->update(
+                $recruitment->id,
+                'interview_hrd',
+                $now,
+                'returned_to_hrd_from_user_interview',
+                [
+                    'reason' => $reason,
+                    'by' => $user,
+                ]
+            );
+
+            $recruitment->update([
+                'status' => 'interview_hrd',
+                'is_approved_interview_hrd' => 0,
+                'approved_interview_hrd_by' => null,
+                'approved_interview_hrd_at' => null,
+                'is_approve_interview_user' => 0,
+                'is_input_review_hrd' => 1,
+            ]);
+
+            $latestHrdInterview = RecruitmentInterview::where('new_recruitment_id', $recruitment->id)
+                ->where('stage', 'hrd')
+                ->orderByDesc('id')
+                ->first();
+
+            if ($latestHrdInterview) {
+                $latestHrdInterview->update(['is_active' => 1]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Kandidat berhasil dikembalikan ke HR Interview. HRD akan meninjau ulang keputusan.',
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile(),
+            ], 500);
+        }
+    }
+
+    /**
      * Save user interview notes
      */
     public function saveUserNotes(Request $request)
@@ -1108,12 +2122,37 @@ class PersonnelRequestController extends Controller
                 return response()->json(['message' => 'Data interview user tidak ditemukan'], 404);
             }
 
-            $interview->update([
-                'catatan_interview' => $request->catatan_interview_user
-            ]);
+            $notes = trim((string) $request->catatan_interview_user);
+            $plain = trim(html_entity_decode(strip_tags($notes)));
+            if ($plain === '') {
+                return response()->json(['message' => 'Catatan interview user wajib diisi.'], 422);
+            }
+
+            $interviewPayload = [
+                'catatan_interview' => $request->catatan_interview_user,
+                'updated_by' => $this->getEffectiveKaryawanName(),
+            ];
+            if (RecruitmentInterview::hasTanggalJoinColumn()) {
+                $joinRaw = trim((string) $request->input('tanggal_join', ''));
+                $normalizedJoin = $joinRaw !== '' ? RecruitmentInterview::normalizeTanggalJoin($joinRaw) : null;
+                if ($normalizedJoin !== null) {
+                    $interviewPayload['tanggal_join'] = $normalizedJoin;
+                }
+            }
+
+            $interview->update($interviewPayload);
+            $interview->refresh();
 
             DB::commit();
-            return response()->json(['message' => 'Berhasil menyimpan catatan interview user!']);
+            return response()->json([
+                'message' => 'Berhasil menyimpan catatan interview user!',
+                'data' => [
+                    'catatan_interview' => $interview->catatan_interview,
+                    'tanggal_join' => RecruitmentInterview::normalizeTanggalJoin($interview->getRawOriginal('tanggal_join')),
+                    'updated_by' => $interview->updated_by,
+                    'updated_at' => $interview->updated_at,
+                ],
+            ]);
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json(["message" => $th->getMessage(), "line" => $th->getLine(), "file" => $th->getFile()], 500);
@@ -1153,6 +2192,24 @@ class PersonnelRequestController extends Controller
             $pr = PersonnelRequest::with(['detailDivisi', 'detailPosisi', 'detailCabang'])->find($recruitment->personnel_request_id);
            
             if ($request->decision === 'approve') {
+                $salaryNormalized = RequesterSalaryApprovalService::normalizeAmount(
+                    $request->input('sallary_offer_user')
+                );
+                if ($salaryNormalized === null) {
+                    DB::rollBack();
+                    return response()->json([
+                        'message' => 'Salary Offer User wajib diisi saat merekomendasikan kandidat.',
+                    ], 422);
+                }
+
+                $tunjanganNormalized = RequesterSalaryApprovalService::normalizeAmount(
+                    $request->input('tunjangan_gaji_user'),
+                    true
+                );
+                if ($tunjanganNormalized === null) {
+                    $tunjanganNormalized = 0;
+                }
+
                 $tokenService = new GenerateToken();
                 $tokenKey = $pr->id . $recruitment->nama_lengkap. 'approval' . str_replace('.', '', microtime(true));
                 $token = $tokenService->encrypt(md5($tokenKey) . '|' . $tokenService->encrypt(DATE('Y-m-d')));
@@ -1165,15 +2222,19 @@ class PersonnelRequestController extends Controller
                     'status' => 'management_decision'
                 ]);
 
-                // Simpan salary offer user jika diisi
-                if ($request->filled('sallary_offer_user')) {
-                    $salaryValue = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $request->input('sallary_offer_user'))));
-                    SallaryOfferService::upsertActive(
-                        (int) $recruitment->id,
-                        ['sallary_offer_user' => $salaryValue ?: null],
-                        $this->karyawan
-                    );
+                $offerPayload = [
+                    'sallary_offer_user' => $salaryNormalized,
+                    'requester_salary_status' => RequesterSalaryApprovalService::STATUS_NOT_REQUIRED,
+                ];
+                if (SallaryOfferService::hasTunjanganGajiUserColumn()) {
+                    $offerPayload['tunjangan_gaji_user'] = $tunjanganNormalized;
                 }
+
+                SallaryOfferService::upsertActive(
+                    (int) $recruitment->id,
+                    $offerPayload,
+                    $this->karyawan
+                );
             } else {
                 $rejectReason = trim((string) ($request->input('alasan_reject') ?? $interview->catatan_interview ?? ''));
                 if ($rejectReason === '') {
@@ -1200,8 +2261,7 @@ class PersonnelRequestController extends Controller
                 app(AtsNotificationService::class)->userInterviewRejected($recruitment, $pr);
 
                 try {
-                    // Set posisi untuk template
-                    $recruitment->posisi_di_lamar = $pr->detailPosisi->nama_jabatan ?? $pr->posisi;
+                    $recruitment->loadMissing(['personnelRequest', 'personalRequest']);
 
                     if (!empty($recruitment->email)) {
                         $emailContent = GenerateMessageAtsEmail::bodyEmailRejectKandidat($recruitment);
@@ -1215,13 +2275,14 @@ class PersonnelRequestController extends Controller
                                     ->send();
                     }
 
-                    $phone = $recruitment->no_telepon ?: ($recruitment->no_hp ?? null);
-                    if (!empty($phone)) {
-                        $waGen = new GenerateMessageAtsWhatsapp($recruitment);
-                        $waMessage = $waGen->RejectedCandidateSelection();
-                        $sendWa = new SendWhatsapp($phone, $waMessage);
-                        $sendWa->send();
-                    }
+                    // DISABLED: WhatsApp rejection info (kebijakan HRD — notifikasi rejection via email saja)
+                    // $phone = $recruitment->no_telepon ?: ($recruitment->no_hp ?? null);
+                    // if (!empty($phone)) {
+                    //     $waGen = new GenerateMessageAtsWhatsapp($recruitment);
+                    //     $waMessage = $waGen->RejectedCandidateSelection();
+                    //     $sendWa = new SendWhatsapp($phone, $waMessage);
+                    //     $sendWa->send();
+                    // }
                 } catch (\Throwable $th) {
                     Log::error('Gagal mengirim notifikasi reject kandidat: ' . $th->getMessage());
                 }
@@ -1256,6 +2317,11 @@ class PersonnelRequestController extends Controller
                     'new_recruitment_id' => $recruitment->id ?? null,
                 ]);
             }
+
+            app(RecruitmentDecisionActionTelegramService::class)->notifyCandidateApprovalRequest($recruitment, [
+                'approved_by' => $this->karyawan,
+                'sallary_offer_user' => $salaryNormalized ?? null,
+            ]);
         }
 
         return response()->json(['message' => 'Keputusan berhasil disimpan!']);
@@ -1292,7 +2358,9 @@ class PersonnelRequestController extends Controller
             'Permohonan Persetujuan Kandidat - ' . $recruitment->nama_lengkap,
             $emailContent,
             $assessmentData,
-            $candidateDocumentSendAttachments
+            $candidateDocumentSendAttachments,
+            (int) $recruitment->id,
+            (string) $recruitment->nama_lengkap
         );
     }
 
@@ -1301,7 +2369,9 @@ class PersonnelRequestController extends Controller
         string $subject,
         string $emailContent,
         array $assessmentData = [],
-        array $candidateDocumentAttachments = []
+        array $candidateDocumentAttachments = [],
+        ?int $recruitmentIdForPush = null,
+        ?string $candidateNameForPush = null
     ): array {
         if ($targetEmail === '') {
             throw new \RuntimeException('target_email atau EMAIL_DIREKTUR_IBU belum diisi');
@@ -1326,6 +2396,14 @@ class PersonnelRequestController extends Controller
             }
 
             $emailQuery->send();
+
+            if ($recruitmentIdForPush !== null && $candidateNameForPush !== null) {
+                app(\App\Services\ApprovalAppFcmService::class)->notifyPendingKandidatForIbuEmail(
+                    $targetEmail,
+                    $recruitmentIdForPush,
+                    $candidateNameForPush
+                );
+            }
 
             return [
                 'sent' => true,
@@ -1484,7 +2562,9 @@ class PersonnelRequestController extends Controller
                         $subject,
                         $emailContent,
                         $assessmentData,
-                        $candidateDocumentSendAttachments
+                        $candidateDocumentSendAttachments,
+                        (int) $recruitment->id,
+                        (string) $recruitment->nama_lengkap
                     );
                     $meta = array_merge($meta, $sendResult);
                 } else {
@@ -1553,6 +2633,162 @@ class PersonnelRequestController extends Controller
         $query->where('is_active', 1)
             ->whereRaw('COALESCE(is_rejected_kandidat, 0) = 0')
             ->whereRaw("LOWER(TRIM(COALESCE(status, ''))) NOT IN ('assessment', 'hired', 'training')");
+    }
+
+    private function resolveCandidateBirthDateForShio($row): ?string
+    {
+        if (!empty($row->tanggal_lahir)) {
+            return (string) $row->tanggal_lahir;
+        }
+
+        foreach (['tempat_tanggal_lahir', 'tempat_lahir'] as $field) {
+            if (empty($row->{$field})) {
+                continue;
+            }
+            $value = trim((string) $row->{$field});
+            if ($value !== '' && ShioElemenHelper::parseBirthDateParts($value)) {
+                return $value;
+            }
+        }
+
+        $ttl = $this->getCandidateTtlString($row);
+        if ($ttl && ShioElemenHelper::parseBirthDateParts($ttl)) {
+            return $ttl;
+        }
+
+        return $ttl ?: null;
+    }
+
+    private function resolveCandidateShioElemen($row): array
+    {
+        $birthDate = $this->resolveCandidateBirthDateForShio($row);
+
+        return ShioElemenHelper::resolve(
+            $birthDate,
+            $row->shio ?? null,
+            $row->elemen ?? null
+        );
+    }
+
+    private function getCandidateTtlString($row)
+    {
+        if (!empty($row->tempat_tanggal_lahir)) {
+            return $row->tempat_tanggal_lahir;
+        }
+        $parts = [];
+        if (!empty($row->tempat_lahir)) {
+            $parts[] = $row->tempat_lahir;
+        }
+        if (!empty($row->tanggal_lahir)) {
+            $parts[] = $row->tanggal_lahir;
+        }
+
+        return count($parts) > 0 ? implode(', ', $parts) : null;
+    }
+
+    private function extractCandidateBirthYear($row)
+    {
+        $ttl = is_string($row) ? $row : $this->getCandidateTtlString($row);
+
+        if (is_object($row) && !empty($row->tanggal_lahir)) {
+            try {
+                $dt = Carbon::parse($row->tanggal_lahir);
+                $year = (int) $dt->year;
+                if ($year >= 1930 && $year <= Carbon::now()->year) {
+                    return $year;
+                }
+                if ($year > 0) {
+                    $last2 = $year % 100;
+                    $currentYY = Carbon::now()->year % 100;
+
+                    return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
+                }
+            } catch (\Exception $e) {
+            }
+        }
+
+        if (!$ttl) {
+            return null;
+        }
+
+        if (preg_match('/\b(19\d\d|20\d\d)\b/', $ttl, $matches)) {
+            return (int) $matches[1];
+        }
+
+        if (preg_match('/\b(\d{4})\b/', $ttl, $matches)) {
+            $year = (int) $matches[1];
+            if ($year >= 1930 && $year <= Carbon::now()->year) {
+                return $year;
+            }
+            if ($year > 0) {
+                $last2 = $year % 100;
+                $currentYY = Carbon::now()->year % 100;
+
+                return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
+            }
+        }
+
+        return null;
+    }
+
+    private function newRecruitmentHasColumn($column)
+    {
+        static $columns = null;
+
+        if ($columns === null) {
+            $columns = Schema::hasTable('new_recruitment')
+                ? array_flip(Schema::getColumnListing('new_recruitment'))
+                : [];
+        }
+
+        return isset($columns[$column]);
+    }
+
+    private function whereAnyExistingNewRecruitmentLike($query, array $columns, $keyword)
+    {
+        $query->where(function ($sub) use ($columns, $keyword) {
+            $applied = false;
+
+            foreach ($columns as $column) {
+                if (!$this->newRecruitmentHasColumn($column)) {
+                    continue;
+                }
+
+                if (!$applied) {
+                    $sub->where($column, 'like', "%{$keyword}%");
+                    $applied = true;
+                    continue;
+                }
+
+                $sub->orWhere($column, 'like', "%{$keyword}%");
+            }
+
+            if (!$applied) {
+                $sub->whereRaw('1 = 0');
+            }
+        });
+    }
+
+    private function filterCandidateUsiaColumn($q, $keyword)
+    {
+        $cleanDigits = preg_replace('/[^0-9]/', '', $keyword);
+        $q->where(function ($sub) use ($keyword, $cleanDigits) {
+            if ($cleanDigits !== '') {
+                $targetYear = Carbon::now()->year - (int) $cleanDigits;
+                if ($this->newRecruitmentHasColumn('tanggal_lahir')) {
+                    $sub->whereYear('tanggal_lahir', $targetYear);
+                }
+                foreach (['tempat_tanggal_lahir', 'tempat_lahir'] as $column) {
+                    if ($this->newRecruitmentHasColumn($column)) {
+                        $sub->orWhere($column, 'like', "%{$cleanDigits}%");
+                    }
+                }
+
+                return;
+            }
+
+            $this->whereAnyExistingNewRecruitmentLike($sub, ['tempat_tanggal_lahir', 'tempat_lahir'], $keyword);
+        });
     }
 
 }

@@ -28,11 +28,10 @@ use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\RecruitmentStatusService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
-use App\Services\PublicRecruitmentJobListService;
-use App\Services\PersonnelRequestImageService;
+use App\Services\PublicRecruitmentOpenJobService;
 use App\Services\RecruitmentApplicationDraftService;
-use App\Services\UserAssessmentCategoryService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 
 class RecruitmentController extends Controller{
@@ -348,8 +347,6 @@ class RecruitmentController extends Controller{
             $shioElemen = ShioElemenHelper::resolve($request->tanggal_lahir, null, null);
             $token = rtrim(strtr(base64_encode(random_bytes(48)), '+/', '-_'), '=');
 
-            DB::beginTransaction();
-
             $sumberInformasi = trim((string) $request->input('sumber_informasi'));
             if ($sumberInformasi === 'Lainnya') {
                 $sumberInformasi = trim((string) $request->input('sumber_informasi_lainnya'));
@@ -362,7 +359,51 @@ class RecruitmentController extends Controller{
                 ], 422);
             }
 
-            $id = DB::table('new_recruitment')->insertGetId([
+            $masalahHukum = $request->input('masalah_hukum', []);
+            if (is_string($masalahHukum)) {
+                $masalahHukum = json_decode($masalahHukum, true);
+            }
+            $masalahHukum = is_array($masalahHukum) ? $masalahHukum : [];
+
+            $pernahTerlibatMasalahHukum = filter_var(
+                $masalahHukum['pernah'] ?? false,
+                FILTER_VALIDATE_BOOLEAN
+            );
+            $keteranganMasalahHukum = $pernahTerlibatMasalahHukum
+                ? trim((string) ($masalahHukum['keterangan'] ?? ''))
+                : null;
+
+            if ($pernahTerlibatMasalahHukum && $keteranganMasalahHukum === '') {
+                return response()->json([
+                    'message' => 'Keterangan masalah kriminal atau hukum wajib diisi jika memilih Ya.',
+                    'status' => false,
+                ], 422);
+            }
+
+            $pernahBekerjaPerusahaan = $request->input('pernah_bekerja_perusahaan', []);
+            if (is_string($pernahBekerjaPerusahaan)) {
+                $pernahBekerjaPerusahaan = json_decode($pernahBekerjaPerusahaan, true);
+            }
+            $pernahBekerjaPerusahaan = is_array($pernahBekerjaPerusahaan) ? $pernahBekerjaPerusahaan : [];
+
+            $pernahBekerjaDiPerusahaan = filter_var(
+                $pernahBekerjaPerusahaan['pernah'] ?? false,
+                FILTER_VALIDATE_BOOLEAN
+            );
+            $keteranganKeluarPerusahaan = $pernahBekerjaDiPerusahaan
+                ? trim((string) ($pernahBekerjaPerusahaan['keterangan'] ?? ''))
+                : null;
+
+            if ($pernahBekerjaDiPerusahaan && $keteranganKeluarPerusahaan === '') {
+                return response()->json([
+                    'message' => 'Keterangan penyebab keluar dari PT Inti Surya Laboratorium wajib diisi jika memilih Ya.',
+                    'status' => false,
+                ], 422);
+            }
+
+            DB::beginTransaction();
+
+            $recruitmentPayload = [
                 'nama_lengkap' => $namaLengkap,
                 'tempat_lahir' => $request->tempat_lahir,
                 'tanggal_lahir' => $request->tanggal_lahir,
@@ -374,6 +415,11 @@ class RecruitmentController extends Controller{
                 'pendidikan' => $json($request->pendidikan),
                 'pengalaman_kerja' => $json($request->pengalaman_kerja),
                 'referensi' => $json($request->referensi),
+                'rekomendasi' => $json($request->rekomendasi),
+                'masalah_hukum' => json_encode([
+                    'pernah' => $pernahTerlibatMasalahHukum,
+                    'keterangan' => $keteranganMasalahHukum,
+                ]),
                 'sumber_informasi' => $sumberInformasi,
                 'skill' => $json($request->skill),
                 'shio' => $shioElemen['shio'] ?? null,
@@ -388,8 +434,17 @@ class RecruitmentController extends Controller{
                 'is_active' => true,
                 'created_at' => DATE('Y-m-d H:i:s'),
                 'updated_at' => DATE('Y-m-d H:i:s'),
-            ]);
-            (new RecruitmentStatusService())->update($id, 'assessment');
+            ];
+
+            if (Schema::hasColumn('new_recruitment', 'pernah_bekerja_perusahaan')) {
+                $recruitmentPayload['pernah_bekerja_perusahaan'] = json_encode([
+                    'pernah' => $pernahBekerjaDiPerusahaan,
+                    'keterangan' => $keteranganKeluarPerusahaan,
+                ]);
+            }
+
+            $id = DB::table('new_recruitment')->insertGetId($recruitmentPayload);
+            (new RecruitmentStatusService())->update($id, 'review');
 
             DB::commit();
 
@@ -535,7 +590,7 @@ class RecruitmentController extends Controller{
             ->get();
 
         $activeRecruitmentStatuses = [
-            'assessment', 'screening', 'approved', 'interview_hrd', 'profile_completion',
+            'review', 'assessment', 'screening', 'approved', 'interview_hrd', 'profile_completion',
             'interview_user', 'management_decision', 'internal_sallary_offer', 'salary_offer',
         ];
 
@@ -1479,42 +1534,9 @@ class RecruitmentController extends Controller{
     public function jobList()
     {
         try {
-            $data = PersonnelRequest::query()
-                ->leftJoin('master_divisi as md', 'md.id', '=', 'personnel_requests.divisi')
-                ->leftJoin('master_cabang as mc', 'mc.id', '=', 'personnel_requests.lokasi_penempatan_cabang')
-                ->where('personnel_requests.is_active', true)
-                ->where('personnel_requests.is_reject', false)
-                ->where('personnel_requests.is_publish', true)
-                ->select([
-                    'personnel_requests.id',
-                    'personnel_requests.created_at',
-                    'no_request',
-                    'divisi',
-                    'jumlah_personal',
-                    'lokasi_penempatan_cabang',
-                    'pengalaman_kerja',
-                    'pendidikan',
-                    'gender',
-                    'prioritas',
-                    'divisi_alias',
-                    'grade_master_karyawan',
-                    'personnel_requests.gambar',
-                    'md.nama_divisi as divisi_name',
-                    'mc.nama_cabang as placement',
-                ])
-                ->get();
+            $data = app(PublicRecruitmentOpenJobService::class)->getOpenJobs();
 
-            $data = app(PublicRecruitmentJobListService::class)
-                ->filterDuplicatePositions($data);
-
-            $imageService = app(PersonnelRequestImageService::class);
-            $data->each(function ($job) use ($imageService) {
-                $imageService->appendToJob($job);
-            });
-
-            $data->each->makeHidden(['id', 'created_at', 'divisi', 'lokasi_penempatan_cabang']);
-
-            return response()->json($data->values(), 200);
+            return response()->json($data, 200);
         } catch (\Exception $th) {
             return response()->json([
                 'message' => 'Gagal mengambil data job list.',
@@ -1525,41 +1547,11 @@ class RecruitmentController extends Controller{
     public function getJob(Request $request)
     {
         try {
-            $data = PersonnelRequest::query()
-                ->leftJoin('master_divisi as md', 'md.id', '=', 'personnel_requests.divisi')
-                ->leftJoin('master_cabang as mc', 'mc.id', '=', 'personnel_requests.lokasi_penempatan_cabang')
-                ->where('personnel_requests.is_active', true)
-                ->where('personnel_requests.is_reject', false)
-                ->where('personnel_requests.is_publish', true)
-                ->where('no_request', $request->no_request)
-                ->select([
-                    'personnel_requests.id',
-                    'no_request',
-                    'divisi',
-                    'jumlah_personal',
-                    'lokasi_penempatan_cabang',
-                    'pengalaman_kerja',
-                    'pendidikan',
-                    'gender',
-                    'requirement',
-                    'prioritas',
-                    'divisi_alias',
-                    'grade_master_karyawan',
-                    'personnel_requests.created_by',
-                    'personnel_requests.gambar',
-                    'use_user_assessment',
-                    'md.nama_divisi as divisi_name',
-                    'mc.nama_cabang as placement',
-                ])
-                ->first();
+            $data = app(PublicRecruitmentOpenJobService::class)->getOpenJob((string) $request->no_request);
 
             if (!$data) {
                 return response()->json(['message' => 'Data job tidak ditemukan.'], 404);
             }
-
-            app(PersonnelRequestImageService::class)->appendToJob($data);
-            app(UserAssessmentCategoryService::class)->appendLegacyConfigFields($data);
-            $data->makeHidden(['divisi', 'lokasi_penempatan_cabang', 'created_by']);
 
             return response()->json($data, 200);
         } catch (\Exception $th) {

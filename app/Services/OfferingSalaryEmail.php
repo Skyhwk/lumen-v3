@@ -64,10 +64,23 @@ class OfferingSalaryEmail
         return 'Rp ' . number_format((float) $value, 0, ',', '.');
     }
 
+    /** Total penawaran HRD = gaji_pokok + tunjangan_kerja (candidate_data_offers), fallback sallary_offer_hrd. */
     public static function getSalaryOfferHrd($data): ?float
     {
         if (empty($data)) {
             return null;
+        }
+
+        $cdo = $data->candidateDataOffer
+            ?? $data->candidate_data_offer
+            ?? null;
+
+        if ($cdo) {
+            $gajiPokok = (float) ($cdo->gaji_pokok ?? 0);
+            $tunjangan = (float) ($cdo->tunjangan_kerja ?? 0);
+            if ($gajiPokok > 0 || $tunjangan > 0) {
+                return $gajiPokok + $tunjangan;
+            }
         }
 
         $offer = $data->sallaryOffer
@@ -82,6 +95,30 @@ class OfferingSalaryEmail
         }
 
         return (float) $amount;
+    }
+
+    /** Rincian gaji HRD: gaji pokok + tunjangan kerja. */
+    public static function getSalaryOfferHrdBreakdown($data): array
+    {
+        $cdo = $data->candidateDataOffer
+            ?? $data->candidate_data_offer
+            ?? null;
+
+        $gajiPokok = 0.0;
+        $tunjangan = 0.0;
+        if ($cdo) {
+            $gajiPokok = (float) ($cdo->gaji_pokok ?? 0);
+            $tunjangan = (float) ($cdo->tunjangan_kerja ?? 0);
+        }
+
+        $hasBreakdown = $gajiPokok > 0 || $tunjangan > 0;
+
+        return [
+            'gaji_pokok' => $gajiPokok,
+            'tunjangan_kerja' => $tunjangan,
+            'total' => self::getSalaryOfferHrd($data),
+            'has_breakdown' => $hasBreakdown,
+        ];
     }
 
     public static function getNamaJabatan($data): string
@@ -222,7 +259,8 @@ class OfferingSalaryEmail
             'skillBahasa'          => self::decodeJsonField($data->skill_bahasa ?? null),
             'minat'                => self::decodeJsonField($data->minat ?? null),
             'organisasi'           => self::decodeJsonField($data->organisasi ?? null),
-            'referensi'            => self::decodeJsonField($data->referensi ?? null),
+            'referensi'            => HrdEmailViewData::normalizePersonReferenceList($data->referensi ?? null),
+            'rekomendasi'          => HrdEmailViewData::normalizePersonRekomendasiList($data->rekomendasi ?? null),
             'sertifikat'           => self::decodeJsonField($data->sertifikat ?? null),
             'kursus'               => self::decodeJsonField($data->kursus ?? null),
             'salaryFormatted'      => self::formatRupiah($data->salary_user ?? null),

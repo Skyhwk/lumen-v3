@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Models\BonusKaryawan;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Services\PayrollRecordSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -20,25 +21,40 @@ class BonusKaryawanController extends Controller
 {
     public function index()
     {
-        $data = BonusKaryawan::where('is_active', true);
+        $data = PayrollRecordSyncService::scopeActiveKaryawanById(
+            BonusKaryawan::query()->where('bonus_karyawan.is_active', true),
+            'bonus_karyawan.id_karyawan'
+        );
 
         return Datatables::of($data)->make(true);
     }
 
     public function getKaryawan()
     {
-        $existingKaryawan = BonusKaryawan::where('is_active', true)->pluck('nik_karyawan')->toArray();
+        $existingIds = BonusKaryawan::where('is_active', true)
+            ->whereNotNull('id_karyawan')
+            ->pluck('id_karyawan')
+            ->all();
 
         $karyawan = MasterKaryawan::where('is_active', true)
-            ->whereNotIn('nik_karyawan', $existingKaryawan)
-            ->select('nik_karyawan', 'nama_lengkap')
-            ->get();
-        
-            return response()->json([
-                'success' => true,
-                'data' => $karyawan,
-                'message' => 'Available karyawan data retrieved successfully',
-            ], 201);
+            ->when(!empty($existingIds), function ($query) use ($existingIds) {
+                $query->whereNotIn('id', $existingIds);
+            })
+            ->select('id', 'nama_lengkap')
+            ->orderBy('nama_lengkap')
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'id_karyawan' => $row->id,
+                    'nama_lengkap' => $row->nama_lengkap,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => $karyawan,
+            'message' => 'Available karyawan data retrieved successfully',
+        ], 201);
     }
 
     public function delete(Request $request){
@@ -67,15 +83,21 @@ class BonusKaryawanController extends Controller
                     'message' => 'Nominal Terlalu Besar',
                 ], 401);
             }
-            $existingKaryawan = BonusKaryawan::where('is_active', true)->pluck('nik_karyawan')->toArray();
+
+            $existingKaryawan = BonusKaryawan::where('is_active', true)
+                ->whereNotNull('id_karyawan')
+                ->pluck('id_karyawan')
+                ->toArray();
 
             $bonusKaryawan = new BonusKaryawan();
             $bonusKaryawan->nominal = str_replace(['Rp', '.', ','], '', $request->nominal);
-            $bonusKaryawan->bulan_efektif = $request->bulan_efektif;
+            $bonusKaryawan->bulan_efektif = preg_match('/^(\d{4}-\d{2})/', (string) $request->bulan_efektif, $m)
+                ? $m[1]
+                : $request->bulan_efektif;
             $bonusKaryawan->created_by = $this->karyawan;
             $bonusKaryawan->created_at = DATE('Y-m-d H:i:s');
 
-            if($request->id && in_array($request->nik_karyawan, $existingKaryawan)) {
+            if ($request->id && in_array((int) $request->id_karyawan, array_map('intval', $existingKaryawan), true)) {
                 $oldBonusKaryawan = BonusKaryawan::findorFail($request->id);
                 $oldBonusKaryawan->updated_at = DATE('Y-m-d H:i:s');
                 $oldBonusKaryawan->updated_by = $this->karyawan;
@@ -83,18 +105,18 @@ class BonusKaryawanController extends Controller
                 $oldBonusKaryawan->save();
 
                 $bonusKaryawan->previous_id = $request->id;
-                $bonusKaryawan->karyawan = $oldBonusKaryawan->karyawan; 
+                $bonusKaryawan->karyawan = $oldBonusKaryawan->karyawan;
                 $bonusKaryawan->nik_karyawan = $oldBonusKaryawan->nik_karyawan;
+                $bonusKaryawan->id_karyawan = $oldBonusKaryawan->id_karyawan;
 
                 $message = 'Bonus Karyawan data updated successfully';
-
             } else {
-                $karyawan = MasterKaryawan::where('nik_karyawan', $request->nik_karyawan)->first();
+                $karyawan = MasterKaryawan::findOrFail($request->id_karyawan);
+                $bonusKaryawan->id_karyawan = $karyawan->id;
                 $bonusKaryawan->nik_karyawan = $karyawan->nik_karyawan;
-                $bonusKaryawan->karyawan = $karyawan->nama_lengkap; 
+                $bonusKaryawan->karyawan = $karyawan->nama_lengkap;
 
                 $message = 'Bonus Karyawan data inserted successfully';
-                
             }
 
             $bonusKaryawan->save();
@@ -110,12 +132,16 @@ class BonusKaryawanController extends Controller
 
     public function getHistory(Request $request)
     {
-        
-        $data = BonusKaryawan::where('nik_karyawan', $request->nik_karyawan)
-            ->orderBy('created_at', 'asc')
-            ->get();
+        $query = BonusKaryawan::query();
+
+        if (!empty($request->id_karyawan)) {
+            $query->where('id_karyawan', $request->id_karyawan);
+        } elseif (!empty($request->nik_karyawan)) {
+            $query->where('nik_karyawan', $request->nik_karyawan);
+        }
+
+        $data = $query->orderBy('created_at', 'asc');
 
         return Datatables::of($data)->make(true);
-
     }
 }

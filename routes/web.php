@@ -36,6 +36,7 @@ $router->group(['prefix' => 'api', 'middleware' => ['auth.token', 'rate.limit.us
 
 $router->post('/api/cekLHP', 'external\LHPHandleController@cekLHP');
 $router->post('/api/newCheckLhp', 'external\LHPHandleController@newCheckLhp');
+$router->post('/api/payroll-transfer/complete', 'external\PayrollTransferCallbackController@complete');
 
 $router->get('/api/getJadwal', 'external\JadwalHandler@getJadwal');
 $router->get('/api/showDetailJadwal', 'external\JadwalHandler@getDetailJadwalApi');
@@ -130,6 +131,38 @@ $router->get('/cs_tickets/conversation/{file}', 'CsTicketAssetController@show');
 
 $router->get('/r/{key}', 'external\RedirectLinkHandler@redirect');
 $router->get('/redirect/{key}', 'external\RedirectLinkHandler@redirect');
+
+$router->group(['prefix' => 'api/private/assessment', 'middleware' => ['cors']], function () use ($router) {
+    $router->post('overview', 'api\PenyesuaianGajiAssessmentPublicController@overview');
+    $router->post('start', 'api\PenyesuaianGajiAssessmentPublicController@start');
+    $router->post('state', 'api\PenyesuaianGajiAssessmentPublicController@state');
+    $router->post('answer', 'api\PenyesuaianGajiAssessmentPublicController@answer');
+});
+
+$router->group(['prefix' => 'api/private/decision', 'middleware' => ['cors']], function () use ($router) {
+    $router->post('overview', 'api\PenyesuaianGajiApprovalPublicController@overview');
+    $router->post('decide', 'api\PenyesuaianGajiApprovalPublicController@decide');
+});
+
+$router->group(['prefix' => 'api/public/recruitment', 'middleware' => ['cors']], function () use ($router) {
+    $router->get('jobs', 'api\PublicRecruitmentJobController@index');
+    $router->get('jobs/{no_request}', 'api\PublicRecruitmentJobController@show');
+    $router->post('director/overview', 'api\DirectorDecisionController@overview');
+    $router->post('director/decide', 'api\DirectorDecisionController@decide');
+});
+
+$router->group(['prefix' => 'api/approval-app', 'middleware' => ['cors']], function () use ($router) {
+    $router->post('register-device', 'api\ApprovalAppController@registerDevice');
+    $router->get('counts', 'api\ApprovalAppController@counts');
+    $router->get('inbox', 'api\ApprovalAppController@inbox');
+    $router->get('kandidat/{id}', 'api\ApprovalAppController@kandidatDetail');
+    $router->get('kandidat/{id}/assessment-sessions/{sessionId}', 'api\ApprovalAppAssessmentController@sessionResult');
+    $router->get('penyesuaian/detail', 'api\ApprovalAppController@penyesuaianDetail');
+    $router->get('penyesuaian/attendance-daily', 'api\ApprovalAppController@penyesuaianAttendanceDaily');
+    $router->get('penyesuaian/assessment-sessions/{sessionId}', 'api\ApprovalAppAssessmentController@penyesuaianSessionResult');
+});
+
+require __DIR__ . '/greatday.php';
 
 $router->post('/{any:.*}', ['uses' => 'R404Controller@r404']);
 $router->get('/{any:.*}', ['uses' => 'R404Controller@r404']);

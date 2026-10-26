@@ -20,6 +20,9 @@ class FdlCahayaController extends Controller
 {
     public function getSampel(Request $request)
     {
+        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+             return $response;
+        }
         if (isset($request->no_sampel) && $request->no_sampel != null) {
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->where('kategori_3', '28-Pencahayaan')->where('is_active', 1)->first();
             if (is_null($data)) {

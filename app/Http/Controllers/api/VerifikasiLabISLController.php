@@ -214,11 +214,48 @@ class VerifikasiLabISLController extends Controller
             $data_scanned = array_values($data_scanned);
         }
 
+        $orderDetail = OrderDetail::where('no_sampel', $scan->no_sampel)->first();
+
+        // Filter botol hanya yang valid sesuai persiapan di OrderDetail
+        if ($orderDetail && $orderDetail->persiapan) {
+            $persiapan = json_decode($orderDetail->persiapan, true) ?: [];
+            $validKodings = array_filter(array_column($persiapan, 'koding'));
+            if (!empty($validKodings)) {
+                $data_botol = array_filter($data_botol, function ($item) use ($validKodings) {
+                    $koding = is_object($item) ? ($item->koding ?? '') : ($item['koding'] ?? '');
+                    return in_array($koding, $validKodings);
+                });
+            }
+        }
+
+        // Deduplikasi botol berdasarkan koding agar tidak muncul double
+        $uniqueBotol = [];
+        foreach ($data_botol as $item) {
+            $koding = is_object($item) ? ($item->koding ?? '') : ($item['koding'] ?? '');
+            if ($koding && !isset($uniqueBotol[$koding])) {
+                $uniqueBotol[$koding] = $item;
+            }
+        }
+        $data_botol = array_values($uniqueBotol);
+
+        // Hitung total parameter
+        $totalParameter = 0;
+        if ($orderDetail && $orderDetail->parameter) {
+            $paramDecoded = json_decode($orderDetail->parameter, true);
+            if (is_array($paramDecoded)) {
+                $totalParameter = count($paramDecoded);
+            } else if (is_string($orderDetail->parameter)) {
+                $totalParameter = count(array_filter(explode(',', $orderDetail->parameter)));
+            }
+        }
+
         return response()->json([
             'message' => 'Botol dengan no sampel tersebut berhasil di dapatkan',
             'status' => '200',
             'data_botol' => $data_botol,
             'no_sampel' => $scan->no_sampel ?? null,
+            'penamaan_titik' => $orderDetail ? $orderDetail->keterangan_1 : null,
+            'total_parameter' => $totalParameter,
             'data_scan' => $data_scanned_analis
         ], 200);
     }

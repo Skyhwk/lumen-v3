@@ -13,9 +13,12 @@ use App\Services\RecruitmentStatusService;
 use App\Services\SallaryOfferService;
 use App\Services\SendEmail;
 use App\Services\AtsNotificationService;
+use App\Services\RecruitmentDecisionActionTelegramService;
+use App\Services\OfferingSalaryEmail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Yajra\DataTables\Facades\DataTables;
 
 class FinanceOfferingSallaryController extends Controller
@@ -54,41 +57,141 @@ class FinanceOfferingSallaryController extends Controller
         return $pos ?: '-';
     }
 
-    // ─── Index — DataTables list of candidates in finance_review ────────────
-
-    /**
-     * List candidates with status = finance_review
-     */
-    public function index(Request $request)
+    private function hasRejectFinanceColumn(): bool
     {
-        $tab = $request->input('tab', 'pending');
+        static $has = null;
 
-        $query = NewRecruitment::with([
-            'personalRequest.masterJabatan', 
-            'hrdInterview', 
-            'userInterview', 
-            'sallaryOffer', 
-            'candidateDataOffer', 
-            'candidateProfile'
-        ]);
+        if ($has === null) {
+            $has = Schema::hasColumn('new_recruitment', 'is_reject_finance');
+        }
+
+        return $has;
+    }
+
+    private function hasRejectedKandidatColumn(): bool
+    {
+        static $has = null;
+
+        if ($has === null) {
+            $has = Schema::hasColumn('new_recruitment', 'is_rejected_kandidat');
+        }
+
+        return $has;
+    }
+
+    private function applyActiveCandidateFilter($query)
+    {
+        if ($this->hasRejectedKandidatColumn()) {
+            $query->where(function ($q) {
+                $q->where('is_rejected_kandidat', 0)
+                    ->orWhereNull('is_rejected_kandidat');
+            });
+        }
+
+        return $query;
+    }
+
+    private function applyFinanceRejectTabFilter($query)
+    {
+        if ($this->hasRejectFinanceColumn()) {
+            $query->where('is_reject_finance', true);
+            if (Schema::hasColumn('new_recruitment', 'is_reject_finance_by')) {
+                $query->whereNotNull('is_reject_finance_by');
+            }
+            if (Schema::hasColumn('new_recruitment', 'is_reject_finance_at')) {
+                $query->whereNotNull('is_reject_finance_at');
+            }
+        } else {
+            $query->where('meta_history', 'like', '%finance_rejected%');
+        }
+
+        // is_rejected_kandidat = true artinya kandidat sudah tidak aktif, jangan tampilkan.
+        $this->applyActiveCandidateFilter($query);
+
+        return $query;
+    }
+
+    private function resolveYear(Request $request): ?int
+    {
+        if (!$request->filled('year')) {
+            return null;
+        }
+
+        $year = (int) $request->input('year');
+
+        return $year > 2000 ? $year : null;
+    }
+
+    private function applyYearFilter($query, Request $request)
+    {
+        $year = $this->resolveYear($request);
+        if ($year === null) {
+            return $query;
+        }
+
+        return $query->where(function ($sub) use ($year) {
+            $sub->whereYear('created_at', $year)
+                ->orWhereNull('created_at');
+        });
+    }
+
+    private function applyNotCurrentRejectOutcome($query)
+    {
+        $query->whereRaw('LOWER(COALESCE(status, "")) NOT LIKE ?', ['%reject%']);
+        if ($this->hasRejectFinanceColumn()) {
+            $query->where(function ($q) {
+                $q->where('is_reject_finance', false)
+                    ->orWhereNull('is_reject_finance');
+            });
+        }
+
+        return $query;
+    }
+
+    private function applyTabFilter($query, string $tab)
+    {
+        if ($tab === 'rejected') {
+            return $this->applyFinanceRejectTabFilter($query);
+        }
 
         if ($tab === 'processed') {
             $query->where('status', '!=', 'finance_review')
-                  ->where(function ($q) {
-                      $q->where('meta_history', 'like', '%finance_approved%')
-                        ->orWhere('meta_history', 'like', '%finance_rejected%');
-                  });
-        } else {
-            $query->where('status', 'finance_review');
+                ->where('meta_history', 'like', '%finance_approved%');
+            $this->applyNotCurrentRejectOutcome($query);
+            $this->applyActiveCandidateFilter($query);
+
+            return $query;
         }
 
-        $query->when($request->filled('year'), function ($q) use ($request) {
-            return $q->where(function ($sub) use ($request) {
-                $sub->whereYear('created_at', $request->year)
-                    ->orWhereNull('created_at');
-            });
-        })
-        ->orderBy('id', 'desc');
+        $query->where('status', 'finance_review');
+        $this->applyActiveCandidateFilter($query);
+
+        return $query;
+    }
+
+    // ─── Index — DataTables list by finance tab ─────────────────────────────
+
+    /**
+     * pending = menunggu keputusan Finance (kandidat masih aktif)
+     * processed = sudah disetujui Finance dan belum rejected
+     * rejected = is_reject_finance + by/at terisi, kandidat masih aktif (is_rejected_kandidat = false)
+     */
+    public function index(Request $request)
+    {
+        $tab = strtolower(trim((string) $request->input('tab', 'pending')));
+
+        $query = NewRecruitment::with([
+            'personalRequest.masterJabatan',
+            'hrdInterview',
+            'userInterview',
+            'sallaryOffer',
+            'candidateDataOffer',
+            'candidateProfile'
+        ]);
+
+        $this->applyTabFilter($query, $tab);
+        $this->applyYearFilter($query, $request);
+        $query->orderBy('id', 'desc');
 
         return DataTables::of($query)
             ->addColumn('no_request', function ($row) {
@@ -101,10 +204,24 @@ class FinanceOfferingSallaryController extends Controller
                 return $row->candidateDataOffer;
             })
             ->addColumn('expected_salary', function ($row) {
-                return optional($row->sallaryOffer)->sallary_offer_hrd ?? $row->ekspetasi_gaji ?? 0;
+                $cdo = $row->candidateDataOffer;
+                if ($cdo) {
+                    $total = (float) ($cdo->gaji_pokok ?? 0) + (float) ($cdo->tunjangan_kerja ?? 0);
+                    if ($total > 0) {
+                        return $total;
+                    }
+                }
+
+                return OfferingSalaryEmail::getSalaryOfferHrd($row)
+                    ?? optional($row->sallaryOffer)->sallary_offer_hrd
+                    ?? $row->ekspetasi_gaji
+                    ?? 0;
             })
             ->addColumn('sallary_offer_user', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_user ?? 0;
+            })
+            ->addColumn('tunjangan_gaji_user', function ($row) {
+                return optional($row->sallaryOffer)->tunjangan_gaji_user ?? 0;
             })
             ->addColumn('sallary_offer_direktur', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_direktur ?? 0;
@@ -159,6 +276,23 @@ class FinanceOfferingSallaryController extends Controller
             ->make(true);
     }
 
+    public function tabCounts(Request $request)
+    {
+        $counts = [];
+
+        foreach (['pending', 'processed', 'rejected'] as $tab) {
+            $query = NewRecruitment::query();
+            $this->applyTabFilter($query, $tab);
+            $this->applyYearFilter($query, $request);
+            $counts[$tab] = (int) $query->count();
+        }
+
+        return response()->json([
+            'status' => 200,
+            'data' => $counts,
+        ]);
+    }
+
     // ─── Update Finance Decision ─────────────────────────────────────────────
 
     /**
@@ -191,6 +325,8 @@ class FinanceOfferingSallaryController extends Controller
         DB::beginTransaction();
         try {
             if ($decision === 'approve') {
+                $sendOfferingToCandidate = RecruitmentStatusService::shouldSendCandidateEmailOnFinanceApprove($applicant);
+
                 $activeOffer = SallaryOfferService::getActive((int) $id);
                 $approvedSalary = $request->input('approved_salary')
                     ?? optional($activeOffer)->sallary_offer_hrd
@@ -212,11 +348,90 @@ class FinanceOfferingSallaryController extends Controller
 
                 RecruitmentStatusService::clearFinanceRejected((int) $id, $now);
 
+                if ($sendOfferingToCandidate) {
+                    if (empty($applicant->email)) {
+                        DB::rollBack();
+                        return response()->json([
+                            'status'  => 422,
+                            'message' => 'Email kandidat tidak tersedia. Penawaran gaji tidak dapat dikirim.',
+                        ], 422);
+                    }
+
+                    (new RecruitmentStatusService())->update(
+                        $id,
+                        'salary_offer',
+                        $now,
+                        'finance_approved',
+                        ['by' => $user ?? 'Finance']
+                    );
+
+                    $applicant = $applicant->fresh([
+                        'sallaryOffer',
+                        'candidateDataOffer',
+                        'personalRequest.masterJabatan',
+                        'personnelRequest.masterJabatan',
+                    ]);
+
+                    $emailSent = false;
+                    $emailError = null;
+                    try {
+                        $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant);
+                        $emailSent = GenerateMessageAtsEmail::sendCandidateOfferingSalaryEmail(
+                            $applicant,
+                            $dataObj,
+                            is_string($user) && $user !== '' ? $user : 'Finance'
+                        );
+                    } catch (\Throwable $e) {
+                        $emailError = $e->getMessage();
+                        \Log::warning('Candidate salary offer email failed after finance approve', [
+                            'recruitment_id' => $id,
+                            'error' => $emailError,
+                        ]);
+                    }
+
+                    if (!$emailSent) {
+                        DB::rollBack();
+                        return response()->json([
+                            'status'  => 500,
+                            'message' => 'Persetujuan Finance tercatat, namun email penawaran gagal dikirim ke kandidat.'
+                                . ($emailError ? ' ' . $emailError : ''),
+                        ], 500);
+                    }
+
+                    (new RecruitmentStatusService())->update(
+                        $id,
+                        'salary_offer',
+                        $now,
+                        'candidate_offering_sent',
+                        ['by' => $user ?? 'Finance']
+                    );
+                    (new RecruitmentStatusService())->update(
+                        $id,
+                        'salary_offer',
+                        $now,
+                        'candidate_offering_email_sent',
+                        ['by' => $user ?? 'Finance']
+                    );
+
+                    $applicant = $applicant->fresh(['sallaryOffer', 'personalRequest.masterJabatan']);
+
+                    DB::commit();
+
+                    app(AtsNotificationService::class)->financeDecisionMade($applicant, 'approve');
+
+                    return response()->json([
+                        'status'  => 200,
+                        'message' => 'Persetujuan Finance berhasil diproses. Email penawaran gaji telah dikirim ke kandidat.',
+                        'sent_to_candidate' => true,
+                        'data'    => $applicant,
+                    ], 200);
+                }
+
                 (new RecruitmentStatusService())->update(
-                    $id, 
-                    'internal_sallary_offer', 
-                    $now, 
-                    'finance_approved', 
+                    $id,
+                    'internal_sallary_offer',
+                    $now,
+                    'finance_approved',
                     ['by' => $user ?? 'Finance']
                 );
 
@@ -227,12 +442,16 @@ class FinanceOfferingSallaryController extends Controller
                 DB::commit();
 
                 app(AtsNotificationService::class)->financeDecisionMade($applicant, 'approve');
+                app(RecruitmentDecisionActionTelegramService::class)->notifySalaryApprovalRequest($applicant, [
+                    'approved_by' => $user ?? 'Finance',
+                ]);
 
                 return response()->json([
                     'status'  => 200,
                     'message' => $directorEmailSent
                         ? 'Persetujuan Finance berhasil diproses dan email persetujuan telah dikirim ke Approval (Salary).'
                         : 'Persetujuan Finance berhasil diproses. Email Approval (Salary) belum dikirim karena alamat email belum tersedia.',
+                    'sent_to_candidate' => false,
                     'data'    => $applicant,
                 ], 200);
             }
@@ -254,9 +473,13 @@ class FinanceOfferingSallaryController extends Controller
                     $user ?? 'Finance'
                 );
 
+                $rejectStatus = RecruitmentStatusService::isFinanceReviewBeforeCandidateOffering($applicant)
+                    ? 'salary_offer'
+                    : 'management_decision';
+
                 (new RecruitmentStatusService())->update(
                     $id,
-                    'management_decision',
+                    $rejectStatus,
                     $now,
                     'finance_rejected',
                     [
@@ -300,6 +523,19 @@ class FinanceOfferingSallaryController extends Controller
 
     private function sendDirectorApprovalEmail(NewRecruitment $applicant, string $sender = 'Finance'): bool
     {
+        $applicant->loadMissing([
+            'candidateDataOffer',
+            'sallaryOffer',
+            'personalRequest.masterJabatan',
+            'personnelRequest.masterJabatan',
+            'candidateProfile',
+            'candidateEducations',
+            'candidateWorkExperiences',
+            'candidateMedicalInformation',
+            'hrdInterview',
+            'userInterview',
+        ]);
+
         if (empty($applicant->token_approval)) {
             $tokenService = new GenerateToken();
             $tokenKey = $applicant->id . ($applicant->nama_lengkap ?? '') . 'salary_approval' . str_replace('.', '', microtime(true));
@@ -366,10 +602,13 @@ class FinanceOfferingSallaryController extends Controller
         $applicant = NewRecruitment::with([
             'personalRequest.masterJabatan',
             'sallaryOffer',
+            'candidateDataOffer',
             'candidateProfile',
             'candidateEducations',
             'candidateWorkExperiences',
             'candidateMedicalInformation',
+            'hrdInterview',
+            'userInterview',
         ])->find($recruitmentId);
 
         if (!$applicant) {

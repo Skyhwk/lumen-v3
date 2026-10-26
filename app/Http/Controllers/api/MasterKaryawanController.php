@@ -29,10 +29,39 @@ use App\Helpers\ShioElemenHelper;
 
 class MasterKaryawanController extends Controller
 {
+    /** Kolom filter select2: cocokkan persis, bukan LIKE (hindari Male ikut match Female). */
+    private const KARYAWAN_EXACT_SEARCH_COLUMNS = [
+        'department',
+        'jenis_kelamin',
+        'status_pernikahan',
+        'status_karyawan',
+        'grade',
+    ];
+
     public function index(Request $request)
     {
-        $data = MasterKaryawan::with(['medical', 'user', 'pengalaman_kerja', 'pendidikan_karyawan', 'sertifikat_karyawan', 'kontak_darurat'])->where('is_active', true);
-        return Datatables::of($data)->addColumn('personal', function ($row) {
+        $data = MasterKaryawan::with([
+            'medical',
+            'user',
+            'pengalaman_kerja',
+            'pendidikan_karyawan' => function ($query) {
+                $query->where('is_active', true);
+            },
+            'sertifikat_karyawan',
+            'kontak_darurat' => function ($query) {
+                $query->where('is_active', true);
+            },
+        ])->where('is_active', true);
+
+        if ($request->filled('id_cabang') && $request->id_cabang !== 'all') {
+            $data->where('id_cabang', (int) $request->id_cabang);
+        }
+
+        return Datatables::of($data)
+        ->addColumn('count', function ($row) {
+            return $row->count();
+        })
+        ->addColumn('personal', function ($row) {
             $shioElemen = ShioElemenHelper::resolve($row->tanggal_lahir, $row->shio, $row->elemen);
             return [
                 'nama_lengkap' => $row->nama_lengkap,
@@ -85,6 +114,72 @@ class MasterKaryawanController extends Controller
                 'priv_branch' => json_decode($row->privilage_cabang)
             ];
         })
+            ->addColumn('pendidikan', function ($row) {
+                $rows = $row->pendidikan_karyawan
+                    ->filter(function ($item) {
+                        return (int) ($item->is_active ?? 1) !== 0
+                            && (trim((string) $item->jenjang) !== '' || trim((string) $item->institusi) !== '');
+                    })
+                    ->sortByDesc(function ($item) {
+                        return sprintf('%04d-%06d', (int) $item->tahun_lulus, (int) $item->id);
+                    })
+                    ->values()
+                    ->map(function ($item) {
+                        return [
+                            'id' => $item->id,
+                            'jenjang' => $item->jenjang,
+                            'institusi' => $item->institusi,
+                            'jurusan' => $item->jurusan,
+                            'tahun_masuk' => $item->tahun_masuk,
+                            'tahun_lulus' => $item->tahun_lulus,
+                            'kota' => $item->kota,
+                        ];
+                    })
+                    ->all();
+
+                if ($rows) {
+                    return $rows;
+                }
+
+                $decoded = json_decode($row->getOriginal('pendidikan') ?: '[]', true);
+                return is_array($decoded) ? $decoded : [];
+            })
+            ->addColumn('kontak_darurat', function ($row) {
+                $seen = [];
+                return $row->kontak_darurat
+                    ->filter(function ($item) use (&$seen) {
+                        if ((int) ($item->is_active ?? 1) === 0) {
+                            return false;
+                        }
+                        $nama = trim((string) $item->nama_kontak);
+                        $hubungan = trim((string) $item->hubungan);
+                        $nomor = trim((string) $item->nomor_kontak);
+                        if ($nama === '' && $nomor === '') {
+                            return false;
+                        }
+                        $fingerprint = strtolower($nama . '|' . $hubungan . '|' . $nomor);
+                        if (isset($seen[$fingerprint])) {
+                            return false;
+                        }
+                        $seen[$fingerprint] = true;
+                        return true;
+                    })
+                    ->values()
+                    ->map(function ($item) {
+                        return [
+                            'id' => $item->id,
+                            'nama_kontak' => $item->nama_kontak,
+                            'hubungan' => $item->hubungan,
+                            'nomor_kontak' => $item->nomor_kontak,
+                        ];
+                    })
+                    ->all();
+            })
+            ->filterColumn('department', $this->exactColumnFilter('department'))
+            ->filterColumn('jenis_kelamin', $this->exactColumnFilter('jenis_kelamin'))
+            ->filterColumn('status_pernikahan', $this->exactColumnFilter('status_pernikahan'))
+            ->filterColumn('status_karyawan', $this->exactColumnFilter('status_karyawan'))
+            ->filterColumn('grade', $this->exactColumnFilter('grade'))
             ->rawColumns(['personal', 'contact', 'employee', 'access'])
             ->make(true);
     }
@@ -389,6 +484,7 @@ class MasterKaryawanController extends Controller
 
                     if ($oldNik !== $newNik) {
                         MasterSallaryNikSyncService::syncOnNikChange(
+                            $karyawan->id,
                             $request->personal['nama_lengkap'] ?? $karyawan->nama_lengkap,
                             $oldNik,
                             $newNik,
@@ -668,7 +764,7 @@ class MasterKaryawanController extends Controller
     public function getAllKaryawan(Request $request)
     {
         $data = MasterKaryawan::where('is_active', true)
-            ->select('nama_lengkap', 'nik_karyawan')
+            ->select('id', 'nama_lengkap', 'nik_karyawan')
             ->get();
         return response()->json(['message' => 'Data hasbeen show', 'data' => $data], 200);
     }
@@ -700,14 +796,14 @@ class MasterKaryawanController extends Controller
                 $user->save();
             }
 
-            DB::connection('intilab_apps')
-                ->table('users')
-                ->where('user_id', $karyawan->id)
-                ->update([
-                    'updated_by' => $this->karyawan,
-                    'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'is_active' => false
-                ]);
+            // DB::connection('mysql')
+            //     ->table('users')
+            //     ->where('user_id', $karyawan->id)
+            //     ->update([
+            //         'updated_by' => $this->karyawan,
+            //         'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+            //         'is_active' => false
+            //     ]);
 
             $job = new NonaktifKaryawanJob($karyawan);
             $this->dispatch($job);
@@ -716,6 +812,7 @@ class MasterKaryawanController extends Controller
             return response()->json(['message' => 'Berhasil menonaktifkan karyawan, silahkan tunggu beberapa saat'], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
+            dd($th);
             return response()->json(['message' => 'Gagal menonaktifkan karyawan: ' . $th->getMessage()], 500);
             //throw $th;
         }
@@ -727,5 +824,81 @@ class MasterKaryawanController extends Controller
 
         $job = new NonaktifKaryawanJob($karyawan);
         $this->dispatch($job);
+    }
+
+    public function getCabang(Request $request)
+    {
+        $base = MasterKaryawan::query()->where('is_active', true);
+        $this->applyKaryawanColumnSearch($base, $request);
+
+        $counts = (clone $base)
+            ->select('id_cabang', DB::raw('COUNT(*) as total'))
+            ->groupBy('id_cabang')
+            ->pluck('total', 'id_cabang');
+
+        $data = MasterCabang::where('is_active', true)
+            ->select('id', 'nama_cabang')
+            ->get()
+            ->map(function ($cabang) use ($counts) {
+                $cabang->total = (int) ($counts[$cabang->id] ?? 0);
+                return $cabang;
+            });
+
+        return response()->json([
+            'message' => 'Data hasbeen show',
+            'data' => $data,
+            'total' => (clone $base)->count(),
+        ], 200);
+    }
+
+    private function applyKaryawanColumnSearch($query, Request $request): void
+    {
+        $columns = [
+            '2' => 'nik_karyawan',
+            '3' => 'nama_lengkap',
+            '4' => 'department',
+            '5' => 'jabatan',
+            '6' => 'jenis_kelamin',
+            '7' => 'status_pernikahan',
+            '8' => 'status_karyawan',
+            '9' => 'grade',
+            '10' => 'tgl_mulai_kerja',
+            '11' => 'tgl_berakhir_kontrak',
+        ];
+
+        $search = $request->input('column_search', []);
+        if (!is_array($search)) {
+            return;
+        }
+
+        foreach ($columns as $index => $column) {
+            $value = trim((string) ($search[$index] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+
+            $this->applyKaryawanColumnFilter($query, $column, $value);
+        }
+    }
+
+    private function applyKaryawanColumnFilter($query, string $column, string $value): void
+    {
+        if (in_array($column, self::KARYAWAN_EXACT_SEARCH_COLUMNS, true)) {
+            $query->where($column, $value);
+            return;
+        }
+
+        $query->where($column, 'like', '%' . addcslashes($value, '%_\\') . '%');
+    }
+
+    private function exactColumnFilter(string $column): \Closure
+    {
+        return function ($query, $keyword) use ($column) {
+            $keyword = trim((string) $keyword);
+            if ($keyword === '') {
+                return;
+            }
+            $query->where($column, $keyword);
+        };
     }
 }

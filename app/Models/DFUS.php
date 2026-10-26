@@ -8,6 +8,10 @@ class DFUS extends Sector
 {
     protected $table = 'dfus';
 
+    protected $casts = [
+        'status_quotation' => 'array',
+    ];
+
     public function pelanggan()
     {
         return $this->belongsTo(MasterPelanggan::class, 'id_pelanggan', 'id_pelanggan')->where('is_active', true);

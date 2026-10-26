@@ -7,6 +7,9 @@ use App\Models\IntilabInternal\PermissionRequest;
 use App\Models\MasterKaryawan;
 use App\Services\GetAtasan;
 use App\Services\GetBawahan;
+use App\Services\Hr\HrTableMode;
+use App\Services\Hr\Portal\PortalPermissionDatatableQuery;
+use App\Services\Hr\PortalHrSync;
 use App\Services\Notification;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -98,9 +101,68 @@ class PermohonanIzinController extends Controller
         return $map[$type] ?? $type;
     }
 
+    public function tabCounts(Request $request)
+    {
+        $periode = (int) ($request->periode ?: date('Y'));
+
+        if (HrTableMode::portalReadsHrTables()) {
+            $portal = app(PortalPermissionDatatableQuery::class);
+            $staff = $this->grade === 'STAFF' ? $this->karyawan : null;
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'on_progress' => $portal->countUnprocessed($periode, $this->getOwnerNames(), $staff),
+                    'processed' => $portal->countProcessed($periode, $this->getOwnerNames(), $staff),
+                ],
+            ]);
+        }
+
+        $onProgress = $this->baseQuery($periode)
+            ->whereNull('pr.approved_hrd_by')
+            ->whereNull('pr.rejected_hrd_by')
+            ->whereNull('pr.rejected_atasan_by');
+        $processed = $this->baseQuery($periode)
+            ->where(function ($query) {
+                $query->whereNotNull('pr.approved_hrd_by')
+                    ->orWhereNotNull('pr.rejected_hrd_by')
+                    ->orWhereNotNull('pr.rejected_atasan_by');
+            });
+
+        if ($this->grade === 'STAFF') {
+            $onProgress->where('pr.created_by', $this->karyawan);
+            $processed->where('pr.created_by', $this->karyawan);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'on_progress' => $onProgress->count(),
+                'processed' => $processed->count(),
+            ],
+        ]);
+    }
+
     public function indexUnprocessed(Request $request)
     {
         try {
+            if (HrTableMode::portalReadsHrTables()) {
+                $periode = (int) $request->periode;
+                $staff = $this->grade === 'STAFF' ? $this->karyawan : null;
+                $data = app(PortalPermissionDatatableQuery::class)
+                    ->unprocessed($periode, $this->getOwnerNames(), $staff)
+                    ->map(function ($item) {
+                        $item->status_label = $this->mapStatusLabel($item->status);
+                        $item->type_label = $this->mapTypeLabel($item->type);
+
+                        return $item;
+                    });
+
+                return Datatables::of($data)
+                    ->addColumn('can_approve', fn () => $this->grade === 'MANAGER')
+                    ->make(true);
+            }
+
             $query = $this->baseQuery((int) $request->periode)
                 ->where(function ($query) {
                     $query->whereNull('pr.approved_hrd_by')
@@ -135,6 +197,23 @@ class PermohonanIzinController extends Controller
     public function indexProcessed(Request $request)
     {
         try {
+            if (HrTableMode::portalReadsHrTables()) {
+                $periode = (int) $request->periode;
+                $staff = $this->grade === 'STAFF' ? $this->karyawan : null;
+                $data = app(PortalPermissionDatatableQuery::class)
+                    ->processed($periode, $this->getOwnerNames(), $staff)
+                    ->map(function ($item) {
+                        $item->status_label = $this->mapStatusLabel($item->status);
+                        $item->type_label = $this->mapTypeLabel($item->type);
+
+                        return $item;
+                    });
+
+                return Datatables::of($data)
+                    ->addColumn('can_approve', fn () => false)
+                    ->make(true);
+            }
+
             $query = $this->baseQuery((int) $request->periode)
                 ->where(function ($query) {
                     $query->whereNotNull('pr.approved_hrd_by')
@@ -218,10 +297,12 @@ class PermohonanIzinController extends Controller
                     Notification::whereIn('id', $atasanIds)
                         ->title('Permohonan Izin Baru')
                         ->message('Permohonan izin dari ' . $this->karyawan . ' menunggu persetujuan Anda')
-                        ->url('/request/formulir/permohonan-izin')
+                        ->url('/request/permohonan/permohonan-izin')
                         ->send();
                 }
             }
+
+            app(PortalHrSync::class)->syncPermissionFromLegacy((int) $record->id);
 
             DB::commit();
 
@@ -328,12 +409,14 @@ class PermohonanIzinController extends Controller
                 'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
 
+            app(PortalHrSync::class)->syncPermissionFromLegacy((int) $record->id);
+
             $userIds = GetAtasan::where('nama_lengkap', $record->created_by)->get()->pluck('id')->toArray();
             if (!empty($userIds)) {
                 Notification::whereIn('id', $userIds)
                     ->title('Permohonan Izin')
                     ->message('Permohonan izin Anda telah disetujui atasan oleh ' . $this->karyawan)
-                    ->url('/request/formulir/permohonan-izin')
+                    ->url('/request/permohonan/permohonan-izin')
                     ->send();
             }
 
@@ -376,12 +459,14 @@ class PermohonanIzinController extends Controller
                 'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
 
+            app(PortalHrSync::class)->syncPermissionFromLegacy((int) $record->id);
+
             $userIds = GetAtasan::where('nama_lengkap', $record->created_by)->get()->pluck('id')->toArray();
             if (!empty($userIds)) {
                 Notification::whereIn('id', $userIds)
                     ->title('Permohonan Izin Ditolak')
                     ->message('Permohonan izin Anda ditolak atasan. Alasan: ' . $request->keterangan)
-                    ->url('/request/formulir/permohonan-izin')
+                    ->url('/request/permohonan/permohonan-izin')
                     ->send();
             }
 

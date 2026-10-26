@@ -457,6 +457,7 @@ class RenderNonKontrak
                     </tr>'
                 );
                 $hargaTransportasiPerdiem += $data->harga_transportasi * $data->transportasi;
+                $i++;
             }
             $perdiem_24 = "";
             $total_perdiem = 0;
@@ -470,9 +471,6 @@ class RenderNonKontrak
                 $total_perdiem += $data->{'harga_24jam_personil_total'};
             }
             if ($data->perdiem_jumlah_orang > 0 && $data->harga_perdiem_personil_total != null) {
-                if ($data->transportasi > 0 && $data->harga_transportasi_total != null) {
-                    $i = $i + 1;
-                }
                 $pdf->WriteHTML(
                     '<tr>
                         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
@@ -483,6 +481,7 @@ class RenderNonKontrak
                     </tr>'
                 );
                 $hargaTransportasiPerdiem += ($data->harga_perdiem_personil_total + $total_perdiem);
+                $i++;
             }
 
             $transportAmount = 0;
@@ -526,20 +525,7 @@ class RenderNonKontrak
                 $biaya_lain = [];
             }
             if (!empty($biaya_lain)) {
-                $u = '';
                 foreach ($biaya_lain as $k => $v) {
-                    if ($data->perdiem_jumlah_orang > 0 && $data->harga_perdiem_personil_total != null) {
-                        $i = $i + 1;
-                    } else {
-                        if ($u == $i) {
-                            $i = $i + 1;
-                        } else {
-                            if (count(json_decode($data->data_pendukung_sampling)) == 0) {
-                                $i = $i + 1;
-                            }
-                        }
-                    }
-
                     if ($lang != 'id') {
                         $v->deskripsi = str_replace('Perdiem', 'Manpower', $v->deskripsi);
                         $tranlator = new Translator();
@@ -555,7 +541,7 @@ class RenderNonKontrak
                             <td style="font-size: 13px; text-align:right;padding: 5px;">' . self::rupiah($v->total_biaya) . '</td>
                         </tr>'
                     );
-                    $u = $i;
+                    $i++;
                 }
             }
             $totalBiayaLain = (float) ($data->total_biaya_lain ?? 0);
@@ -1060,6 +1046,16 @@ class RenderNonKontrak
                                 $v = __('QT.terms_conditions.general.8');
                             } else if (preg_match('/^Jangka waktu pembuatan dokumen dikerjakan selama 2 - 3 bulan, dengan kewajiban pelanggan melengkapi dokumen sebelum sampling dilakukan\.?$/i', $v)) {
                                 $v = __('QT.terms_conditions.general.9');
+                            } else if (preg_match('/^Laboratorium menjunjung tinggi prinsip independensi, ketidakberpihakan, objektivitas, dan pengelolaan (potensi konflik kepentingan, serta berkomitmen pada praktik anti gratifikasi dalam pelaksanaan seluruh kegiatan pengujian, sesuai|terhadap potensi konflik kepentingan dalam seluruh kegiatan pengujian,\s*sesuai) dengan kebijakan dan prosedur yang berlaku\.?$/i', $v)) {
+                                $v = __('QT.terms_conditions.general.11');
+                            } else if (preg_match('/^Data yang diperlukan untuk pelaksanaan pengujian psikologi wajib diterima paling lambat 3 \(tiga\) hari kalender sebelum pelaksanaan sampling\.?$/i', $v)) {
+                                $v = __('QT.terms_conditions.general.12');
+                            } else if (preg_match('/^Pengisian kuesioner pengujian psikologi wajib diselesaikan paling lambat 10 \(sepuluh\) hari kalender sejak tautan kuesioner dikirimkan\. Perpanjangan waktu pengisian dapat diberikan maksimal 3 \(tiga\) kali, dengan total waktu pengisian paling lama 30 \(tiga puluh\) hari kalender sejak tautan pertama kali dikirimkan\. Apabila keterlambatan pengisian menyebabkan tautan kuesioner tidak dapat diaktifkan kembali, maka hal tersebut menjadi tanggung jawab pelanggan sepenuhnya\.?$/i', $v)) {
+                                $v = __('QT.terms_conditions.general.13');
+                            } else if (preg_match('/^Untuk pengujian emisi genset, pelanggan wajib memastikan genset dalam kondisi siap operasi dan berfungsi secara normal\/stabil pada saat pelaksanaan pengujian\. Genset wajib dipersiapkan dan dioperasikan terlebih dahulu sesuai dengan kondisi operasi normalnya sebelum dilakukan pengujian, guna memastikan kondisi pengujian dapat merepresentasikan kondisi operasi genset yang sebenarnya\.?$/i', $v)) {
+                                $v = __('QT.terms_conditions.general.14');
+                            } else if (preg_match('/^Pelaksanaan pengujian ergonomi hanya dapat dilakukan dengan adanya persetujuan pelanggan untuk pengambilan dokumentasi \(foto\/video\) selama proses pengujian, yang diperlukan sebagai bagian dari pelaksanaan dan\/atau dokumentasi hasil pengujian\.?$/i', $v)) {
+                                $v = __('QT.terms_conditions.general.15');
                             } else if (preg_match('/^Biaya sudah termasuk (.+)$/i', $v, $matches)) {
                                 $text = $matches[1];
                                 if ($lang != 'id') {

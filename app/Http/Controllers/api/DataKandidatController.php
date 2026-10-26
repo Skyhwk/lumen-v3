@@ -233,12 +233,13 @@ class DataKandidatController extends Controller
                 $data->is_active = false;
                 $data->save();
 
+                // DISABLED: WhatsApp rejection info (kebijakan HRD — notifikasi rejection via email saja)
+                $SendWhatsapp = true;
                 // ============================== BEGIN WHATSAPP KANDIDAT ===================
-                $message = new GenerateMessageWhatsapp($data);
-                $message = $message->RejectedCandidateSelection();
-
-                $Send = new SendWhatsapp($data->no_hp, $message);
-                $SendWhatsapp = $Send->send();
+                // $message = new GenerateMessageWhatsapp($data);
+                // $message = $message->RejectedCandidateSelection();
+                // $Send = new SendWhatsapp($data->no_hp, $message);
+                // $SendWhatsapp = $Send->send();
                 // ============================== END WHATSAPP KANDIDAT ===================
 
                 DB::commit();

@@ -37,6 +37,9 @@ class FdlPartikulatIsokinetikMethod1Controller extends Controller
 {
     public function getSurvei(Request $request)
     {
+        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+             return $response;
+        }
         if ($request->method == 2) {
             $data = DataLapanganIsokinetikSurveiLapangan::where('no_survei', $request->no_survei)->first();
             $check = DataLapanganIsokinetikPenentuanKecepatanLinier::where('no_survei', $request->no_survei)->first();
@@ -313,7 +316,7 @@ class FdlPartikulatIsokinetikMethod1Controller extends Controller
             //     $orderDetail->save();
             // }
 
-            InsertActivityFdl::by($this->user_id)->action('input')->target("Survei Cerobong pada perusahaan $request->nama_perusahaan")->save();
+            InsertActivityFdl::by($this->user_id)->action('input')->target("Survei Cerobong pada perusahaan $request->nama_perusahaan")->noSampel($request->no_sample)->save();
 
 
             DB::commit();

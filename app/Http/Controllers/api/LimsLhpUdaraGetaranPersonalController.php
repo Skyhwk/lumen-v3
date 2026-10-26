@@ -20,6 +20,7 @@ use App\Models\Lims\OrderDetail;
 use App\Models\LhpsGetaranHeader;
 use App\Models\LhpsGetaranDetail;
 
+use App\Helpers\DraftLhpRejectHelper;
 class LimsLhpUdaraGetaranPersonalController extends Controller
 {
     public function index()
@@ -55,6 +56,9 @@ class LimsLhpUdaraGetaranPersonalController extends Controller
     }
 
       public function handleReject(Request $request) {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $header = LhpsGetaranHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();

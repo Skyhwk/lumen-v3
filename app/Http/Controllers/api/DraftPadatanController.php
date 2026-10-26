@@ -26,6 +26,7 @@ use App\Models\PengesahanLhp;
 use App\Models\KonfirmasiLhp;
 
 use App\Helpers\EmailLhpRilisHelpers;
+use App\Helpers\DraftLhpRejectHelper;
 
 use App\Services\TemplateLhps;
 use App\Services\SendEmail;
@@ -1084,6 +1085,9 @@ class DraftPadatanController extends Controller
 
     public function handleReject(Request $request)
     {
+        if ($denied = DraftLhpRejectHelper::denyIfNotManager($this->grade)) {
+            return $denied;
+        }
         DB::beginTransaction();
         try {
             $data = OrderDetail::where('id', $request->id)->first();

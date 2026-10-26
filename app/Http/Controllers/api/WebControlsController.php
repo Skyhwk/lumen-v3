@@ -4,12 +4,26 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\{WebControl,CompanyPageControl};
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Yajra\DataTables\Facades\DataTables;
 use Carbon\Carbon;
 use DB;
 
 class WebControlsController extends Controller
 {
+    private function pageControlImageUrl(?string $filename): ?string
+    {
+        if (empty($filename)) {
+            return null;
+        }
+
+        $relative = 'profile/page-control/' . ltrim($filename, '/');
+        $absolute = public_path($relative);
+        $version = file_exists($absolute) ? filemtime($absolute) : time();
+
+        return rtrim(env('APP_URL', ''), '/') . '/public/' . $relative . '?v=' . $version;
+    }
+
     // Start Main Control Function
     public function indexMain()
     {
@@ -128,6 +142,40 @@ class WebControlsController extends Controller
         }
     }
 
+    public function clearCache(Request $request)
+    {
+        $token = env(
+            'WEBSITE_DEPLOY_TOKEN',
+            env(
+                'WEBSITE_STATS_TOKEN',
+                '036dbf9759059fb69c1356c3c7780470ddaa0fd23ad7d24783980b86547b609a'
+            )
+        );
+
+        try {
+            $response = Http::timeout(60)
+                ->withToken($token)
+                ->acceptJson()
+                ->post('https://www.intilab.com/api/deploy');
+
+            if (!$response->successful()) {
+                return response()->json([
+                    'message' => 'Gagal clear cache website www.intilab.com',
+                    'detail' => $response->json(),
+                ], $response->status());
+            }
+
+            return response()->json([
+                'message' => 'Cache www.intilab.com berhasil di-clear',
+                'data' => $response->json(),
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Gagal clear cache: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // End Main Control Function
 
     // Start Page Control Function
@@ -135,7 +183,7 @@ class WebControlsController extends Controller
     {
         $data = CompanyPageControl::get();
         $data->map(function ($item) {
-            $item->image = env('APP_URL') . '/public/profile/page-control/' . $item->image;
+            $item->image = $this->pageControlImageUrl($item->image);
             return $item;
         });
         return DataTables::of($data)->make(true);
@@ -145,7 +193,7 @@ class WebControlsController extends Controller
     {
         $data = CompanyPageControl::get();
         $data->map(function ($item) {
-            $item->image = env('APP_URL') . '/public/profile/page-control/' . $item->image;
+            $item->image = $this->pageControlImageUrl($item->image);
             return $item;
         });
         return response()->json($data,200);
@@ -178,7 +226,13 @@ class WebControlsController extends Controller
                     mkdir($destinationPath, 0777, true);
                 }
                 $file = $request->file('image');
-                $filename = "BG_" . preg_replace('/\s+/', '_', $request->name) . '.' . $file->getClientOriginalExtension();
+                $pageSlug = preg_replace('/\s+/', '_', trim((string) $request->name));
+                $filename = sprintf(
+                    'BG_%s_%s.%s',
+                    $pageSlug,
+                    Carbon::now()->format('YmdHis'),
+                    $file->getClientOriginalExtension()
+                );
                 $file->move($destinationPath, $filename);
                 $data->image = $filename;
             }

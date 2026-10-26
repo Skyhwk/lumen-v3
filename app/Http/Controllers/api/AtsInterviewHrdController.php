@@ -4,6 +4,8 @@ namespace App\Http\Controllers\api;
 
 use App\Helpers\ShioElemenHelper;
 use App\Http\Controllers\Controller;
+use App\Models\MasterDivisi;
+use App\Models\MasterKaryawan;
 use App\Models\NewRecruitment;
 use App\Models\RecruitmentInterview;
 use App\Services\GenerateMessageAtsEmail;
@@ -42,6 +44,7 @@ class AtsInterviewHrdController extends Controller
                     'upcoming' => $this->buildHrdInterviewQuery('upcoming', $year, $todayStr)->count(),
                     'past' => $this->buildHrdInterviewQuery('past', $year, $todayStr)->count(),
                 ],
+                'can_bypass_hrd_interview' => $this->canPerformHrdInterviewBypass(),
             ],
             'message' => 'HRD Interview tab counts retrieved successfully',
         ], 200);
@@ -244,6 +247,9 @@ class AtsInterviewHrdController extends Controller
 
                 return $pipelineStatus['label'] ?? null;
             })
+            ->addColumn('is_returned_from_user_interview', function ($row) {
+                return (int) RecruitmentStatusService::isReturnedFromUserInterview($row);
+            })
             ->addColumn('reject_reason', function ($row) {
                 if (RecruitmentStatusService::isRejectedKandidat($row) && !RecruitmentStatusService::isReturnedFromDirectorManagementRejection($row)) {
                     $reason = trim((string) ($row->alasan_reject ?? ''));
@@ -272,8 +278,9 @@ class AtsInterviewHrdController extends Controller
     /**
      * Input or update HRD Interview score & evaluation results
      */
-    public function inputHrdResult(Request $request, $id)
+    public function inputHrdResult(Request $request, $id = null)
     {
+        $id = $id ?? $request->header('id') ?? $request->input('id');
         $applicant = NewRecruitment::find($id);
 
         if (!$applicant) {
@@ -281,6 +288,20 @@ class AtsInterviewHrdController extends Controller
                 'status' => 404,
                 'message' => 'Candidate data not found',
             ], 404);
+        }
+
+        try {
+            $this->storeHrdSelfieDocument($request, $applicant);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'status' => 422,
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'status' => 500,
+                'message' => $e->getMessage(),
+            ], 500);
         }
 
         $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
@@ -293,18 +314,23 @@ class AtsInterviewHrdController extends Controller
             'is_input_review_hrd' => 1,
         ]);
 
+        $interviewPayload = [
+            'nilai_interview' => $nilaiHrd,
+            'status_result' => $statusResult,
+            'catatan_interview' => $catatan,
+            'updated_by' => $user,
+        ];
+        if (RecruitmentInterview::hasTanggalJoinColumn() && $request->exists('tanggal_join')) {
+            $interviewPayload['tanggal_join'] = RecruitmentInterview::normalizeTanggalJoin($request->input('tanggal_join'));
+        }
+
         $interview = RecruitmentInterview::updateOrCreate(
             [
                 'new_recruitment_id' => $applicant->id,
                 'stage' => 'hrd',
                 'is_active' => 1,
             ],
-            [
-                'nilai_interview' => $nilaiHrd,
-                'status_result' => $statusResult,
-                'catatan_interview' => $catatan,
-                'updated_by' => $user,
-            ]
+            $interviewPayload
         );
 
         return response()->json([
@@ -312,6 +338,69 @@ class AtsInterviewHrdController extends Controller
             'message' => 'HRD Interview score and evaluation saved successfully.',
             'data' => $interview,
         ], 200);
+    }
+
+    private function storeHrdSelfieDocument(Request $request, NewRecruitment $applicant): void
+    {
+        if (!Schema::hasTable('candidate_documents')) {
+            throw new \RuntimeException('Tabel candidate_documents tidak tersedia.');
+        }
+
+        $file = $request->file('selfie');
+        if (!$file || !method_exists($file, 'isValid') || !$file->isValid()) {
+            return;
+        }
+
+        $allowed = [
+            'image/jpeg' => 'jpg',
+            'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+        ];
+        $mime = strtolower((string) $file->getMimeType());
+        if (!isset($allowed[$mime])) {
+            throw new \InvalidArgumentException('Foto selfie harus berupa gambar JPG, PNG, atau WEBP.');
+        }
+
+        $fileSize = (int) $file->getSize();
+        if ($fileSize > 5 * 1024 * 1024) {
+            throw new \InvalidArgumentException('Ukuran foto selfie maksimal 5 MB.');
+        }
+
+        $directory = public_path('recruitment/candidate-documents');
+        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+            throw new \RuntimeException('Folder penyimpanan dokumen kandidat tidak dapat dibuat.');
+        }
+
+        $extension = $allowed[$mime];
+        $originalName = trim((string) ($file->getClientOriginalName() ?: ('selfie.' . $extension)));
+        $fileName = 'candidate-' . $applicant->id . '-foto-selfie-' . time() . '-' . substr(md5($originalName . microtime(true)), 0, 6) . '.' . $extension;
+        $file->move($directory, $fileName);
+
+        $now = Carbon::now();
+        $profileId = DB::table('candidate_profiles')
+            ->where('new_recruitment_id', $applicant->id)
+            ->value('id');
+
+        DB::table('candidate_documents')
+            ->where('new_recruitment_id', $applicant->id)
+            ->where('is_active', 1)
+            ->where('jenis_dokumen', 'FOTO SELFIE')
+            ->update(['is_active' => 0, 'updated_at' => $now]);
+
+        DB::table('candidate_documents')->insert([
+            'candidate_profile_id' => $profileId,
+            'new_recruitment_id' => $applicant->id,
+            'jenis_dokumen' => 'FOTO SELFIE',
+            'nama_file' => $originalName,
+            'path_file' => 'recruitment/candidate-documents/' . $fileName,
+            'mime_type' => $mime,
+            'ukuran_file' => $fileSize,
+            'catatan' => 'Selfie terbaru evaluasi HRD',
+            'is_active' => 1,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
     }
 
     /**
@@ -373,25 +462,17 @@ class AtsInterviewHrdController extends Controller
             $tglInter = $dt->format('d F Y');
             $jamInterview = $dt->format('H:i');
 
-            $posisiName = $this->resolvePositionName($applicant);
-
-            $dataArray = (object) [
-                'nama_lengkap' => $applicant->nama_lengkap,
-                'jenis_kelamin' => $applicant->jenis_kelamin,
-                'posisi_di_lamar' => $posisiName,
-                'nama_jabatan' => $posisiName,
-                'hariIndonesia' => $hariIndonesia,
-                'tglInter' => $tglInter,
-                'jam_interview' => $jamInterview,
-                'jam_interview_hrd' => $jamInterview,
-                'jenis_interview_hrd' => $jenisInterview,
-                'link_gmeet_hrd' => $jenisInterview === 'Online' ? $linkGmeet : null,
-                'alamat_cabang' => $jenisInterview === 'Offline' ? $ruanganInterview : 'Online Meeting',
-                'kode_uniq' => $applicant->id,
-            ];
+            $applicant->loadMissing(['personnelRequest', 'personalRequest']);
+            $applicant->hariIndonesia = $hariIndonesia;
+            $applicant->tglInter = $tglInter;
+            $applicant->jam_interview = $jamInterview;
+            $applicant->jam_interview_hrd = $jamInterview;
+            $applicant->jenis_interview_hrd = $jenisInterview;
+            $applicant->link_gmeet_hrd = $jenisInterview === 'Online' ? $linkGmeet : null;
+            $applicant->alamat_cabang = $jenisInterview === 'Offline' ? $ruanganInterview : 'Online Meeting';
 
             if (!empty($applicant->email)) {
-                $bodyEmail = GenerateMessageAtsEmail::bodyEmailApproveKandidat($dataArray);
+                $bodyEmail = GenerateMessageAtsEmail::bodyEmailApproveKandidat($applicant);
                 SendEmail::where('to', $applicant->email)
                     ->where('subject', 'Reschedule Undangan Interview HRD - PT Inti Surya Laboratorium')
                     ->where('body', $bodyEmail)
@@ -403,7 +484,7 @@ class AtsInterviewHrdController extends Controller
 
             $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
             if (!empty($phone)) {
-                $waObj = new GenerateMessageAtsWhatsapp($dataArray);
+                $waObj = new GenerateMessageAtsWhatsapp($applicant);
                 $waMessage = $waObj->PassedCandidateSelection();
 
                 $sendWa = new SendWhatsapp($phone, $waMessage);
@@ -459,81 +540,8 @@ class AtsInterviewHrdController extends Controller
                 'updated_by' => $user,
             ]);
 
-        // Send email + system notification to personnel request creator
         try {
-            $posisiName  = $this->resolvePositionName($applicant);
-            $noRequest   = $applicant->personalRequest->no_request ?? '-';
-            $prCreatedBy = $applicant->personalRequest->created_by ?? null;
-
-            if ($prCreatedBy) {
-                // Lookup creator from master_karyawan by name
-                $mk = DB::table('master_karyawan')
-                    ->where('nama_lengkap', $prCreatedBy)
-                    ->first();
-
-                app(AtsNotificationService::class)->hrdInterviewPassed(
-                    $applicant,
-                    $applicant->personalRequest
-                );
-
-                // 2. Email notification to PR creator
-                $creatorEmail = ($mk && !empty($mk->email)) ? $mk->email : null;
-                if ($creatorEmail) {
-                    $bodyEmail = GenerateMessageAtsEmail::bodyEmailHrdApprovalNotifUser((object)[
-                        'nama_user'     => $prCreatedBy,
-                        'nama_kandidat' => $applicant->nama_lengkap,
-                        'posisi'        => $posisiName,
-                        'no_request'    => $noRequest,
-                        'approved_by'   => $user,
-                        'approved_at'   => Carbon::now()->format('d M Y, H:i') . ' WIB',
-                    ]);
-
-                    SendEmail::where('to', $creatorEmail)
-                        ->where('subject', "HRD Interview Approval — {$applicant->nama_lengkap} ({$posisiName})")
-                        ->where('body', $bodyEmail)
-                        ->where('karyawan', $user)
-                        ->noReply()
-                        ->send();
-                }
-            }
-
-            // 3. Email & WhatsApp notification to Candidate to complete data profile
-            if (!$skipProfileCompletion) {
-                $token = $applicant->token ?? '';
-                $baseUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/');
-                $profileUrl = "{$baseUrl}/public/recruitment/complete-profile/" . rawurlencode($token);
-
-                $candidateDataObj = (object) [
-                    'id'                    => $applicant->id,
-                    'nama_lengkap'          => $applicant->nama_lengkap,
-                    'jenis_kelamin'         => $applicant->jenis_kelamin,
-                    'posisi_di_lamar'       => $posisiName,
-                    'nama_jabatan'          => $posisiName,
-                    'link_complete_profile' => $profileUrl,
-                ];
-
-                // 3a. Email to candidate
-                if (!empty($applicant->email)) {
-                    $bodyCandidateEmail = GenerateMessageAtsEmail::bodyEmailCompleteProfileCandidate($candidateDataObj);
-                    SendEmail::where('to', $applicant->email)
-                        ->where('subject', "Permintaan Kelengkapan Data Diri - PT Inti Surya Laboratorium")
-                        ->where('body', $bodyCandidateEmail)
-                        ->where('karyawan', $user)
-                        ->noReply()
-                        ->replyToAtsHrd()
-                        ->send();
-                }
-
-                // 3b. WhatsApp to candidate
-                $candidatePhone = $applicant->no_telepon ?? $applicant->no_hp ?? $applicant->no_whatsapp ?? null;
-                if (!empty($candidatePhone)) {
-                    $genWa = new GenerateMessageAtsWhatsapp($candidateDataObj);
-                    $waMessage = $genWa->CompleteProfileCandidate();
-
-                    $sendWa = new SendWhatsapp($candidatePhone, $waMessage);
-                    $sendWa->send();
-                }
-            }
+            $this->sendHrdStageAdvanceNotifications($applicant, $user, $skipProfileCompletion, null, true);
         } catch (\Exception $e) {
             // Silence — notification/email/wa failure must not block the approval response
         }
@@ -545,6 +553,91 @@ class AtsInterviewHrdController extends Controller
                 : 'HRD Interview approved. Candidate is ready for User Interview scheduling.',
             'skipped_profile_completion' => $skipProfileCompletion,
             'data' => $applicant->fresh(),
+        ], 200);
+    }
+
+    /**
+     * Bypass HRD Interview evaluation — advance to profile completion with audit trail.
+     * Notifications use the same templates and recipients as passToUser.
+     */
+    public function bypassToProfileCompletion(Request $request, $id)
+    {
+        if ($deny = $this->denyUnlessAllowedHrdInterviewBypass()) {
+            return $deny;
+        }
+
+        $applicant = NewRecruitment::with(['personalRequest'])->find($id);
+
+        if (!$applicant) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Candidate data not found',
+            ], 404);
+        }
+
+        if ((int) ($applicant->is_approved_interview_hrd ?? 0) === 1) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Kandidat sudah disetujui / bypass pada tahap HRD Interview.',
+            ], 422);
+        }
+
+        if ((int) ($applicant->is_rejected_kandidat ?? 0) === 1) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Kandidat sudah ditolak dan tidak dapat di-bypass.',
+            ], 422);
+        }
+
+        $reason = trim((string) ($request->input('description') ?? ''));
+        $plainReason = preg_replace('/[\s\x{00A0}]+/u', ' ', html_entity_decode(strip_tags($reason), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        if (trim($plainReason) === '') {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Alasan bypass wajib diisi.',
+            ], 422);
+        }
+
+        $user = trim((string) ($request->input('bypass_by') ?? ''));
+        if ($user === '') {
+            $user = $this->karyawan ?? $request->header('user') ?? 'HRD Admin';
+        }
+
+        $bypassAt = $request->filled('bypass_at')
+            ? Carbon::parse($request->input('bypass_at'))
+            : Carbon::now();
+
+        $nextStatus = 'profile_completion';
+
+        (new RecruitmentStatusService())->update($applicant->id, $nextStatus, $bypassAt);
+
+        $updatePayload = [
+            'status'                    => $nextStatus,
+            'is_approved_interview_hrd' => 1,
+            'approved_interview_hrd_by' => $user,
+            'approved_interview_hrd_at' => $bypassAt,
+        ];
+
+        $bypass = is_array($applicant->bypass) ? $applicant->bypass : (json_decode($applicant->bypass ?? '{}', true) ?: []);
+        $bypass['hrd_interview'] = [
+            'description' => $reason,
+            'by' => $user,
+            'at' => $bypassAt->toDateTimeString(),
+        ];
+        $updatePayload['bypass'] = $bypass;
+
+        $applicant->update($updatePayload);
+
+        try {
+            $this->sendHrdStageAdvanceNotifications($applicant, $user, false, null, true);
+        } catch (\Exception $e) {
+            // Silence — notification/email failure must not block the bypass response
+        }
+
+        return response()->json([
+            'status'  => 200,
+            'message' => 'HRD Interview bypassed. Kandidat diminta melengkapi profil (notifikasi terkirim).',
+            'data'    => $applicant->fresh(),
         ], 200);
     }
 
@@ -580,14 +673,7 @@ class AtsInterviewHrdController extends Controller
             'is_rejected_kandidat_at' => Carbon::now(),
         ]);
 
-        RecruitmentInterview::where('new_recruitment_id', $applicant->id)
-            ->where('stage', 'hrd')
-            ->where('is_active', 1)
-            ->update([
-                'status_result' => 'failed',
-                'catatan_interview' => $reason,
-                'updated_by' => $user,
-            ]);
+        $this->markHrdInterviewFailed((int) $applicant->id, $user, $reason);
 
         // Send dignified rejection email & WhatsApp
         try {
@@ -787,6 +873,165 @@ class AtsInterviewHrdController extends Controller
         return null;
     }
 
+    protected function isElevatedGradeForHrdInterviewBypass(): bool
+    {
+        $grade = strtoupper(trim((string) ($this->grade ?? '')));
+
+        return in_array($grade, ['MANAGER', 'DIRECTOR', 'SENIOR MANAGER'], true);
+    }
+
+    /**
+     * Semua grade di divisi IT Programming boleh bypass HR Interview.
+     */
+    protected function isItProgrammingDivisionMember(): bool
+    {
+        $departmentId = (int) env('ATS_IT_PROGRAMMING_DEPARTMENT_ID', 0);
+        if ($departmentId > 0 && (int) $this->department === $departmentId) {
+            return true;
+        }
+
+        if (!$this->user_id) {
+            return false;
+        }
+
+        $employee = MasterKaryawan::query()
+            ->where('id', $this->user_id)
+            ->first(['department', 'id_department']);
+
+        if (!$employee) {
+            return false;
+        }
+
+        $deptLabel = strtoupper(trim((string) ($employee->department ?? '')));
+        if ($this->isItProgrammingDivisionName($deptLabel)) {
+            return true;
+        }
+
+        $divisiName = MasterDivisi::query()
+            ->where('id', $employee->id_department)
+            ->value('nama_divisi');
+
+        return $this->isItProgrammingDivisionName((string) $divisiName);
+    }
+
+    protected function canPerformHrdInterviewBypass(): bool
+    {
+        return $this->isElevatedGradeForHrdInterviewBypass();
+    }
+
+    protected function isItProgrammingDivisionName(string $name): bool
+    {
+        $normalized = strtoupper(trim($name));
+
+        if ($normalized === '') {
+            return false;
+        }
+
+        if (in_array($normalized, ['IT SUPPORT & PROGRAMMING', 'IT PROGRAMMING'], true)) {
+            return true;
+        }
+
+        return strpos($normalized, 'IT') !== false && strpos($normalized, 'PROGRAMMING') !== false;
+    }
+
+    protected function denyUnlessAllowedHrdInterviewBypass()
+    {
+        if ($this->canPerformHrdInterviewBypass()) {
+            return null;
+        }
+
+        return response()->json([
+            'status'  => 403,
+            'message' => 'Bypass HR Interview hanya untuk divisi IT Programming (semua grade) atau grade Manager / Senior Manager / Director.',
+        ], 403);
+    }
+
+    /**
+     * Shared notifications after HRD pass or bypass (same email templates as passToUser).
+     *
+     * @param string|null $redirectAllEmailTo When set, PR creator & candidate emails go here (no WhatsApp if false).
+     */
+    private function sendHrdStageAdvanceNotifications(
+        NewRecruitment $applicant,
+        string $user,
+        bool $skipProfileCompletion,
+        ?string $redirectAllEmailTo,
+        bool $sendWhatsapp
+    ): void {
+        $applicant->loadMissing('personalRequest');
+        $posisiName  = $this->resolvePositionName($applicant);
+        $noRequest   = $applicant->personalRequest->no_request ?? '-';
+        $prCreatedBy = $applicant->personalRequest->created_by ?? null;
+
+        if ($prCreatedBy) {
+            $mk = DB::table('master_karyawan')
+                ->where('nama_lengkap', $prCreatedBy)
+                ->first();
+
+            app(AtsNotificationService::class)->hrdInterviewPassed(
+                $applicant,
+                $applicant->personalRequest
+            );
+
+            $creatorEmail = $redirectAllEmailTo ?: (($mk && !empty($mk->email)) ? $mk->email : null);
+            if ($creatorEmail) {
+                $bodyEmail = GenerateMessageAtsEmail::bodyEmailHrdApprovalNotifUser((object) [
+                    'nama_user'     => $prCreatedBy,
+                    'nama_kandidat' => $applicant->nama_lengkap,
+                    'posisi'        => $posisiName,
+                    'no_request'    => $noRequest,
+                    'approved_by'   => $user,
+                    'approved_at'   => Carbon::now()->format('d M Y, H:i') . ' WIB',
+                ]);
+
+                SendEmail::where('to', $creatorEmail)
+                    ->where('subject', "HRD Interview Approval — {$applicant->nama_lengkap} ({$posisiName})")
+                    ->where('body', $bodyEmail)
+                    ->where('karyawan', $user)
+                    ->noReply()
+                    ->send();
+            }
+        }
+
+        if (!$skipProfileCompletion) {
+            $token = $applicant->token ?? '';
+            $baseUrl = rtrim(env('PORTALV4', 'https://portal.intilab.com'), '/');
+            $profileUrl = "{$baseUrl}/public/recruitment/complete-profile/" . rawurlencode($token);
+
+            $candidateDataObj = (object) [
+                'id'                    => $applicant->id,
+                'nama_lengkap'          => $applicant->nama_lengkap,
+                'jenis_kelamin'         => $applicant->jenis_kelamin,
+                'posisi_di_lamar'       => $posisiName,
+                'nama_jabatan'          => $posisiName,
+                'link_complete_profile' => $profileUrl,
+            ];
+
+            $candidateEmail = $redirectAllEmailTo ?: ($applicant->email ?? null);
+            if (!empty($candidateEmail)) {
+                $bodyCandidateEmail = GenerateMessageAtsEmail::bodyEmailCompleteProfileCandidate($candidateDataObj);
+                SendEmail::where('to', $candidateEmail)
+                    ->where('subject', 'Permintaan Kelengkapan Data Diri - PT Inti Surya Laboratorium')
+                    ->where('body', $bodyCandidateEmail)
+                    ->where('karyawan', $user)
+                    ->noReply()
+                    ->replyToAtsHrd()
+                    ->send();
+            }
+
+            if ($sendWhatsapp && !$redirectAllEmailTo) {
+                $candidatePhone = $applicant->no_telepon ?? $applicant->no_hp ?? $applicant->no_whatsapp ?? null;
+                if (!empty($candidatePhone)) {
+                    $genWa = new GenerateMessageAtsWhatsapp($candidateDataObj);
+                    $waMessage = $genWa->CompleteProfileCandidate();
+
+                    $sendWa = new SendWhatsapp($candidatePhone, $waMessage);
+                    $sendWa->send();
+                }
+            }
+        }
+    }
+
     /**
      * Helper to resolve applicant position title safely in PHP 7.4
      */
@@ -839,5 +1084,33 @@ class AtsInterviewHrdController extends Controller
                 'histories' => $applicant->hrdInterviewHistories,
             ],
         ], 200);
+    }
+
+    private function markHrdInterviewFailed(int $recruitmentId, string $user, string $reason): void
+    {
+        $payload = [
+            'status_result' => 'failed',
+            'catatan_interview' => $reason,
+            'updated_by' => $user,
+        ];
+
+        $updated = RecruitmentInterview::where('new_recruitment_id', $recruitmentId)
+            ->where('stage', 'hrd')
+            ->where('is_active', 1)
+            ->update($payload);
+
+        if ($updated > 0) {
+            return;
+        }
+
+        $interview = RecruitmentInterview::where('new_recruitment_id', $recruitmentId)
+            ->where('stage', 'hrd')
+            ->whereNotIn('status_result', ['failed', 'gagal', 'passed'])
+            ->orderByDesc('id')
+            ->first();
+
+        if ($interview) {
+            $interview->update($payload);
+        }
     }
 }

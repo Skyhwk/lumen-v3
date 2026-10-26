@@ -3,22 +3,22 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
-
+use App\Models\MasterKaryawan;
+use App\Models\OrderHeader;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 
-use App\Models\OrderHeader;
 class QtRevisiController extends Controller
 {
-    public function index(Request $request){
+    public function index(Request $request)
+    {
         $tahun = request()->tahun;
-        
-        $data = OrderHeader::with(['quotationNonKontrak', 'quotationKontrakH', 'sales'])->where('is_revisi', true)
-        ->whereYear('tanggal_penawaran', $tahun)
-        ->where('is_active', 1)
-        ->orderBy('tanggal_penawaran', 'desc');
+
+        $data = OrderHeader::with(['quotationNonKontrak', 'quotationKontrakH', 'sales'])
+            ->where('is_revisi', true)
+            ->whereYear('tanggal_penawaran', $tahun)
+            ->where('is_active', 1)
+            ->orderBy('tanggal_penawaran', 'desc');
 
         $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
         switch ($jabatan) {
@@ -34,6 +34,37 @@ class QtRevisiController extends Controller
                 break;
         }
 
-        return DataTables::of($data)->make(true);
+        return DataTables::of($data)
+            ->addColumn('status_quotation', function ($row) {
+                return $this->resolveStatusQuotation($row);
+            })
+            ->filterColumn('status_quotation', function ($query, $keyword) {
+                $keyword = trim((string) $keyword);
+                if ($keyword === '') {
+                    return;
+                }
+
+                $like = '%' . $keyword . '%';
+                $query->where(function ($sub) use ($like) {
+                    $sub->where('order_header.status_quotation', 'like', $like)
+                        ->orWhereHas('quotationKontrakH', function ($q) use ($like) {
+                            $q->where('status_quotation', 'like', $like);
+                        })
+                        ->orWhereHas('quotationNonKontrak', function ($q) use ($like) {
+                            $q->where('status_quotation', 'like', $like);
+                        })
+                        ->orWhere('order_header.no_document', 'like', $like);
+                });
+            })
+            ->make(true);
+    }
+
+    private function resolveStatusQuotation($row): ?string
+    {
+        if (!empty($row->status_quotation)) {
+            return $row->status_quotation;
+        }
+
+        return null;
     }
 }

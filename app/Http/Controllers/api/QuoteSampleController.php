@@ -23,25 +23,39 @@ class QuoteSampleController extends Controller
     public function index(Request $request)
     {
         try {
-
-            $periode_awal = date('Y-m-01', strtotime($request->periode_awal));
-            $periode_akhir = date('Y-m-t', strtotime($request->periode_akhir));
+            $periode_awal = date('Y-m-d', strtotime($request->periode_awal));
+            $periode_akhir = date('Y-m-d', strtotime($request->periode_akhir));
 
             $model = $request->type == 'non_kontrak' ? QuotationNonKontrak::class : QuotationKontrakH::class;
             $flagColumn = $request->type == 'non_kontrak' ? 'request_quotation' : 'request_quotation_kontrak_H';
 
-            $data = $model::with([
-                'sampling.jadwal' => function ($q) use ($periode_awal, $periode_akhir) {
-                    $q->where('is_active', true)
-                        ->whereBetween('tanggal', [$periode_awal, $periode_akhir])
-                        ->orderBy('tanggal', 'asc');
-                },
-                'sales',
-                'order',
-                'documentCodingSampling' => function ($q) use ($request) {
-                    $q->where('menu', $request->act);
-                },
-            ]);
+            $data = $model::query()
+                ->select([
+                    "$flagColumn.id",
+                    "$flagColumn.tanggal_penawaran",
+                    "$flagColumn.no_document",
+                    "$flagColumn.nama_perusahaan",
+                    "$flagColumn.status_sampling",
+                    "$flagColumn.flag_status",
+                    "$flagColumn.konsultan",
+                    "$flagColumn.created_by",
+                    "$flagColumn.created_at",
+                ])
+                ->with([
+                    'sampling' => function ($q) {
+                        $q->select('id', 'quotation_id');
+                    },
+                    'sampling.jadwal' => function ($q) use ($periode_awal, $periode_akhir) {
+                        $q->select('id_sampling', 'tanggal', 'periode')
+                            ->where('is_active', true)
+                            ->whereBetween('tanggal', [$periode_awal, $periode_akhir])
+                            ->orderBy('tanggal', 'asc');
+                    },
+                    'documentCodingSampling' => function ($q) use ($request) {
+                        $q->select('no_quotation', 'status_purchase_request')
+                            ->where('menu', $request->act);
+                    },
+                ]);
 
             if ($request->type != 'non_kontrak') {
                 $data->with('detail');
@@ -59,6 +73,8 @@ class QuoteSampleController extends Controller
                 });
 
             $filtered = $data->get();
+            $this->attachOrderNumbers($filtered, $request->type == 'non_kontrak');
+
             return DataTables::of($filtered)
                 ->filter(function ($item) use ($request) {
                     $search = strtolower($request->search['value'] ?? '');
@@ -70,7 +86,6 @@ class QuoteSampleController extends Controller
                         return true;
                     }
 
-                    // filter tanggal_sampling (ambil dari jadwal)
                     $foundSampling = false;
                     foreach ($item->sampling as $sampling) {
                         foreach ($sampling->jadwal as $jadwal) {
@@ -125,6 +140,39 @@ class QuoteSampleController extends Controller
                 'line' => $ex->getLine(),
             ], 500);
         }
+    }
+
+    private function attachOrderNumbers($rows, $activeOnly)
+    {
+        $documents = $rows->pluck('no_document')->filter()->unique()->values();
+        $orders = collect();
+
+        if ($documents->isNotEmpty()) {
+            $orders = OrderHeader::query()
+                ->select('id', 'no_document', 'no_order')
+                ->whereIn('no_document', $documents)
+                ->when($activeOnly, function ($query) {
+                    $query->where('is_active', 1);
+                })
+                ->orderBy('id')
+                ->get()
+                ->groupBy('no_document')
+                ->map(function ($group) {
+                    return $group->first();
+                });
+        }
+
+        $rows->each(function ($row) use ($orders) {
+            $match = $orders->get($row->no_document);
+            if (!$match) {
+                $row->setRelation('order', null);
+                return;
+            }
+
+            $order = new OrderHeader();
+            $order->no_order = $match->no_order;
+            $row->setRelation('order', $order);
+        });
     }
 
     public function getQuoteSampleDocument(Request $request)
@@ -504,9 +552,7 @@ class QuoteSampleController extends Controller
 
             $fileName = preg_replace('/\\//', '-', $data['no_document']) . '-QSC.pdf';
 
-            $pdf->Output(public_path() . '/qs/' . $fileName, 'F');
-
-            return $fileName;
+            return $this->saveQuoteSamplePdf($pdf, $fileName);
         } catch (\Exception $e) {
 
             dd($e);
@@ -803,12 +849,22 @@ class QuoteSampleController extends Controller
 
             $fileName = preg_replace('/\\//', '-', $data['no_document']) . '-QS.pdf';
 
-            $pdf->Output(public_path() . '/qs/' . $fileName, 'F');
-
-            return $fileName;
+            return $this->saveQuoteSamplePdf($pdf, $fileName);
         } catch (\Exception $e) {
             dd($e);
         }
+    }
+
+    private function saveQuoteSamplePdf($pdf, $fileName)
+    {
+        $directory = public_path('qs');
+        if (!is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $pdf->Output($directory . DIRECTORY_SEPARATOR . $fileName, 'F');
+
+        return $fileName;
     }
 
     private function tanggal_indonesia($tanggal, $mode = '')

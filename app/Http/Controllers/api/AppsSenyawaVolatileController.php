@@ -23,6 +23,7 @@ use App\Models\QuotationNonKontrak;
 // SERVICE
 use App\Services\SendTelegram;
 use App\Services\GetAtasan;
+use App\Support\FdlLingkunganSharedParameters;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -38,9 +39,9 @@ class AppsSenyawaVolatileController extends Controller
 {
     public function getSample(Request $request)
     {
-        // if ($response = $this->ensureSamplerCheckedInForSample($request)) {
-        //     return $response;
-        // }
+        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+             return $response;
+        }
 
         if (isset($request->no_sampel) && $request->no_sampel != null) {
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->whereIn('kategori_3', ['11-Udara Ambient', '27-Udara Lingkungan Kerja'])->where('is_active', true)->first();
@@ -57,33 +58,16 @@ class AppsSenyawaVolatileController extends Controller
                     $parNonSes = array();
                     foreach ($param as $value) {
                         if ($value->shift_pengambilan != 'Sesaat') {
-                            $p = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sampel)))->where('parameter', $value->parameter)->get();
-                            $l = $value->shift_pengambilan;
-                            $li = explode("-", $l);
-                            $shift = '';
-
-                            if (str_contains($value->parameter, 'PM')) {
-                                if ($li[0] == '24 Jam') {
-                                    $shift = 25;
-                                } else if ($li[0] == '8 Jam') {
-                                    $shift = 8;
-                                } else if ($li[0] == '6 Jam') {
-                                    $shift = 6;
-                                }
-                            } else if (str_contains($value->parameter, 'TSP')) {
-                                if ($li[0] == '24 Jam') {
-                                    $shift = 24;
-                                } else if ($li[0] == '8 Jam') {
-                                    $shift = 8;
-                                }
-                            } else {
-                                if ($li[0] == '24 Jam') {
-                                    $shift = 4;
-                                } else if ($li[0] == '8 Jam') {
-                                    $shift = 3;
-                                }
-                            }
-                            if ($shift > count($p)) {
+                            $p = DetailSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sampel)))
+                                ->where('parameter', $value->parameter)
+                                ->get(['parameter', 'shift_pengambilan', 'kategori_pengujian']);
+                            $kategoriPrefix = explode('-', (string) $value->kategori_pengujian)[0] ?? '';
+                            $expected = FdlLingkunganSharedParameters::resolveSenyawaExpectedShiftTotal(
+                                $value->parameter,
+                                $kategoriPrefix
+                            );
+                            $filled = FdlLingkunganSharedParameters::countDistinctShiftsInRows($p, $value->parameter);
+                            if ($expected > 0 && $expected > $filled) {
                                 $parNonSes[] = $value->parameter;
                             }
                         }
@@ -147,26 +131,16 @@ class AppsSenyawaVolatileController extends Controller
 
         foreach ($param as $value) {
             if ($value->kategori_pengujian != 'Sesaat') {
-                $p = DetailSenyawaVolatile::where('no_sampel', $request->no_sampel)->where('parameter', $value->parameter)->get();
-                $l = $value->kategori_pengujian;
-                $li = explode("-", $l);
-                $shift = '';
-                if (str_contains($value->parameter, 'TSP')) {
-                    if ($li[0] == '24 Jam') {
-                        $shift = 24; 
-                    } else if ($li[0] == '8 Jam') {
-                        $shift = 8;
-                    }
-                } else {
-                    if ($li[0] == '24 Jam') {
-                        $shift = 4;
-                    } else if ($li[0] == '8 Jam') {
-                        $shift = 3;
-                    }else if ($li[0] == '3 Jam') {
-                        $shift = 3;
-                    }
-                }
-                if ($shift > count($p)) {
+                $p = DetailSenyawaVolatile::where('no_sampel', $request->no_sampel)
+                    ->where('parameter', $value->parameter)
+                    ->get(['parameter', 'shift_pengambilan', 'kategori_pengujian']);
+                $kategoriPrefix = explode('-', (string) $value->kategori_pengujian)[0] ?? '';
+                $expected = FdlLingkunganSharedParameters::resolveSenyawaExpectedShiftTotal(
+                    $value->parameter,
+                    $kategoriPrefix
+                );
+                $filled = FdlLingkunganSharedParameters::countDistinctShiftsInRows($p, $value->parameter);
+                if ($expected > 0 && $expected > $filled) {
                     $parNonSes[] = $value->parameter;
                 }
             }

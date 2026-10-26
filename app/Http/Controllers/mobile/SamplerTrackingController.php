@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Carbon\Carbon;
 use App\Models\MasterKaryawan;
 use App\Models\SamplerTrackingMember;
+use Illuminate\Validation\ValidationException;
 
 class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackingController
 {
@@ -35,10 +36,18 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
             $isPreview = true;
         }
 
+        $today = Carbon::now('Asia/Jakarta')->toDateString();
+        $troubleService = new \App\Services\SamplerTrackingTroubleService();
+        $troubles = $troubleService->unresolved($samplerId);
+        // Pin old date only while the unblocked session still needs check-in/out.
+        // After that, follow the normal journey (longest duration) on today's list.
+        $recovery = $troubleService->activeMobileRecovery($samplerId);
+        $date = $recovery ? $recovery->activity_date : $today;
         $data = $this->service->listByDate(
-            Carbon::now('Asia/Jakarta')->toDateString(),
+            $date,
             $samplerId,
-            $samplerName
+            $samplerName,
+            $recovery ? [$recovery->tracking_session_id] : null
         );
 
         // Aktivitas yang bisa dijalankan dari Apps FDL hanya milik sampler
@@ -60,9 +69,23 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
             $session->setRelation('activeMembers', $ownMembers);
         });
 
+        // An explicitly reopened recovery assignment is authorized to record
+        // events by assertAllowed(). Do not mark that same recovery read-only
+        // in Apps FDL while it still needs check-in/check-out completion.
+        $isRecovery = $recovery !== null;
+        $blockingTroubles = $isRecovery
+            ? collect()
+            : $troubleService->troublesBlockingCurrentActivity($samplerId);
+
         return response()->json([
             'success' => true,
             'data' => $data,
+            'activity_date' => $date,
+            'server_today' => $today,
+            'is_recovery' => $isRecovery,
+            'troubles' => $troubles,
+            'blocked' => $blockingTroubles->isNotEmpty(),
+            'blocked_message' => $blockingTroubles->isNotEmpty() ? $troubleService->message($troubles) : null,
             'can_preview_sampler' => (int) $this->user_id === self::PREVIEWER_USER_ID,
             'is_preview' => $isPreview,
             'preview_sampler' => $previewSampler ? [
@@ -86,7 +109,22 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
             abort(403, 'Activity sampler lain hanya dapat dilihat melalui mode preview.');
         }
 
-        return parent::storeEvent($request);
+        // Old-day recovery is recorded at the real submission time, not a client-supplied backdate.
+        $request->merge(['event_at' => Carbon::now('Asia/Jakarta')->toDateTimeString()]);
+
+        try {
+            return parent::storeEvent($request);
+        } catch (ValidationException $exception) {
+            $errors = $exception->errors();
+            $message = collect($errors)->flatten()->first()
+                ?: 'Data activity tidak valid.';
+
+            return response()->json([
+                'success' => false,
+                'message' => $message,
+                'errors' => $errors,
+            ], 422);
+        }
     }
 
     public function previewSamplers(Request $request)
@@ -132,6 +170,12 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
 
         $payload = $request->all();
         $payload['sampler_name'] = $this->karyawan;
+        $payload['sampler_id'] = $this->user_id;
+        (new \App\Services\SamplerTrackingTroubleService())->assertAllowed($this->user_id, Carbon::now('Asia/Jakarta')->toDateString());
+        $allowedIds = $this->service->listByDate(null, $this->user_id)->pluck('id')->map('strval')->all();
+        foreach ($payload['items'] as $item) {
+            if (!in_array((string) $item['session_id'], $allowedIds, true)) abort(403, 'Tujuan sampling bukan milik Anda.');
+        }
 
         $data = $this->service->updateRouteOrder($payload, $this->karyawan);
 
@@ -140,5 +184,15 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
             'message' => 'Urutan tujuan sampling berhasil disimpan.',
             'data' => $data,
         ]);
+    }
+
+    public function updateMovementGroup(Request $request)
+    {
+        abort(403, 'Perubahan tim dilakukan melalui kantor.');
+    }
+
+    public function sync(Request $request)
+    {
+        abort(403, 'Sinkronisasi jadwal dilakukan melalui kantor.');
     }
 }

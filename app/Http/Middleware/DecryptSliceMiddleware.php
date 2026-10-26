@@ -18,17 +18,23 @@ class DecryptSliceMiddleware
 
     public function handle($request, Closure $next)
     {
-        $encryptedSlice = $request->header('X-Slice');
-        if (!$encryptedSlice) {
+        $encryptedSlice = $this->normalizeSliceHeader((string) $request->header('X-Slice'));
+        if ($encryptedSlice === '') {
             return response()->json(['message' => 'X-Slice header missing'], 400);
         }
 
         try {
-            if (is_array($encryptedSlice)) {
+            if (is_array($request->header('X-Slice'))) {
                 throw new Exception('X-Slice header is duplicated (array)');
             }
 
-            $decryptedSlice = $this->crypto->decryptSlice($encryptedSlice);
+            // Greatday / legacy client: obfuscation via Crypto::encrypt()
+            // Portal baru: prefix v1. + AES (Crypto::encryptSlice)
+            if (strpos($encryptedSlice, 'v1.') === 0) {
+                $decryptedSlice = $this->crypto->decryptSlice($encryptedSlice);
+            } else {
+                $decryptedSlice = $this->crypto->decrypt($encryptedSlice);
+            }
             $slice = json_decode($decryptedSlice, true);
 
             if (!is_array($slice) || empty($slice['controller']) || empty($slice['function'])) {
@@ -50,6 +56,32 @@ class DecryptSliceMiddleware
         }
 
         return $next($request);
+    }
+
+    private function normalizeSliceHeader(string $slice): string
+    {
+        $slice = trim($slice);
+        if ($slice === '') {
+            return '';
+        }
+
+        // Beberapa proxy menggabungkan header duplikat dengan koma — ambil segmen v1. pertama.
+        if (strpos($slice, ',') !== false && strpos($slice, 'v1.') === 0) {
+            foreach (explode(',', $slice) as $part) {
+                $part = trim($part);
+                if (strpos($part, 'v1.') === 0) {
+                    $slice = $part;
+                    break;
+                }
+            }
+        }
+
+        // Beberapa stack Apache/proxy mengubah '+' menjadi spasi di header (legacy base64).
+        if (strpos($slice, ' ') !== false && strpos($slice, '+') === false && strpos($slice, 'v1.') !== 0) {
+            $slice = str_replace(' ', '+', $slice);
+        }
+
+        return $slice;
     }
 
     private function logSliceEvent(string $outcome, $request, $encryptedSlice, ?string $errorMessage = null): void

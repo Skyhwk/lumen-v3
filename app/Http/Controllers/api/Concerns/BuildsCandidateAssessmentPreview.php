@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api\Concerns;
 
 use App\Models\NewRecruitment;
+use App\Models\RecruitmentInterview;
 use App\Services\RecruitmentPictureService;
 use App\Services\RecruitmentStatusService;
 use Illuminate\Http\Request;
@@ -39,6 +40,86 @@ trait BuildsCandidateAssessmentPreview
         return count(array_filter($answers, function ($value) {
             return $value !== null && $value !== '';
         }));
+    }
+
+    protected function resolveEvaluationTargetName($session): string
+    {
+        $name = trim((string) ($session->evaluation_target_name ?? ''));
+        if ($name !== '') {
+            return $name;
+        }
+
+        $targetId = $session->evaluation_target_karyawan_id ?? null;
+        if ($targetId === null || $targetId === '') {
+            return '';
+        }
+
+        $resolved = DB::table('master_karyawan')
+            ->where('id', $targetId)
+            ->value('nama_lengkap');
+
+        return trim((string) ($resolved ?? ''));
+    }
+
+    protected function evaluationTargetItemLabel($session): string
+    {
+        $categoryName = strtoupper(trim((string) ($session->category_name ?? '')));
+        if ($categoryName === 'EMPLOYEE EVALUATION') {
+            return 'Karyawan dinilai';
+        }
+        if ($categoryName === 'SATISFACTION OF LEADER') {
+            return 'Atasan dinilai';
+        }
+        if ($categoryName === 'MANAGEMENT EVALUATION') {
+            return 'Management dinilai';
+        }
+
+        return 'Target evaluasi';
+    }
+
+    protected function internalSessionDisplayName($session): string
+    {
+        $categoryName = trim((string) ($session->category_name ?? ''));
+        $targetName = $this->resolveEvaluationTargetName($session);
+
+        return $targetName !== ''
+            ? $categoryName . ' - ' . $targetName
+            : $categoryName;
+    }
+
+    protected function internalSessionUsesProgressMetric($session): bool
+    {
+        $categoryName = strtoupper(trim((string) ($session->category_name ?? '')));
+        if ($categoryName === 'DISC') {
+            return true;
+        }
+
+        return in_array($categoryName, ['KOSTICK PAPI', 'PAPI KOSTICK'], true);
+    }
+
+    protected function extractInternalSessionScorePreview($session): ?array
+    {
+        if (empty($session->result_json)) {
+            return null;
+        }
+
+        $result = json_decode($session->result_json, true) ?: [];
+        $engine = strtolower(trim((string) ($result['engine'] ?? '')));
+        if ($engine === 'disc' || $engine === 'papi_kostick') {
+            return null;
+        }
+
+        if (!array_key_exists('score', $result)) {
+            return null;
+        }
+
+        $score = round((float) $result['score'], 2);
+
+        return [
+            'score' => $score,
+            'score_text' => number_format($score, $score == (int) $score ? 0 : 2) . '/100',
+            'percent' => (int) min(100, max(0, round($score))),
+        ];
     }
 
     protected function isHiddenAssessmentSession($session): bool
@@ -249,6 +330,29 @@ trait BuildsCandidateAssessmentPreview
             $summaryText = $totalQuestions > 0
                 ? 'PAPI Kostick selesai — ' . $answered . '/' . $totalQuestions . ' item terjawab'
                 : 'Hasil PAPI Kostick tersedia';
+        } elseif ($engine === '16pf') {
+            $pf16Detail = $this->buildPf16Detail($result);
+            foreach ($pf16Detail['psychogram'] ?? [] as $row) {
+                $items[] = [
+                    'label' => (string) ($row['factor'] ?? '-'),
+                    'value' => 'STEN ' . ($row['sten'] ?? '-')
+                        . ' (' . ($row['sten_band_label'] ?? '-') . ') — '
+                        . ($row['interpretation'] ?? '-'),
+                ];
+            }
+
+            if (isset($result['factors']['MD']['sten'])) {
+                $items[] = [
+                    'label' => 'MD (validitas)',
+                    'value' => 'STEN ' . $result['factors']['MD']['sten'],
+                ];
+            }
+
+            $answered = (int) ($result['answered'] ?? 0);
+            $totalQuestions = (int) ($result['total_questions'] ?? 0);
+            $summaryText = $totalQuestions > 0
+                ? '16PF selesai — ' . $answered . '/' . $totalQuestions . ' item terjawab'
+                : 'Hasil 16PF tersedia';
         } elseif ($engine === 'mixed') {
             $score = $result['score'] ?? null;
             $correct = (int) ($result['correct_answers'] ?? 0);
@@ -305,15 +409,26 @@ trait BuildsCandidateAssessmentPreview
                 : 'Hasil tes tersedia';
         }
 
-        $isPersonalityEngine = $engine === 'disc' || $engine === 'papi_kostick';
+        $isPersonalityEngine = $engine === 'disc' || $engine === 'papi_kostick' || $engine === '16pf';
+
+        $targetName = $this->resolveEvaluationTargetName($session);
+        if ($targetName !== '') {
+            array_unshift($items, [
+                'label' => $this->evaluationTargetItemLabel($session),
+                'value' => $targetName,
+            ]);
+        }
 
         return [
             'engine' => $engine,
             'summary_text' => $summaryText,
             'items' => $items,
+            'target_name' => $targetName !== '' ? $targetName : null,
+            'session_display_name' => $this->internalSessionDisplayName($session),
             'scored_at' => $result['scored_at'] ?? $session->completed_at,
             'disc_detail' => $engine === 'disc' ? $this->buildDiscDetail($result) : null,
             'papi_detail' => $engine === 'papi_kostick' ? $this->buildPapiDetail($result) : null,
+            'pf16_detail' => $engine === '16pf' ? $this->buildPf16Detail($result) : null,
             'question_review' => $isPersonalityEngine ? [] : $this->buildQuestionReview($session, $result),
         ];
     }
@@ -577,6 +692,108 @@ trait BuildsCandidateAssessmentPreview
         ];
     }
 
+    protected function pf16StenBandLabel(int $sten): string
+    {
+        if ($sten <= 2) {
+            return 'Sangat Rendah';
+        }
+        if ($sten <= 4) {
+            return 'Rendah';
+        }
+        if ($sten <= 6) {
+            return 'Cukup';
+        }
+        if ($sten <= 8) {
+            return 'Baik';
+        }
+
+        return 'Sangat Baik';
+    }
+
+    protected function pf16PoleEmphasis(int $sten): string
+    {
+        if ($sten <= 4) {
+            return 'low';
+        }
+        if ($sten >= 7) {
+            return 'high';
+        }
+
+        return 'mid';
+    }
+
+    protected function pf16ActiveInterpretation(int $sten, array $pole): string
+    {
+        $low = trim((string) ($pole['low'] ?? ''));
+        $high = trim((string) ($pole['high'] ?? ''));
+
+        if ($sten <= 4) {
+            return $low !== '' ? $low : '-';
+        }
+        if ($sten >= 7) {
+            return $high !== '' ? $high : '-';
+        }
+
+        $parts = array_values(array_filter([$low, $high]));
+
+        return $parts !== [] ? implode(' / ', $parts) : 'Skor rata-rata pada dimensi ini.';
+    }
+
+    protected function buildPf16Detail(array $result): array
+    {
+        $profile = app(\App\Services\SixteenPfScoringService::class)->psychogramProfile();
+
+        $rows = [];
+        foreach ($result['psychogram'] ?? [] as $row) {
+            $code = (string) ($row['factor'] ?? '');
+            $factorScores = is_array($result['factors'][$code] ?? null) ? $result['factors'][$code] : [];
+            $sten = (int) ($row['sten'] ?? 5);
+            $band = (string) ($row['band'] ?? 'rata-rata');
+            $pole = is_array($profile[$code] ?? null) ? $profile[$code] : [];
+            $lowLabel = trim((string) ($pole['low'] ?? ($row['low_label'] ?? '')));
+            $highLabel = trim((string) ($pole['high'] ?? ($row['high_label'] ?? '')));
+
+            $rows[] = [
+                'factor' => $code,
+                'raw' => isset($factorScores['raw']) ? (int) $factorScores['raw'] : null,
+                'sten' => $sten,
+                'band' => $band,
+                'sten_band_label' => $this->pf16StenBandLabel($sten),
+                'low_label' => $lowLabel,
+                'high_label' => $highLabel,
+                'interpretation' => $this->pf16ActiveInterpretation($sten, [
+                    'low' => $lowLabel,
+                    'high' => $highLabel,
+                ]),
+                'emphasis' => $this->pf16PoleEmphasis($sten),
+            ];
+        }
+
+        $md = is_array($result['factors']['MD'] ?? null) ? $result['factors']['MD'] : [];
+        $scoreRows = [];
+        foreach (array_merge(['MD'], ['A', 'B', 'C', 'E', 'F', 'G', 'H', 'I', 'L', 'M', 'N', 'O', 'Q1', 'Q2', 'Q3', 'Q4']) as $code) {
+            $factorScores = is_array($result['factors'][$code] ?? null) ? $result['factors'][$code] : [];
+            $scoreRows[] = [
+                'factor' => $code,
+                'raw' => isset($factorScores['raw']) ? (int) $factorScores['raw'] : null,
+                'sten' => isset($factorScores['sten']) ? (int) $factorScores['sten'] : null,
+            ];
+        }
+
+        return [
+            'norm_group' => $result['norm_group'] ?? null,
+            'gender' => $result['gender'] ?? null,
+            'answered' => (int) ($result['answered'] ?? 0),
+            'total_questions' => (int) ($result['total_questions'] ?? 0),
+            'psychogram' => $rows,
+            'score_table' => $scoreRows,
+            'md' => [
+                'raw' => isset($md['raw']) ? (int) $md['raw'] : null,
+                'sten' => isset($md['sten']) ? (int) $md['sten'] : null,
+            ],
+        ];
+    }
+
     protected function decodeMetaHistory($metaHistory)
     {
         if (is_array($metaHistory)) {
@@ -616,6 +833,7 @@ trait BuildsCandidateAssessmentPreview
             'link_gmeet' => $hrd->link_gmeet,
             'ruangan_interview' => $hrd->ruangan_interview,
             'status_result' => $hrd->status_result,
+            'tanggal_join' => RecruitmentInterview::normalizeTanggalJoin($hrd->getRawOriginal('tanggal_join')),
             'catatan_interview' => $catatan,
             'updated_by' => $hrd->updated_by,
             'updated_at' => $hrd->updated_at,
@@ -644,11 +862,13 @@ trait BuildsCandidateAssessmentPreview
 
         return [
             'id' => $user->id,
+            'new_recruitment_id' => $user->new_recruitment_id ?? $candidate->id ?? null,
             'tgl_interview' => $user->tgl_interview,
             'jenis_interview' => $user->jenis_interview,
             'link_gmeet' => $user->link_gmeet,
             'ruangan_interview' => $user->ruangan_interview,
             'status_result' => $user->status_result,
+            'tanggal_join' => RecruitmentInterview::normalizeTanggalJoin($user->getRawOriginal('tanggal_join')),
             'catatan_interview' => $catatan,
             'updated_by' => $user->updated_by,
             'updated_at' => $user->updated_at,
@@ -715,6 +935,7 @@ trait BuildsCandidateAssessmentPreview
             'applied_at' => $candidate->created_at,
             'updated_at' => $candidate->updated_at,
             'meta_history' => $this->decodeMetaHistory($candidate->meta_history),
+            'bypass' => $this->decodeCandidateBypass($candidate->bypass ?? null),
             'assessment' => $this->buildAssessmentProgress($candidate->id),
             'hrd_interview' => $this->formatHrdInterviewSummary($candidate),
             'user_interview' => $this->formatUserInterviewSummary($candidate),
@@ -727,6 +948,15 @@ trait BuildsCandidateAssessmentPreview
             'has_completed_profile' => $this->candidateHasCompletedProfile($candidate->id),
             'attachments' => $this->formatCandidateAttachments($candidate->id),
         ];
+    }
+
+    protected function decodeCandidateBypass($bypass): array
+    {
+        if (is_array($bypass)) {
+            return $bypass;
+        }
+
+        return json_decode((string) $bypass, true) ?: [];
     }
 
     protected function candidateHasCompletedProfile($candidateId): bool

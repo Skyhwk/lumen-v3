@@ -256,6 +256,11 @@ class RequestKebijakanNotificationService
         );
     }
 
+    public static function userIdsForMenuPath(string $menuPath, array $requiredAccessTypes = ['view']): array
+    {
+        return self::getUserIdsByMenuPath($menuPath, $requiredAccessTypes);
+    }
+
     private static function getApprovalMenuUserIds(): array
     {
         return self::getUserIdsByMenuPath(self::URL_APPROVAL, ['view', 'approve']);

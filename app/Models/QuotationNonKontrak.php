@@ -130,6 +130,13 @@ class QuotationNonKontrak extends Sector
         return $this->hasOne(LinkLhp::class, 'no_quotation', 'no_document');
     }
 
+    public function lhpManuals()
+    {
+        return $this->hasMany(LhpManual::class, 'no_quotation', 'no_document')
+            ->where('is_active', true)
+            ->whereNull('deleted_at');
+    }
+
     public function dailyQsd()
     {
         return $this->hasMany(DailyQsd::class, 'no_quotation', 'no_document');

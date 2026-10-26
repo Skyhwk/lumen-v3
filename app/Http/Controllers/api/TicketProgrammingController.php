@@ -37,6 +37,118 @@ class TicketProgrammingController extends Controller
             . 'maka ticket akan dianggap selesai.';
     }
 
+    private function isProgrammingTeamView(Request $request): bool
+    {
+        $department = $request->attributes->get('user')->karyawan->id_department;
+
+        return $department == 7 && !in_array($this->user_id, [10, 15, 93, 123]);
+    }
+
+    private function baseTicketListQuery(Request $request)
+    {
+        if ($this->isProgrammingTeamView($request)) {
+            return TicketProgramming::where('is_active', true)
+                ->orderBy('id', 'desc');
+        }
+
+        $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
+
+        return TicketProgramming::whereIn('request_by', $getBawahan)
+            ->where('is_active', true)
+            ->orderBy('id', 'desc');
+    }
+
+    private function applyStatusTabFilter($query, ?string $statusTab)
+    {
+        if (!$statusTab) {
+            return $query;
+        }
+
+        switch ($statusTab) {
+            case 'waiting_approval':
+                return $query
+                    ->where('kategori', 'PERUBAHAN_DATA')
+                    ->whereNull('approved_by')
+                    ->where('status', 'WAITING PROCESS');
+            case 'waiting_process':
+                return $query->where(function ($builder) {
+                    $builder->where('status', 'REOPEN')
+                        ->orWhere(function ($waiting) {
+                            $waiting->where('status', 'WAITING PROCESS')
+                                ->where(function ($approvalScope) {
+                                    $approvalScope->where('kategori', '!=', 'PERUBAHAN_DATA')
+                                        ->orWhereNotNull('approved_by');
+                                });
+                        });
+                });
+            case 'process':
+                return $query->whereIn('status', ['PROCESS', 'PENDING']);
+            case 'solve':
+                return $query->where('status', 'SOLVE');
+            case 'done':
+                return $query->where('status', 'DONE');
+            case 'reject':
+                return $query->where('status', 'REJECT');
+            default:
+                return $query;
+        }
+    }
+
+    private function makeTicketProgrammingDatatable($data, bool $includeCanApprove = false, array $getBawahan = [])
+    {
+        $datatable = Datatables::of($data)
+            ->addColumn('reff', function ($row) {
+                $filePath = public_path('ticket_programming/' . $row->filename);
+                if (file_exists($filePath) && is_file($filePath)) {
+                    return file_get_contents($filePath);
+                }
+
+                return 'File not found';
+            })
+            ->addColumn('unread_count', function ($row) {
+                return TicketProgrammingConversationService::getUnreadCount($row->id, $this->user_id);
+            });
+
+        if ($includeCanApprove) {
+            $datatable->addColumn('can_approve', function ($row) use ($getBawahan) {
+                return in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
+            });
+        }
+
+        return $datatable->make(true);
+    }
+
+    public function tabCounts(Request $request)
+    {
+        try {
+            $tabs = [
+                'waiting_approval',
+                'waiting_process',
+                'process',
+                'solve',
+                'done',
+                'reject',
+            ];
+            $counts = [];
+
+            foreach ($tabs as $tab) {
+                $query = $this->baseTicketListQuery($request);
+                $counts[$tab] = $this->applyStatusTabFilter($query, $tab)->count();
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $counts,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'data' => [],
+            ], 500);
+        }
+    }
+
     public function checkPendingSolveTickets(Request $request)
     {
         try {
@@ -62,48 +174,18 @@ class TicketProgrammingController extends Controller
     public function index(Request $request)
     {
         try {
-            $department = $request->attributes->get('user')->karyawan->id_department;
-            if ($department == 7 && !in_array($this->user_id, [10, 15, 93, 123])) {
-                $data = TicketProgramming::where('is_active', true)
-                    ->orderBy('id', 'desc');
-                return Datatables::of($data)
-                    ->addColumn('reff', function ($row) {
-                        $filePath = public_path('ticket_programming/' . $row->filename);
-                        if (file_exists($filePath) && is_file($filePath)) {
-                            return file_get_contents($filePath);
-                        } else {
-                            return 'File not found';
-                        }
-                    })
-                    ->addColumn('unread_count', function ($row) {
-                        return TicketProgrammingConversationService::getUnreadCount($row->id, $this->user_id);
-                    })
-                    ->make(true);
-            } else {
+            $data = $this->applyStatusTabFilter(
+                $this->baseTicketListQuery($request),
+                $request->status_tab
+            );
 
-                $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
-                $data = TicketProgramming::whereIn('request_by', $getBawahan)
-                    ->where('is_active', true)
-                    ->orderBy('id', 'desc');
-
-                return Datatables::of($data)
-                    ->addColumn('reff', function ($row) {
-                        $filePath = public_path('ticket_programming/' . $row->filename);
-                        if (file_exists($filePath) && is_file($filePath)) {
-                            return file_get_contents($filePath);
-                        } else {
-                            return 'File not found';
-                        }
-                    })
-                    ->addColumn('can_approve', function ($row) use ($getBawahan) {
-                        // comment
-                        return in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
-                    })
-                    ->addColumn('unread_count', function ($row) {
-                        return TicketProgrammingConversationService::getUnreadCount($row->id, $this->user_id);
-                    })
-                    ->make(true);
+            if ($this->isProgrammingTeamView($request)) {
+                return $this->makeTicketProgrammingDatatable($data);
             }
+
+            $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
+
+            return $this->makeTicketProgrammingDatatable($data, true, $getBawahan);
         } catch (\Exception $e) {
             return response()->json([
                 'data' => [],

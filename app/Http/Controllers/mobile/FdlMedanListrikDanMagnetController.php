@@ -34,9 +34,9 @@ class FdlMedanListrikDanMagnetController extends Controller
 {
     public function getSample(Request $request)
     {
-        // if ($response = $this->ensureSamplerCheckedInForSample($request)) {
-        //     return $response;
-        // }
+        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+             return $response;
+        }
 
         // Cek apakah input no_sample valid
         if (!isset($request->no_sample) || trim($request->no_sample) === '') {
@@ -193,6 +193,7 @@ class FdlMedanListrikDanMagnetController extends Controller
                         if ($request->frekuensi3 != '') $data->frekuensi_3       = $request->frekuensi3;
                         if ($request->frekuensi30 != '') $data->frekuensi_30      = $request->frekuensi30;
                         if ($request->frekuensi100 != '') $data->frekuensi_100      = $request->frekuensi100;
+                        if ($request->frekuensi_alat != '') $data->frekuensi_alat = $request->frekuensi_alat;
 
                         if ($request->permission != '') $data->permission                      = $request->permission;
                         if ($request->foto_lokasi_sampel != '') $data->foto_lokasi_sampel        = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
@@ -248,6 +249,7 @@ class FdlMedanListrikDanMagnetController extends Controller
                         if ($request->frekuensi3 != '') $data->frekuensi_3       = $request->frekuensi3;
                         if ($request->frekuensi30 != '') $data->frekuensi_30      = $request->frekuensi30;
                         if ($request->frekuensi100 != '') $data->frekuensi_100      = $request->frekuensi100;
+                        if ($request->frekuensi_alat != '') $data->frekuensi_alat = $request->frekuensi_alat;
 
                         if ($request->permission != '') $data->permission                      = $request->permission;
                         if ($request->foto_lokasi_sampel != '') $data->foto_lokasi_sampel        = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
@@ -325,6 +327,7 @@ class FdlMedanListrikDanMagnetController extends Controller
                         if ($request->frekuensi3 != '') $data->frekuensi_3       = $request->frekuensi3;
                         if ($request->frekuensi30 != '') $data->frekuensi_30      = $request->frekuensi30;
                         if ($request->frekuensi100 != '') $data->frekuensi_100      = $request->frekuensi100;
+                        if ($request->frekuensi_alat != '') $data->frekuensi_alat = $request->frekuensi_alat;
 
                         if ($request->permission != '') $data->permission                      = $request->permission;
                         if ($request->foto_lokasi_sampel != '') $data->foto_lokasi_sampel        = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
@@ -455,6 +458,7 @@ class FdlMedanListrikDanMagnetController extends Controller
             'frek_3'         => $data->frekuensi_3,
             'frek_30'        => $data->frekuensi_30,
             'frek_100'        => $data->frekuensi_100,
+            'frekuensi_alat' => $data->frekuensi_alat,
 
             'tikoor'         => $data->titik_koordinat,
             'foto_lok'       => $data->foto_lokasi_sampel,

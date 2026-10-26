@@ -153,7 +153,9 @@ class RenderInvoice
                 'mode' => 'utf-8',
                 'format' => 'A4',
                 'margin_header' => 3, // 30mm not pixel
-                'margin_bottom' => 10, // 30mm not pixel
+                // Footer memuat QR, nomor halaman, dan note sistem. Ruang ini harus
+                // sudah dicadangkan sebelum tabel ringkasan ditulis agar tidak overlap.
+                'margin_bottom' => 25,
                 'margin_footer' => 3,
                 'setAutoTopMargin' => 'stretch',
                 'setAutoBottomMargin' => 'stretch',
@@ -1955,7 +1957,9 @@ class RenderInvoice
                 'mode' => 'utf-8',
                 'format' => 'A4',
                 'margin_header' => 3, // 30mm not pixel
-                'margin_bottom' => 10, // 30mm not pixel
+                // Footer memuat QR, nomor halaman, dan note sistem. Ruang ini harus
+                // sudah dicadangkan sebelum tabel ringkasan ditulis agar tidak overlap.
+                'margin_bottom' => 25,
                 'margin_footer' => 3,
                 'setAutoTopMargin' => 'stretch',
                 'setAutoBottomMargin' => 'stretch',
@@ -2044,6 +2048,24 @@ class RenderInvoice
             // );
 
             // $pdf->setFooter($footer);
+
+            $qr_img = '';
+            $qr_name = \str_replace('/', '_', $dataHead->no_invoice);
+            $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
+            $customNeedsSignature = self::shouldRenderSignature($customInvoice->harga->nilai_tagihan, $forceSignature);
+            if ($qr) {
+                $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>'
+                    . ($customNeedsSignature ? $qr->kode_qr : '');
+            }
+
+            $pdf->setFooter([
+                'odd' => [
+                    'C' => ['content' => 'Hal {PAGENO} dari {nbpg}', 'font-size' => 6, 'font-style' => 'I', 'font-family' => 'serif', 'color' => '#606060'],
+                    'R' => ['content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}', 'font-size' => 5, 'font-style' => 'I', 'font-family' => 'serif', 'color' => '#000000'],
+                    'L' => ['content' => $customNeedsSignature ? $qr_img : '', 'font-size' => 4, 'font-style' => 'I', 'font-family' => 'serif', 'color' => '#000000'],
+                    'line' => -1,
+                ],
+            ]);
 
             $trAlamat = '<tr>
                 <td style="width:35%;"><p style="font-size: 10px;"><u>Alamat Kantor :</u><br><span

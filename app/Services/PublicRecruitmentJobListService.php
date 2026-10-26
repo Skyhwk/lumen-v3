@@ -4,6 +4,8 @@ namespace App\Services;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class PublicRecruitmentJobListService
 {
@@ -25,8 +27,16 @@ class PublicRecruitmentJobListService
             return $jobs->values();
         }
 
-        $requestIds = $jobs->pluck('id')->filter()->unique()->values()->all();
-        $countsByRequestId = $this->getCandidateCountsByRequest($requestIds);
+        try {
+            $requestIds = $jobs->pluck('id')->filter()->unique()->values()->all();
+            $countsByRequestId = $this->getCandidateCountsByRequest($requestIds);
+        } catch (\Throwable $exception) {
+            Log::warning('public_recruitment.filter_duplicates_skipped', [
+                'message' => $exception->getMessage(),
+            ]);
+
+            return $jobs->values();
+        }
 
         return $jobs
             ->groupBy(fn ($job) => $this->positionGroupKey($job))
@@ -42,8 +52,8 @@ class PublicRecruitmentJobListService
 
     private function positionGroupKey(object $job): string
     {
-        $grade = mb_strtolower(trim((string) ($job->grade_master_karyawan ?? '')));
-        $alias = mb_strtolower(trim((string) ($job->divisi_alias ?? '')));
+        $grade = $this->lower(trim((string) ($job->grade_master_karyawan ?? '')));
+        $alias = $this->lower(trim((string) ($job->divisi_alias ?? '')));
 
         if ($alias !== '') {
             return 'alias:' . $alias . ':grade:' . $grade;
@@ -60,6 +70,10 @@ class PublicRecruitmentJobListService
     private function getCandidateCountsByRequest(array $requestIds): array
     {
         if ($requestIds === []) {
+            return [];
+        }
+
+        if (!Schema::hasTable('new_recruitment') || !Schema::hasColumn('new_recruitment', 'personnel_request_id')) {
             return [];
         }
 
@@ -158,5 +172,14 @@ class PublicRecruitmentJobListService
         return $counts['early'] >= self::EARLY_MIN
             || $counts['hrd'] >= self::HRD_MIN
             || $counts['user'] >= self::USER_MIN;
+    }
+
+    private function lower(string $value): string
+    {
+        if (function_exists('mb_strtolower')) {
+            return mb_strtolower($value);
+        }
+
+        return strtolower($value);
     }
 }

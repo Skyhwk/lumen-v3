@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Support\FdlOrderDetailNoSampelSync;
+
 use App\Models\DataLapanganKebisingan;
 use App\Models\OrderDetail;
 use App\Models\MasterSubKategori;
@@ -27,10 +29,26 @@ use App\Services\AnalystFormula;
 
 class FdlKebisinganController extends Controller
 {
+    public function tabCounts()
+    {
+        $base = DataLapanganKebisingan::query();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'pending' => (clone $base)->where(function ($query) {
+                    $query->where('is_approve', 0)->orWhereNull('is_approve');
+                })->count(),
+                'approved' => (clone $base)->where('is_approve', 1)->count(),
+            ],
+        ]);
+    }
+
     public function indexAll(Request $request)
     {
         $this->autoBlock();
         $data = DataLapanganKebisingan::with('detail')->orderBy('id', 'desc');
+        $this->applyApprovalFilter($data, $request);
 
         return Datatables::of($data)
             ->filterColumn('created_by', function ($query, $keyword) {
@@ -178,7 +196,7 @@ class FdlKebisinganController extends Controller
                 $dataParsing->totSesaat = json_decode($dataLapangan->value_kebisingan, true);
             }
 
-            // ==== Jika ada formula, jalankan perhitungan ====
+            // ==== Jika kuota approve terpenuhi: hitung formula, simpan header & WS ====
             $calculate = null;
             if ($function) {
                 $calculate = AnalystFormula::where('function', $function)
@@ -189,53 +207,55 @@ class FdlKebisinganController extends Controller
                 if (!is_array($calculate)) {
                     throw new Exception("Formula tidak valid atau belum diimplementasikan");
                 }
+
+                $dataHeader = KebisinganHeader::where('no_sampel', $no_sample)
+                    ->where('id_parameter', $param->id)
+                    ->where('is_active', true)
+                    ->first();
+
+                if (!$dataHeader) {
+                    $dataHeader = new KebisinganHeader();
+                    $dataHeader->created_by = $this->karyawan;
+                    $dataHeader->created_at = Carbon::now();
+                }
+
+                $dataHeader->no_sampel        = $no_sample;
+                $dataHeader->id_parameter     = $param->id;
+                $dataHeader->parameter        = $param->nama_lab;
+                $dataHeader->min              = $nilaiMin;
+                $dataHeader->max              = $nilaiMax;
+                $dataHeader->suhu_udara       = $reratasuhu;
+                $dataHeader->kelembapan_udara = $reratakelemb;
+                $dataHeader->ls               = $calculate['totalLSM'] ?? null;
+                $dataHeader->lm               = $calculate['rerataLSM'] ?? null;
+                $dataHeader->leq_ls           = $calculate['leqLS'] ?? null;
+                $dataHeader->leq_lm           = $calculate['leqLM'] ?? null;
+                $dataHeader->leq              = $calculate['jumlah_leq'] ?? null;
+
+                $dataHeader->is_approved      = true;
+                $dataHeader->is_active        = true;
+                $dataHeader->approved_by      = $this->karyawan;
+                $dataHeader->approved_at      = Carbon::now();
+                $dataHeader->save();
+
+                $ws = WsValueUdara::where('no_sampel', $no_sample)
+                    ->where('id_kebisingan_header', $dataHeader->id)
+                    ->where('is_active', true)
+                    ->first();
+
+                if (!$ws) {
+                    $ws = new WsValueUdara();
+                }
+
+                $ws->no_sampel            = $no_sample;
+                $ws->id_kebisingan_header = $dataHeader->id;
+                $ws->id_po                = $po->id;
+                $ws->hasil1               = $calculate['hasil'] ?? null;
+                $ws->hasil2               = $calculate['hasil2'] ?? null;
+                $ws->satuan               = $calculate['satuan'] ?? null;
+                $ws->is_active            = true;
+                $ws->save();
             }
-
-            $dataHeader = KebisinganHeader::where('no_sampel', $no_sample)
-                ->where('id_parameter', $param->id)
-                ->where('is_active', true)
-                ->first();
-
-            if (!$dataHeader) {
-                $dataHeader = new KebisinganHeader();
-                $dataHeader->created_by = $this->karyawan;
-            }
-
-            $dataHeader->no_sampel        = $no_sample;
-            $dataHeader->id_parameter     = $param->id;
-            $dataHeader->parameter        = $param->nama_lab;
-            $dataHeader->min              = $nilaiMin;
-            $dataHeader->max              = $nilaiMax;
-            $dataHeader->suhu_udara       = $reratasuhu;
-            $dataHeader->kelembapan_udara = $reratakelemb;
-            $dataHeader->ls               = $calculate['totalLSM'] ?? null;
-            $dataHeader->lm               = $calculate['rerataLSM'] ?? null;
-            $dataHeader->leq_ls           = $calculate['leqLS'] ?? null;
-            $dataHeader->leq_lm           = $calculate['leqLM'] ?? null;
-            $dataHeader->leq              = $calculate['jumlah_leq'] ?? null;
-            $dataHeader->is_approved      = true;
-            $dataHeader->is_active        = true;
-            $dataHeader->approved_by      = $this->karyawan;
-            $dataHeader->approved_at      = Carbon::now();
-            $dataHeader->save();
-
-            $ws = WsValueUdara::where('no_sampel', $no_sample)
-                ->where('id_kebisingan_header', $dataHeader->id)
-                ->where('is_active', true)
-                ->first();
-
-            if (!$ws) {
-                $ws = new WsValueUdara();
-            }
-
-            $ws->no_sampel            = $no_sample;
-            $ws->id_kebisingan_header = $dataHeader->id;
-            $ws->id_po                = $po->id;
-            $ws->hasil1               = $calculate['hasil'] ?? null;
-            $ws->hasil2               = $calculate['hasil2'] ?? null;
-            $ws->satuan               = $calculate['satuan'] ?? null;
-            $ws->is_active            = true;
-            $ws->save();
 
             // ==== Update status Approve ====
             $dataLapangan->update([
@@ -360,6 +380,9 @@ class FdlKebisinganController extends Controller
 
     public function updateNoSampel(Request $request)
     {
+        $request->merge([
+            'no_sampel_baru' => trim((string) $request->input('no_sampel_baru', '')),
+        ]);
         if (isset($request->id) && $request->id != null) {
             DB::beginTransaction();
             try {
@@ -388,20 +411,8 @@ class FdlKebisinganController extends Controller
                     $item->updated_at = Carbon::now()->format('Y-m-d H:i:s');
                     $item->save(); // Save for each item
                 }
+                FdlOrderDetailNoSampelSync::afterRename($request->no_sampel_lama, $request->no_sampel_baru);
 
-                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
-                    ->first();
-
-                if ($order_detail_lama) {
-                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
-                        ->where('is_active', 1)
-                        ->update([
-                            'tanggal_terima' => $order_detail_lama->tanggal_terima
-                        ]);
-                    
-                    $order_detail_lama->tanggal_terima = NULL;
-                    $order_detail_lama->save();
-                }
 
                 DB::commit();
                 return response()->json([
@@ -494,5 +505,21 @@ class FdlKebisinganController extends Controller
     {
         $tgl = Carbon::now()->subDays(7);
         $data = DataLapanganKebisingan::where('is_blocked', 0)->where('created_at', '<=', $tgl)->update(['is_blocked' => 1, 'blocked_by' => 'System', 'blocked_at' => Carbon::now()->format('Y-m-d H:i:s')]);
+    }
+
+    private function applyApprovalFilter($query, Request $request): void
+    {
+        if (!$request->filled('approval')) {
+            return;
+        }
+
+        if ($request->approval === 'approved') {
+            $query->where('is_approve', 1);
+            return;
+        }
+
+        $query->where(function ($sub) {
+            $sub->where('is_approve', 0)->orWhereNull('is_approve');
+        });
     }
 }

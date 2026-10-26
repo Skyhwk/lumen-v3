@@ -71,6 +71,12 @@ return [
             'path' => storage_path('logs/sampling/log.log'),
             'level' => 'info',
         ],
+        'assessment_rejection' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/assessment_rejection/log.log'),
+            'level' => 'info',
+            'days' => 30,
+        ],
         'monitor_log_qsd_revenue' => [
             'driver' => 'daily',
             'path' => storage_path('logs/monitor_log_qsd_revenue/log.log'),
@@ -201,6 +207,13 @@ return [
             'days' => 30,
         ],
 
+        'deactivate_expired_bookings' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/deactivate_expired_bookings/log.log'),
+            'level' => 'info',
+            'days' => 90,
+        ],
+
         'send_mqtt' => [
             'driver' => 'daily',
             'path' => storage_path('logs/send_mqtt/logs.log'),
@@ -260,6 +273,13 @@ return [
         'ats_ai_matching' => [
             'driver' => 'daily',
             'path' => storage_path('logs/ats_ai_matching/log.log'),
+            'level' => 'info',
+            'days' => 30,
+        ],
+
+        'telegram' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/telegram/log.log'),
             'level' => 'info',
             'days' => 30,
         ],

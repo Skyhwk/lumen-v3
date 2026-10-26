@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Support\FdlOrderDetailNoSampelSync;
+
 use App\Models\DataLapanganErgonomi;
 use App\Models\OrderDetail;
 use App\Models\MasterSubKategori;
@@ -18,6 +20,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Schema;
 use Yajra\Datatables\Datatables;
 
 class FdlErgonomiController extends Controller
@@ -25,11 +28,35 @@ class FdlErgonomiController extends Controller
     private const VIDEO_DOKUMENTASI_FOLDER = '/dokumentasi/video_bahaya_ergonomi/';
     private const LEGACY_VIDEO_DOKUMENTASI_FOLDER = '/dokumentasi/sampling/';
 
+    public function tabCounts(Request $request)
+    {
+        $base = DataLapanganErgonomi::query();
+        if ($request->filled('is_active') && Schema::hasColumn('data_lapangan_ergonomi', 'is_active')) {
+            $base->where('is_active', (int) $request->is_active);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'pending' => (clone $base)->where(function ($query) {
+                    $query->where('is_approve', 0)->orWhereNull('is_approve');
+                })->count(),
+                'approved' => (clone $base)->where('is_approve', 1)->count(),
+            ],
+        ]);
+    }
+
     public function index(Request $request)
     {
         try {
             $this->autoBlock();
             $data = DataLapanganErgonomi::with('detail')->orderBy('id', 'desc');
+
+            if ($request->filled('is_active') && Schema::hasColumn('data_lapangan_ergonomi', 'is_active')) {
+                $data->where('is_active', (int) $request->is_active);
+            }
+
+            $this->applyApprovalFilter($data, $request);
 
             return Datatables::of($data)
                 ->filterColumn('created_by', function ($query, $keyword) {
@@ -1154,6 +1181,9 @@ class FdlErgonomiController extends Controller
 
     public function updateNoSampel(Request $request)
     {
+        $request->merge([
+            'no_sampel_baru' => trim((string) $request->input('no_sampel_baru', '')),
+        ]);
         if (isset($request->id) && $request->id != null) {
             DB::beginTransaction();
             try {
@@ -1180,21 +1210,8 @@ class FdlErgonomiController extends Controller
                     $item->updated_at = Carbon::now()->format('Y-m-d H:i:s');
                     $item->save(); // Save for each item
                 }
+                FdlOrderDetailNoSampelSync::afterRename($request->no_sampel_lama, $request->no_sampel_baru);
 
-                
-                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
-                    ->first();
-
-                if ($order_detail_lama) {
-                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
-                        ->where('is_active', 1)
-                        ->update([
-                            'tanggal_terima' => $order_detail_lama->tanggal_terima
-                        ]);
-                    
-                    $order_detail_lama->tanggal_terima = NULL;
-                    $order_detail_lama->save();
-                }
 
                 DB::commit();
                 return response()->json([
@@ -1340,6 +1357,23 @@ class FdlErgonomiController extends Controller
         }
 
         return $newPath;
+    }
+
+
+    private function applyApprovalFilter($query, Request $request): void
+    {
+        if (!$request->filled('approval')) {
+            return;
+        }
+
+        if ($request->approval === 'approved') {
+            $query->where('is_approve', 1);
+            return;
+        }
+
+        $query->where(function ($sub) {
+            $sub->where('is_approve', 0)->orWhereNull('is_approve');
+        });
     }
 
 }

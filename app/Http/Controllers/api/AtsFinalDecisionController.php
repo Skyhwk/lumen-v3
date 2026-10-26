@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Helpers\ShioElemenHelper;
 use App\Http\Controllers\Controller;
 use App\Models\CandidateDataOffers;
+use App\Models\DecisionSalary;
 use App\Models\NewRecruitment;
 use App\Models\PersonnelRequest;
 use App\Models\RecruitmentInterview;
@@ -13,10 +14,13 @@ use App\Services\GenerateMessageAtsWhatsapp;
 use App\Services\GenerateToken;
 use App\Services\CandidateDocumentAttachmentService;
 use App\Services\GenerateAssessmentDocumentService;
+use App\Services\AtsFinalDecisionCandidateScope;
 use App\Services\RecruitmentStatusService;
+use App\Services\RequesterSalaryApprovalService;
 use App\Services\SallaryOfferService;
 use App\Services\SendEmail;
 use App\Services\SendWhatsapp;
+use App\Services\ApprovalAppFcmService;
 use App\Services\AtsNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -110,6 +114,24 @@ class AtsFinalDecisionController extends Controller
         return $pos ?: '-';
     }
 
+    private function parseMoneyField($val): float
+    {
+        $parsed = RequesterSalaryApprovalService::parseRupiahToInt($val);
+
+        return $parsed !== null ? (float) $parsed : 0.0;
+    }
+
+    private function cleanSalaryString($salary): string
+    {
+        if ($salary === null || $salary === '') {
+            return '';
+        }
+
+        $parsed = RequesterSalaryApprovalService::parseRupiahToInt($salary);
+
+        return $parsed !== null ? (string) $parsed : '';
+    }
+
     private function newRecruitmentHasColumn($column)
     {
         static $columns = null;
@@ -192,111 +214,14 @@ class AtsFinalDecisionController extends Controller
         $this->whereAnyExistingLike($q, ['nilai_kecocokan', 'matching_score'], $cleanVal);
     }
 
-    private function scopeFinalDecisionBase($query)
-    {
-        return $query->where(function ($q) {
-            $q->whereIn('status', [
-                'management_decision',
-                'internal_sallary_offer',
-                'salary_offer',
-                'finance_review',
-                'rejected',
-            ])
-            ->orWhere(function ($sub) {
-                $sub->where('status', 'rejected')
-                    ->where(function ($meta) {
-                        $meta->where('meta_history', 'like', '%management_decision%')
-                            ->orWhere('meta_history', 'like', '%internal_sallary_offer%')
-                            ->orWhere('meta_history', 'like', '%interview_user%')
-                            ->orWhere('meta_history', 'like', '%finance_review%')
-                            ->orWhere('meta_history', 'like', '%finance_rejected%')
-                            ->orWhere('meta_history', 'like', '%candidate_rejected%')
-                            ->orWhere('is_approve_interview_user', 1);
-                    });
-            });
-        })
-        ->where(function ($q) {
-            $q->whereNull('meta_history')
-                ->orWhere('meta_history', 'not like', '%hrd_final_decision_rejected%');
-        })
-        ->where(function ($q) {
-            $q->where('is_rejected_kandidat', false)
-                ->orWhereNull('is_rejected_kandidat');
-        })
-        ->where(function ($q) {
-            $q->whereNull('rejected_by')
-                ->orWhere('is_approved_interview_hrd', 1)
-                ->orWhereNotNull('approved_interview_hrd_by');
-        })
-        ->where('is_active', 1);
-    }
-
     private function scopeFinalDecisionCandidates($query)
     {
-        $query = $this->scopeFinalDecisionBase($query);
-        $this->applyActiveFinalDecisionSectionFilter($query);
-
-        return $query;
+        return AtsFinalDecisionCandidateScope::applyActive($query);
     }
 
     private function scopeRejectedFinalDecisionCandidates($query)
     {
-        $query = $this->scopeFinalDecisionBase($query);
-        $this->applyRejectedFinalDecisionSectionFilter($query);
-
-        return $query;
-    }
-
-    private function applyActiveFinalDecisionSectionFilter($query): void
-    {
-        if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'rejected_decision')) {
-            $query->where(function ($q) {
-                $q->where(function ($sub) {
-                    $sub->where('rejected_decision', false)->orWhereNull('rejected_decision');
-                })->where(function ($sub) {
-                    $sub->where('rejected_salary', false)->orWhereNull('rejected_salary');
-                });
-            });
-        }
-
-        if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'is_reject_finance')) {
-            $query->where(function ($q) {
-                $q->where(function ($sub) {
-                    $sub->where('is_reject_finance', false)->orWhereNull('is_reject_finance');
-                })->orWhere('status', '!=', 'management_decision');
-            });
-        }
-    }
-
-    private function applyRejectedFinalDecisionSectionFilter($query): void
-    {
-        $hasFilter = false;
-
-        $query->where(function ($q) use (&$hasFilter) {
-            if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'rejected_decision')) {
-                $q->where(function ($sub) {
-                    $sub->where('rejected_decision', true)->orWhere('rejected_salary', true);
-                });
-                $hasFilter = true;
-            }
-
-            if (\Illuminate\Support\Facades\Schema::hasColumn('new_recruitment', 'is_reject_finance')) {
-                $financeRejected = function ($sub) {
-                    $sub->where('status', 'management_decision')->where('is_reject_finance', true);
-                };
-
-                if ($hasFilter) {
-                    $q->orWhere($financeRejected);
-                } else {
-                    $q->where($financeRejected);
-                    $hasFilter = true;
-                }
-            }
-
-            if (!$hasFilter) {
-                $q->whereRaw('1 = 0');
-            }
-        });
+        return AtsFinalDecisionCandidateScope::applyRejected($query);
     }
 
     private function applyFinalDecisionListScope($query, ?string $listType = null, ?string $stageTab = null, $year = null)
@@ -369,6 +294,7 @@ class AtsFinalDecisionController extends Controller
             'management_decision' => 0,
             'salary_offer' => 0,
             'waiting_approval' => 0,
+            'keep' => 0,
             'finance_review' => 0,
             'waiting_approval_salary' => 0,
             'rejected' => $this->buildFinalDecisionTabQuery('rejected', $year)->count(),
@@ -386,7 +312,7 @@ class AtsFinalDecisionController extends Controller
             ->get();
 
         foreach ($candidates as $row) {
-            foreach (['management_decision', 'salary_offer', 'waiting_approval', 'finance_review', 'waiting_approval_salary'] as $tab) {
+            foreach (['management_decision', 'salary_offer', 'waiting_approval', 'keep', 'finance_review', 'waiting_approval_salary'] as $tab) {
                 if (RecruitmentStatusService::matchesFinalDecisionStageTab($row, $tab)) {
                     $counts[$tab]++;
                 }
@@ -405,7 +331,7 @@ class AtsFinalDecisionController extends Controller
 
     /**
      * List candidates grouped by stage_tab:
-     * management_decision | salary_offer | waiting_approval | finance_review
+     * management_decision | salary_offer | waiting_approval | keep | finance_review
      * | waiting_approval_salary | rejected
      * Legacy: list_type = active | rejected
      */
@@ -471,6 +397,13 @@ class AtsFinalDecisionController extends Controller
             ->addColumn('sallary_offer_user', function ($row) {
                 return optional($row->sallaryOffer)->sallary_offer_user ?? 0;
             })
+            ->addColumn('tunjangan_gaji_user', function ($row) {
+                return optional($row->sallaryOffer)->tunjangan_gaji_user ?? 0;
+            })
+            ->addColumn('requester_salary_status', function ($row) {
+                return optional($row->sallaryOffer)->requester_salary_status
+                    ?? RequesterSalaryApprovalService::STATUS_NOT_REQUIRED;
+            })
             ->addColumn('offering_status', function ($row) {
                 $offer = $row->sallaryOffer;
                 $emailSentAt = $offer->email_sent_at ?? null;
@@ -481,7 +414,91 @@ class AtsFinalDecisionController extends Controller
                 $lastHistory = !empty($history) ? end($history) : [];
                 $lastHistoryStatus = (string) ($lastHistory['status'] ?? '');
 
-                if ($lastHistoryStatus === 'candidate_offering_sent' && in_array($status, ['salary_offer', 'internal_sallary_offer'], true)) {
+                $requesterStatus = strtolower(trim((string) ($offer->requester_salary_status ?? '')));
+                if ($requesterStatus === RequesterSalaryApprovalService::STATUS_PENDING) {
+                    return [
+                        'code' => 'awaiting_requester_salary',
+                        'label' => 'Menunggu Approval Salary User',
+                        'email_sent_at' => $emailSentAt,
+                        'requester_salary_status' => $requesterStatus,
+                    ];
+                }
+                if ($requesterStatus === RequesterSalaryApprovalService::STATUS_REJECTED) {
+                    $rejectReason = null;
+                    foreach (array_reverse($history) as $entry) {
+                        if (($entry['status'] ?? '') === RequesterSalaryApprovalService::HISTORY_REJECTED) {
+                            $rejectReason = trim((string) ($entry['reason'] ?? '')) ?: null;
+                            break;
+                        }
+                    }
+                    if ($rejectReason === null) {
+                        $openDecision = DecisionSalary::query()
+                            ->where('new_recruitment_id', $row->id)
+                            ->where('decision', DecisionSalary::DECISION_REJECTED)
+                            ->orderByDesc('id')
+                            ->first();
+                        $rejectReason = $openDecision ? trim((string) ($openDecision->reason ?? '')) : null;
+                        $rejectReason = $rejectReason !== '' ? $rejectReason : null;
+                    }
+
+                    return [
+                        'code' => 'requester_salary_rejected',
+                        'label' => 'Gaji Ditolak User (Re-input HRD)',
+                        'email_sent_at' => $emailSentAt,
+                        'requester_salary_status' => $requesterStatus,
+                        'reject_reason' => $rejectReason,
+                    ];
+                }
+                if ($requesterStatus === RequesterSalaryApprovalService::STATUS_NEGOTIATED) {
+                    $negoReason = null;
+                    $negoEntry = null;
+                    foreach (array_reverse($history) as $entry) {
+                        if (($entry['status'] ?? '') === RequesterSalaryApprovalService::HISTORY_NEGOTIATED) {
+                            $negoEntry = $entry;
+                            $negoReason = trim((string) ($entry['reason'] ?? '')) ?: null;
+                            break;
+                        }
+                    }
+                    if ($negoReason === null) {
+                        $openDecision = DecisionSalary::query()
+                            ->where('new_recruitment_id', $row->id)
+                            ->where('decision', DecisionSalary::DECISION_NEGOTIATED)
+                            ->orderByDesc('id')
+                            ->first();
+                        $negoReason = $openDecision ? trim((string) ($openDecision->reason ?? '')) : null;
+                        $negoReason = $negoReason !== '' ? $negoReason : null;
+                    }
+
+                    return [
+                        'code' => 'requester_salary_negotiated',
+                        'label' => 'Nego User (Re-input HRD)',
+                        'email_sent_at' => $emailSentAt,
+                        'requester_salary_status' => $requesterStatus,
+                        'nego_reason' => $negoReason,
+                        'reject_reason' => $negoReason,
+                        'allow_hrd_transfer_jabatan' => (bool) ($negoEntry['allow_hrd_transfer_jabatan'] ?? false),
+                        'allow_hrd_transfer_divisi' => (bool) ($negoEntry['allow_hrd_transfer_divisi'] ?? false),
+                        'tanggal_join_nego' => $negoEntry['tanggal_join_nego'] ?? null,
+                    ];
+                }
+
+                if (RecruitmentStatusService::isAwaitingCandidateOfferingNegotiateResubmit($row)) {
+                    $readyToResend = RecruitmentStatusService::hasHrdSalaryInputSavedAfterCandidateNegotiate($row);
+                    $nego = RecruitmentStatusService::getCandidateOfferingNegotiateDetails($row) ?: [];
+
+                    return [
+                        'code' => 'candidate_offering_negotiated',
+                        'label' => $readyToResend
+                            ? 'Siap Kirim Ulang ke Kandidat'
+                            : 'Dinegosiasi Kandidat (Re-input HRD)',
+                        'email_sent_at' => $emailSentAt,
+                        'salary_offer_candidate' => $nego['salary_offer_candidate'] ?? optional($offer)->salary_offer_candidate,
+                        'tunjangan_offer_candidate' => $nego['tunjangan_offer_candidate'] ?? optional($offer)->tunjangan_offer_candidate,
+                        'tanggal_mulai_kerja' => $nego['tanggal_mulai_kerja'] ?? optional($row->candidateDataOffer)->tanggal_mulai_kerja,
+                    ];
+                }
+
+                if (RecruitmentStatusService::isAwaitingCandidateOfferingResponse($row)) {
                     return [
                         'code' => 'waiting_candidate_approval',
                         'label' => 'Menunggu Respon Kandidat',
@@ -609,6 +626,14 @@ class AtsFinalDecisionController extends Controller
                     ];
                 }
 
+                if (RecruitmentStatusService::isKeptCandidate($row)) {
+                    return [
+                        'code' => 'kept',
+                        'label' => 'Di-keep',
+                        'email_sent_at' => null,
+                    ];
+                }
+
                 if (RecruitmentStatusService::isAwaitingIbuDirekturApproval($row)) {
                     return [
                         'code' => 'awaiting_ibu_direktur',
@@ -625,6 +650,14 @@ class AtsFinalDecisionController extends Controller
                     ];
                 }
 
+                if (RecruitmentStatusService::isAwaitingJoinDateForHiringLetter($row)) {
+                    return [
+                        'code' => 'awaiting_join_date',
+                        'label' => 'Disetujui Direktur — Input Tanggal Join',
+                        'email_sent_at' => $emailSentAt,
+                    ];
+                }
+
                 if (RecruitmentStatusService::isReadyToSendDirectorAfterFinanceApprove($row)) {
                     return [
                         'code' => 'finance_approved',
@@ -636,16 +669,7 @@ class AtsFinalDecisionController extends Controller
                 $history = json_decode($row->meta_history ?: '[]', true);
                 $history = is_array($history) ? $history : [];
 
-                $decision = null;
-                if (!empty($history)) {
-                    for ($i = count($history) - 1; $i >= 0; $i--) {
-                        $hStatus = (string) ($history[$i]['status'] ?? '');
-                        if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $hStatus, $m)) {
-                            $decision = $m[1];
-                            break;
-                        }
-                    }
-                }
+                $decision = RecruitmentStatusService::getLatestDirectorSalaryDecision($history);
 
                 if ($decision === 'approved' || $status === 'hired' || $status === 'accepted') {
                     return [
@@ -857,6 +881,12 @@ class AtsFinalDecisionController extends Controller
 
             if (preg_match('/^internal_sallary_offer_(approved|rejected|negotiated)$/', $hStatus, $m)) {
                 if ($m[1] === 'rejected') {
+                    // Penolakan Direktur sudah tidak aktif setelah HRD mengajukan ulang
+                    // dan prosesnya diteruskan ke kandidat/Finance.
+                    if (RecruitmentStatusService::hasHistoryStatusAfterDirectorResubmit($applicant, 'candidate_offering_sent')) {
+                        return false;
+                    }
+
                     return !RecruitmentStatusService::isAwaitingDirectorSalaryResubmit($applicant);
                 }
 
@@ -868,6 +898,24 @@ class AtsFinalDecisionController extends Controller
     }
 
     public function updateExpectedSalary(Request $request, $id = null)
+    {
+        $writesSalary = ($request->input('expected_salary') ?? $request->input('ekspetasi_gaji')) !== null;
+        $operation = function () use ($request, $id, $writesSalary) {
+            $recruitmentId = $id ?? $request->header('id') ?? $request->input('id');
+            if ($writesSalary) {
+                NewRecruitment::where('id', $recruitmentId)->lockForUpdate()->first();
+            }
+            $offer = SallaryOfferService::getActive((int) $recruitmentId);
+            if ($offer && $offer->requester_salary_status === RequesterSalaryApprovalService::STATUS_PENDING) {
+                return response()->json(['status' => 422, 'message' => 'Gaji tidak dapat diedit atau dikirim selama menunggu Approval Salary User.'], 422);
+            }
+            return $this->performUpdateExpectedSalary($request, $id);
+        };
+        // Serialize HRD saves with requester decisions; normal email dispatch keeps its existing transaction boundary.
+        return $writesSalary ? DB::transaction($operation) : $operation();
+    }
+
+    private function performUpdateExpectedSalary(Request $request, $id = null)
     {
         $id = $id ?? $request->header('id') ?? $request->input('id');
 
@@ -926,8 +974,7 @@ class AtsFinalDecisionController extends Controller
             $offer = SallaryOfferService::getActive((int) $id);
 
             if ($reqFinalSalary !== null && $reqFinalSalary !== '') {
-                $cleanSalary = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', $reqFinalSalary)));
-                $finalSalary = $cleanSalary !== '' ? $cleanSalary : $reqFinalSalary;
+                $finalSalary = $this->cleanSalaryString($reqFinalSalary) ?: $reqFinalSalary;
             } else {
                 $finalSalary = optional($offer)->sallary_offer_direktur ?? optional($offer)->sallary_offer_hrd ?? $applicant->ekspetasi_gaji;
             }
@@ -938,17 +985,12 @@ class AtsFinalDecisionController extends Controller
                 $user ?? 'HRD'
             );
 
-            $cleanNumber = function ($val) {
-                if ($val === null || $val === '') return 0;
-                $clean = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', (string)$val)));
-                return $clean !== '' ? (float) $clean : 0;
-            };
-
-            $gajiPokok       = $cleanNumber($request->input('gaji_pokok')) ?: (float)$finalSalary;
-            $potBpjsKes      = $cleanNumber($request->input('potongan_bpjs_kes'));
-            $potBpjsTk       = $cleanNumber($request->input('potongan_bpjs_tk'));
-            $potPph21        = $cleanNumber($request->input('pot_pph21'));
-            $pencadanganUpah = $cleanNumber($request->input('pencadangan_upah'));
+            $gajiPokok       = $this->parseMoneyField($request->input('gaji_pokok')) ?: (float)$finalSalary;
+            $tunjanganKerja  = $this->parseMoneyField($request->input('tunjangan_kerja'));
+            $potBpjsKes      = $this->parseMoneyField($request->input('potongan_bpjs_kes'));
+            $potBpjsTk       = $this->parseMoneyField($request->input('potongan_bpjs_tk'));
+            $potPph21        = $this->parseMoneyField($request->input('pot_pph21'));
+            $pencadanganUpah = $this->parseMoneyField($request->input('pencadangan_upah'));
 
             $startDate = $request->input('start_date');
             if (!empty($startDate)) {
@@ -962,6 +1004,7 @@ class AtsFinalDecisionController extends Controller
                     ['new_recruitment_id' => $id],
                     [
                         'gaji_pokok'          => $gajiPokok,
+                        'tunjangan_kerja'     => $tunjanganKerja,
                         'potongan_bpjs_kes'   => $potBpjsKes,
                         'potongan_bpjs_tk'    => $potBpjsTk,
                         'pot_pph21'           => $potPph21,
@@ -989,6 +1032,7 @@ class AtsFinalDecisionController extends Controller
 
                 $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant, [
                     'gaji_pokok'          => $gajiPokok,
+                    'tunjangan_kerja'     => $tunjanganKerja,
                     'potongan_bpjs_kes'   => $potBpjsKes,
                     'potongan_bpjs_tk'    => $potBpjsTk,
                     'pot_pph21'           => $potPph21,
@@ -1039,16 +1083,8 @@ class AtsFinalDecisionController extends Controller
 
             try {
                 if (!empty($applicant->email)) {
-                    $posisiName = $this->resolvePositionName($applicant);
-                    $dataObj = (object) [
-                        'nama_lengkap'    => $applicant->nama_lengkap,
-                        'jenis_kelamin'   => $applicant->jenis_kelamin,
-                        'nama_jabatan'    => $posisiName,
-                        'posisi_di_lamar' => $posisiName,
-                        'alasan_reject'   => $rejectReason,
-                    ];
-
-                    $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataObj);
+                    $applicant->loadMissing(['personnelRequest', 'personalRequest']);
+                    $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($applicant);
                     SendEmail::where('to', $applicant->email)
                         ->where('subject', 'Selection Result Notification - PT Inti Surya Laboratorium')
                         ->where('body', $bodyEmail)
@@ -1077,14 +1113,10 @@ class AtsFinalDecisionController extends Controller
         }
 
         $expectedSalary = $request->input('expected_salary') ?? $request->input('ekspetasi_gaji');
-
-        $cleanSalary = function ($salary) {
-            if ($salary === null || $salary === '') return '';
-            return preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', (string)$salary)));
-        };
+        $requesterSalaryStatus = null;
 
         if ($expectedSalary !== null) {
-            $cleanExpectedSalary = $cleanSalary($expectedSalary);
+            $cleanExpectedSalary = $this->cleanSalaryString($expectedSalary);
             $valueToSave = $cleanExpectedSalary !== '' ? $cleanExpectedSalary : $expectedSalary;
 
             $user = $this->karyawan;
@@ -1101,12 +1133,17 @@ class AtsFinalDecisionController extends Controller
                 $offerData['sallary_offer_user'] = $userReferenceSalary;
             }
 
+            $userTunjangan = SallaryOfferService::resolveUserTunjangan($applicant);
+            if ($userTunjangan !== null) {
+                $offerData['tunjangan_gaji_user'] = $userTunjangan;
+            }
+
             if ($request->has('sallary_offer_direktur')) {
-                $offerData['sallary_offer_direktur'] = $cleanSalary($request->input('sallary_offer_direktur'));
+                $offerData['sallary_offer_direktur'] = $this->cleanSalaryString($request->input('sallary_offer_direktur'));
             }
 
             if ($request->has('final_sallary')) {
-                $offerData['final_sallary'] = $cleanSalary($request->input('final_sallary'));
+                $offerData['final_sallary'] = $this->cleanSalaryString($request->input('final_sallary'));
             }
 
             $forceNewOffer = RecruitmentStatusService::hasFinanceRejected($applicant)
@@ -1119,17 +1156,12 @@ class AtsFinalDecisionController extends Controller
                 $forceNewOffer
             );
 
-            $cleanNumber = function ($val) use ($cleanSalary) {
-                if ($val === null || $val === '') return 0;
-                $clean = $cleanSalary($val);
-                return $clean !== '' ? (float) $clean : 0;
-            };
-
-            $gajiPokok       = $cleanNumber($request->input('gaji_pokok')) ?: (float)$valueToSave;
-            $potBpjsKes      = $cleanNumber($request->input('potongan_bpjs_kes'));
-            $potBpjsTk       = $cleanNumber($request->input('potongan_bpjs_tk'));
-            $potPph21        = $cleanNumber($request->input('pot_pph21'));
-            $pencadanganUpah = $cleanNumber($request->input('pencadangan_upah'));
+            $gajiPokok       = $this->parseMoneyField($request->input('gaji_pokok')) ?: (float)$valueToSave;
+            $tunjanganKerja  = $this->parseMoneyField($request->input('tunjangan_kerja'));
+            $potBpjsKes      = $this->parseMoneyField($request->input('potongan_bpjs_kes'));
+            $potBpjsTk       = $this->parseMoneyField($request->input('potongan_bpjs_tk'));
+            $potPph21        = $this->parseMoneyField($request->input('pot_pph21'));
+            $pencadanganUpah = $this->parseMoneyField($request->input('pencadangan_upah'));
             $startDate       = $request->input('start_date');
 
             $startDateTime = null;
@@ -1145,6 +1177,7 @@ class AtsFinalDecisionController extends Controller
                 ['new_recruitment_id' => $id],
                 [
                     'gaji_pokok'          => $gajiPokok,
+                    'tunjangan_kerja'     => $tunjanganKerja,
                     'potongan_bpjs_kes'   => $potBpjsKes,
                     'potongan_bpjs_tk'    => $potBpjsTk,
                     'pot_pph21'           => $potPph21,
@@ -1154,6 +1187,18 @@ class AtsFinalDecisionController extends Controller
                     'updated_by'          => $user ?? 'HRD',
                 ]
             );
+
+            // Sync setelah CDO tersimpan agar snapshot pencadangan ikut ter-capture
+            $activeOffer = SallaryOfferService::getActive((int) $id);
+            $requesterSalaryStatus = null;
+            if ($activeOffer) {
+                $requesterSalaryStatus = RequesterSalaryApprovalService::syncAfterHrdSalarySave(
+                    $applicant,
+                    $activeOffer,
+                    $valueToSave,
+                    $user
+                );
+            }
         }
 
         $action = $request->input('action', 'save');
@@ -1176,6 +1221,34 @@ class AtsFinalDecisionController extends Controller
         }
 
         if ($action === 'approve' || $action === 'submit' || $action === 'send_email') {
+            $isDirectorSalaryResubmission = RecruitmentStatusService::isAwaitingDirectorSalaryRejectResubmit($applicant);
+            $resubmitReason = trim((string) $request->input('reason', ''));
+
+            if ($isDirectorSalaryResubmission && $resubmitReason === '') {
+                return response()->json([
+                    'status' => 422,
+                    'message' => 'Alasan pengajuan ulang Salary Approval wajib diisi.',
+                ], 422);
+            }
+            if (mb_strlen($resubmitReason) > 2000) {
+                return response()->json([
+                    'status' => 422,
+                    'message' => 'Alasan pengajuan ulang maksimal 2000 karakter.',
+                ], 422);
+            }
+
+            if ($isDirectorSalaryResubmission) {
+                $history = RecruitmentStatusService::parseMetaHistory($applicant);
+                $history[] = [
+                    'status' => 'internal_sallary_offer_resubmitted',
+                    'at' => $now->toDateTimeString(),
+                    'reason' => $resubmitReason,
+                    'by' => $user ?? 'HRD',
+                ];
+                $applicant->update(['meta_history' => json_encode(array_values($history))]);
+                $applicant->meta_history = json_encode(array_values($history));
+            }
+
             $savedOffer = CandidateDataOffers::where('new_recruitment_id', $id)->first();
             $history = RecruitmentStatusService::parseMetaHistory($applicant);
             $hasSalaryInputSaved = false;
@@ -1199,16 +1272,22 @@ class AtsFinalDecisionController extends Controller
                 ], 422);
             }
 
+            $applicant->loadMissing('sallaryOffer', 'userInterview', 'candidateDataOffer');
+            $requesterGate = RequesterSalaryApprovalService::canSendCandidateOffering(
+                $applicant,
+                SallaryOfferService::getActive((int) $id)
+            );
+            if (!$requesterGate['allowed']) {
+                return response()->json([
+                    'status'  => 422,
+                    'message' => $requesterGate['message']
+                        ?: 'Menunggu Approval Salary User sebelum mengirim offering ke kandidat.',
+                    'requester_salary_status' => $requesterGate['status'] ?? null,
+                ], 422);
+            }
+
             $wasFinanceResubmit = RecruitmentStatusService::isAwaitingFinanceResubmit($applicant);
             $wasDirectorResubmit = RecruitmentStatusService::isAwaitingDirectorSalaryResubmit($applicant);
-
-            (new RecruitmentStatusService())->update(
-                $applicant->id,
-                'salary_offer',
-                Carbon::now(),
-                'candidate_offering_sent',
-                ['by' => $user]
-            );
 
             if ($wasFinanceResubmit || $wasDirectorResubmit) {
                 SallaryOfferService::upsertActive(
@@ -1220,49 +1299,25 @@ class AtsFinalDecisionController extends Controller
                     ],
                     $user ?? 'HRD'
                 );
+                if ($wasFinanceResubmit) {
+                    RecruitmentStatusService::clearFinanceRejected((int) $id, Carbon::now());
+                }
             }
 
-            $emailSent = false;
-            $emailError = null;
+            (new RecruitmentStatusService())->update(
+                $applicant->id,
+                'finance_review',
+                Carbon::now(),
+                'waiting_approve_finance',
+                ['by' => $user ?? 'HRD']
+            );
 
-            if (empty($applicant->email)) {
-                return response()->json([
-                    'status'  => 422,
-                    'message' => 'Email kandidat tidak tersedia. Penawaran gaji tidak dapat dikirim.',
-                ], 422);
-            }
-
-            try {
-                $applicant->loadMissing([
-                    'candidateDataOffer',
-                    'sallaryOffer',
-                    'personalRequest.masterJabatan',
-                    'personnelRequest.masterJabatan',
-                ]);
-
-                $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant);
-
-                $emailSent = GenerateMessageAtsEmail::sendCandidateOfferingSalaryEmail(
-                    $applicant,
-                    $dataObj,
-                    is_string($user) && $user !== '' ? $user : 'HRD'
-                );
-            } catch (\Exception $e) {
-                $emailError = $e->getMessage();
-                \Log::warning('Candidate salary offer email send failed', ['id' => $id, 'error' => $emailError]);
-            }
-
-            if (!$emailSent) {
-                return response()->json([
-                    'status'  => 500,
-                    'message' => 'Status berhasil diupdate, namun email penawaran gagal dikirim.'
-                        . ($emailError ? ' ' . $emailError : ' Periksa konfigurasi MAIL_NOREPLY_USERNAME / MAIL_USERNAME di server.'),
-                ], 500);
-            }
+            $applicant->loadMissing('personalRequest', 'personnelRequest', 'sallaryOffer');
+            app(AtsNotificationService::class)->salarySubmittedToFinance($applicant);
 
             return response()->json([
                 'status'  => 200,
-                'message' => 'Penawaran gaji berhasil di-approve dan email telah dikirim ke kandidat.',
+                'message' => 'Penawaran gaji berhasil diajukan. Menunggu review dan persetujuan Finance.',
                 'data'    => $applicant->fresh(),
             ], 200);
         }
@@ -1271,7 +1326,9 @@ class AtsFinalDecisionController extends Controller
             $savedOffer = CandidateDataOffers::where('new_recruitment_id', $id)->first();
 
             if ($savedOffer && (float) ($savedOffer->gaji_pokok ?? 0) > 0 && !empty($savedOffer->tanggal_mulai_kerja)) {
-                if (RecruitmentStatusService::isAwaitingCandidateOfferingResubmit($applicant)) {
+                if (RecruitmentStatusService::isAwaitingCandidateOfferingResubmit($applicant)
+                    || RecruitmentStatusService::isAwaitingCandidateOfferingNegotiateResubmit($applicant)
+                ) {
                     $nextStatus = 'salary_offer';
                 } elseif (RecruitmentStatusService::isAwaitingFinanceResubmit($applicant)) {
                     $nextStatus = 'internal_sallary_offer';
@@ -1293,10 +1350,23 @@ class AtsFinalDecisionController extends Controller
             }
         }
 
+        $fresh = $applicant->fresh(['candidateDataOffer', 'sallaryOffer']);
+        $requesterStatus = $requesterSalaryStatus
+            ?? optional($fresh->sallaryOffer)->requester_salary_status
+            ?? RequesterSalaryApprovalService::STATUS_NOT_REQUIRED;
+
+        $message = 'Data penawaran gaji berhasil disimpan.';
+        if ($requesterStatus === RequesterSalaryApprovalService::STATUS_PENDING) {
+            $message = 'Data disimpan. Gaji HRD berbeda dari gaji User — menunggu Approval Salary di Personnel Request.';
+        } elseif ($requesterStatus === RequesterSalaryApprovalService::STATUS_REJECTED) {
+            $message = 'Data disimpan. Penawaran sebelumnya ditolak User — pastikan nominal sudah disesuaikan.';
+        }
+
         return response()->json([
             'status'  => 200,
-            'message' => 'Data penawaran gaji berhasil disimpan.',
-            'data'    => $applicant->fresh(['candidateDataOffer', 'sallaryOffer']),
+            'message' => $message,
+            'requester_salary_status' => $requesterStatus,
+            'data'    => $fresh,
         ], 200);
     }
 
@@ -1363,6 +1433,20 @@ class AtsFinalDecisionController extends Controller
         }
 
         $btn = GenerateMessageAtsEmail::buildSalaryDecisionButtons($applicant, $token);
+        $emailApplicant = clone $applicant;
+        $history = RecruitmentStatusService::parseMetaHistory($applicant);
+        $directorResubmitIndex = RecruitmentStatusService::getLatestDirectorSalaryResubmitIndex($history);
+        if ($directorResubmitIndex !== null) {
+            for ($i = count($history) - 1; $i > $directorResubmitIndex; $i--) {
+                if (($history[$i]['status'] ?? '') === 'internal_sallary_offer_resubmitted'
+                    && trim((string) ($history[$i]['reason'] ?? '')) !== '') {
+                    $emailApplicant->resubmit_reason = trim((string) $history[$i]['reason']);
+                    $emailApplicant->resubmit_by = $history[$i]['by'] ?? null;
+                    $emailApplicant->resubmit_at = $history[$i]['at'] ?? null;
+                    break;
+                }
+            }
+        }
 
         $targetEmail = trim((string) env('EMAIL_DIREKTUR_BAPAK', ''));
         $user = $this->karyawan;
@@ -1371,7 +1455,7 @@ class AtsFinalDecisionController extends Controller
         $documents = [];
 
         try {
-            $bodyEmail = GenerateMessageAtsEmail::bodyEmailSallaryOffer($applicant, $btn);
+            $bodyEmail = GenerateMessageAtsEmail::bodyEmailSallaryOffer($emailApplicant, $btn);
             $attachmentBundle = $assessmentService->prepareDirectorEmailAttachments((int) $applicant->id);
             $documents = $attachmentBundle['documents'] ?? [];
             $attachments = $attachmentBundle['attachments'] ?? [];
@@ -1415,9 +1499,272 @@ class AtsFinalDecisionController extends Controller
      * Template & penerima sama persis dengan PersonnelRequestController::submitUserDecision (approve).
      * Hanya untuk kandidat rejected_decision = 1.
      */
+    public function resendKeptDecisionEmail(Request $request, $id = null)
+    {
+        $id = $id ?? $request->header('id') ?? $request->input('id');
+        $resubmitReason = trim((string) $request->input('reason', ''));
+
+        if ($resubmitReason === '') {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Alasan pengajuan ulang wajib diisi.',
+            ], 422);
+        }
+        if (mb_strlen($resubmitReason) > 2000) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Alasan pengajuan ulang maksimal 2000 karakter.',
+            ], 422);
+        }
+
+        $applicant = NewRecruitment::find($id);
+
+        if (!$applicant) {
+            return response()->json([
+                'status'  => 404,
+                'message' => 'Candidate data not found.',
+            ], 404);
+        }
+
+        if (!RecruitmentStatusService::isKeptCandidate($applicant)) {
+            return response()->json([
+                'status'  => 422,
+                'message' => 'Pengajuan ulang hanya tersedia untuk kandidat yang sedang di-keep.',
+            ], 422);
+        }
+
+        $pr = PersonnelRequest::with(['detailDivisi', 'detailPosisi', 'detailCabang'])
+            ->find($applicant->personnel_request_id);
+
+        if (!$pr) {
+            return response()->json([
+                'status'  => 422,
+                'message' => 'Data personnel request tidak ditemukan.',
+            ], 422);
+        }
+
+        $interview = RecruitmentInterview::where('new_recruitment_id', $applicant->id)
+            ->where('stage', 'user')
+            ->where('is_active', 1)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        $targetEmail = trim((string) env('EMAIL_DIREKTUR_IBU'));
+        if ($targetEmail === '') {
+            return response()->json([
+                'status'  => 422,
+                'message' => 'Email penerima persetujuan belum dikonfigurasi.',
+            ], 422);
+        }
+
+        $selfieDocument = null;
+        try {
+            $selfieDocument = $this->storeKeptResubmitSelfieDocument($request, (int) $applicant->id);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'status' => 422,
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'status' => 500,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+
+        $assessmentService = app(GenerateAssessmentDocumentService::class);
+        $documentService = app(CandidateDocumentAttachmentService::class);
+        $documents = [];
+        $applicantUpdated = false;
+
+        try {
+            $tokenService = new GenerateToken();
+            $tokenKey = $pr->id . $applicant->nama_lengkap . 'approval' . str_replace('.', '', microtime(true));
+            $token = $tokenService->encryptv1(md5($tokenKey) . '|' . $tokenService->encrypt(date('Y-m-d')));
+
+            $history = RecruitmentStatusService::parseMetaHistory($applicant);
+            $history[] = [
+                'status' => 'management_decision_keep_resubmitted',
+                'at' => Carbon::now()->toDateTimeString(),
+                'reason' => $resubmitReason,
+                'by' => $this->karyawan ?? 'HRD',
+            ];
+
+            $applicant->update([
+                'token_approval' => $token,
+                'status'         => 'management_decision',
+                'is_keep'        => 0,
+                'meta_history'   => json_encode(array_values($history)),
+            ]);
+            $applicantUpdated = true;
+            $applicant->meta_history = json_encode(array_values($history));
+            $applicant->resubmit_reason = $resubmitReason;
+            $applicant->resubmit_by = $this->karyawan ?? 'HRD';
+            $applicant->resubmit_at = $history[count($history) - 1]['at'];
+
+            $assessmentData = $assessmentService->tryGenerateTempAttachments((int) $applicant->id);
+            $documents = $assessmentData['documents'] ?? [];
+            $assessmentAttachments = $assessmentService->mapDocumentsToAttachmentLabels($documents);
+            $candidateDocumentAttachments = $documentService->listAttachmentLabels((int) $applicant->id);
+            $candidateDocumentSendAttachments = $documentService->buildSendEmailAttachments((int) $applicant->id);
+
+            $emailContent = GenerateMessageAtsEmail::bodyEmailHasilInterviewUser(
+                $applicant,
+                $pr,
+                $interview,
+                'approve',
+                $assessmentAttachments,
+                $candidateDocumentAttachments
+            );
+
+            $subject = 'Pengajuan Ulang Permohonan Persetujuan Kandidat - ' . $applicant->nama_lengkap;
+            $attachments = array_merge(
+                $assessmentService->buildSendEmailAttachments($documents),
+                $candidateDocumentSendAttachments
+            );
+
+            $emailQuery = SendEmail::where('to', $targetEmail)
+                ->where('subject', $subject)
+                ->where('body', $emailContent)
+                ->noReply();
+
+            if (!empty($attachments)) {
+                $emailQuery->where('attachment', $attachments);
+            }
+
+            $emailQuery->send();
+
+            app(ApprovalAppFcmService::class)->notifyPendingKandidatForIbuEmail(
+                $targetEmail,
+                (int) $applicant->id,
+                (string) $applicant->nama_lengkap
+            );
+
+            return response()->json([
+                'status'  => 200,
+                'message' => 'Email Pengajuan Ulang permohonan persetujuan kandidat berhasil dikirim ulang.',
+                'assessment_attachment_count' => count($assessmentAttachments),
+                'candidate_document_attachment_count' => count($candidateDocumentAttachments),
+            ], 200);
+        } catch (\Exception $e) {
+            if ($selfieDocument && !$applicantUpdated) {
+                $this->deleteKeptResubmitSelfieDocument($selfieDocument);
+            }
+
+            return response()->json([
+                'status'  => 500,
+                'message' => 'Gagal mengirim email: ' . $e->getMessage(),
+            ], 500);
+        } finally {
+            $assessmentService->cleanupDocuments($documents);
+        }
+    }
+
+    private function storeKeptResubmitSelfieDocument(Request $request, int $recruitmentId): array
+    {
+        $file = $request->file('selfie');
+        if (!$file || !method_exists($file, 'isValid') || !$file->isValid()) {
+            throw new \InvalidArgumentException('Foto selfie terbaru wajib diunggah.');
+        }
+
+        $allowed = [
+            'image/jpeg' => 'jpg',
+            'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+        ];
+        $mime = strtolower((string) $file->getMimeType());
+        if (!isset($allowed[$mime])) {
+            throw new \InvalidArgumentException('Foto selfie harus berupa gambar JPG, PNG, atau WEBP.');
+        }
+        if ((int) $file->getSize() > 5 * 1024 * 1024) {
+            throw new \InvalidArgumentException('Ukuran foto selfie maksimal 5 MB.');
+        }
+        if (!Schema::hasTable('candidate_documents') || !Schema::hasTable('candidate_profiles')) {
+            throw new \RuntimeException('Tabel dokumen kandidat belum tersedia.');
+        }
+
+        $profileId = DB::table('candidate_profiles')
+            ->where('new_recruitment_id', $recruitmentId)
+            ->orderByDesc('id')
+            ->value('id');
+        if (!$profileId) {
+            throw new \InvalidArgumentException('Profil kandidat tidak ditemukan. Foto selfie tidak dapat disimpan.');
+        }
+
+        $directory = public_path('recruitment/candidate-documents');
+        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+            throw new \RuntimeException('Folder dokumen kandidat tidak dapat dibuat.');
+        }
+
+        $size = (int) $file->getSize();
+        $originalName = trim((string) $file->getClientOriginalName());
+        $fileName = 'candidate-' . $recruitmentId . '-foto-selfie-' . Carbon::now()->format('YmdHisv') . '.' . $allowed[$mime];
+        $file->move($directory, $fileName);
+
+        $now = Carbon::now();
+        try {
+            $documentId = DB::table('candidate_documents')->insertGetId([
+                'candidate_profile_id' => (int) $profileId,
+                'new_recruitment_id' => $recruitmentId,
+                'jenis_dokumen' => 'FOTO SELFIE',
+                'nama_file' => $originalName !== '' ? $originalName : $fileName,
+                'path_file' => 'recruitment/candidate-documents/' . $fileName,
+                'mime_type' => $mime,
+                'ukuran_file' => $size,
+                'catatan' => 'Selfie terbaru pengajuan ulang kandidat di-keep',
+                'is_active' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        } catch (\Exception $e) {
+            $storedPath = $directory . DIRECTORY_SEPARATOR . $fileName;
+            if (is_file($storedPath)) {
+                @unlink($storedPath);
+            }
+            throw new \RuntimeException('Foto selfie tidak dapat disimpan ke dokumen kandidat.');
+        }
+
+        return [
+            'id' => (int) $documentId,
+            'file_name' => $fileName,
+        ];
+    }
+
+    private function deleteKeptResubmitSelfieDocument(array $document): void
+    {
+        if (!empty($document['id']) && Schema::hasTable('candidate_documents')) {
+            DB::table('candidate_documents')->where('id', $document['id'])->delete();
+        }
+
+        $fileName = basename((string) ($document['file_name'] ?? ''));
+        if ($fileName === '') {
+            return;
+        }
+
+        $path = public_path('recruitment/candidate-documents/' . $fileName);
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
+
     public function resendRejectedDecisionEmail(Request $request, $id = null)
     {
         $id = $id ?? $request->header('id') ?? $request->input('id');
+        $resubmitReason = trim((string) $request->input('reason', ''));
+
+        if ($resubmitReason === '') {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Alasan pengajuan ulang Final Decision wajib diisi.',
+            ], 422);
+        }
+        if (mb_strlen($resubmitReason) > 2000) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Alasan pengajuan ulang maksimal 2000 karakter.',
+            ], 422);
+        }
 
         $applicant = NewRecruitment::find($id);
 
@@ -1469,11 +1816,24 @@ class AtsFinalDecisionController extends Controller
             $tokenKey = $pr->id . $applicant->nama_lengkap . 'approval' . str_replace('.', '', microtime(true));
             $token = $tokenService->encryptv1(md5($tokenKey) . '|' . $tokenService->encrypt(date('Y-m-d')));
 
+            $history = RecruitmentStatusService::parseMetaHistory($applicant);
+            $history[] = [
+                'status' => 'management_decision_resubmitted',
+                'at' => Carbon::now()->toDateTimeString(),
+                'reason' => $resubmitReason,
+                'by' => $this->karyawan ?? 'HRD',
+            ];
+
             $applicant->update([
                 'token_approval'           => $token,
                 'status'                   => 'management_decision',
                 'rejected_decision'        => false,
+                'meta_history'             => json_encode(array_values($history)),
             ]);
+            $applicant->meta_history = json_encode(array_values($history));
+            $applicant->resubmit_reason = $resubmitReason;
+            $applicant->resubmit_by = $this->karyawan ?? 'HRD';
+            $applicant->resubmit_at = $history[count($history) - 1]['at'];
 
             $assessmentData = $assessmentService->tryGenerateTempAttachments((int) $applicant->id);
             $documents = $assessmentData['documents'] ?? [];
@@ -1490,7 +1850,7 @@ class AtsFinalDecisionController extends Controller
                 $candidateDocumentAttachments
             );
 
-            $subject = 'Permohonan Persetujuan Kandidat - ' . $applicant->nama_lengkap;
+            $subject = 'Pengajuan Ulang Permohonan Persetujuan Kandidat - ' . $applicant->nama_lengkap;
             $attachments = array_merge(
                 $assessmentService->buildSendEmailAttachments($documents),
                 $candidateDocumentSendAttachments
@@ -1507,9 +1867,15 @@ class AtsFinalDecisionController extends Controller
 
             $emailQuery->send();
 
+            app(ApprovalAppFcmService::class)->notifyPendingKandidatForIbuEmail(
+                $targetEmail,
+                (int) $applicant->id,
+                (string) $applicant->nama_lengkap
+            );
+
             return response()->json([
                 'status'  => 200,
-                'message' => 'Email permohonan persetujuan kandidat berhasil dikirim ulang.',
+                'message' => 'Email Pengajuan Ulang permohonan persetujuan kandidat berhasil dikirim ulang.',
                 'assessment_attachment_count' => count($assessmentAttachments),
                 'candidate_document_attachment_count' => count($candidateDocumentAttachments),
             ], 200);
@@ -1543,6 +1909,18 @@ class AtsFinalDecisionController extends Controller
             ], 422);
         }
 
+        $awaitingJoinDate = RecruitmentStatusService::isAwaitingJoinDateForHiringLetter($applicant);
+        $savedOffer = CandidateDataOffers::where('new_recruitment_id', $id)->first();
+
+        if (!$awaitingJoinDate && RecruitmentStatusService::getLatestDirectorSalaryDecision(
+            RecruitmentStatusService::parseMetaHistory($applicant)
+        ) !== 'approved') {
+            return response()->json([
+                'status'  => 422,
+                'message' => 'Kandidat belum disetujui Approval (Salary) oleh Direktur.',
+            ], 422);
+        }
+
         $startDate = $request->input('start_date');
 
         if (empty($startDate)) {
@@ -1552,17 +1930,44 @@ class AtsFinalDecisionController extends Controller
             ], 422);
         }
 
-        $cleanNumber = function ($val) {
-            if ($val === null || $val === '') return 0;
-            $clean = preg_replace('/[^0-9.]/', '', str_replace(',', '.', str_replace('.', '', (string)$val)));
-            return $clean !== '' ? (float) $clean : 0;
-        };
+        if ($awaitingJoinDate) {
+            try {
+                if (Carbon::parse($startDate)->startOfDay()->lte(Carbon::today())) {
+                    return response()->json([
+                        'status'  => 422,
+                        'message' => 'Tanggal join harus setelah hari ini karena tanggal join sebelumnya sudah lewat.',
+                    ], 422);
+                }
+            } catch (\Exception $e) {
+                return response()->json([
+                    'status'  => 422,
+                    'message' => 'Format tanggal mulai kerja tidak valid.',
+                ], 422);
+            }
+        }
 
-        $gajiPokok       = $cleanNumber($request->input('gaji_pokok'));
-        $potBpjsKes      = $cleanNumber($request->input('potongan_bpjs_kes'));
-        $potBpjsTk       = $cleanNumber($request->input('potongan_bpjs_tk'));
-        $potPph21        = $cleanNumber($request->input('pot_pph21'));
-        $pencadanganUpah = $cleanNumber($request->input('pencadangan_upah'));
+        if ($awaitingJoinDate && $savedOffer) {
+            $gajiPokok = $this->parseMoneyField($request->input('gaji_pokok')) ?: (float) ($savedOffer->gaji_pokok ?? 0);
+            $tunjanganKerja = $this->parseMoneyField($request->input('tunjangan_kerja')) ?: (float) ($savedOffer->tunjangan_kerja ?? 0);
+            $potBpjsKes = $this->parseMoneyField($request->input('potongan_bpjs_kes')) ?: (float) ($savedOffer->potongan_bpjs_kes ?? 0);
+            $potBpjsTk = $this->parseMoneyField($request->input('potongan_bpjs_tk')) ?: (float) ($savedOffer->potongan_bpjs_tk ?? 0);
+            $potPph21 = $this->parseMoneyField($request->input('pot_pph21')) ?: (float) ($savedOffer->pot_pph21 ?? 0);
+            $pencadanganUpah = $this->parseMoneyField($request->input('pencadangan_upah')) ?: (float) ($savedOffer->pencadangan_upah ?? 0);
+        } else {
+            $gajiPokok       = $this->parseMoneyField($request->input('gaji_pokok'));
+            $tunjanganKerja  = $this->parseMoneyField($request->input('tunjangan_kerja'));
+            $potBpjsKes      = $this->parseMoneyField($request->input('potongan_bpjs_kes'));
+            $potBpjsTk       = $this->parseMoneyField($request->input('potongan_bpjs_tk'));
+            $potPph21        = $this->parseMoneyField($request->input('pot_pph21'));
+            $pencadanganUpah = $this->parseMoneyField($request->input('pencadangan_upah'));
+        }
+
+        if ($gajiPokok <= 0) {
+            return response()->json([
+                'status'  => 422,
+                'message' => 'Data gaji pokok belum tersedia. Simpan data penawaran gaji terlebih dahulu.',
+            ], 422);
+        }
 
         $user = $this->karyawan;
         $now = Carbon::now();
@@ -1577,6 +1982,7 @@ class AtsFinalDecisionController extends Controller
             ['new_recruitment_id' => $id],
             [
                 'gaji_pokok'          => $gajiPokok,
+                'tunjangan_kerja'     => $tunjanganKerja,
                 'potongan_bpjs_kes'   => $potBpjsKes,
                 'potongan_bpjs_tk'    => $potBpjsTk,
                 'pot_pph21'           => $potPph21,
@@ -1610,6 +2016,7 @@ class AtsFinalDecisionController extends Controller
 
             $dataObj = GenerateMessageAtsEmail::buildOfferingLetterPayload($applicant, [
                 'gaji_pokok'          => $gajiPokok,
+                'tunjangan_kerja'     => $tunjanganKerja,
                 'potongan_bpjs_kes'   => $potBpjsKes,
                 'potongan_bpjs_tk'    => $potBpjsTk,
                 'pot_pph21'           => $potPph21,
@@ -1714,18 +2121,10 @@ class AtsFinalDecisionController extends Controller
             ]);
 
         try {
-            $posisiName = $this->resolvePositionName($applicant);
-            $dataArray = (object) [
-                'nama_lengkap'    => $applicant->nama_lengkap,
-                'jenis_kelamin'   => $applicant->jenis_kelamin,
-                'posisi_di_lamar' => $posisiName,
-                'nama_jabatan'    => $posisiName,
-                'alasan_reject'   => $reason,
-                'hrd_name'        => $user,
-            ];
+            $applicant->loadMissing(['personnelRequest', 'personalRequest']);
 
             if (!empty($applicant->email)) {
-                $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($dataArray);
+                $bodyEmail = GenerateMessageAtsEmail::bodyEmailRejectKandidat($applicant);
                 SendEmail::where('to', $applicant->email)
                     ->where('subject', 'Selection Result Notification - PT Inti Surya Laboratorium')
                     ->where('body', $bodyEmail)
@@ -1735,13 +2134,13 @@ class AtsFinalDecisionController extends Controller
                     ->send();
             }
 
-            $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
-            if (!empty($phone)) {
-                $waObj = new GenerateMessageAtsWhatsapp($dataArray);
-                $waMessage = $waObj->RejectedCandidateSelection();
-
-                (new SendWhatsapp($phone, $waMessage))->send();
-            }
+            // DISABLED: WhatsApp rejection info (kebijakan HRD — notifikasi rejection via email saja)
+            // $phone = $applicant->no_telepon ?: ($applicant->no_hp ?? null);
+            // if (!empty($phone)) {
+            //     $waObj = new GenerateMessageAtsWhatsapp($applicant);
+            //     $waMessage = $waObj->RejectedCandidateSelection();
+            //     (new SendWhatsapp($phone, $waMessage))->send();
+            // }
         } catch (\Exception $e) {
             \Log::warning('Final decision HRD reject notification failed', [
                 'recruitment_id' => $id,
@@ -1761,5 +2160,81 @@ class AtsFinalDecisionController extends Controller
             'message' => 'Kandidat berhasil ditolak oleh HRD.',
             'data'    => $applicant->fresh(),
         ], 200);
+    }
+
+    public function void(Request $request)
+    {
+        $id = $request->id;
+        $reason = trim((string) ($request->reason ?? ''));
+
+        if (!$id || $reason === '') {
+            return response()->json([
+                'message' => 'ID dan alasan wajib diisi',
+                'status' => false,
+            ], 400);
+        }
+
+        $by = $this->karyawan;
+        $at = Carbon::now();
+
+        $recruitment = NewRecruitment::find($id);
+        if (!$recruitment) {
+            return response()->json([
+                'message' => 'Data kandidat tidak ditemukan',
+                'status' => false,
+            ], 404);
+        }
+
+        if ((int) ($recruitment->is_active ?? 1) === 0 || strtolower(trim((string) ($recruitment->status ?? ''))) === 'void') {
+            return response()->json([
+                'message' => 'Kandidat sudah divoid sebelumnya',
+                'status' => false,
+            ], 422);
+        }
+
+        if (!RecruitmentStatusService::matchesFinalDecisionStageTab($recruitment, 'salary_offer')) {
+            return response()->json([
+                'message' => 'Void hanya dapat dilakukan untuk kandidat pada tahap Salary Offer',
+                'status' => false,
+            ], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $history = json_decode($recruitment->meta_history ?: '[]', true);
+            $history = is_array($history) ? $history : [];
+            $history[] = [
+                'status' => 'salary_offer_void',
+                'reason' => $reason,
+                'by' => $by,
+                'at' => $at->toDateTimeString(),
+                'previous_status' => $recruitment->status ?? null,
+            ];
+
+            DB::table('new_recruitment')->where('id', $id)->update([
+                'status' => 'void',
+                'is_rejected_kandidat' => true,
+                'is_rejected_kandidat_by' => $by ?: null,
+                'is_rejected_kandidat_at' => $at,
+                'is_rejected_kandidat_reason' => $reason,
+                'meta_history' => json_encode(array_values($history)),
+                'updated_at' => $at,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Kandidat berhasil divoid',
+                'status' => true,
+            ], 200);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Gagal void kandidat: ' . $e->getMessage(),
+                'status' => false,
+            ], 500);
+        }
     }
 }

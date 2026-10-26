@@ -7106,6 +7106,76 @@ class TestingController extends Controller
     }
 
     /**
+     * Tes kirim WhatsApp. Body diambil dari wa_message_templates + variant aktif.
+     * Nomor HRD dipilih SendWhatsapp dari wa_sender_numbers.
+     *
+     * Body:
+     * - numbers (wajib): array nomor tujuan
+     * - code (wajib): wa_message_templates.code
+     * - variables (opsional): objek pengganti {{nama}}, {{posisi}}, dan seterusnya
+     */
+    public function testWhatsapp(Request $request)
+    {
+        $numbers = $request->input('numbers', []);
+        if (is_string($numbers)) {
+            $decodedNumbers = json_decode($numbers, true);
+            $numbers = is_array($decodedNumbers) ? $decodedNumbers : [];
+        }
+        if (!is_array($numbers)) {
+            $numbers = [];
+        }
+        $numbers = array_values(array_filter(array_map(function ($number) {
+            return trim((string) $number);
+        }, $numbers), function ($number) {
+            return $number !== '';
+        }));
+
+        $code = trim((string) $request->input('code', ''));
+        $variables = $request->input('variables', []);
+        if (is_string($variables)) {
+            $decoded = json_decode($variables, true);
+            $variables = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($variables)) {
+            $variables = [];
+        }
+
+        if ($numbers === [] || $code === '') {
+            return response()->json([
+                'status' => false,
+                'message' => 'numbers (array) dan code wajib diisi',
+            ], 422);
+        }
+
+        $message = \App\Services\WaMessageTemplateService::render($code, $variables);
+        if ($message === null || trim($message) === '') {
+            return response()->json([
+                'status' => false,
+                'message' => 'Template tidak ditemukan, nonaktif, atau tidak punya variant aktif',
+            ], 422);
+        }
+
+        $results = [];
+        foreach ($numbers as $number) {
+            $sent = (new \App\Services\SendWhatsapp($number, $message))->send();
+            $results[] = [
+                'number' => $number,
+                'status' => (bool) $sent,
+            ];
+        }
+
+        $allSent = !in_array(false, array_column($results, 'status'), true);
+
+        return response()->json([
+            'status' => $allSent,
+            'message' => $allSent ? 'WhatsApp terkirim' : 'Ada nomor tujuan yang gagal terkirim',
+            'code' => $code,
+            'body' => $message,
+            'results' => $results,
+        ], $allSent ? 200 : 422);
+    }
+
+    /**
      * Tes payload log_bas tanpa kirim email.
      *
      * Body:
@@ -7243,5 +7313,469 @@ class TestingController extends Controller
                 'status' => false,
             ], 500);
         }
+    }
+
+    /**
+     * Tracing dokumen FDL: sampel & kategori yang terlihat oleh sampler
+     * pada tanggal tertentu, mengikuti logika mobile DokumenFdlController@detailsData.
+     *
+     * Body / query:
+     * - tanggal_sampling: "2026-10-15" atau "15 Oktober 2026" (default 2026-10-15)
+     * - sampler / samplers: array atau string "Nama A dan Nama B"
+     * - no_order, no_quotation: opsional, sempitkan scope
+     * - include_inactive: true = ikutkan jadwal is_active=0
+     * - include_nearby: true = tampilkan jadwal terdekat sampler (bukan tanggal itu)
+     */
+    public function traceSamplerFdl(Request $request)
+    {
+        try {
+            $tanggalSampling = $this->parseTraceTanggalSampling(
+                $request->input('tanggal_sampling', $request->input('tanggal', '2026-10-15'))
+            );
+            $samplerNames = $this->parseTraceSamplerNames($request->input('sampler', $request->input('samplers')));
+            if (empty($samplerNames)) {
+                $samplerNames = ['Dzul Akbar Saifulloh', 'Ilham Ari Mustopa'];
+            }
+
+            $noOrderFilter = trim((string) $request->input('no_order', ''));
+            $noQuotationFilter = trim((string) ($request->input('no_quotation', $request->input('nomor_quotation', ''))));
+            $includeInactive = filter_var($request->input('include_inactive', false), FILTER_VALIDATE_BOOLEAN);
+            $includeNearby = filter_var($request->input('include_nearby', true), FILTER_VALIDATE_BOOLEAN);
+
+            $karyawanLookup = [];
+            foreach ($samplerNames as $name) {
+                $exact = MasterKaryawan::query()
+                    ->select(['id', 'nama_lengkap', 'id_jabatan', 'is_active'])
+                    ->where('nama_lengkap', $name)
+                    ->first();
+                $isProgrammer = false;
+                if ($exact) {
+                    $isProgrammer = in_array((int) $exact->id_jabatan, [41, 42], true);
+                }
+                $karyawanLookup[] = [
+                    'dicari' => $name,
+                    'ketemu' => $exact ? true : false,
+                    'id' => $exact->id ?? null,
+                    'nama_lengkap' => $exact->nama_lengkap ?? null,
+                    'id_jabatan' => $exact->id_jabatan ?? null,
+                    'is_active' => $exact ? (bool) $exact->is_active : null,
+                    'is_programmer' => $isProgrammer,
+                    'catatan' => $exact
+                        ? ($isProgrammer
+                            ? 'Jabatan programmer: detailsData menampilkan SEMUA sampel tanpa cek nama di jadwal'
+                            : 'Sampler biasa: detailsData wajib nama persis (case-sensitive) di jadwal.sampler')
+                        : 'Nama tidak ada di master_karyawan. Matching tetap memakai string yang dikirim.',
+                ];
+            }
+
+            $jadwalQuery = Jadwal::query()
+                ->where('tanggal', $tanggalSampling);
+            if (!$includeInactive) {
+                $jadwalQuery->where('is_active', true);
+            }
+            $jadwalHariItu = $jadwalQuery
+                ->orderBy('id')
+                ->get([
+                    'id', 'id_sampling', 'no_quotation', 'tanggal', 'sampler', 'kategori',
+                    'periode', 'nama_perusahaan', 'jam_mulai', 'jam_selesai', 'is_active', 'status',
+                ]);
+
+            $decodeKategoriJadwal = function ($raw) {
+                $decoded = json_decode(html_entity_decode((string) $raw), true);
+                if (!is_array($decoded)) {
+                    return $raw === null || $raw === '' ? [] : [(string) $raw];
+                }
+                return array_values($decoded);
+            };
+            $parseSamplerField = function ($raw) {
+                $list = array_map('trim', explode(',', (string) $raw));
+                return array_values(array_filter($list, function ($item) {
+                    return $item !== '';
+                }));
+            };
+            $nameInListStrict = function ($name, array $list) {
+                return in_array($name, $list, true);
+            };
+            $nameInListLoose = function ($name, array $list) {
+                foreach ($list as $item) {
+                    if (strcasecmp($name, $item) === 0) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            $jadwalKonteks = $jadwalHariItu->map(function ($row) use ($decodeKategoriJadwal, $parseSamplerField, $samplerNames, $nameInListStrict, $nameInListLoose) {
+                $samplerList = $parseSamplerField($row->sampler);
+                $cocokStrict = [];
+                $cocokLoose = [];
+                foreach ($samplerNames as $name) {
+                    if ($nameInListStrict($name, $samplerList)) {
+                        $cocokStrict[] = $name;
+                    }
+                    if ($nameInListLoose($name, $samplerList)) {
+                        $cocokLoose[] = $name;
+                    }
+                }
+                return [
+                    'jadwal_id' => $row->id,
+                    'id_sampling' => $row->id_sampling,
+                    'no_quotation' => $row->no_quotation,
+                    'nama_perusahaan' => $row->nama_perusahaan,
+                    'tanggal' => $row->tanggal,
+                    'periode' => $row->periode,
+                    'jam_mulai' => $row->jam_mulai,
+                    'jam_selesai' => $row->jam_selesai,
+                    'is_active' => (bool) $row->is_active,
+                    'status' => $row->status,
+                    'sampler_raw' => $row->sampler,
+                    'sampler_list' => $samplerList,
+                    'kategori_jadwal' => $decodeKategoriJadwal($row->kategori),
+                    'cocok_target_strict' => $cocokStrict,
+                    'cocok_target_loose' => $cocokLoose,
+                ];
+            })->values();
+
+            $orderDetailQuery = OrderDetail::with([
+                'orderHeader:id,tanggal_order,nama_perusahaan,konsultan,no_document,no_order,alamat_sampling,nama_pic_order,nama_pic_sampling,no_tlp_pic_sampling,jabatan_pic_sampling,jabatan_pic_order,is_revisi',
+                'orderHeader.samplingPlan',
+                'orderHeader.samplingPlan.jadwal' => function ($query) {
+                    $query->where('is_active', true);
+                },
+            ])
+                ->where('is_active', true)
+                ->where('tanggal_sampling', $tanggalSampling);
+
+            if ($noOrderFilter !== '') {
+                $orderDetailQuery->where('no_order', $noOrderFilter);
+            }
+            if ($noQuotationFilter !== '') {
+                $orderDetailQuery->where('no_quotation', $noQuotationFilter);
+            }
+
+            $orderDetails = $orderDetailQuery->get();
+
+            $mapSampelRow = function ($orderDetail, $samplerTerpilih, array $alasan) {
+                $crf = explode('-', (string) $orderDetail->kategori_3, 2);
+                $namaKategori = explode('/', (string) ($orderDetail->no_sampel ?? ''), 2);
+                $kategoriLabel = trim(($crf[1] ?? '') . ' - ' . ($namaKategori[1] ?? ''), ' -');
+
+                return [
+                    'sampler' => $samplerTerpilih,
+                    'nomor_quotation' => $orderDetail->no_quotation,
+                    'no_order' => $orderDetail->no_order,
+                    'nama_perusahaan' => optional($orderDetail->orderHeader)->nama_perusahaan,
+                    'kategori_2' => $orderDetail->kategori_2,
+                    'kategori_3' => $orderDetail->kategori_3,
+                    'kategori' => $kategoriLabel,
+                    'kategori_nama' => trim($crf[1] ?? ''),
+                    'no_sampel' => $orderDetail->no_sampel,
+                    'kode_titik' => $namaKategori[1] ?? '',
+                    'deskripsi' => $orderDetail->keterangan_1,
+                    'tanggal_sampling' => $orderDetail->tanggal_sampling,
+                    'periode' => $orderDetail->periode,
+                    'alasan_lolos' => $alasan,
+                ];
+            };
+
+            $extractTitikKategori = function ($raw) use ($decodeKategoriJadwal) {
+                $titik = [];
+                foreach ($decodeKategoriJadwal($raw) as $item) {
+                    if (preg_match('/(\d+)\s*$/', (string) $item, $m)) {
+                        $titik[] = str_pad($m[1], 3, '0', STR_PAD_LEFT);
+                    }
+                }
+                return $titik;
+            };
+            $extractTitikSampel = function ($noSampel) {
+                $parts = explode('/', (string) $noSampel);
+                $code = trim((string) end($parts));
+                if ($code === '' || !preg_match('/^\d+$/', $code)) {
+                    return null;
+                }
+                return str_pad($code, 3, '0', STR_PAD_LEFT);
+            };
+
+            $simulateDetailsData = function ($loggedInUser, $isProgrammer) use ($orderDetails, $mapSampelRow, $parseSamplerField, $nameInListStrict, $extractTitikKategori, $extractTitikSampel) {
+                $rows = [];
+                $ditolak = [];
+
+                foreach ($orderDetails as $orderDetail) {
+                    if (!$orderDetail->orderHeader || !$orderDetail->orderHeader->samplingPlan) {
+                        $ditolak[] = [
+                            'no_sampel' => $orderDetail->no_sampel,
+                            'no_order' => $orderDetail->no_order,
+                            'alasan' => 'order_header / sampling_plan tidak ada (status sampling_plan harus is_active=1 dan status=1)',
+                        ];
+                        continue;
+                    }
+
+                    $allowPush = false;
+                    $samplerTerpilih = $loggedInUser;
+                    $alasan = [];
+                    $jadwalCocok = [];
+                    $titikMilikSampler = [];
+
+                    if ($isProgrammer) {
+                        $allowPush = true;
+                        $alasan[] = 'programmer: lolos tanpa cek nama sampler';
+                        foreach ($orderDetail->orderHeader->samplingPlan as $samplingPlan) {
+                            $jadwal = $samplingPlan->jadwal->first();
+                            if ($jadwal && !empty($jadwal->sampler)) {
+                                $samplerList = $parseSamplerField($jadwal->sampler);
+                                $samplerTerpilih = $samplerList[0] ?? $loggedInUser;
+                                $alasan[] = 'display sampler diambil dari jadwal pertama: ' . $samplerTerpilih;
+                                break;
+                            }
+                        }
+                    } else {
+                        foreach ($orderDetail->orderHeader->samplingPlan as $samplingPlan) {
+                            foreach ($samplingPlan->jadwal ?? [] as $jadwal) {
+                                if ($jadwal->tanggal != $orderDetail->tanggal_sampling) {
+                                    continue;
+                                }
+                                $samplerList = $parseSamplerField($jadwal->sampler);
+                                $jadwalCocok[] = [
+                                    'jadwal_id' => $jadwal->id,
+                                    'id_sampling' => $samplingPlan->id,
+                                    'sampler_raw' => $jadwal->sampler,
+                                    'sampler_list' => $samplerList,
+                                ];
+                                if ($nameInListStrict($loggedInUser, $samplerList)) {
+                                    $allowPush = true;
+                                    $alasan[] = 'nama persis ada di jadwal_id ' . $jadwal->id;
+                                    $titikMilikSampler = array_merge(
+                                        $titikMilikSampler,
+                                        $extractTitikKategori($jadwal->kategori)
+                                    );
+                                }
+                            }
+                        }
+                        $titikMilikSampler = array_values(array_unique($titikMilikSampler));
+                    }
+
+                    if ($allowPush && !$isProgrammer && !empty($titikMilikSampler)) {
+                        $titikSampel = $extractTitikSampel($orderDetail->no_sampel);
+                        if ($titikSampel === null || !in_array($titikSampel, $titikMilikSampler, true)) {
+                            $ditolak[] = [
+                                'no_sampel' => $orderDetail->no_sampel,
+                                'no_order' => $orderDetail->no_order,
+                                'nomor_quotation' => $orderDetail->no_quotation,
+                                'alasan' => 'titik tidak ada di jadwal.kategori milik sampler (bukan dari detail_cs_documents)',
+                                'titik_sampel' => $titikSampel,
+                                'titik_jadwal' => $titikMilikSampler,
+                            ];
+                            continue;
+                        }
+                        $alasan[] = 'titik ' . $titikSampel . ' ada di jadwal.kategori';
+                    }
+
+                    if ($allowPush) {
+                        $rows[] = $mapSampelRow($orderDetail, $samplerTerpilih, $alasan);
+                    } else {
+                        $ditolak[] = [
+                            'no_sampel' => $orderDetail->no_sampel,
+                            'no_order' => $orderDetail->no_order,
+                            'nomor_quotation' => $orderDetail->no_quotation,
+                            'alasan' => 'nama tidak ada di jadwal.sampler pada tanggal yang sama (in_array case-sensitive)',
+                            'jadwal_dicek' => $jadwalCocok,
+                        ];
+                    }
+                }
+
+                return [$rows, $ditolak];
+            };
+
+            $groupByKategori = function (array $rows) {
+                $grouped = [];
+                foreach ($rows as $row) {
+                    $key = $row['kategori_nama'] !== '' ? $row['kategori_nama'] : ($row['kategori_3'] ?: 'TANPA_KATEGORI');
+                    if (!isset($grouped[$key])) {
+                        $grouped[$key] = [
+                            'kategori' => $key,
+                            'jumlah' => 0,
+                            'no_sampel' => [],
+                        ];
+                    }
+                    $grouped[$key]['jumlah']++;
+                    $grouped[$key]['no_sampel'][] = $row['no_sampel'];
+                }
+                ksort($grouped);
+                return array_values($grouped);
+            };
+
+            $perSampler = [];
+            $allVisible = [];
+            foreach ($karyawanLookup as $karyawan) {
+                $nama = $karyawan['nama_lengkap'] ?: $karyawan['dicari'];
+                list($visibleRows, $ditolak) = $simulateDetailsData($nama, (bool) $karyawan['is_programmer']);
+
+                $jadwalMilik = $jadwalKonteks->filter(function ($row) use ($nama, $nameInListLoose) {
+                    return $nameInListLoose($nama, $row['sampler_list']);
+                })->values();
+
+                $kategori = $groupByKategori($visibleRows);
+                $perSampler[$nama] = [
+                    'karyawan' => $karyawan,
+                    'jumlah_jadwal_tanggal_ini' => $jadwalMilik->count(),
+                    'jadwal' => $jadwalMilik,
+                    'jumlah_sampel_terlihat' => count($visibleRows),
+                    'kategori' => $kategori,
+                    'sampel' => $visibleRows,
+                    'sampel_tidak_terlihat' => $ditolak,
+                ];
+
+                foreach ($visibleRows as $row) {
+                    $allVisible[$row['no_sampel'] . '|' . $row['no_order']] = $row;
+                }
+            }
+
+            $gabunganRows = array_values($allVisible);
+            usort($gabunganRows, function ($a, $b) {
+                return strcmp((string) $a['no_sampel'], (string) $b['no_sampel']);
+            });
+
+            $nearby = [];
+            if ($includeNearby) {
+                foreach ($karyawanLookup as $karyawan) {
+                    $nama = $karyawan['nama_lengkap'] ?: $karyawan['dicari'];
+                    $nearbyRows = Jadwal::query()
+                        ->where('sampler', 'like', '%' . $nama . '%')
+                        ->where('is_active', true)
+                        ->where('tanggal', '!=', $tanggalSampling)
+                        ->orderByDesc('tanggal')
+                        ->limit(8)
+                        ->get(['id', 'tanggal', 'no_quotation', 'nama_perusahaan', 'sampler', 'kategori', 'periode', 'is_active']);
+                    $nearby[$nama] = $nearbyRows->map(function ($row) use ($decodeKategoriJadwal) {
+                        return [
+                            'jadwal_id' => $row->id,
+                            'tanggal' => $row->tanggal,
+                            'no_quotation' => $row->no_quotation,
+                            'nama_perusahaan' => $row->nama_perusahaan,
+                            'sampler' => $row->sampler,
+                            'periode' => $row->periode,
+                            'kategori_jadwal' => $decodeKategoriJadwal($row->kategori),
+                        ];
+                    })->values();
+                }
+            }
+
+            $orderKonteks = $orderDetails->groupBy('no_order')->map(function ($items, $noOrder) {
+                $first = $items->first();
+                return [
+                    'no_order' => $noOrder,
+                    'no_quotation' => $first->no_quotation,
+                    'nama_perusahaan' => optional($first->orderHeader)->nama_perusahaan,
+                    'jumlah_sampel' => $items->count(),
+                    'kategori' => $items->pluck('kategori_3')->unique()->values(),
+                    'no_sampel' => $items->pluck('no_sampel')->values(),
+                ];
+            })->values();
+
+            $ringkasan = [];
+            foreach ($perSampler as $nama => $data) {
+                $ringkasan[] = [
+                    'sampler' => $nama,
+                    'ada_di_master_karyawan' => $data['karyawan']['ketemu'],
+                    'jumlah_jadwal' => $data['jumlah_jadwal_tanggal_ini'],
+                    'jumlah_sampel' => $data['jumlah_sampel_terlihat'],
+                    'kategori' => array_map(function ($item) {
+                        return $item['kategori'] . ' (' . $item['jumlah'] . ')';
+                    }, $data['kategori']),
+                    'no_sampel' => array_column($data['sampel'], 'no_sampel'),
+                ];
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Tracing sampler FDL mengikuti logika DokumenFdlController@detailsData',
+                'filter' => [
+                    'tanggal_sampling' => $tanggalSampling,
+                    'sampler' => $samplerNames,
+                    'no_order' => $noOrderFilter !== '' ? $noOrderFilter : null,
+                    'no_quotation' => $noQuotationFilter !== '' ? $noQuotationFilter : null,
+                    'include_inactive' => $includeInactive,
+                ],
+                'logika' => [
+                    'sumber_assignment' => 'jadwal.sampler (varchar, pecah koma) pada tanggal yang sama dengan order_detail.tanggal_sampling',
+                    'sumber_sampel' => 'order_detail.is_active=1 + tanggal_sampling',
+                    'sampling_plan' => 'order_header.samplingPlan: is_active=1 AND status=1, jadwal is_active=1',
+                    'detailsData_sampler_biasa' => 'Nama harus ada di jadwal.sampler, lalu no_sampel hanya lolos jika kodenya ada di jadwal.kategori milik sampler itu. detail_cs_documents tidak dipakai untuk menentukan titik.',
+                    'detailsData_programmer' => 'id_jabatan 41/42 lolos semua, display sampler = nama pertama di jadwal',
+                    'index_beda' => 'list order memakai strcasecmp (case-insensitive), detailsData memakai in_array ketat',
+                ],
+                'ringkasan' => $ringkasan,
+                'per_sampler' => $perSampler,
+                'gabungan' => [
+                    'jumlah_sampel' => count($gabunganRows),
+                    'kategori' => $groupByKategori($gabunganRows),
+                    'sampel' => $gabunganRows,
+                ],
+                'konteks_tanggal' => [
+                    'jumlah_jadwal' => $jadwalKonteks->count(),
+                    'sampler_yang_benar_benar_terjadwal' => $jadwalKonteks->pluck('sampler_list')->flatten()->unique()->values(),
+                    'jadwal' => $jadwalKonteks,
+                    'jumlah_order_detail' => $orderDetails->count(),
+                    'order' => $orderKonteks,
+                ],
+                'jadwal_terdekat_sampler' => $includeNearby ? $nearby : null,
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Gagal tracing sampler FDL',
+                'error' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile(),
+            ], 500);
+        }
+    }
+
+    private function parseTraceTanggalSampling($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '2026-10-15';
+        }
+
+        $bulan = [
+            'januari' => '01', 'februari' => '02', 'maret' => '03', 'april' => '04',
+            'mei' => '05', 'juni' => '06', 'juli' => '07', 'agustus' => '08',
+            'september' => '09', 'oktober' => '10', 'november' => '11', 'desember' => '12',
+        ];
+
+        if (preg_match('/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/u', $value, $m)) {
+            $kodeBulan = $bulan[strtolower($m[2])] ?? null;
+            if ($kodeBulan) {
+                return sprintf('%04d-%s-%02d', (int) $m[3], $kodeBulan, (int) $m[1]);
+            }
+        }
+
+        try {
+            return Carbon::parse($value)->toDateString();
+        } catch (\Throwable $e) {
+            return $value;
+        }
+    }
+
+    private function parseTraceSamplerNames($raw)
+    {
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+        if (is_array($raw)) {
+            $list = $raw;
+        } else {
+            $list = preg_split('/\s*(?:,|;|&|\/|\bdan\b)\s*/iu', (string) $raw);
+        }
+
+        $out = [];
+        foreach ($list as $item) {
+            $name = trim((string) $item);
+            if ($name !== '') {
+                $out[] = $name;
+            }
+        }
+        return array_values(array_unique($out));
     }
 }

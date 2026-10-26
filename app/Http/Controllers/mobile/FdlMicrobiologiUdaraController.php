@@ -25,6 +25,7 @@ use App\Services\SendTelegram;
 use App\Services\InsertActivityFdl;
 use App\Services\FdlOrderDetailService;
 use App\Services\GetAtasan;
+use App\Support\FdlLingkunganSharedParameters;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -40,9 +41,9 @@ class FdlMicrobiologiUdaraController extends Controller
 {
     public function getSample(Request $request)
     {
-        // if ($response = $this->ensureSamplerCheckedInForSample($request)) {
-        //     return $response;
-        // }
+        if ($response = $this->ensureSamplerCheckedInForSample($request)) {
+             return $response;
+        }
 
         if (isset($request->no_sample) && $request->no_sample != null) {
             $parameter = ParameterFdl::select('parameters')->where('nama_fdl', 'microbiologi')->where('is_active', 1)->first();
@@ -74,12 +75,12 @@ class FdlMicrobiologiUdaraController extends Controller
                     $parKurangShift = [];
             
                     foreach ($param as $item) {
-                        // Abaikan parameter dengan shift 'Sesaat'
                         if ($item->shift_pengambilan != 'Sesaat') {
-                            $jumlah = DetailMicrobiologi::where('no_sampel', $no_sampel)
+                            $rows = DetailMicrobiologi::where('no_sampel', $no_sampel)
                                 ->where('parameter', $item->parameter)
-                                ->count();
-            
+                                ->get(['parameter', 'shift_pengambilan']);
+                            $jumlah = FdlLingkunganSharedParameters::countDistinctShiftsInRows($rows, $item->parameter);
+
                             if ($jumlah < 3) {
                                 $parKurangShift[] = $item->parameter;
                             }

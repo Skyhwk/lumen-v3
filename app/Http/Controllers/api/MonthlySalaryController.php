@@ -56,7 +56,7 @@ class MonthlySalaryController extends Controller
         }
 
         $user = $this->getCurrentUser();
-        return $user && in_array($user->grade, ['MANAGER', 'DIREKSI']);
+        return $user && in_array($user->grade, ['MANAGER', 'DIRECTOR', 'SENIOR MANAGER']);
     }
 
     /**
@@ -74,7 +74,7 @@ class MonthlySalaryController extends Controller
         }
 
         $user = $this->getCurrentUser();
-        if ($user && $user->grade === 'DIREKSI' || $user->id === 131) {
+        if ($user && $user->grade === 'DIRECTOR' || $user->id === 131) {
             return null; // DIREKSI tidak memfilter bawahan, bisa melihat semua data salary
         }
 
@@ -200,17 +200,19 @@ class MonthlySalaryController extends Controller
                 $headerIds = [$id_header];
             }
             
-            $data = Payroll::whereIn('payroll_header_id', $headerIds)
-                ->where('is_active', true)
+            $data = Payroll::whereIn('payroll.payroll_header_id', $headerIds)
+                ->where('payroll.is_active', true)
                 ->when($bawahanIds !== null, function ($query) use ($bawahanIds) {
-                    $query->whereIn('id_karyawan', $bawahanIds);
+                    $query->whereIn('payroll.id_karyawan', $bawahanIds);
                 })
                 ->with(['karyawan' => function ($query) {
-                    $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan', 'is_active');
+                    $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan', 'is_active', 'tgl_mulai_kerja');
                 }, 'department' => function ($query) {
                     $query->select('master_divisi.id', 'nama_divisi');
                 }])
-                ->orderBy('nik_karyawan', 'asc');
+                ->join('master_karyawan', 'payroll.id_karyawan', '=', 'master_karyawan.id')
+                ->select('payroll.*')
+                ->orderByRaw('master_karyawan.tgl_mulai_kerja IS NULL, master_karyawan.tgl_mulai_kerja ASC');
 
             // Calculate totals
             $totals = Payroll::whereIn('payroll_header_id', $headerIds)
@@ -221,6 +223,7 @@ class MonthlySalaryController extends Controller
                 ->selectRaw('
                     sum(gaji_pokok) as total_gaji_pokok,
                     sum(tunjangan) as total_tunjangan,
+                    sum(gaji_pokok + tunjangan) as total_gaji_tunjangan,
                     sum(bonus) as total_bonus,
                     sum(pencadangan_upah) as total_pencadangan_upah,
                     sum(jamsostek) as total_jamsostek,
@@ -235,6 +238,9 @@ class MonthlySalaryController extends Controller
 
             // Prepare DataTable response
             $response = Datatables::of($data)
+                ->addColumn('total_gaji_tunjangan', function ($row) {
+                    return (float) $row->gaji_pokok + (float) $row->tunjangan;
+                })
                 ->make(true)
                 ->getData();
 

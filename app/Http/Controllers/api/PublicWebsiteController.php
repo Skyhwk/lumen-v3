@@ -247,7 +247,10 @@ class PublicWebsiteController extends Controller
     {
         return $collection->map(function ($item) {
             if ($item->image) {
-                $item->image = $this->publicAssetUrl('profile/page-control/' . $item->image);
+                $relative = 'profile/page-control/' . ltrim($item->image, '/');
+                $absolute = public_path($relative);
+                $version = file_exists($absolute) ? filemtime($absolute) : time();
+                $item->image = $this->publicAssetUrl($relative) . '?v=' . $version;
             }
             return $item;
         });

@@ -12,6 +12,7 @@ class RekeningKaryawan extends Sector{
     protected $fillable = [
         'karyawan',
         'nik_karyawan',
+        'id_karyawan',
         'no_rekening',
         'nama_bank',
         'created_at',
@@ -25,4 +26,9 @@ class RekeningKaryawan extends Sector{
     ];
 
     public $timestamps = false;
+
+    public function masterKaryawan()
+    {
+        return $this->belongsTo(MasterKaryawan::class, 'id_karyawan', 'id');
+    }
 }

@@ -115,6 +115,89 @@ class RecruitmentStatusService
         return self::isAwaitingCandidateOfferingResubmit($recruitment);
     }
 
+    public static function getLatestCandidateOfferingNegotiateEntry(array $history): ?array
+    {
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (($history[$i]['status'] ?? '') === 'candidate_offering_negotiated') {
+                return $history[$i];
+            }
+        }
+
+        return null;
+    }
+
+    public static function isAwaitingCandidateOfferingNegotiateResubmit($recruitment): bool
+    {
+        $history = self::parseMetaHistory($recruitment);
+        $negotiatedIndex = null;
+
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (($history[$i]['status'] ?? '') === 'candidate_offering_negotiated') {
+                $negotiatedIndex = $i;
+                break;
+            }
+        }
+
+        if ($negotiatedIndex === null) {
+            return false;
+        }
+
+        for ($i = $negotiatedIndex + 1; $i < count($history); $i++) {
+            if (($history[$i]['status'] ?? '') === 'candidate_offering_sent') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static function hasHrdSalaryInputSavedAfterCandidateNegotiate($recruitment): bool
+    {
+        if (!self::isAwaitingCandidateOfferingNegotiateResubmit($recruitment)) {
+            return false;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+        $negotiatedIndex = null;
+
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (($history[$i]['status'] ?? '') === 'candidate_offering_negotiated') {
+                $negotiatedIndex = $i;
+                break;
+            }
+        }
+
+        if ($negotiatedIndex === null) {
+            return false;
+        }
+
+        for ($i = $negotiatedIndex + 1; $i < count($history); $i++) {
+            if (($history[$i]['status'] ?? '') === 'hrd_salary_input_saved') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function getCandidateOfferingNegotiateDetails($recruitment): ?array
+    {
+        if (!self::isAwaitingCandidateOfferingNegotiateResubmit($recruitment)) {
+            return null;
+        }
+
+        $entry = self::getLatestCandidateOfferingNegotiateEntry(self::parseMetaHistory($recruitment));
+        if (!$entry) {
+            return null;
+        }
+
+        return [
+            'salary_offer_candidate' => $entry['salary_offer_candidate'] ?? null,
+            'tunjangan_offer_candidate' => $entry['tunjangan_offer_candidate'] ?? null,
+            'tanggal_mulai_kerja' => $entry['tanggal_mulai_kerja'] ?? null,
+        ];
+    }
+
     public static function getCandidateOfferingRejectReason($recruitment): ?string
     {
         if (!self::isAwaitingCandidateOfferingResubmit($recruitment)) {
@@ -131,9 +214,34 @@ class RecruitmentStatusService
         return $reason !== '' ? $reason : null;
     }
 
+    public static function isKeptCandidate($recruitment): bool
+    {
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        if ($status !== 'management_decision') {
+            return false;
+        }
+
+        $isKeep = is_object($recruitment)
+            ? (int) ($recruitment->is_keep ?? 0)
+            : (int) ($recruitment['is_keep'] ?? 0);
+
+        return $isKeep === 1;
+    }
+
     public static function isAwaitingIbuDirekturApproval($recruitment): bool
     {
+        if (self::isKeptCandidate($recruitment)) {
+            return false;
+        }
+
         if (self::isAwaitingCandidateOfferingResubmit($recruitment)) {
+            return false;
+        }
+
+        if (self::isAwaitingCandidateOfferingNegotiateResubmit($recruitment)) {
             return false;
         }
 
@@ -178,9 +286,42 @@ class RecruitmentStatusService
         return null;
     }
 
+    /**
+     * Direktur sudah approve salary offer, tetapi tanggal join sudah lewat / hari ini —
+     * HRD wajib isi ulang tanggal join sebelum Hiring Letter dikirim ke kandidat.
+     */
+    public static function isAwaitingJoinDateForHiringLetter($recruitment): bool
+    {
+        if (self::getLatestDirectorSalaryDecision(self::parseMetaHistory($recruitment)) !== 'approved') {
+            return false;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            $status = (string) ($history[$i]['status'] ?? '');
+            if ($status === 'candidate_approved') {
+                return false;
+            }
+            if ($status !== 'internal_sallary_offer_approved') {
+                continue;
+            }
+            if (self::isDirectorSalaryDecisionSuperseded($history, $i)) {
+                continue;
+            }
+
+            return !empty($history[$i]['pending_join_date_for_hiring_letter']);
+        }
+
+        return false;
+    }
+
     public static function isReadyToSendDirectorAfterFinanceApprove($recruitment): bool
     {
         if (!self::hasFinanceApproved($recruitment)) {
+            return false;
+        }
+
+        if (self::isAwaitingCandidateOfferingResponse($recruitment)) {
             return false;
         }
 
@@ -193,6 +334,55 @@ class RecruitmentStatusService
         $history = self::parseMetaHistory($recruitment);
 
         return self::getLatestDirectorSalaryDecision($history) === null;
+    }
+
+    /**
+     * Offering letter sudah dikirim ke kandidat; belum ada respon approve/reject setelah offering terakhir.
+     * Termasuk alur Finance approve dulu lalu email offering (history berakhir candidate_offering_email_sent).
+     */
+    public static function isAwaitingCandidateOfferingResponse($recruitment): bool
+    {
+        if (self::isAwaitingCandidateOfferingResubmit($recruitment)) {
+            return false;
+        }
+
+        if (!self::hasCandidateOfferingSent($recruitment)) {
+            return false;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+        $lastSentIndex = null;
+
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            if (($history[$i]['status'] ?? '') === 'candidate_offering_sent') {
+                $lastSentIndex = $i;
+                break;
+            }
+        }
+
+        if ($lastSentIndex === null) {
+            return false;
+        }
+
+        for ($i = 0; $i < $lastSentIndex; $i++) {
+            if (($history[$i]['status'] ?? '') === 'candidate_offering_approved') {
+                return false;
+            }
+        }
+
+        for ($i = $lastSentIndex + 1; $i < count($history); $i++) {
+            $status = (string) ($history[$i]['status'] ?? '');
+            if (in_array($status, [
+                'candidate_offering_approved',
+                'candidate_offering_rejected',
+                'candidate_offering_negotiated',
+                'candidate_rejected',
+            ], true)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public static function isAwaitingDirectorSalaryApproval($recruitment): bool
@@ -882,7 +1072,54 @@ class RecruitmentStatusService
 
         for ($i = $rejectedIndex + 1; $i < count($history); $i++) {
             $status = (string) ($history[$i]['status'] ?? '');
-            if (in_array($status, ['candidate_offering_sent', 'finance_approved', 'candidate_offering_approved'], true)) {
+            if (in_array($status, [
+                'candidate_offering_sent',
+                'finance_approved',
+                'candidate_offering_approved',
+                'waiting_approve_finance',
+            ], true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Finance review diajukan HRD sebelum offering letter dikirim ke kandidat.
+     */
+    public static function isFinanceReviewBeforeCandidateOffering($recruitment): bool
+    {
+        $status = strtolower(trim((string) (is_object($recruitment) ? ($recruitment->status ?? '') : '')));
+        if ($status !== 'finance_review') {
+            return false;
+        }
+
+        $history = self::parseMetaHistory($recruitment);
+        $lastWaitingIndex = null;
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            $entryStatus = (string) ($history[$i]['status'] ?? '');
+            if ($entryStatus === 'waiting_approve_finance') {
+                $lastWaitingIndex = $i;
+                break;
+            }
+            if ($entryStatus === 'candidate_offering_approved') {
+                return false;
+            }
+        }
+
+        if ($lastWaitingIndex === null) {
+            foreach ($history as $entry) {
+                if (($entry['status'] ?? '') === 'candidate_offering_sent') {
+                    return false;
+                }
+            }
+
+            return false;
+        }
+
+        for ($i = $lastWaitingIndex + 1; $i < count($history); $i++) {
+            if (in_array($history[$i]['status'] ?? '', ['candidate_offering_sent', 'candidate_offering_email_sent'], true)) {
                 return false;
             }
         }
@@ -940,6 +1177,14 @@ class RecruitmentStatusService
             return false;
         }
 
+        if (self::isAwaitingCandidateOfferingNegotiateResubmit($recruitment)) {
+            return false;
+        }
+
+        if (self::isAwaitingCandidateOfferingResubmit($recruitment)) {
+            return false;
+        }
+
         if (!self::hasFinanceApproved($recruitment)) {
             return false;
         }
@@ -958,6 +1203,56 @@ class RecruitmentStatusService
         return false;
     }
 
+    /** Waktu terakhir email offering ke kandidat (dari meta_history). */
+    public static function getLatestCandidateOfferingEmailSentAt($recruitment): ?string
+    {
+        $history = self::parseMetaHistory($recruitment);
+
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            $status = strtolower((string) ($history[$i]['status'] ?? ''));
+            if (!in_array($status, ['candidate_offering_email_sent', 'candidate_offering_sent'], true)) {
+                continue;
+            }
+
+            $at = trim((string) ($history[$i]['at'] ?? ''));
+            if ($at !== '') {
+                return $at;
+            }
+        }
+
+        return null;
+    }
+
+    public static function recruitmentPipelineSalaryOfferStatuses(): array
+    {
+        return ['internal_sallary_offer', 'salary_offer', 'sallary_offer', 'approved'];
+    }
+
+    public static function hasCandidateOfferingSent($recruitment): bool
+    {
+        foreach (self::parseMetaHistory($recruitment) as $entry) {
+            if (($entry['status'] ?? '') === 'candidate_offering_sent') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Recruitment Pipeline Stages — step Salary Offer (setelah email offering ke kandidat). */
+    public static function matchesRecruitmentPipelineSalaryOfferStage($recruitment): bool
+    {
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        if (!in_array($status, self::recruitmentPipelineSalaryOfferStatuses(), true)) {
+            return false;
+        }
+
+        return self::hasCandidateOfferingSent($recruitment);
+    }
+
     public static function hasPriorFinanceApproval($recruitment): bool
     {
         $history = self::parseMetaHistory($recruitment);
@@ -973,7 +1268,7 @@ class RecruitmentStatusService
 
     public static function shouldSendCandidateEmailOnFinanceApprove($recruitment): bool
     {
-        return !self::hasCandidateOfferingEmailSent($recruitment);
+        return self::isFinanceReviewBeforeCandidateOffering($recruitment);
     }
 
     public static function getFinanceRejectReason($recruitment): ?string
@@ -1130,6 +1425,13 @@ class RecruitmentStatusService
             ];
         }
 
+        if (self::isAwaitingCandidateOfferingResponse($recruitment)) {
+            return [
+                'code' => 'awaiting_candidate_offering',
+                'label' => 'Menunggu Respon Kandidat',
+            ];
+        }
+
         return null;
     }
 
@@ -1159,10 +1461,41 @@ class RecruitmentStatusService
         return false;
     }
 
+    public static function hasReturnedFromUserInterviewInHistory($recruitment): bool
+    {
+        foreach (self::parseMetaHistory($recruitment) as $entry) {
+            if (strtolower((string) ($entry['status'] ?? '')) === 'returned_to_hrd_from_user_interview') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function isReturnedFromUserInterview($recruitment): bool
+    {
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        if ($status !== 'interview_hrd') {
+            return false;
+        }
+
+        return self::hasReturnedFromUserInterviewInHistory($recruitment);
+    }
+
     public static function shouldSkipProfileCompletionOnHrdPass($recruitment): bool
     {
-        return self::hasCompletedProfile($recruitment)
-            && self::hasDirectorManagementRejectionInHistory($recruitment);
+        if (!self::hasCompletedProfile($recruitment)) {
+            return false;
+        }
+
+        if (self::hasReturnedFromUserInterviewInHistory($recruitment)) {
+            return true;
+        }
+
+        return self::hasDirectorManagementRejectionInHistory($recruitment);
     }
 
     public function update($recruitmentId, $status, $at = null, $historyStatus = null, array $extraData = [])
@@ -1180,8 +1513,8 @@ class RecruitmentStatusService
 
         if (($last['status'] ?? null) !== $historyStatus) {
             $history[] = array_merge([
-                'status' => $historyStatus,
                 'at'     => Carbon::parse($at)->toDateTimeString(),
+                'status' => $historyStatus,
             ], $extraData);
         }
 
@@ -1312,6 +1645,7 @@ class RecruitmentStatusService
         if (self::isAwaitingDirectorSalaryResubmit($recruitment)
             || self::isAwaitingFinanceResubmit($recruitment)
             || self::isAwaitingCandidateOfferingResubmit($recruitment)
+            || self::isAwaitingCandidateOfferingNegotiateResubmit($recruitment)
             || self::isFinanceRejectedOnManagementDecision($recruitment)) {
             return true;
         }
@@ -1343,6 +1677,130 @@ class RecruitmentStatusService
         return false;
     }
 
+    public static function mapRejectionSourceToApprovedCandidateLabel(?string $source): string
+    {
+        $source = trim((string) $source);
+        if ($source === 'Finance') {
+            return 'Rejected - Finance';
+        }
+        if (in_array($source, ['Ibu Direktur', 'Direktur', 'Direktur (Negosiasi)'], true)) {
+            return 'Rejected - Approval';
+        }
+        if (in_array($source, ['Penolakan Gaji', 'Kandidat'], true)) {
+            return 'Rejected - Salary Offering';
+        }
+
+        return 'Rejected';
+    }
+
+    /**
+     * Label status untuk tab Approved Candidate (Personnel Request / User).
+     */
+    public static function resolveApprovedCandidateUserStatusLabel($recruitment): string
+    {
+        if (self::isRejectedKandidat($recruitment)) {
+            $summary = self::getPriorRejectionSummaryForHrd($recruitment);
+            if ($summary && !empty($summary['source'])) {
+                return self::mapRejectionSourceToApprovedCandidateLabel($summary['source']);
+            }
+            if (self::hasHrdFinalDecisionRejected($recruitment)) {
+                return 'Rejected - Approval';
+            }
+
+            return 'Rejected';
+        }
+
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        if (self::isAwaitingCandidateOfferingResubmit($recruitment)) {
+            return 'Rejected - Salary Offering';
+        }
+
+        if (self::isFinanceRejectedOnManagementDecision($recruitment)) {
+            return 'Rejected - Finance';
+        }
+
+        if (self::isAwaitingDirectorManagementDecisionRejectResubmit($recruitment)) {
+            return 'Rejected - Approval';
+        }
+
+        if (Schema::hasColumn('new_recruitment', 'rejected_decision')) {
+            $rejectedDecision = is_object($recruitment)
+                ? (bool) ($recruitment->rejected_decision ?? false)
+                : (bool) ($recruitment['rejected_decision'] ?? false);
+
+            if ($status === 'management_decision' && $rejectedDecision) {
+                return 'Rejected - Approval';
+            }
+        }
+
+        if (self::isAwaitingDirectorSalaryRejectResubmit($recruitment)) {
+            return 'Rejected - Approval';
+        }
+
+        if (Schema::hasColumn('new_recruitment', 'rejected_salary')) {
+            $rejectedSalary = is_object($recruitment)
+                ? (bool) ($recruitment->rejected_salary ?? false)
+                : (bool) ($recruitment['rejected_salary'] ?? false);
+
+            if ($rejectedSalary && $status === 'internal_sallary_offer') {
+                return 'Rejected - Salary Offering';
+            }
+        }
+
+        if (self::isAwaitingFinanceResubmit($recruitment) && $status === 'management_decision') {
+            return 'Rejected - Finance';
+        }
+
+        $prior = self::getPriorRejectionSummaryForHrd($recruitment);
+        if ($prior && !empty($prior['source']) && self::canHrdResubmitRejectedOffering($recruitment)) {
+            return self::mapRejectionSourceToApprovedCandidateLabel($prior['source']);
+        }
+
+        if (self::isKeptCandidate($recruitment)) {
+            return 'Candidate Keep';
+        }
+
+        if (self::isAwaitingIbuDirekturApproval($recruitment)) {
+            return 'Waiting Approval';
+        }
+
+        if (in_array($status, ['finance_review', 'waiting_approve_finance'], true)) {
+            return 'Waiting Finance Approval';
+        }
+
+        if (self::isAwaitingDirectorSalaryApproval($recruitment)) {
+            return 'Waiting Salary Approval';
+        }
+
+        if (in_array($status, ['internal_sallary_offer', 'salary_offer', 'sallary_offer', 'approved'], true)) {
+            return 'Salary Offer';
+        }
+
+        if ($status === 'management_decision' && self::hasManagementDecisionApproved($recruitment)) {
+            return 'Salary Offer';
+        }
+
+        if ($status === 'hired') {
+            return 'Hired';
+        }
+        if ($status === 'training') {
+            return 'Training';
+        }
+        if ($status === 'selesai') {
+            return 'Selesai';
+        }
+
+        $pipeline = self::resolvePipelineStatus($recruitment);
+        if ($pipeline && !empty($pipeline['label'])) {
+            return (string) $pipeline['label'];
+        }
+
+        return ucwords(str_replace('_', ' ', $status));
+    }
+
     public static function matchesFinalDecisionStageTab($recruitment, string $stageTab): bool
     {
         $status = strtolower(trim((string) (is_object($recruitment)
@@ -1350,6 +1808,9 @@ class RecruitmentStatusService
             : ($recruitment['status'] ?? ''))));
 
         switch ($stageTab) {
+            case 'keep':
+                return self::isKeptCandidate($recruitment);
+
             case 'waiting_approval':
                 return self::isAwaitingIbuDirekturApproval($recruitment);
 
@@ -1359,11 +1820,13 @@ class RecruitmentStatusService
             case 'management_decision':
                 return $status === 'management_decision'
                     && !self::isAwaitingIbuDirekturApproval($recruitment)
-                    && !self::isAwaitingDirectorSalaryApproval($recruitment);
+                    && !self::isAwaitingDirectorSalaryApproval($recruitment)
+                    && !self::isKeptCandidate($recruitment);
 
             case 'salary_offer':
                 return in_array($status, ['internal_sallary_offer', 'salary_offer'], true)
-                    && !self::isAwaitingDirectorSalaryApproval($recruitment);
+                    && !self::isAwaitingDirectorSalaryApproval($recruitment)
+                    && !self::isAwaitingCandidateOfferingResponse($recruitment);
 
             case 'finance_review':
                 return $status === 'finance_review';

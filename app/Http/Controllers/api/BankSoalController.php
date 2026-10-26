@@ -9,6 +9,8 @@ use App\Models\QuestionOption;
 use App\Models\ScaleType;
 use App\Services\BankSoalImageService;
 use App\Services\GetBawahan;
+use App\Services\HrdAssessmentReadinessService;
+use App\Services\RecruitmentManagerAccess;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -29,7 +31,7 @@ class BankSoalController extends Controller
         $scope = $this->scope($request);
 
         $questions = Question::with(['options', 'scaleType', 'categoryMaster'])
-            ->where('question_scope', $scope)
+            ->whereIn('question_scope', [$scope, 'default'])
             ->where('is_active', 1)
             ->when($scope === 'manager', function ($query) use ($request) {
                 if ($request->filled('question_category_id')) {
@@ -49,27 +51,39 @@ class BankSoalController extends Controller
         $query = QuestionCategory::withCount(['questions as current_question_count' => fn ($q) => $q->where('question_scope', 'hr')->where('is_active', 1)->where('status', '!=', 'retired')])
             ->where('is_active', true)
             ->where(function ($builder) {
-                $builder->where('category_scope', 'hr')->orWhereNull('category_scope');
+                $builder->whereIn('category_scope', ['hr', 'default'])->orWhereNull('category_scope');
             });
+
+        $categories = $query
+            ->orderByRaw("CASE WHEN UPPER(name) = 'DISC' THEN 1 WHEN UPPER(name) IN ('KOSTICK PAPI', 'PAPI KOSTICK') THEN 2 WHEN UPPER(name) = '16PF' THEN 3 ELSE 4 END")
+            ->orderBy('name')
+            ->get();
+
+        app(HrdAssessmentReadinessService::class)->attachPsychometricBankCounts($categories);
 
         return response()->json([
             'success' => true,
-            'data'    => $query
-                ->orderByRaw("CASE WHEN UPPER(name) = 'DISC' THEN 1 WHEN UPPER(name) IN ('KOSTICK PAPI', 'PAPI KOSTICK') THEN 2 ELSE 3 END")
-                ->orderBy('name')
-                ->get(),
+            'data'    => $categories,
         ]);
     }
 
     public function managerCategories(Request $request)
     {
         $managerHierarchyNames = $this->managerHierarchyNames();
+        $scopeNames = $managerHierarchyNames;
+        $isDivisiScope = false;
+
+        if (RecruitmentManagerAccess::forKaryawanId((int) $this->getEffectiveUserId()) && $request->filled('divisi_id')) {
+            $scopeNames = RecruitmentManagerAccess::namesInDivisi((int) $request->input('divisi_id'));
+            $isDivisiScope = true;
+        }
+
         $categories = QuestionCategory::withCount(['questions as current_question_count' => fn ($q) => $q->where('question_scope', 'manager')->where('is_active', 1)->where('status', '!=', 'retired')])
             ->where('category_scope', 'manager')
             ->where('is_active', true)
-            ->where(function ($query) use ($managerHierarchyNames) {
-                $query->whereIn('owner_karyawan', $managerHierarchyNames)
-                    ->orWhere('assigned_manager', $this->getEffectiveKaryawanName());
+            ->where(function ($query) use ($scopeNames) {
+                $query->whereIn('owner_karyawan', $scopeNames)
+                    ->orWhereIn('assigned_manager', $scopeNames);
             })
             ->orderBy('name')
             ->get()
@@ -79,7 +93,11 @@ class BankSoalController extends Controller
                 return $category;
             });
 
-        return response()->json(['success' => true, 'data' => $categories]);
+        return response()->json([
+            'success' => true,
+            'data' => $categories,
+            'scope' => $isDivisiScope ? 'divisi' : 'hierarchy',
+        ]);
     }
 
     public function managerAvailableQuestionCount()

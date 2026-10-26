@@ -893,6 +893,15 @@ class DraftHygieneController extends Controller
     // Amang
     // public function handleReject(Request $request)
     // {
+            // $allowedGrades = ['MANAGER', 'SENIOR MANAGER'];
+            // $currentGrade = strtoupper(trim(str_replace('_', ' ', (string) ($this->grade ?? ''))));
+
+            // if (!in_array($currentGrade, $allowedGrades, true)) {
+            //     return response()->json([
+            //         'status' => 'error',
+            //         'message' => 'Reject draft LHP hanya dapat dilakukan oleh Manager atau Senior Manager.',
+            //     ], 403);
+            // }
     //     DB::beginTransaction();
     //     try {
     //         // $noSampel = array_map('trim', explode(',', $request->noSampel));

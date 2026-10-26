@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Support\FdlOrderDetailNoSampelSync;
+
 use App\Models\DataLapanganLingkunganKerja;
 use App\Models\DetailLingkunganKerja;
 use App\Models\OrderDetail;
@@ -32,10 +34,27 @@ use App\Models\AnalystFormula as Formula;
 
 class FdlLingkunganKerjaController extends Controller
 {
+    public function tabCounts(Request $request)
+    {
+        $base = DataLapanganLingkunganKerja::query();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'pending' => (clone $base)->where(function ($query) {
+                    $query->where('is_approve', 0)->orWhereNull('is_approve');
+                })->count(),
+                'approved' => (clone $base)->where('is_approve', 1)->count(),
+            ],
+        ]);
+    }
+
     public function index(Request $request)
     {
         $this->autoBlock();
         $data = DataLapanganLingkunganKerja::with('detail', 'detailLingkunganKerja')->orderBy('id', 'desc');
+        $this->applyApprovalFilter($data, $request);
+
 
         return Datatables::of($data)
             ->filterColumn('created_by', function ($query, $keyword) {
@@ -70,6 +89,9 @@ class FdlLingkunganKerjaController extends Controller
 
     public function updateNoSampel(Request $request)
     {
+        $request->merge([
+            'no_sampel_baru' => trim((string) $request->input('no_sampel_baru', '')),
+        ]);
         if ($request->id != null && $request->id != '') {
             DB::beginTransaction();
             try {
@@ -109,21 +131,8 @@ class FdlLingkunganKerjaController extends Controller
                             'no_sampel_lama' => $request->no_sampel_lama
                         ]
                     );
+                FdlOrderDetailNoSampelSync::afterRename($request->no_sampel_lama, $request->no_sampel_baru);
 
-                    // update OrderDetail
-                    $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
-                        ->first();
-
-                    if ($order_detail_lama) {
-                        OrderDetail::where('no_sampel', $request->no_sampel_baru)
-                            ->where('is_active', 1)
-                            ->update([
-                                'tanggal_terima' => $order_detail_lama->tanggal_terima
-                            ]);
-                        
-                        $order_detail_lama->tanggal_terima = NULL;
-                        $order_detail_lama->save();
-                    }
 
                     DB::commit();
                     return response()->json([
@@ -551,4 +560,21 @@ class FdlLingkunganKerjaController extends Controller
         }
     }
     
+
+    private function applyApprovalFilter($query, Request $request): void
+    {
+        if (!$request->filled('approval')) {
+            return;
+        }
+
+        if ($request->approval === 'approved') {
+            $query->where('is_approve', 1);
+            return;
+        }
+
+        $query->where(function ($sub) {
+            $sub->where('is_approve', 0)->orWhereNull('is_approve');
+        });
+    }
+
 }

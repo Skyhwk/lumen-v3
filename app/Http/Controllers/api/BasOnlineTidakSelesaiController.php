@@ -22,15 +22,18 @@ class BasOnlineTidakSelesaiController extends Controller
             $query = DB::table('persiapan_sampel_header as psh')
                 ->join('sampel_tidak_selesai as sts', 'psh.id', '=', 'sts.id_persiapan')
                 ->select([
+                    'psh.id as id_persiapan',
                     'psh.no_quotation as no_qt',
                     'sts.no_order',
                     'psh.nama_perusahaan',
                     'psh.tanggal_sampling',
                     'psh.sampler_jadwal',
                     'psh.detail_bas_documents',
-                    DB::raw("GROUP_CONCAT(CONCAT(sts.no_sampel, ' (', sts.keterangan, ')') SEPARATOR ', ') AS nosampel_tidak_selesai")
+                    DB::raw("GROUP_CONCAT(CONCAT(sts.no_sampel, ' (', COALESCE(sts.keterangan, sts.alasan, sts.status, ''), ')') SEPARATOR ', ') AS nosampel_tidak_selesai")
                 ])
-                ->where('sts.alasan', '!=', 'Sample di pick up')
+                ->where(function ($query) {
+                    $query->whereNull('sts.alasan')->orWhere('sts.alasan', '!=', 'Sample di pick up');
+                })
                 ->where('psh.is_active', 1);
 
             // Filter berdasarkan range tanggal (dari frontend)

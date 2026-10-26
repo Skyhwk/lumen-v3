@@ -65,7 +65,7 @@ class OrderDetail extends Sector
 
     public function dataLapanganEmisiKendaraan()
     {
-        return $this->belongsTo(DataLapanganEmisiKendaraan::class, 'no_sampel', 'no_sampel')->with('emisiOrder');
+        return $this->belongsTo(DataLapanganEmisiKendaraan::class, 'no_sampel', 'no_sampel')->where('is_active', true)->with('emisiOrder');
     }
 
     public function dataLapanganEmisiCerobong()
@@ -231,6 +231,12 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(LhpsAirHeader::class, 'no_sampel', 'no_sampel')->with('lhpsAirDetail', 'lhpsAirCustom')->where('is_active', true);
     }
+
+    public function lhp_manual()
+    {
+        return $this->belongsTo(LhpManual::class, 'cfr', 'no_lhp')->where('is_active', true);
+    }
+
     public function lhps_padatan()
     {
         return $this->belongsTo(LhpsPadatanHeader::class, 'no_sampel', 'no_sampel')->with('lhpsPadatanDetail', 'lhpsPadatanCustom')->where('is_active', true);
@@ -881,5 +887,12 @@ class OrderDetail extends Sector
             return true;
         }
         return $this->wsValueSwab()->exists();
+    }
+
+    public function lhpManual()
+    {
+        return $this->belongsTo(LhpManual::class, 'cfr', 'no_lhp')
+            ->where('is_active', true)
+            ->whereNull('deleted_at');
     }
 }

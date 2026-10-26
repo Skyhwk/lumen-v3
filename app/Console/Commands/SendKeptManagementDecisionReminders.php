@@ -7,6 +7,7 @@ use App\Models\PersonnelRequest;
 use App\Models\RecruitmentInterview;
 use App\Services\CandidateDocumentAttachmentService;
 use App\Services\GenerateAssessmentDocumentService;
+use App\Services\ApprovalAppFcmService;
 use App\Services\GenerateMessageAtsEmail;
 use App\Services\RecruitmentStatusService;
 use App\Services\SendEmail;
@@ -91,6 +92,12 @@ class SendKeptManagementDecisionReminders extends Command
                         }
 
                         $emailQuery->send();
+
+                        app(ApprovalAppFcmService::class)->notifyPendingKandidatForIbuEmail(
+                            $targetEmail,
+                            (int) $candidate->id,
+                            (string) $candidate->nama_lengkap
+                        );
 
                         DB::transaction(function () use ($candidate, $keptAt) {
                             (new RecruitmentStatusService())->update(

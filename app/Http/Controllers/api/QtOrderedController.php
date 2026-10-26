@@ -80,6 +80,7 @@ class QtOrderedController extends Controller
                         'request_quotation.is_generate_data_lab',
                         'request_quotation.id_cabang',
                         'request_quotation.is_active',
+                        'request_quotation.status_quotation',
                         )
                     ->where('request_quotation.id_cabang', $request->cabang)
                     ->where('request_quotation.flag_status', 'ordered')
@@ -705,7 +706,7 @@ class QtOrderedController extends Controller
 
                 Invoice::where('no_quotation', 'like', '%' . $baseQuotation . '%')
                     ->update([
-                        'deleted_by' => $this->karyawan, 
+                        'deleted_by' => $this->karyawan,
                         'deleted_at' => Carbon::now()->format('Y-m-d H:i:s'),
                         'is_active' => false
                         ]);

@@ -202,7 +202,7 @@ class CompleteProfileController extends Controller
         })->values()->all();
     }
 
-    private function validateInput(Request $request)
+    private function validateInput(Request $request, $recruitment = null)
     {
         $required = ['nama_lengkap', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'no_telepon', 'email', 'alamat_ktp', 'alamat_domisili', 'nama_panggilan', 'nik_ktp', 'agama', 'status_pernikahan', 'kota_ktp', 'provinsi_ktp', 'kode_pos_ktp', 'kota_domisili', 'provinsi_domisili', 'kode_pos_domisili', 'status_tempat_tinggal', 'jumlah_tanggungan', 'nama_kontak_darurat', 'hubungan_kontak_darurat', 'no_telepon_darurat', 'nama_kontak_darurat_2', 'hubungan_kontak_darurat_2', 'no_telepon_darurat_2', 'tinggi_badan', 'berat_badan', 'mata'];
         $errors = [];
@@ -252,6 +252,26 @@ class CompleteProfileController extends Controller
         if ($request->input('jenis_kelamin') && !in_array($request->input('jenis_kelamin'), ['Male', 'Female'], true)) {
             $errors['jenis_kelamin'] = ['Jenis kelamin tidak valid.'];
         }
+
+        foreach ([
+            'has_penyakit_bawaan_lahir' => 'penyakit_bawaan_lahir',
+            'has_penyakit_kronis' => 'penyakit_kronis',
+            'has_riwayat_kecelakaan' => 'riwayat_kecelakaan',
+            'has_obat_rutin' => 'obat_rutin',
+            'has_gangguan_mental' => 'gangguan_mental',
+            'has_alergi' => 'alergi',
+        ] as $flagField => $detailField) {
+            $flagValue = $request->input($flagField);
+            if (!in_array($flagValue, ['yes', 'no'], true)) {
+                $errors[$flagField] = ['Pilih Ya atau Tidak.'];
+                continue;
+            }
+
+            if ($flagValue === 'yes' && trim((string) $request->input($detailField)) === '') {
+                $errors[$detailField] = ['Keterangan wajib diisi jika memilih Ya.'];
+            }
+        }
+
         $educations = $request->input('educations', []);
         if (empty($educations) && $recruitment) {
             $educations = $this->educations($recruitment);
@@ -682,9 +702,24 @@ class CompleteProfileController extends Controller
             'berat_badan' => $request->input('berat_badan') !== null && $request->input('berat_badan') !== '' ? (float) $request->input('berat_badan') : null,
             'mata' => trim((string) $request->input('mata')) ?: null,
             'golongan_darah' => trim((string) $request->input('golongan_darah')) ?: null,
-            'penyakit_bawaan_lahir' => trim((string) $request->input('penyakit_bawaan_lahir')) ?: null,
-            'penyakit_kronis' => trim((string) $request->input('penyakit_kronis')) ?: null,
-            'riwayat_kecelakaan' => trim((string) $request->input('riwayat_kecelakaan')) ?: null,
+            'penyakit_bawaan_lahir' => $request->input('has_penyakit_bawaan_lahir') === 'yes'
+                ? (trim((string) $request->input('penyakit_bawaan_lahir')) ?: null)
+                : null,
+            'penyakit_kronis' => $request->input('has_penyakit_kronis') === 'yes'
+                ? (trim((string) $request->input('penyakit_kronis')) ?: null)
+                : null,
+            'riwayat_kecelakaan' => $request->input('has_riwayat_kecelakaan') === 'yes'
+                ? (trim((string) $request->input('riwayat_kecelakaan')) ?: null)
+                : null,
+            'obat_rutin' => $request->input('has_obat_rutin') === 'yes'
+                ? (trim((string) $request->input('obat_rutin')) ?: null)
+                : null,
+            'gangguan_mental' => $request->input('has_gangguan_mental') === 'yes'
+                ? (trim((string) $request->input('gangguan_mental')) ?: null)
+                : null,
+            'alergi' => $request->input('has_alergi') === 'yes'
+                ? (trim((string) $request->input('alergi')) ?: null)
+                : null,
             'is_active' => 1,
             'created_by' => 'Candidate Profile Portal',
             'created_at' => $now,

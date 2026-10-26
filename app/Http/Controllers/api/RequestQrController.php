@@ -33,6 +33,13 @@ class RequestQrController extends Controller
             $data = RequestQR::where('is_active', true)
                 ->where('tipe', $request->mode);
 
+            $year = $request->input('year');
+            if (is_numeric($year) && (int) $year >= 2000 && (int) $year <= 2100) {
+                $year = (int) $year;
+                $data->where('created_at', '>=', $year . '-01-01 00:00:00')
+                    ->where('created_at', '<', ($year + 1) . '-01-01 00:00:00');
+            }
+
             if($jabatan == 21){
                 $data->whereIn('created_by', $getBawahan);
             }else if($jabatan == 24){

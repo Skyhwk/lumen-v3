@@ -55,6 +55,313 @@ class HrdEmailViewData
         return array_filter($decoded);
     }
 
+    /**
+     * Referensi / rekomendasi: satu objek atau daftar objek dari kolom JSON.
+     *
+     * @param mixed $value
+     * @return array<int, array<string, mixed>>
+     */
+    public static function normalizePersonReferenceList($value): array
+    {
+        $value = self::sanitizeJsonColumnValue($value);
+        if ($value === null || $value === '') {
+            return [];
+        }
+
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : [];
+        }
+
+        if (!is_array($value) || empty($value)) {
+            return [];
+        }
+
+        if (self::personReferenceItemHasContent($value)) {
+            return [$value];
+        }
+
+        $items = [];
+        foreach ($value as $item) {
+            if (!is_array($item) || !self::personReferenceItemHasContent($item)) {
+                continue;
+            }
+            $items[] = $item;
+        }
+
+        return $items;
+    }
+
+    public static function personReferenceItemHasContent(array $item): bool
+    {
+        foreach (['nama', 'instansi', 'jabatan', 'email', 'telepon'] as $key) {
+            if (trim((string) ($item[$key] ?? '')) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Rekomendasi: sama struktur referensi tanpa key instansi. */
+    public static function personRekomendasiItemHasContent(array $item): bool
+    {
+        foreach (['nama', 'jabatan', 'email', 'telepon'] as $key) {
+            if (trim((string) ($item[$key] ?? '')) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param mixed $value
+     * @return array<int, array<string, mixed>>
+     */
+    public static function normalizePersonRekomendasiList($value): array
+    {
+        $value = self::sanitizeJsonColumnValue($value);
+        if ($value === null || $value === '') {
+            return [];
+        }
+
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : [];
+        }
+
+        if (!is_array($value) || empty($value)) {
+            return [];
+        }
+
+        if (self::personRekomendasiItemHasContent($value)) {
+            return [$value];
+        }
+
+        $items = [];
+        foreach ($value as $item) {
+            if (!is_array($item) || !self::personRekomendasiItemHasContent($item)) {
+                continue;
+            }
+            $items[] = $item;
+        }
+
+        return $items;
+    }
+
+    public static function formatPersonReferenceContact(array $item): string
+    {
+        $phone = trim((string) ($item['telepon'] ?? ''));
+        $email = trim((string) ($item['email'] ?? ''));
+
+        if ($phone !== '' && $email !== '') {
+            return $phone . ' / ' . $email;
+        }
+
+        if ($phone !== '') {
+            return $phone;
+        }
+
+        if ($email !== '') {
+            return $email;
+        }
+
+        return '-';
+    }
+
+    public static function formatPersonReferenceLine(array $item): string
+    {
+        return self::formatPersonContactLine($item, true);
+    }
+
+    public static function formatPersonRekomendasiLine(array $item): string
+    {
+        return self::formatPersonContactLine($item, false);
+    }
+
+    private static function formatPersonContactLine(array $item, bool $includeInstansi): string
+    {
+        $nama = trim((string) ($item['nama'] ?? ''));
+        $instansi = trim((string) ($item['instansi'] ?? ''));
+        $jabatan = trim((string) ($item['jabatan'] ?? ''));
+        $contact = self::formatPersonReferenceContact($item);
+
+        $parts = [];
+        if ($nama !== '') {
+            $parts[] = $nama;
+        }
+        if ($jabatan !== '') {
+            $parts[] = $jabatan;
+        }
+        if ($includeInstansi && $instansi !== '') {
+            $parts[] = $instansi;
+        }
+
+        $headline = !empty($parts) ? implode(' · ', $parts) : '-';
+        if ($contact !== '-') {
+            return $headline . ' — ' . $contact;
+        }
+
+        return $headline;
+    }
+
+    /**
+     * @param object|array|null $profile
+     * @param object|null $data
+     * @return array<string, string>
+     */
+    public static function emergencyContactRows($profile, $data = null): array
+    {
+        $p = is_array($profile) ? (object) $profile : $profile;
+
+        $line = static function ($name, $relation, $phone) {
+            $name = trim((string) $name);
+            if ($name === '') {
+                return '-';
+            }
+
+            $relation = trim((string) $relation);
+            $phone = trim((string) $phone);
+            $suffix = ($relation !== '' ? $relation : 'Kontak') . ($phone !== '' ? ' — ' . $phone : '');
+
+            return $name . ' (' . $suffix . ')';
+        };
+
+        return [
+            'Kontak Darurat 1' => $line(
+                $p->nama_kontak_darurat ?? null,
+                $p->hubungan_kontak_darurat ?? null,
+                $p->no_telepon_darurat ?? null
+            ),
+            'Kontak Darurat 2' => $line(
+                $p->nama_kontak_darurat_2 ?? null,
+                $p->hubungan_kontak_darurat_2 ?? null,
+                $p->no_telepon_darurat_2 ?? null
+            ),
+        ];
+    }
+
+    public static function formatSumberInformasi($record): string
+    {
+        if ($record === null) {
+            return 'Tidak ada data';
+        }
+
+        if (is_array($record)) {
+            $record = (object) $record;
+        }
+
+        $value = trim((string) ($record->sumber_informasi ?? ''));
+
+        return $value !== '' ? $value : 'Tidak ada data';
+    }
+
+    public static function formatPernahBekerjaPerusahaan($record): array
+    {
+        $raw = null;
+        if (is_array($record)) {
+            $raw = $record['pernah_bekerja_perusahaan'] ?? null;
+        } elseif (is_object($record)) {
+            $raw = $record->pernah_bekerja_perusahaan ?? null;
+        }
+
+        $parsed = self::parseYesNoKeteranganField($raw);
+
+        $rows = [
+            'Pernah bekerja di perusahaan ini' => $parsed['pernah'] ? 'Ya' : 'Tidak',
+        ];
+
+        if ($parsed['pernah']) {
+            $rows['Penyebab keluar dari PT ini'] = $parsed['keterangan'] !== '' ? $parsed['keterangan'] : '-';
+        }
+
+        return $rows;
+    }
+
+    public static function formatMasalahHukum($record): array
+    {
+        $raw = null;
+        if (is_array($record)) {
+            $raw = $record['masalah_hukum'] ?? null;
+        } elseif (is_object($record)) {
+            $raw = $record->masalah_hukum ?? null;
+        }
+
+        $parsed = self::parseYesNoKeteranganField($raw);
+
+        $rows = [
+            'Pernah terlibat masalah hukum / kriminal' => $parsed['pernah'] ? 'Ya' : 'Tidak',
+        ];
+
+        if ($parsed['pernah']) {
+            $rows['Keterangan masalah hukum'] = $parsed['keterangan'] !== '' ? $parsed['keterangan'] : '-';
+        }
+
+        return $rows;
+    }
+
+    /**
+     * JSON kolom { pernah, keterangan } — null / string "null" = belum pernah.
+     *
+     * @return array{pernah: bool, keterangan: string}
+     */
+    public static function parseYesNoKeteranganField($raw): array
+    {
+        $default = ['pernah' => false, 'keterangan' => ''];
+
+        if (is_array($raw)) {
+            $data = $raw;
+        } else {
+            $raw = self::sanitizeJsonColumnValue($raw);
+            if ($raw === null) {
+                return $default;
+            }
+
+            if (is_string($raw)) {
+                $decoded = json_decode($raw, true);
+                $data = is_array($decoded) ? $decoded : null;
+            } else {
+                $data = null;
+            }
+
+            if (!is_array($data)) {
+                return $default;
+            }
+        }
+
+        $pernah = filter_var($data['pernah'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $keterangan = trim((string) ($data['keterangan'] ?? ''));
+        if (strtolower($keterangan) === 'null') {
+            $keterangan = '';
+        }
+
+        return [
+            'pernah' => $pernah,
+            'keterangan' => $pernah ? $keterangan : '',
+        ];
+    }
+
+    /**
+     * @param mixed $value
+     * @return mixed
+     */
+    public static function sanitizeJsonColumnValue($value)
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (is_string($value)) {
+            $trim = trim($value);
+            if ($trim === '' || strtolower($trim) === 'null') {
+                return null;
+            }
+        }
+
+        return $value;
+    }
+
     public static function formatRupiah($value): string
     {
         if ($value === null || $value === '') {
@@ -198,7 +505,8 @@ class HrdEmailViewData
             'skillBahasa'          => self::decodeJsonField($data->skill_bahasa ?? null),
             'minat'                => self::decodeJsonField($data->minat ?? null),
             'organisasi'           => self::decodeJsonField($data->organisasi ?? null),
-            'referensi'            => self::decodeJsonField($data->referensi ?? null),
+            'referensi'            => self::normalizePersonReferenceList($data->referensi ?? null),
+            'rekomendasi'          => self::normalizePersonRekomendasiList($data->rekomendasi ?? null),
             'sertifikat'           => self::decodeJsonField($data->sertifikat ?? null),
             'kursus'               => self::decodeJsonField($data->kursus ?? null),
             'salaryFormatted'      => self::formatRupiah($data->salary_user ?? null),

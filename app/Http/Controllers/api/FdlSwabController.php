@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Support\FdlOrderDetailNoSampelSync;
+
 use App\Models\DataLapanganSwab;
 use App\Models\OrderDetail;
 use App\Models\MasterSubKategori;
@@ -22,10 +24,27 @@ use Yajra\Datatables\Datatables;
 
 class FdlSwabController extends Controller
 {
+    public function tabCounts(Request $request)
+    {
+        $base = DataLapanganSwab::query();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'pending' => (clone $base)->where(function ($query) {
+                    $query->where('is_approve', 0)->orWhereNull('is_approve');
+                })->count(),
+                'approved' => (clone $base)->where('is_approve', 1)->count(),
+            ],
+        ]);
+    }
+
     public function index(Request $request)
     {
         $this->autoBlock();
         $data = DataLapanganSwab::with('detail')->orderBy('id', 'desc');
+        $this->applyApprovalFilter($data, $request);
+
 
         return Datatables::of($data)
             ->filterColumn('created_by', function ($query, $keyword) {
@@ -79,6 +98,9 @@ class FdlSwabController extends Controller
 
     public function updateNoSampel(Request $request)
     {
+        $request->merge([
+            'no_sampel_baru' => trim((string) $request->input('no_sampel_baru', '')),
+        ]);
         if (isset($request->id) && $request->id != null) {
             DB::beginTransaction();
             try {
@@ -88,22 +110,8 @@ class FdlSwabController extends Controller
                 $data->updated_by = $this->karyawan;
                 $data->updated_at = Carbon::now();
                 $data->save();
+                FdlOrderDetailNoSampelSync::afterRename($request->no_sampel_lama, $request->no_sampel_baru);
 
-
-                // update OrderDetail
-                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
-                    ->first();
-
-                if ($order_detail_lama) {
-                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
-                        ->where('is_active', 1)
-                        ->update([
-                            'tanggal_terima' => $order_detail_lama->tanggal_terima
-                        ]);
-                    
-                    $order_detail_lama->tanggal_terima = NULL;
-                    $order_detail_lama->save();
-                }
                 DB::commit();
                 return response()->json([
                     'message' => 'Berhasil ubah no sampel ' . $request->no_sampel_lama . ' menjadi ' . $request->no_sampel_baru
@@ -331,4 +339,21 @@ class FdlSwabController extends Controller
             ], 401);
         }
     }
+
+    private function applyApprovalFilter($query, Request $request): void
+    {
+        if (!$request->filled('approval')) {
+            return;
+        }
+
+        if ($request->approval === 'approved') {
+            $query->where('is_approve', 1);
+            return;
+        }
+
+        $query->where(function ($sub) {
+            $sub->where('is_approve', 0)->orWhereNull('is_approve');
+        });
+    }
+
 }

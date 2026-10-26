@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Support\FdlOrderDetailNoSampelSync;
+
 use App\Models\DataLapanganEmisiKendaraan;
 use App\Models\DataLapanganEmisiOrder;
 use App\Models\MasterQr;
@@ -21,11 +23,26 @@ use Yajra\Datatables\Datatables;
 
 class FdlEmisiKendaraanController extends Controller
 {
-    // Ini punya web
+    public function tabCounts()
+    {
+        $base = DataLapanganEmisiKendaraan::query()->where('is_active', true);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'pending' => (clone $base)->where(function ($query) {
+                    $query->where('is_approve', 0)->orWhereNull('is_approve');
+                })->count(),
+                'approved' => (clone $base)->where('is_approve', 1)->count(),
+            ],
+        ]);
+    }
+
     public function showFdlEmisiApi(Request $request)
     {
         $this->autoBlock();
         $data = DataLapanganEmisiKendaraan::with('emisiOrder', 'detail')->where('is_active', true)->orderBy('id', 'DESC');
+        $this->applyApprovalFilter($data, $request);
 
         return Datatables::of($data)
             ->filterColumn('created_by', function ($query, $keyword) {
@@ -127,6 +144,9 @@ class FdlEmisiKendaraanController extends Controller
     }
 
     public function updateNoSampel(Request $request){
+        $request->merge([
+            'no_sampel_baru' => trim((string) $request->input('no_sampel_baru', '')),
+        ]);
         try {
             $cek_data = DataLapanganEmisiKendaraan::where('id', $request->id)->first();
             if($cek_data != null && $cek_data->no_sampel_lama != null){
@@ -144,21 +164,8 @@ class FdlEmisiKendaraanController extends Controller
                 $data_order->no_sampel = $request->no_sampel_baru;
                 $data_order->no_sampel_lama = $request->no_sampel_lama;
                 $data_order->save();
+                FdlOrderDetailNoSampelSync::afterRename($request->no_sampel_lama, $request->no_sampel_baru);
 
-                // update OrderDetail
-                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
-                    ->first();
-
-                if ($order_detail_lama) {
-                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
-                        ->where('is_active', 1)
-                        ->update([
-                            'tanggal_terima' => $order_detail_lama->tanggal_terima
-                        ]);
-                    
-                    $order_detail_lama->tanggal_terima = NULL;
-                    $order_detail_lama->save();
-                }
 
                 return response()->json([
                     'message'=>'No Sampel '.$request->no_sampel_lama.' Berhasil Dirubah Menjadi '.$request->no_sampel_baru
@@ -177,22 +184,7 @@ class FdlEmisiKendaraanController extends Controller
             $data->id_regulasi = $request->regulasi;
             $data->save();
 
-            
-                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
-                    ->first();
-
-                if ($order_detail_lama) {
-                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
-                        ->where('is_active', 1)
-                        ->update([
-                            'tanggal_terima' => $order_detail_lama->tanggal_terima
-                        ]);
-                    
-                    $order_detail_lama->tanggal_terima = NULL;
-                    $order_detail_lama->save();
-                }
-
-                return response()->json([
+            return response()->json([
                 'message'=>'Regulasi Berhasil Dirubah'
             ],201);
         } catch (\Exception $e) {
@@ -1074,5 +1066,21 @@ class FdlEmisiKendaraanController extends Controller
     {
         $tgl = Carbon::now()->subDays(3);
         $data = DataLapanganEmisiKendaraan::where('is_blocked', 0)->where('created_at', '<=', $tgl)->update(['is_blocked' => 1, 'blocked_by' => 'System', 'blocked_at' => Carbon::now()->format('Y-m-d H:i:s')]);
+    }
+
+    private function applyApprovalFilter($query, Request $request): void
+    {
+        if (!$request->filled('approval')) {
+            return;
+        }
+
+        if ($request->approval === 'approved') {
+            $query->where('is_approve', 1);
+            return;
+        }
+
+        $query->where(function ($sub) {
+            $sub->where('is_approve', 0)->orWhereNull('is_approve');
+        });
     }
 }

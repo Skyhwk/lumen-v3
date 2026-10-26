@@ -21,9 +21,9 @@ class BpjsTkController extends Controller
 {
     public function index()
     {
-        $data = PayrollRecordSyncService::scopeActiveKaryawan(
+        $data = PayrollRecordSyncService::scopeActiveKaryawanById(
             BpjsTk::query()->where('bpjs_tk.is_active', true),
-            'bpjs_tk.nik_karyawan'
+            'bpjs_tk.id_karyawan'
         );
 
         return Datatables::of($data)->make(true);
@@ -31,20 +31,30 @@ class BpjsTkController extends Controller
 
     public function getKaryawan()
     {
-        $existingNik = BpjsTk::where('is_active', true)->pluck('nik_karyawan')->toArray();
-        $existingNames = BpjsTk::where('is_active', true)->pluck('karyawan')->toArray();
+        $existingIds = BpjsTk::where('is_active', true)
+            ->whereNotNull('id_karyawan')
+            ->pluck('id_karyawan')
+            ->all();
 
         $karyawan = MasterKaryawan::where('is_active', true)
-            ->whereNotIn('nik_karyawan', $existingNik)
-            ->whereNotIn('nama_lengkap', $existingNames)
-            ->select('nik_karyawan', 'nama_lengkap')
-            ->get();
-        
-            return response()->json([
-                'success' => true,
-                'data' => $karyawan,
-                'message' => 'Available karyawan data retrieved successfully',
-            ], 201);
+            ->when(!empty($existingIds), function ($query) use ($existingIds) {
+                $query->whereNotIn('id', $existingIds);
+            })
+            ->select('id', 'nama_lengkap')
+            ->orderBy('nama_lengkap')
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'id_karyawan' => $row->id,
+                    'nama_lengkap' => $row->nama_lengkap,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => $karyawan,
+            'message' => 'Available karyawan data retrieved successfully',
+        ], 201);
     }
 
     public function delete(Request $request){
@@ -74,12 +84,17 @@ class BpjsTkController extends Controller
                 ], 401);
             }
 
-            $existingKaryawan = BpjsTk::where('is_active', true)->pluck('nik_karyawan')->toArray();
+            $existingKaryawan = BpjsTk::where('is_active', true)
+                ->whereNotNull('id_karyawan')
+                ->pluck('id_karyawan')
+                ->toArray();
+
             $bpjsTk = new BpjsTk();
-            // $bpjsTk = fill($request->all());
             $bpjsTk->created_by = $this->karyawan;
             $bpjsTk->no_bpjs_tk = $request->no_bpjs_tk;
-            $bpjsTk->bulan_efektif = $request->bulan_efektif;
+            $bpjsTk->bulan_efektif = preg_match('/^(\d{4}-\d{2})/', (string) $request->bulan_efektif, $m)
+                ? $m[1]
+                : $request->bulan_efektif;
             $bpjsTk->gaji_pokok = str_replace(['Rp', '.', ','], '', $request->gaji_pokok);
             $bpjsTk->potongan_karyawan = $request->potongan_karyawan / 100;
             $bpjsTk->nominal_potongan_karyawan = $bpjsTk->potongan_karyawan * $bpjsTk->gaji_pokok;
@@ -87,7 +102,7 @@ class BpjsTkController extends Controller
             $bpjsTk->nominal_potongan_kantor = $bpjsTk->potongan_kantor * $bpjsTk->gaji_pokok;
             $bpjsTk->created_at = DATE('Y-m-d H:i:s');
 
-            if($request->id && in_array($request->nik_karyawan, $existingKaryawan)) {
+            if ($request->id && in_array((int) $request->id_karyawan, array_map('intval', $existingKaryawan), true)) {
                 $oldBpjsTk = BpjsTk::findorFail($request->id);
                 $oldBpjsTk->updated_at = DATE('Y-m-d H:i:s');
                 $oldBpjsTk->updated_by = $this->karyawan;
@@ -95,18 +110,18 @@ class BpjsTkController extends Controller
                 $oldBpjsTk->save();
 
                 $bpjsTk->previous_id = $request->id;
-                $bpjsTk->karyawan = $oldBpjsTk->karyawan; 
+                $bpjsTk->karyawan = $oldBpjsTk->karyawan;
                 $bpjsTk->nik_karyawan = $oldBpjsTk->nik_karyawan;
+                $bpjsTk->id_karyawan = $oldBpjsTk->id_karyawan;
 
                 $message = 'BPJS TK data updated successfully';
-
             } else {
-                $karyawan = MasterKaryawan::where('nik_karyawan', $request->nik_karyawan)->first();
+                $karyawan = MasterKaryawan::findOrFail($request->id_karyawan);
+                $bpjsTk->id_karyawan = $karyawan->id;
                 $bpjsTk->nik_karyawan = $karyawan->nik_karyawan;
-                $bpjsTk->karyawan = $karyawan->nama_lengkap; 
+                $bpjsTk->karyawan = $karyawan->nama_lengkap;
 
                 $message = 'BPJS TK data inserted successfully';
-                
             }
 
             $bpjsTk->save();
@@ -122,12 +137,16 @@ class BpjsTkController extends Controller
 
     public function getHistory(Request $request)
     {
-        
-        $data = BpjsTk::where('nik_karyawan', $request->nik_karyawan)
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $query = BpjsTk::query();
+
+        if (!empty($request->id_karyawan)) {
+            $query->where('id_karyawan', $request->id_karyawan);
+        } elseif (!empty($request->nik_karyawan)) {
+            $query->where('nik_karyawan', $request->nik_karyawan);
+        }
+
+        $data = $query->orderBy('created_at', 'desc');
 
         return Datatables::of($data)->make(true);
-
     }
 }

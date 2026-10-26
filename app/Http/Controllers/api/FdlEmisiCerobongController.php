@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Support\FdlOrderDetailNoSampelSync;
+
 use App\Models\DataLapanganEmisiCerobong;
 use App\Models\OrderDetail;
 use App\Models\MasterSubKategori;
@@ -28,12 +30,31 @@ use App\Models\AnalystFormula as Formula;
 
 class FdlEmisiCerobongController extends Controller
 {
+    public function tabCounts(Request $request)
+    {
+        $base = DataLapanganEmisiCerobong::query();
+        if ($request->filled('mode_cerobong')) {
+            $base->where('tipe', $request->mode_cerobong);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'pending' => (clone $base)->where(function ($query) {
+                    $query->where('is_approve', 0)->orWhereNull('is_approve');
+                })->count(),
+                'approved' => (clone $base)->where('is_approve', 1)->count(),
+            ],
+        ]);
+    }
+
     public function index(Request $request)
     {
         $this->autoBlock();
         $data = DataLapanganEmisiCerobong::with('detail')
             ->where('tipe', $request->mode_cerobong)
             ->orderBy('id', 'desc');
+        $this->applyApprovalFilter($data, $request);
 
         return Datatables::of($data)
             ->filterColumn('created_by', function ($query, $keyword) {
@@ -60,6 +81,21 @@ class FdlEmisiCerobongController extends Controller
             ->filterColumn('no_sampel_lama', function ($query, $keyword) {
                 $query->where('no_sampel_lama', 'like', '%' . $keyword . '%');
             })
+            ->filterColumn('is_approve', function ($query, $keyword) {
+                $keyword = strtolower(trim($keyword));
+                if ($keyword === '') {
+                    return;
+                }
+                if (in_array($keyword, ['approved', 'approve', '1'], true) || str_starts_with($keyword, 'approv')) {
+                    $query->where('is_approve', 1);
+                    return;
+                }
+                if (in_array($keyword, ['belum', 'belum approved', '0'], true)) {
+                    $query->where('is_approve', 0);
+                    return;
+                }
+                $query->where('is_approve', 'like', '%' . $keyword . '%');
+            })
             ->filterColumn('metode', function ($query, $keyword) {
                 $query->where('metode', 'like', '%' . $keyword . '%');
             })
@@ -83,6 +119,9 @@ class FdlEmisiCerobongController extends Controller
 
     public function updateNoSampel(Request $request)
     {
+        $request->merge([
+            'no_sampel_baru' => trim((string) $request->input('no_sampel_baru', '')),
+        ]);
         if (isset($request->id) && $request->id != null) {
             DB::beginTransaction();
             try {
@@ -109,21 +148,8 @@ class FdlEmisiCerobongController extends Controller
                 $data->updated_by = $this->karyawan;
                 $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
+                FdlOrderDetailNoSampelSync::afterRename($request->no_sampel_lama, $request->no_sampel_baru);
 
-                // update OrderDetail
-                $order_detail_lama = OrderDetail::where('no_sampel', $request->no_sampel_lama)
-                    ->first();
-
-                if ($order_detail_lama) {
-                    OrderDetail::where('no_sampel', $request->no_sampel_baru)
-                        ->where('is_active', 1)
-                        ->update([
-                            'tanggal_terima' => $order_detail_lama->tanggal_terima
-                        ]);
-                    
-                    $order_detail_lama->tanggal_terima = NULL;
-                    $order_detail_lama->save();
-                }
                 DB::commit();
                 return response()->json([
                     'message' => 'Berhasil ubah no sampel ' . $request->no_sampel_lama . ' menjadi ' . $request->no_sampel_baru
@@ -471,4 +497,21 @@ class FdlEmisiCerobongController extends Controller
         $tgl = Carbon::now()->subDays(7);
         $data = DataLapanganEmisiCerobong::where('is_blocked', 0)->where('created_at', '<=', $tgl)->update(['is_blocked' => 1, 'blocked_by' => 'System', 'blocked_at' => Carbon::now()->format('Y-m-d H:i:s')]);
     }
+
+    private function applyApprovalFilter($query, Request $request): void
+    {
+        if (!$request->filled('approval')) {
+            return;
+        }
+
+        if ($request->approval === 'approved') {
+            $query->where('is_approve', 1);
+            return;
+        }
+
+        $query->where(function ($sub) {
+            $sub->where('is_approve', 0)->orWhereNull('is_approve');
+        });
+    }
+
 }
