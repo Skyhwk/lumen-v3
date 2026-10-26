@@ -248,6 +248,10 @@ class OfferingSalaryEmail
         $medical = $data->candidateMedicalInformation 
             ?? \App\Models\CandidateMedicalInformation::where('new_recruitment_id', $data->id ?? 0)->first();
 
+        $cdo = $data->candidateDataOffer
+            ?? $data->candidate_data_offer
+            ?? \App\Models\CandidateDataOffers::where('new_recruitment_id', $data->id ?? 0)->first();
+
         return [
             'data'                 => $data,
             'profile'              => $profile,
@@ -268,6 +272,7 @@ class OfferingSalaryEmail
             'namaJabatanFormatted' => self::getNamaJabatan($data),
             'usiaFormatted'        => self::getUsia($data),
             'tanggalLahirFormatted' => self::formatTanggalLahir($data),
+            'tanggalJoinFormatted' => HrdEmailViewData::formatTanggalJoin(optional($cdo)->tanggal_mulai_kerja),
             'noTelepon'            => $data->no_telepon ?? $data->no_hp ?? '-',
         ];
     }
