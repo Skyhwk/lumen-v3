@@ -246,6 +246,7 @@ class RenderNonKontrak
 
     public function renderBody($pdf, $data, $fileName, $lang)
     {
+        $data = QuotationPromoPresentation::forPdf($data);
         try {
             /* set locale dari jadwal */
             app()->setLocale($lang);
