@@ -32,6 +32,25 @@ class SalaryAdjustmentEmailAttachmentService
         $documents = [];
         $cleanupDirs = [$outputDir];
 
+        $kpi = $this->normalizeArray($bundle['kpi'] ?? null);
+        if ($this->hasKpiData($kpi)) {
+            $kpiPdf = $this->renderSupportPdf(
+                'pdf.salary-adjustment.kpi',
+                [
+                    'employee_name' => $employeeName,
+                    'manager_name' => trim((string) ($bundle['request']['manager_nama'] ?? '')),
+                    'kpi' => $kpi,
+                ],
+                'KPI_Manager',
+                $employeeName,
+                $outputDir,
+                $relativeDir
+            );
+            if ($kpiPdf) {
+                $documents[] = $kpiPdf;
+            }
+        }
+
         $assessmentPack = $this->buildAssessmentDocuments($request, $bundle, $employeeName);
         foreach ($assessmentPack['documents'] as $document) {
             $documents[] = $document;
@@ -228,6 +247,20 @@ class SalaryAdjustmentEmailAttachmentService
         }
 
         return $stored;
+    }
+
+    private function hasKpiData(?array $kpi): bool
+    {
+        if (!$kpi) {
+            return false;
+        }
+
+        return !empty($kpi['items'])
+            || trim((string) ($kpi['summary'] ?? '')) !== ''
+            || trim((string) ($kpi['strengths'] ?? '')) !== ''
+            || trim((string) ($kpi['improvements'] ?? '')) !== ''
+            || ($kpi['total_score_avg'] ?? '') !== ''
+            || ($kpi['total_final_score'] ?? '') !== '';
     }
 
     private function hasAttendanceData($attendance): bool
