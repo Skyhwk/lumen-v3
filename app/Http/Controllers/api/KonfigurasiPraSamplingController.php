@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\KonfigurasiPraSampling;
-use App\Models\HargaParameter;
+use App\Models\KonfigurasiLabelParameter;
 use App\Models\MasterKategori;
 use App\Models\Parameter;
 use Illuminate\Http\Request;
@@ -156,95 +156,128 @@ class KonfigurasiPraSamplingController extends Controller
     }
 
 
+    private function queryKonfigurasiLabelAir()
+    {
+        return KonfigurasiLabelParameter::query()
+            ->join('parameter as p', 'konfigurasi_label_parameter.id_parameter', '=', 'p.id')
+            ->where('konfigurasi_label_parameter.is_active', true)
+            ->where('p.is_active', true)
+            ->where('p.id_kategori', 1)
+            ->select([
+                'konfigurasi_label_parameter.id',
+                'konfigurasi_label_parameter.id_parameter',
+                'konfigurasi_label_parameter.nama_parameter',
+                'konfigurasi_label_parameter.volume',
+                'konfigurasi_label_parameter.regen',
+                'konfigurasi_label_parameter.created_at',
+                'konfigurasi_label_parameter.created_by',
+                'konfigurasi_label_parameter.updated_at',
+                'konfigurasi_label_parameter.updated_by',
+                'p.nama_kategori as nama_kategori',
+            ]);
+    }
+
     public function indexAir()
     {
-        $data = HargaParameter::where('id_kategori', '1')
-            ->where('is_active', true)
-            ->where('status',0)
-            ->whereNotNull('regen')
-            ->selectRaw('MIN(id) as id, volume, regen, id_parameter, nama_parameter, nama_kategori, MIN(created_at) as created_at, MIN(created_by) as created_by, MAX(updated_at) as updated_at, MAX(updated_by) as updated_by')
-            ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter', 'nama_kategori')
-            ->get();
+        $data = $this->queryKonfigurasiLabelAir()
+            ->whereNotNull('konfigurasi_label_parameter.regen')
+            ->where('konfigurasi_label_parameter.regen', '!=', '');
 
-        return \Datatables::of($data)->make(true);
+        return Datatables::of($data)->make(true);
     }
 
     public function getParameterAir()
     {
-        $data = HargaParameter::where('id_kategori', '1')
-        ->where('is_active', true)
-        ->selectRaw('MIN(id) as id, volume, regen, id_parameter, nama_parameter, nama_kategori')
-        ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter', 'nama_kategori')
-        ->get();
+        $data = $this->queryKonfigurasiLabelAir()->get();
 
-        if ($data) {
-            return response()->json([
-                'data' => $data,
-                'message' => 'Parameter data retrieved successfully',
-            ], 200);
-        } else {
-            return response()->json([
-                'message' => 'Parameter data not found',
-            ], 404);
-        }
+        return response()->json([
+            'data' => $data,
+            'message' => 'Parameter data retrieved successfully',
+        ], 200);
     }
 
     public function getParameterAirCreate()
     {
+        $configuredIds = KonfigurasiLabelParameter::query()
+            ->where('is_active', true)
+            ->pluck('id_parameter');
 
-        $data = HargaParameter::where('id_kategori', '1')
-        ->where('is_active', true)
-        ->whereNotNull('regen')
-        ->selectRaw('MIN(id) as id, volume, regen, id_parameter, nama_parameter, nama_kategori')
-        ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter', 'nama_kategori')
-        ->get();
+        $data = Parameter::query()
+            ->where('id_kategori', 1)
+            ->where('is_active', true)
+            ->whereNotIn('id', $configuredIds)
+            ->get()
+            ->map(function ($parameter) {
+                return [
+                    'id' => null,
+                    'id_parameter' => $parameter->id,
+                    'nama_parameter' => $parameter->nama_regulasi,
+                    'nama_kategori' => $parameter->nama_kategori,
+                    'volume' => null,
+                    'regen' => null,
+                ];
+            })
+            ->values();
 
-        if ($data) {
-            return response()->json([
-                'data' => $data,
-                'message' => 'Parameter data retrieved successfully',
-            ], 200);
-        } else {
-            return response()->json([
-                'message' => 'Parameter data not found',
-            ], 404);
-        }
+        return response()->json([
+            'data' => $data,
+            'message' => 'Parameter data retrieved successfully',
+        ], 200);
     }
 
     public function updateAir(Request $request)
     {
         DB::beginTransaction();
         try {
+            $parameter = Parameter::query()
+                ->where('id', $request->id_parameter)
+                ->where('id_kategori', 1)
+                ->where('is_active', true)
+                ->first();
 
-            $data = HargaParameter::where('id_parameter', $request->id_parameter)->get();
-
-            if ($data->isEmpty()) {
+            if (!$parameter) {
                 DB::rollBack();
                 return response()->json([
-                    'message' => 'Data tidak ditemukan!',
-                    'status' => 'error'
+                    'message' => 'Parameter air tidak ditemukan!',
+                    'status' => 'error',
                 ], 404);
             }
 
-            foreach ($data as $item) {
-                $item->volume = $request->volume;
-                $item->regen = $request->regen;
-                $item->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-                $item->updated_by = $this->karyawan;
-                $item->save();
+            $now = Carbon::now()->format('Y-m-d H:i:s');
+            $payload = [
+                'nama_parameter' => $parameter->nama_regulasi,
+                'volume' => $request->volume,
+                'regen' => $request->regen,
+                'updated_at' => $now,
+                'updated_by' => $this->karyawan,
+            ];
+
+            $config = KonfigurasiLabelParameter::query()
+                ->where('id_parameter', $request->id_parameter)
+                ->where('is_active', true)
+                ->first();
+
+            if ($config) {
+                $config->update($payload);
+            } else {
+                KonfigurasiLabelParameter::create(array_merge($payload, [
+                    'id_parameter' => $request->id_parameter,
+                    'is_active' => true,
+                    'created_at' => $now,
+                    'created_by' => $this->karyawan,
+                ]));
             }
 
             DB::commit();
             return response()->json([
-                'message' => 'Data berhasil diupdate!',
-                'status' => 'success'
+                'message' => 'Data berhasil disimpan!',
+                'status' => 'success',
             ], 200);
-
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json([
                 'message' => $th->getMessage(),
-                'status' => 'error'
+                'status' => 'error',
             ], 500);
         }
     }
