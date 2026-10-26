@@ -936,6 +936,11 @@ class RequestQuotationController extends Controller
                 $data->kode_promo = $payload->data_diskon->kode_promo_discount ?? null;
             }
             // ==================== END DISKON DENGAN KODE PROMO ======================= //
+            \App\Services\QuotationPromo::reduceQuoteBases(
+                $payload->_promo ?? null, $data,
+                $harga_air, $harga_udara, $harga_emisi, $harga_padatan, $harga_swab_test, $harga_tanah, $harga_pangan,
+                $transport, $perdiem, $jam, $payload->data_diskon->diluar_pajak ?? null, $total_diskon
+            );
 
             if (floatval($payload->data_diskon->discount_air) > 0) {
                 $data->discount_air = \str_replace("%", "", $payload->data_diskon->discount_air);
@@ -1276,13 +1281,6 @@ class RequestQuotationController extends Controller
             //Grand total sebelum kena diskon
             // dd($grand_total, $harga_total, $total_diskon);
             $data->grand_total = $grand_total;
-            \App\Services\QuotationPromo::percentage($payload->_promo ?? null, $data, $harga_total, $biaya_akhir, $total_diskon, [
-                        'transportasi' => (float) ($transport_ ?? 0),
-                        'perdiem' => (float) ($perdiem_ ?? 0),
-                        'perdiem24jam' => (float) ($jam_ ?? 0),
-                        'biayalain' => (float) ($biaya_lain ?? 0),
-                        'preparasi' => (float) ($biaya_preparasi ?? 0),
-                    ], $payload->data_diskon->diluar_pajak ?? null);
             $data->total_dpp = $harga_total;
             $data->total_discount = $total_diskon;
 
@@ -1891,6 +1889,11 @@ class RequestQuotationController extends Controller
                 $data->kode_promo = $payload->data_diskon->kode_promo_discount ?? null;
             }
             // ==================== END DISKON DENGAN KODE PROMO ======================= //
+            \App\Services\QuotationPromo::reduceQuoteBases(
+                $payload->_promo ?? null, $data,
+                $harga_air, $harga_udara, $harga_emisi, $harga_padatan, $harga_swab_test, $harga_tanah, $harga_pangan,
+                $transport, $perdiem, $jam, $payload->data_diskon->diluar_pajak ?? null, $total_diskon
+            );
 
             if (floatval($payload->data_diskon->discount_air) > 0) {
                 $data->discount_air = $payload->data_diskon->discount_air;
@@ -2228,13 +2231,6 @@ class RequestQuotationController extends Controller
             //Grand total sebelum kena diskon
             // dd($grand_total);
             $data->grand_total = $grand_total;
-            \App\Services\QuotationPromo::percentage($payload->_promo ?? null, $data, $harga_total, $biaya_akhir, $total_diskon, [
-                        'transportasi' => (float) ($transport_ ?? 0),
-                        'perdiem' => (float) ($perdiem_ ?? 0),
-                        'perdiem24jam' => (float) ($jam_ ?? 0),
-                        'biayalain' => (float) ($biaya_lain ?? 0),
-                        'preparasi' => (float) ($biaya_preparasi ?? 0),
-                    ], $payload->data_diskon->diluar_pajak ?? null);
             $data->total_dpp = $harga_total;
             $data->total_discount = $total_diskon;
 
@@ -3371,6 +3367,11 @@ class RequestQuotationController extends Controller
                         $dataD->kode_promo = $data_diskon->kode_promo_discount ?? null;
                     }
                     // ==================== END DISKON DENGAN KODE PROMO ======================= //
+                    \App\Services\QuotationPromo::reduceQuoteBases(
+                        $payload->_promo ?? null, $dataD,
+                        $harga_air, $harga_udara, $harga_emisi, $harga_padatan, $harga_swab_test, $harga_tanah, $harga_pangan,
+                        $transport, $perdiem, $jam, $payload->data_diskon->diluar_pajak ?? null, $total_diskon
+                    );
 
                     if ($isPeriodeDiskonExist && $data_diskon->discount_data[$indexDataDiskon]->discount_air > 0) {
                         $dataD->discount_air = $data_diskon->discount_data[$indexDataDiskon]->discount_air;
@@ -3728,13 +3729,6 @@ class RequestQuotationController extends Controller
 
                     //Grand total sebelum kena diskon
                     $dataD->grand_total = $grand_total;
-                    \App\Services\QuotationPromo::percentage($payload->_promo ?? null, $dataD, $harga_total, $biaya_akhir, $total_diskon, [
-                        'transportasi' => (float) ($transport_ ?? 0),
-                        'perdiem' => (float) ($perdiem_ ?? 0),
-                        'perdiem24jam' => (float) ($jam_ ?? 0),
-                        'biayalain' => (float) ($biaya_lain ?? 0),
-                        'preparasi' => (float) ($harga_preparasi ?? 0),
-                    ], $payload->data_diskon->diluar_pajak ?? null);
                     $dataD->total_dpp = $harga_total;
 
                     if (floatval($data_diskon->ppn) >= 0) {
@@ -4890,6 +4884,11 @@ class RequestQuotationController extends Controller
                         $dataD->kode_promo = $data_diskon->kode_promo_discount ?? null;
                     }
                     // ==================== END DISKON DENGAN KODE PROMO ======================= //
+                    \App\Services\QuotationPromo::reduceQuoteBases(
+                        $payload->_promo ?? null, $dataD,
+                        $harga_air, $harga_udara, $harga_emisi, $harga_padatan, $harga_swab_test, $harga_tanah, $harga_pangan,
+                        $transport, $perdiem, $jam, $payload->data_diskon->diluar_pajak ?? null, $total_diskon
+                    );
 
                     if ($isPeriodeDiskonExist && $data_diskon->discount_data[$indexDataDiskon]->discount_air > 0) {
                         $dataD->discount_air = $data_diskon->discount_data[$indexDataDiskon]->discount_air;
@@ -5248,13 +5247,6 @@ class RequestQuotationController extends Controller
 
                     //Grand total sebelum kena diskon
                     $dataD->grand_total = $grand_total;
-                    \App\Services\QuotationPromo::percentage($payload->_promo ?? null, $dataD, $harga_total, $biaya_akhir, $total_diskon, [
-                        'transportasi' => (float) ($transport_ ?? 0),
-                        'perdiem' => (float) ($perdiem_ ?? 0),
-                        'perdiem24jam' => (float) ($jam_ ?? 0),
-                        'biayalain' => (float) ($biaya_lain ?? 0),
-                        'preparasi' => (float) ($harga_preparasi ?? 0),
-                    ], $payload->data_diskon->diluar_pajak ?? null);
                     $dataD->total_dpp = $harga_total;
 
                     if (floatval($data_diskon->ppn) >= 0) {
