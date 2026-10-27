@@ -431,7 +431,9 @@ class AtsHiredCandidatesController extends Controller
             try {
                 $dokumenKaryawan = app(GenerateDokumenKaryawanService::class)->generate(
                     (int) $result['karyawan_id'],
-                    (int) $request->input('id')
+                    (int) $request->input('id'),
+                    null,
+                    true
                 );
             } catch (\Throwable $documentError) {
                 $documentWarning = 'Migrasi berhasil, tetapi dokumen karyawan gagal dibuat.';

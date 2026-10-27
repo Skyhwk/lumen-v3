@@ -25,9 +25,9 @@ class GenerateDokumenKaryawanService
 
     private $temporaryBackgroundPath;
 
-    public function generate(int $karyawanId, int $newRecruitmentId): array
+    public function generate(int $karyawanId, ?int $newRecruitmentId = null, ?int $penanggungJawabId = null, bool $penanggungJawabFromPersonnelRequest = false, ?string $generatedBy = null): array
     {
-        $data = $this->prepareData($karyawanId, $newRecruitmentId);
+        $data = $this->prepareData($karyawanId, $newRecruitmentId, $penanggungJawabId, $penanggungJawabFromPersonnelRequest, $generatedBy);
 
         // Setiap generator dokumen menggunakan data bersama yang sama.
         // Tambahkan hasil generator ke array ini saat template dokumennya siap.
@@ -54,24 +54,7 @@ class GenerateDokumenKaryawanService
         }
 
         $karyawan = $data['karyawan'];
-        $recruitment = $data['recruitment'];
-        $existing = EmployeeDocument::query()
-            ->where('karyawan_id', $karyawan->id)
-            ->where('document_type', 'SPRJ')
-            ->where('status', 'generated')
-            ->where('is_active', 1)
-            ->orderByDesc('id')
-            ->first();
-
-        if ($existing && is_file(public_path($existing->file_path))) {
-            return $this->documentResult($existing);
-        }
-
-        if ($existing) {
-            $existing->status = 'missing';
-            $existing->is_active = false;
-            $existing->save();
-        }
+        $this->retireActiveDocuments($karyawan->id, 'SPRJ');
 
         $sequence = $this->nextDocumentNumber('SPRJ', 'ISL-09-SPRJ-', (int) date('Y'), 4);
         $noDokumen = $sequence['document_number'];
@@ -81,7 +64,7 @@ class GenerateDokumenKaryawanService
 
         $document = EmployeeDocument::create([
             'karyawan_id' => $karyawan->id,
-            'new_recruitment_id' => $recruitment->id,
+            'new_recruitment_id' => optional($data['recruitment'])->id,
             'document_type' => 'SPRJ',
             'document_number' => $noDokumen,
             'sequence_year' => $sequence['year'],
@@ -92,7 +75,7 @@ class GenerateDokumenKaryawanService
             'file_size' => null,
             'status' => 'generating',
             'is_active' => true,
-            'generated_by' => 'System',
+            'generated_by' => $data['generated_by'],
             'generated_at' => null,
         ]);
 
@@ -132,24 +115,7 @@ class GenerateDokumenKaryawanService
         }
 
         $karyawan = $data['karyawan'];
-        $recruitment = $data['recruitment'];
-        $existing = EmployeeDocument::query()
-            ->where('karyawan_id', $karyawan->id)
-            ->where('document_type', 'COC')
-            ->where('status', 'generated')
-            ->where('is_active', 1)
-            ->orderByDesc('id')
-            ->first();
-
-        if ($existing && is_file(public_path($existing->file_path))) {
-            return $this->documentResult($existing);
-        }
-
-        if ($existing) {
-            $existing->status = 'missing';
-            $existing->is_active = false;
-            $existing->save();
-        }
+        $this->retireActiveDocuments($karyawan->id, 'COC');
 
         $sequence = $this->nextDocumentNumber('COC', 'COC-', (int) date('Y'), 4);
         $noDokumen = $sequence['document_number'];
@@ -158,7 +124,7 @@ class GenerateDokumenKaryawanService
 
         $document = EmployeeDocument::create([
             'karyawan_id' => $karyawan->id,
-            'new_recruitment_id' => $recruitment->id,
+            'new_recruitment_id' => optional($data['recruitment'])->id,
             'document_type' => 'COC',
             'document_number' => $noDokumen,
             'sequence_year' => $sequence['year'],
@@ -169,7 +135,7 @@ class GenerateDokumenKaryawanService
             'file_size' => null,
             'status' => 'generating',
             'is_active' => true,
-            'generated_by' => 'System',
+            'generated_by' => $data['generated_by'],
             'generated_at' => null,
         ]);
 
@@ -209,24 +175,7 @@ class GenerateDokumenKaryawanService
         }
 
         $karyawan = $data['karyawan'];
-        $recruitment = $data['recruitment'];
-        $existing = EmployeeDocument::query()
-            ->where('karyawan_id', $karyawan->id)
-            ->where('document_type', 'PKKP')
-            ->where('status', 'generated')
-            ->where('is_active', 1)
-            ->orderByDesc('id')
-            ->first();
-
-        if ($existing && is_file(public_path($existing->file_path))) {
-            return $this->documentResult($existing);
-        }
-
-        if ($existing) {
-            $existing->status = 'missing';
-            $existing->is_active = false;
-            $existing->save();
-        }
+        $this->retireActiveDocuments($karyawan->id, 'PKKP');
 
         $sequence = $this->nextPkkpNumber();
         $noDokumen = $sequence['document_number'];
@@ -235,7 +184,7 @@ class GenerateDokumenKaryawanService
 
         $document = EmployeeDocument::create([
             'karyawan_id' => $karyawan->id,
-            'new_recruitment_id' => $recruitment->id,
+            'new_recruitment_id' => optional($data['recruitment'])->id,
             'document_type' => 'PKKP',
             'document_number' => $noDokumen,
             'sequence_year' => $sequence['year'],
@@ -246,7 +195,7 @@ class GenerateDokumenKaryawanService
             'file_size' => null,
             'status' => 'generating',
             'is_active' => true,
-            'generated_by' => 'System',
+            'generated_by' => $data['generated_by'],
             'generated_at' => null,
         ]);
 
@@ -286,24 +235,7 @@ class GenerateDokumenKaryawanService
         }
 
         $karyawan = $data['karyawan'];
-        $recruitment = $data['recruitment'];
-        $existing = EmployeeDocument::query()
-            ->where('karyawan_id', $karyawan->id)
-            ->where('document_type', 'SPKB')
-            ->where('status', 'generated')
-            ->where('is_active', 1)
-            ->orderByDesc('id')
-            ->first();
-
-        if ($existing && is_file(public_path($existing->file_path))) {
-            return $this->documentResult($existing);
-        }
-
-        if ($existing) {
-            $existing->status = 'missing';
-            $existing->is_active = false;
-            $existing->save();
-        }
+        $this->retireActiveDocuments($karyawan->id, 'SPKB');
 
         $sequence = $this->nextPkkpNumber();
         $noDokumen = $sequence['document_number'];
@@ -312,7 +244,7 @@ class GenerateDokumenKaryawanService
 
         $document = EmployeeDocument::create([
             'karyawan_id' => $karyawan->id,
-            'new_recruitment_id' => $recruitment->id,
+            'new_recruitment_id' => optional($data['recruitment'])->id,
             'document_type' => 'SPKB',
             'document_number' => $noDokumen,
             'sequence_year' => $sequence['year'],
@@ -323,7 +255,7 @@ class GenerateDokumenKaryawanService
             'file_size' => null,
             'status' => 'generating',
             'is_active' => true,
-            'generated_by' => 'System',
+            'generated_by' => $data['generated_by'],
             'generated_at' => null,
         ]);
 
@@ -367,24 +299,7 @@ class GenerateDokumenKaryawanService
         }
 
         $karyawan = $data['karyawan'];
-        $recruitment = $data['recruitment'];
-        $existing = EmployeeDocument::query()
-            ->where('karyawan_id', $karyawan->id)
-            ->where('document_type', $documentType)
-            ->where('status', 'generated')
-            ->where('is_active', 1)
-            ->orderByDesc('id')
-            ->first();
-
-        if ($existing && is_file(public_path($existing->file_path))) {
-            return $this->documentResult($existing);
-        }
-
-        if ($existing) {
-            $existing->status = 'missing';
-            $existing->is_active = false;
-            $existing->save();
-        }
+        $this->retireActiveDocuments($karyawan->id, $documentType);
 
         $sequence = $this->nextDocumentNumber('SPNY', 'ISL-09-SPNY-', (int) date('Y'), 4);
         $noDokumen = $sequence['document_number'];
@@ -393,7 +308,7 @@ class GenerateDokumenKaryawanService
 
         $document = EmployeeDocument::create([
             'karyawan_id' => $karyawan->id,
-            'new_recruitment_id' => $recruitment->id,
+            'new_recruitment_id' => optional($data['recruitment'])->id,
             'document_type' => $documentType,
             'document_number' => $noDokumen,
             'sequence_year' => $sequence['year'],
@@ -404,7 +319,7 @@ class GenerateDokumenKaryawanService
             'file_size' => null,
             'status' => 'generating',
             'is_active' => true,
-            'generated_by' => 'System',
+            'generated_by' => $data['generated_by'],
             'generated_at' => null,
         ]);
 
@@ -448,24 +363,7 @@ class GenerateDokumenKaryawanService
         }
 
         $karyawan = $data['karyawan'];
-        $recruitment = $data['recruitment'];
-        $existing = EmployeeDocument::query()
-            ->where('karyawan_id', $karyawan->id)
-            ->where('document_type', $documentType)
-            ->where('status', 'generated')
-            ->where('is_active', 1)
-            ->orderByDesc('id')
-            ->first();
-
-        if ($existing && is_file(public_path($existing->file_path))) {
-            return $this->documentResult($existing);
-        }
-
-        if ($existing) {
-            $existing->status = 'missing';
-            $existing->is_active = false;
-            $existing->save();
-        }
+        $this->retireActiveDocuments($karyawan->id, $documentType);
 
         $sequence = $this->nextDocumentNumber('NDA', 'ISL-11-SPRJ-', (int) date('Y'), 4);
         $noDokumen = $sequence['document_number'];
@@ -474,7 +372,7 @@ class GenerateDokumenKaryawanService
 
         $document = EmployeeDocument::create([
             'karyawan_id' => $karyawan->id,
-            'new_recruitment_id' => $recruitment->id,
+            'new_recruitment_id' => optional($data['recruitment'])->id,
             'document_type' => $documentType,
             'document_number' => $noDokumen,
             'sequence_year' => $sequence['year'],
@@ -485,7 +383,7 @@ class GenerateDokumenKaryawanService
             'file_size' => null,
             'status' => 'generating',
             'is_active' => true,
-            'generated_by' => 'System',
+            'generated_by' => $data['generated_by'],
             'generated_at' => null,
         ]);
 
@@ -521,7 +419,7 @@ class GenerateDokumenKaryawanService
         $grade = strtoupper(trim((string) (
             ($karyawan->kategori_grade ?? null)
             ?: ($karyawan->grade ?? null)
-            ?: optional($data['recruitment']->personnelRequest)->grade_master_karyawan
+            ?: optional(optional($data['recruitment'])->personnelRequest)->grade_master_karyawan
         )));
 
         if (in_array($grade, ['SUPERVISOR', 'MANAGER'], true)) {
@@ -546,7 +444,7 @@ class GenerateDokumenKaryawanService
         $grade = strtoupper(trim((string) (
             ($karyawan->kategori_grade ?? null)
             ?: ($karyawan->grade ?? null)
-            ?: optional($data['recruitment']->personnelRequest)->grade_master_karyawan
+            ?: optional(optional($data['recruitment'])->personnelRequest)->grade_master_karyawan
         )));
 
         if (in_array($grade, ['SUPERVISOR', 'MANAGER', 'SPV'], true)) {
@@ -575,7 +473,7 @@ class GenerateDokumenKaryawanService
         $posisi = strtoupper(trim((string) (
             ($karyawan->getAttributes()['jabatan'] ?? null)
             ?: optional($karyawan->getRelation('jabatan'))->nama_jabatan
-            ?: optional($data['recruitment']->personnelRequest)->posisi
+            ?: optional(optional($data['recruitment'])->personnelRequest)->posisi
         )));
 
         return (bool) preg_match('/\bSAMPLER\b/', $posisi);
@@ -1269,7 +1167,55 @@ class GenerateDokumenKaryawanService
             . str_pad((string) $number, 3, '0', STR_PAD_LEFT);
     }
 
-    private function prepareData(int $karyawanId, int $newRecruitmentId): array
+    private function generatedByName(?string $generatedBy): string
+    {
+        $name = trim((string) $generatedBy);
+        if ($name === '') {
+            return 'System';
+        }
+
+        return function_exists('mb_substr') ? mb_substr($name, 0, 100) : substr($name, 0, 100);
+    }
+
+    private function retireActiveDocuments(int $karyawanId, string $documentType): void
+    {
+        $rows = EmployeeDocument::query()
+            ->where('karyawan_id', $karyawanId)
+            ->where('document_type', $documentType)
+            ->where('status', 'generated')
+            ->where('is_active', 1)
+            ->get();
+
+        foreach ($rows as $existing) {
+            $fullPath = public_path($existing->file_path);
+            if (!is_file($fullPath)) {
+                $existing->status = 'missing';
+                $existing->is_active = false;
+                $existing->save();
+                continue;
+            }
+
+            $basename = basename($fullPath);
+            $historyName = strpos($basename, 'history-') === 0 ? $basename : 'history-' . $basename;
+            $historyPath = dirname($fullPath) . DIRECTORY_SEPARATOR . $historyName;
+            if ($historyName !== $basename) {
+                if (is_file($historyPath)) {
+                    throw new RuntimeException('File riwayat dokumen sudah ada: ' . $historyName);
+                }
+                if (!@rename($fullPath, $historyPath)) {
+                    throw new RuntimeException('File dokumen lama gagal diubah namanya.');
+                }
+                $existing->file_name = $historyName;
+                $existing->file_path = $this->documentRelativePath($karyawanId, $historyName);
+            }
+
+            $existing->status = 'replaced';
+            $existing->is_active = false;
+            $existing->save();
+        }
+    }
+
+    private function prepareData(int $karyawanId, ?int $newRecruitmentId = null, ?int $penanggungJawabId = null, bool $penanggungJawabFromPersonnelRequest = false, ?string $generatedBy = null): array
     {
         $karyawan = MasterKaryawan::with([
             'jabatan',
@@ -1282,21 +1228,35 @@ class GenerateDokumenKaryawanService
             throw new RuntimeException('Karyawan tidak ditemukan.');
         }
 
-        $recruitment = NewRecruitment::with([
-            'personnelRequest',
-            'candidateDataOffer',
-            'salaryOffer',
-        ])->find($newRecruitmentId);
-        if (!$recruitment) {
-            throw new RuntimeException('Data recruitment tidak ditemukan.');
+        $recruitment = null;
+        if ($newRecruitmentId) {
+            $recruitment = NewRecruitment::with([
+                'personnelRequest',
+                'candidateDataOffer',
+                'salaryOffer',
+            ])->find($newRecruitmentId);
+            if (!$recruitment) {
+                throw new RuntimeException('Data recruitment tidak ditemukan.');
+            }
         }
 
-        $namaPenanggungJawab = optional($recruitment->personnelRequest)->created_by;
-        $penanggungJawab = $namaPenanggungJawab
-            ? MasterKaryawan::with('jabatan')
-                ->where('nama_lengkap', $namaPenanggungJawab)
-                ->first()
-            : null;
+        $penanggungJawab = null;
+        if ($penanggungJawabId) {
+            $penanggungJawab = MasterKaryawan::with('jabatan')
+                ->where('is_active', true)
+                ->find($penanggungJawabId);
+            if (!$penanggungJawab) {
+                throw new RuntimeException('Penanggung jawab tidak ditemukan.');
+            }
+        } elseif ($penanggungJawabFromPersonnelRequest && $recruitment) {
+            $namaPenanggungJawab = trim((string) optional($recruitment->personnelRequest)->created_by);
+            if ($namaPenanggungJawab !== '') {
+                $penanggungJawab = MasterKaryawan::with('jabatan')
+                    ->where('nama_lengkap', $namaPenanggungJawab)
+                    ->where('is_active', true)
+                    ->first();
+            }
+        }
 
         return [
             'karyawan' => $karyawan,
@@ -1327,9 +1287,10 @@ class GenerateDokumenKaryawanService
                 ->first(),
             'penanggung_jawab' => [
                 'karyawan' => $penanggungJawab,
-                'nama' => optional($penanggungJawab)->nama_lengkap,
-                'jabatan' => optional($penanggungJawab)->jabatan,
+                'nama' => $penanggungJawab ? $penanggungJawab->nama_lengkap : null,
+                'jabatan' => $penanggungJawab ? $penanggungJawab->jabatan : null,
             ],
+            'generated_by' => $this->generatedByName($generatedBy),
             'tanggal' => [
                 'generated_at' => date('Y-m-d H:i:s'),
                 'tahun' => date('Y'),
@@ -1340,18 +1301,20 @@ class GenerateDokumenKaryawanService
     private function buildPkkpViewData(array $data, string $noDokumen): array
     {
         $karyawan = $data['karyawan'];
-        $recruitment = $data['recruitment'];
-        $recruitment->loadMissing('candidateProfile');
-
-        $profile = $recruitment->candidateProfile;
+        $recruitment = $data['recruitment'] ?? null;
+        $profile = null;
+        if ($recruitment) {
+            $recruitment->loadMissing('candidateProfile');
+            $profile = $recruitment->candidateProfile;
+        }
         $posisi = ($karyawan->getAttributes()['jabatan'] ?? null)
             ?: (optional($karyawan->getRelation('jabatan'))->nama_jabatan ?: null);
         $divisi = ($karyawan->getAttributes()['department'] ?? null)
             ?: (optional($karyawan->getRelation('department'))->nama_divisi ?: null);
         $penempatan = optional($karyawan->cabang)->nama_cabang ?: null;
 
-        $tempatLahir = trim((string) ($karyawan->tempat_lahir ?: $recruitment->tempat_lahir));
-        $tanggalLahir = $karyawan->tanggal_lahir ?: $recruitment->tanggal_lahir;
+        $tempatLahir = trim((string) ($karyawan->tempat_lahir ?: optional($recruitment)->tempat_lahir));
+        $tanggalLahir = $karyawan->tanggal_lahir ?: optional($recruitment)->tanggal_lahir;
         $tanggalLahirText = $tanggalLahir ? $this->formatTanggalIndonesia(Carbon::parse($tanggalLahir)) : '';
         $tempatTanggalLahir = trim($tempatLahir . ($tempatLahir && $tanggalLahirText ? ', ' : '') . $tanggalLahirText);
 
@@ -1363,15 +1326,15 @@ class GenerateDokumenKaryawanService
         return [
             'logo' => public_path('isl_logo.png'),
             'noDokumen' => $noDokumen,
-            'namaLengkap' => $karyawan->nama_lengkap ?: ($recruitment->nama_lengkap ?: '-'),
+            'namaLengkap' => $karyawan->nama_lengkap ?: (optional($recruitment)->nama_lengkap ?: '-'),
             'noKtp' => $karyawan->nik_ktp ?: (optional($profile)->nik_ktp ?: '-'),
             'tempatTanggalLahir' => $tempatTanggalLahir !== '' ? $tempatTanggalLahir : '-',
             'alamatLengkap' => $karyawan->alamat
                 ?: (optional($profile)->alamat_domisili ?: (optional($profile)->alamat_ktp ?: '-')),
-            'noHp' => $karyawan->no_telpon ?: ($recruitment->no_telepon ?: '-'),
+            'noHp' => $karyawan->no_telpon ?: (optional($recruitment)->no_telepon ?: '-'),
             'divisiSubdivisi' => $divisi ?: '-',
             'posisiPenempatan' => $posisiPenempatan ?: '-',
-            'namaKaryawan' => $karyawan->nama_lengkap ?: ($recruitment->nama_lengkap ?: '-'),
+            'namaKaryawan' => $karyawan->nama_lengkap ?: (optional($recruitment)->nama_lengkap ?: '-'),
             'posisiKaryawan' => $posisi ?: '-',
             'tanggalPengesahan' => $this->formatTanggalIndonesia(Carbon::now()),
         ];
@@ -1381,10 +1344,10 @@ class GenerateDokumenKaryawanService
     {
         $view = $this->buildPkkpViewData($data, $noDokumen);
         $karyawan = $data['karyawan'];
-        $recruitment = $data['recruitment'];
+        $recruitment = $data['recruitment'] ?? null;
         $nik = trim((string) ($karyawan->nik_karyawan ?: ''));
         $nama = $view['namaLengkap'];
-        $genderRaw = trim((string) ($karyawan->jenis_kelamin ?: $recruitment->jenis_kelamin));
+        $genderRaw = trim((string) ($karyawan->jenis_kelamin ?: optional($recruitment)->jenis_kelamin));
         $gender = strtoupper($genderRaw);
         $genderLabel = [
             'L' => 'Laki-laki',
@@ -1512,7 +1475,7 @@ class GenerateDokumenKaryawanService
             'jenisKelamin' => $identity['jenisKelamin'],
             'alamatKaryawan' => $identity['alamat'],
             'emailKaryawan' => $karyawan->email_pribadi
-                ?: ($karyawan->email ?: ($recruitment->email ?: '-')),
+                ?: ($karyawan->email ?: (optional($recruitment)->email ?: '-')),
             'salary' => $salary,
             'rekening' => $data['rekening'],
             'pencadangan' => $data['pencadangan_upah'],
@@ -1605,7 +1568,7 @@ class GenerateDokumenKaryawanService
         }
 
         $agama = trim((string) ($karyawan->agama ?? ''));
-        if ($agama === '') {
+        if ($agama === '' && $recruitment) {
             $recruitment->loadMissing('candidateProfile');
             $agama = trim((string) (
                 ($recruitment->agama ?? null)
