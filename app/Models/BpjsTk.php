@@ -16,6 +16,7 @@ class BpjsTk extends Sector{
         'gaji_pokok',
         'potongan_karyawan',
         'nominal_potongan_karyawan',
+        'sumber_potongan',
         'potongan_kantor',
         'nominal_potongan_kantor',
         'no_bpjs_tk',
