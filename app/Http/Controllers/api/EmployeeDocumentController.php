@@ -23,6 +23,7 @@ class EmployeeDocumentController extends Controller
     {
         $data = MasterKaryawan::query()
             ->where('is_active', true)
+            ->where('grade', '!=', 'DIRECTOR')
             ->withCount(['employeeDocuments as dokumen_count' => function ($query) {
                 $query->where('is_active', 1);
             }]);
