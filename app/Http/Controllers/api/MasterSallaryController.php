@@ -129,6 +129,14 @@ class MasterSallaryController extends Controller
                 : $request->bulan_efektif;
             $masterSallary->tunjangan_kerja = str_replace(['Rp', '.', ','], '', $request->tunjangan_kerja);
 
+            $payrollError = $this->assignPayrollSettings($masterSallary, $request);
+            if ($payrollError !== null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $payrollError,
+                ], 422);
+            }
+
             if ($request->id && in_array((int) $request->id_karyawan, array_map('intval', $existingKaryawan), true)) {
                 $oldMasterSallary = MasterSallary::findorFail($request->id);
                 $oldMasterSallary->updated_at = DATE('Y-m-d H:i:s');
@@ -140,10 +148,6 @@ class MasterSallaryController extends Controller
                 $masterSallary->karyawan = $oldMasterSallary->karyawan;
                 $masterSallary->nik_karyawan = $oldMasterSallary->nik_karyawan;
                 $masterSallary->id_karyawan = $oldMasterSallary->id_karyawan;
-                $masterSallary->jadwal_pembayaran_thr = $oldMasterSallary->jadwal_pembayaran_thr;
-                $masterSallary->metode_pembayaran_gaji = $oldMasterSallary->metode_pembayaran_gaji;
-                $masterSallary->jumlah_hari_kerja = $oldMasterSallary->jumlah_hari_kerja;
-                $masterSallary->jadwal_penggajian = $oldMasterSallary->jadwal_penggajian;
 
                 $message = 'Master Sallary data updated successfully';
             } else {
@@ -164,6 +168,99 @@ class MasterSallaryController extends Controller
         } catch (\Throwable $th){
             return response()->json(['message' => $th->getMessage()], 500);
         }
+    }
+
+    private function formatBulanEfektif($value): string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '-';
+        }
+
+        if (preg_match('/^(\d{4})-(\d{2})(?:-\d{2})?(?:\s.*)?$/', $value, $match)) {
+            $year = (int) $match[1];
+            $month = (int) $match[2];
+            if ($month >= 1 && $month <= 12) {
+                return Carbon::createFromDate($year, $month, 1)->locale('id')->translatedFormat('F Y');
+            }
+        }
+
+        if (preg_match('/^\d{1,2}$/', $value)) {
+            $month = (int) $value;
+            if ($month >= 1 && $month <= 12) {
+                return Carbon::createFromDate(2000, $month, 1)->locale('id')->translatedFormat('F');
+            }
+        }
+
+        return $value;
+    }
+
+    private function labelMetodePembayaran($value): string
+    {
+        $metode = strtolower(trim((string) $value));
+        if ($metode === 'tunai') {
+            return 'Tunai';
+        }
+        if ($metode === 'transfer') {
+            return 'Transfer';
+        }
+
+        return $metode !== '' ? (string) $value : '-';
+    }
+
+    private function formatExportDateTime($value): string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '-';
+        }
+
+        try {
+            return Carbon::parse($value)->format('d/m/Y H:i:s');
+        } catch (\Throwable $e) {
+            return $value;
+        }
+    }
+
+    private function assignPayrollSettings(MasterSallary $masterSallary, Request $request): ?string
+    {
+        $thr = trim((string) $request->jadwal_pembayaran_thr);
+        if ($thr === '') {
+            return 'Jadwal pembayaran THR wajib diisi.';
+        }
+        if (mb_strlen($thr) > 100) {
+            return 'Jadwal pembayaran THR maksimal 100 karakter.';
+        }
+
+        $metode = strtolower(trim((string) $request->metode_pembayaran_gaji));
+        if (!in_array($metode, ['tunai', 'transfer'], true)) {
+            return 'Metode pembayaran gaji harus Tunai atau Transfer.';
+        }
+
+        $hariKerja = trim((string) $request->jumlah_hari_kerja);
+        if ($hariKerja === '' || !preg_match('/^\d+$/', $hariKerja)) {
+            return 'Jumlah hari kerja harus berupa angka.';
+        }
+        $hariKerja = (int) $hariKerja;
+        if ($hariKerja < 1 || $hariKerja > 31) {
+            return 'Jumlah hari kerja harus antara 1 dan 31.';
+        }
+
+        $jadwal = trim((string) $request->jadwal_penggajian);
+        if ($jadwal === '' || !preg_match('/^\d+$/', $jadwal)) {
+            return 'Jadwal penggajian harus berupa angka.';
+        }
+        $jadwal = (int) $jadwal;
+        if ($jadwal < 0 || $jadwal > 99) {
+            return 'Jadwal penggajian harus antara 0 dan 99.';
+        }
+
+        $masterSallary->jadwal_pembayaran_thr = $thr;
+        $masterSallary->metode_pembayaran_gaji = $metode;
+        $masterSallary->jumlah_hari_kerja = $hariKerja;
+        $masterSallary->jadwal_penggajian = $jadwal;
+
+        return null;
     }
 
     public function getHistory(Request $request)
@@ -221,7 +318,7 @@ class MasterSallaryController extends Controller
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Master Salary');
 
-        $sheet->mergeCells('A1:J1');
+        $sheet->mergeCells('A1:N1');
         $sheet->setCellValue('A1', 'Master Salary');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
         $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
@@ -234,13 +331,17 @@ class MasterSallaryController extends Controller
             'Gaji Pokok',
             'Tunjangan Kerja',
             'Total Gaji',
+            'Jadwal Pembayaran THR',
+            'Metode Pembayaran Gaji',
+            'Jumlah Hari Kerja',
+            'Jadwal Penggajian',
             'Bulan Efektif',
             'Created By',
             'Created At',
         ];
         $sheet->fromArray($headers, null, 'A3');
-        $sheet->getStyle('A3:J3')->getFont()->setBold(true);
-        $sheet->getStyle('A3:J3')->getFill()
+        $sheet->getStyle('A3:N3')->getFont()->setBold(true);
+        $sheet->getStyle('A3:N3')->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setARGB('FFCCCCCC');
 
@@ -248,12 +349,11 @@ class MasterSallaryController extends Controller
         $no = 1;
 
         foreach ($data as $row) {
-            $bulanEfektif = $row->bulan_efektif
-                ? Carbon::parse($row->bulan_efektif . '-01')->translatedFormat('F Y')
-                : '-';
-            $createdAt = $row->created_at
-                ? Carbon::parse($row->created_at)->format('d/m/Y H:i:s')
-                : '-';
+            $bulanEfektif = $this->formatBulanEfektif($row->bulan_efektif);
+            $createdAt = $this->formatExportDateTime($row->created_at);
+            $jadwalThr = trim((string) $row->jadwal_pembayaran_thr);
+            $jumlahHariKerja = $row->jumlah_hari_kerja;
+            $jadwalPenggajian = $row->jadwal_penggajian;
 
             $sheet->setCellValue("A{$rowIdx}", $no++);
             $sheet->setCellValueExplicit("B{$rowIdx}", (string) ($row->nik_karyawan ?? '-'), DataType::TYPE_STRING);
@@ -262,9 +362,13 @@ class MasterSallaryController extends Controller
             $sheet->setCellValue("E{$rowIdx}", (float) ($row->gaji_pokok ?? 0));
             $sheet->setCellValue("F{$rowIdx}", (float) ($row->tunjangan_kerja ?? 0));
             $sheet->setCellValue("G{$rowIdx}", (float) ($row->total_gaji ?? 0));
-            $sheet->setCellValue("H{$rowIdx}", $bulanEfektif);
-            $sheet->setCellValue("I{$rowIdx}", $row->created_by ?? '-');
-            $sheet->setCellValue("J{$rowIdx}", $createdAt);
+            $sheet->setCellValue("H{$rowIdx}", $jadwalThr !== '' ? $jadwalThr : '-');
+            $sheet->setCellValue("I{$rowIdx}", $this->labelMetodePembayaran($row->metode_pembayaran_gaji));
+            $sheet->setCellValue("J{$rowIdx}", ($jumlahHariKerja === null || $jumlahHariKerja === '') ? '-' : (int) $jumlahHariKerja);
+            $sheet->setCellValue("K{$rowIdx}", ($jadwalPenggajian === null || $jadwalPenggajian === '') ? '-' : 'H+' . (int) $jadwalPenggajian);
+            $sheet->setCellValue("L{$rowIdx}", $bulanEfektif);
+            $sheet->setCellValue("M{$rowIdx}", $row->created_by ?? '-');
+            $sheet->setCellValue("N{$rowIdx}", $createdAt);
 
             foreach (['E', 'F', 'G'] as $col) {
                 $sheet->getStyle("{$col}{$rowIdx}")
@@ -275,12 +379,12 @@ class MasterSallaryController extends Controller
             $rowIdx++;
         }
 
-        foreach (range('A', 'J') as $col) {
+        foreach (range('A', 'N') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
         $lastRow = max($rowIdx - 1, 3);
-        $sheet->getStyle("A3:J{$lastRow}")->applyFromArray([
+        $sheet->getStyle("A3:N{$lastRow}")->applyFromArray([
             'borders' => [
                 'allBorders' => [
                     'borderStyle' => Border::BORDER_THIN,

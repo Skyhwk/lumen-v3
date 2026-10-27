@@ -86,6 +86,12 @@ class RekeningKaryawanController extends Controller
             $data->created_at = DATE('Y-m-d H:i:s');
             $data->no_rekening = $request->no_rekening;
             $data->nama_bank = $request->nama_bank;
+            $data->cabang_bank = $request->exists('cabang_bank')
+                ? $request->cabang_bank
+                : null;
+            $data->nama_pemilik_rekening = $request->exists('nama_pemilik_rekening')
+                ? $request->nama_pemilik_rekening
+                : null;
 
             if ($request->id && in_array((int) $request->id_karyawan, array_map('intval', $existingKaryawan), true)) {
                 $oldData = RekeningKaryawan::findorFail($request->id);
