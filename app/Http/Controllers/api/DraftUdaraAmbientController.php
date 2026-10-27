@@ -543,11 +543,21 @@ class DraftUdaraAmbientController extends Controller
                     ->values()
                     ->toArray();
 
+                $methodsFromLhp = collect($cek_lhp->lhpsLingDetail)
+                    ->pluck('methode')
+                    ->merge(collect($cek_lhp->lhpsLingCustom)->pluck('methode'))
+                    ->filter(fn ($methode) => ! empty($methode) && $methode !== '-')
+                    ->unique()
+                    ->values()
+                    ->toArray();
+
+                $resultMethods = array_values(array_unique(array_merge($methodsFromLhp, $defaultMethods)));
+
                 return response()->json([
                     'status'             => true,
                     'data'               => $data_entry,
                     'next_page'          => $data_custom,
-                    'spesifikasi_method' => $defaultMethods,
+                    'spesifikasi_method' => $resultMethods,
 
                 ], 201);
             } else {
@@ -626,7 +636,6 @@ class DraftUdaraAmbientController extends Controller
             $cek_lhp = LhpsLingHeader::with('lhpsLingDetail', 'lhpsLingCustom')
                 ->where('no_sampel', $noSampel)
                 ->first();
-
             // ==============================
             // CASE 1: Jika ada cek_lhp
             // ==============================
@@ -735,11 +744,21 @@ class DraftUdaraAmbientController extends Controller
                     ->values()
                     ->toArray();
 
+                $methodsFromLhp = collect($cek_lhp->lhpsLingDetail)
+                    ->pluck('methode')
+                    ->merge(collect($cek_lhp->lhpsLingCustom)->pluck('methode'))
+                    ->filter(fn ($methode) => ! empty($methode) && $methode !== '-')
+                    ->unique()
+                    ->values()
+                    ->toArray();
+
+                $resultMethods = array_values(array_unique(array_merge($methodsFromLhp, $defaultMethods)));
+
                 return response()->json([
                     'status'             => true,
                     'data'               => $data_entry,
                     'next_page'          => $data_custom,
-                    'spesifikasi_method' => $defaultMethods,
+                    'spesifikasi_method' => $resultMethods,
                     'keterangan'         => [
                         '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
                         '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
