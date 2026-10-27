@@ -1529,8 +1529,9 @@ class RecruitmentStatusService
 
     /**
      * Sinkronkan flag section Final Decision (aktif vs ditolak sementara).
-     * rejected_salary  = penolakan Finance / Kandidat / negosiasi gaji
-     * rejected_decision = penolakan approval salary oleh Direktur
+     * rejected_salary  = penolakan Kandidat / negosiasi gaji
+     * rejected_decision = penolakan approval salary / management decision oleh Direktur
+     * Jalur Finance hanya memakai is_reject_finance* — tidak menulis rejected_salary / rejected_decision_reason.
      */
     public static function syncRejectedSectionFlags(int $recruitmentId): void
     {
@@ -1564,18 +1565,12 @@ class RecruitmentStatusService
         $rejectedSalaryReason = null;
         $rejectedDecision = false;
         $rejectedDecisionReason = null;
-
-        if (self::isAwaitingFinanceResubmit($row)) {
-            $rejectedSalary = true;
-            $rejectedSalaryReason = self::getFinanceRejectReason($row);
-        }
+        $awaitingFinance = self::isAwaitingFinanceResubmit($row);
 
         if (self::isAwaitingCandidateOfferingResubmit($row)) {
             $rejectedSalary = true;
             $candidateReason = self::getCandidateOfferingRejectReason($row);
-            $rejectedSalaryReason = $rejectedSalaryReason && $candidateReason
-                ? $rejectedSalaryReason . ' | ' . $candidateReason
-                : ($candidateReason ?: $rejectedSalaryReason);
+            $rejectedSalaryReason = $candidateReason ?: $rejectedSalaryReason;
         }
 
         if (self::isAwaitingDirectorSalaryNegotiateResubmit($row)) {
@@ -1601,16 +1596,23 @@ class RecruitmentStatusService
             $rejectedDecisionReason = self::getDirectorManagementDecisionRejectReason($row);
         }
 
-        $updatePayload = [
-            'rejected_decision'        => $rejectedDecision,
-            'rejected_decision_reason' => $rejectedDecision ? ($rejectedDecisionReason ?: null) : null,
-            'rejected_salary'          => $rejectedSalary,
-            'rejected_salary_reason'   => $rejectedSalary ? ($rejectedSalaryReason ?: null) : null,
-        ];
+        $financeOnly = $awaitingFinance && !$rejectedSalary && !$rejectedDecision;
+        $updatePayload = [];
+
+        if (!$financeOnly) {
+            $updatePayload['rejected_decision'] = $rejectedDecision;
+            $updatePayload['rejected_decision_reason'] = $rejectedDecision ? ($rejectedDecisionReason ?: null) : null;
+            $updatePayload['rejected_salary'] = $rejectedSalary;
+            $updatePayload['rejected_salary_reason'] = $rejectedSalary ? ($rejectedSalaryReason ?: null) : null;
+        }
 
         if (Schema::hasColumn('new_recruitment', 'is_reject_finance')) {
-            $updatePayload['is_reject_finance'] = self::isAwaitingFinanceResubmit($row)
+            $updatePayload['is_reject_finance'] = $awaitingFinance
                 && strtolower(trim((string) ($row->status ?? ''))) === 'management_decision';
+        }
+
+        if ($updatePayload === []) {
+            return;
         }
 
         DB::table('new_recruitment')->where('id', $recruitmentId)->update($updatePayload);
