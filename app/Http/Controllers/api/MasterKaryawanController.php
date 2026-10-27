@@ -910,7 +910,6 @@ class MasterKaryawanController extends Controller
 
     private function excludeHiddenKaryawanFromFrontend($query): void
     {
-        
         $query->whereNotIn('id', self::FRONTEND_HIDDEN_KARYAWAN_IDS);
     }
 }
