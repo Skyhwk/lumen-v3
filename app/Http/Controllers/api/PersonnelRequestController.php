@@ -9,7 +9,7 @@ use App\Services\SallaryOfferService;
 use App\Services\GenerateAssessmentDocumentService;
 use App\Services\CandidateDocumentAttachmentService;
 use App\Services\RecruitmentDecisionActionTelegramService;
-use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService,RecruitmentStatusService,RequesterSalaryApprovalService};
+use App\Services\{GetBawahanAll,GetAtasan,GenerateMessageAtsEmail,SendEmail,GenerateToken,GenerateMessageAtsWhatsapp,SendWhatsapp,RecruitmentPictureService,AtsNotificationService,UserAssessmentCategoryService,RecruitmentStatusService,RequesterSalaryApprovalService,RecruitmentManagerAccess};
 use App\Http\Controllers\api\Concerns\BuildsCandidateAssessmentPreview;
 use App\Helpers\ShioElemenHelper;
 use Yajra\Datatables\Datatables;
@@ -253,19 +253,24 @@ class PersonnelRequestController extends Controller
                 abort(422, 'Kategori soal HR tidak valid.');
             }
 
-            $availableQuestions = \App\Models\Question::query()
-                ->where('question_category_id', $category->id)
-                ->where('question_scope', 'hr')
-                ->where('status', '!=', 'retired')
-                ->where('is_active', 1)
-                ->count();
+            $categoryName = strtoupper(trim((string) $category->name));
+            $isPsychometric = in_array($categoryName, ['DISC', 'KOSTICK PAPI', 'PAPI KOSTICK'], true);
 
-            if ($availableQuestions < 1) {
-                abort(422, 'Kategori "' . $category->name . '" belum memiliki soal HR aktif.');
-            }
+            if (!$isPsychometric) {
+                $availableQuestions = \App\Models\Question::query()
+                    ->where('question_category_id', $category->id)
+                    ->where('question_scope', 'hr')
+                    ->where('status', '!=', 'retired')
+                    ->where('is_active', 1)
+                    ->count();
 
-            if ((int) $config['question_count'] > $availableQuestions) {
-                abort(422, 'Jumlah soal kategori "' . $category->name . '" tidak boleh melebihi soal tersedia (' . $availableQuestions . ' soal).');
+                if ($availableQuestions < 1) {
+                    abort(422, 'Kategori "' . $category->name . '" belum memiliki soal HR aktif.');
+                }
+
+                if ((int) $config['question_count'] > $availableQuestions) {
+                    abort(422, 'Jumlah soal kategori "' . $category->name . '" tidak boleh melebihi soal tersedia (' . $availableQuestions . ' soal).');
+                }
             }
 
             if (!empty($config['has_time_limit']) && (int) $config['duration_minutes'] < 1) {
@@ -391,7 +396,10 @@ class PersonnelRequestController extends Controller
             abort(422, 'Kategori soal wajib dipilih apabila tes teknis diaktifkan.');
         }
 
-        $hierarchyNames = $this->managerHierarchyNames();
+        $allowedNames = $this->managerHierarchyNames();
+        if ($this->isRecruitmentManager() && (int) $request->input('divisi') > 0) {
+            $allowedNames = RecruitmentManagerAccess::namesInDivisi((int) $request->input('divisi'));
+        }
 
         foreach ($configs as $config) {
             $categoryId = (int) $config['id'];
@@ -404,9 +412,9 @@ class PersonnelRequestController extends Controller
             }
 
             $category = \App\Models\QuestionCategory::where('id', $categoryId)
-                ->where(function ($query) use ($hierarchyNames) {
-                    $query->whereIn('owner_karyawan', $hierarchyNames)
-                          ->orWhereIn('assigned_manager', $hierarchyNames);
+                ->where(function ($query) use ($allowedNames) {
+                    $query->whereIn('owner_karyawan', $allowedNames)
+                          ->orWhereIn('assigned_manager', $allowedNames);
                 })
                 ->first();
 
@@ -1753,34 +1761,41 @@ class PersonnelRequestController extends Controller
     /**
      * Helper to get allowed employee IDs based on hierarchy
      */
-    private function getAllowedEmployeeIds()
+    private function getEffectiveKaryawanId()
     {
-        // === DEV MODE: Otomatis membaca konfigurasi dari .env ===
-        // Fitur ini otomatis MATI jika APP_ENV='production' di .env
         $isDevMode = env('APP_ENV') !== 'production' && env('DEV_BYPASS_USER_ID') !== null;
-        $devUserId = env('DEV_BYPASS_USER_ID'); // Ambil dari .env
-        
-        $userId = $this->user_id;
+        $devUserId = env('DEV_BYPASS_USER_ID');
 
         if ($isDevMode && $devUserId) {
-            $userId = $devUserId;
+            return (int) $devUserId;
         }
 
-        // Get hierarchy (manager + all subordinates up to 3 levels deep)
-        
-        $bawahanAll = GetBawahanAll::where('id', $userId)->get();
-        
+        return (int) $this->user_id;
+    }
+
+    private function isRecruitmentManager(): bool
+    {
+        return RecruitmentManagerAccess::forKaryawanId($this->getEffectiveKaryawanId());
+    }
+
+    private function getAllowedEmployeeIds()
+    {
+        $bawahanAll = GetBawahanAll::where('id', $this->getEffectiveKaryawanId())->get();
+
         return $bawahanAll->pluck('id')->toArray();
     }
 
     public function getKaryawan()
     {
         try {
-            $allowedIds = $this->getAllowedEmployeeIds();
+            $listQuery = MasterKaryawan::select('user_id', 'nik_karyawan', 'nama_lengkap', 'id_department', 'id_jabatan', 'id_cabang', 'grade')
+                ->where('is_active', true);
 
-            $list = MasterKaryawan::select('user_id', 'nik_karyawan', 'nama_lengkap', 'id_department', 'id_jabatan', 'id_cabang', 'grade')
-                ->where('is_active', true)
-                ->whereIn('id', $allowedIds)
+            if (!$this->isRecruitmentManager()) {
+                $listQuery->whereIn('id', $this->getAllowedEmployeeIds());
+            }
+
+            $list = $listQuery
                 ->orderBy('nama_lengkap')
                 ->get()
                 ->map(function ($k) {
@@ -1808,11 +1823,14 @@ class PersonnelRequestController extends Controller
     public function getGrade()
     {
         try {
-            $allowedIds = $this->getAllowedEmployeeIds();
+            $gradeQuery = MasterKaryawan::select('grade')
+                ->where('is_active', true);
 
-            $grades = MasterKaryawan::select('grade')
-                ->where('is_active', true)
-                ->whereIn('id', $allowedIds)
+            if (!$this->isRecruitmentManager()) {
+                $gradeQuery->whereIn('id', $this->getAllowedEmployeeIds());
+            }
+
+            $grades = $gradeQuery
                 ->whereNotNull('grade')
                 ->where('grade', '!=', '')
                 ->distinct()
@@ -1832,11 +1850,15 @@ class PersonnelRequestController extends Controller
     public function getDivisi()
     {
         try {
-            $allowedIds = $this->getAllowedEmployeeIds();
-            $allowedDivisiIds = MasterKaryawan::whereIn('id', $allowedIds)->whereNotNull('id_department')->pluck('id_department')->unique()->toArray();
+            $divisiQuery = MasterDivisi::where('is_active', 1);
 
-            $divisi = MasterDivisi::where('is_active', 1)
-                ->whereIn('id', $allowedDivisiIds)
+            if (!$this->isRecruitmentManager()) {
+                $allowedIds = $this->getAllowedEmployeeIds();
+                $allowedDivisiIds = MasterKaryawan::whereIn('id', $allowedIds)->whereNotNull('id_department')->pluck('id_department')->unique()->toArray();
+                $divisiQuery->whereIn('id', $allowedDivisiIds);
+            }
+
+            $divisi = $divisiQuery
                 ->orderBy('nama_divisi')
                 ->get()
                 ->map(fn($d) => ['id' => $d->id, 'text' => $d->nama_divisi]);
@@ -1859,7 +1881,7 @@ class PersonnelRequestController extends Controller
 
             if ($divisiId) {
                 $query->where('id_divisi', $divisiId);
-            } else {
+            } elseif (!$this->isRecruitmentManager()) {
                 $allowedIds = $this->getAllowedEmployeeIds();
                 $allowedDivisiIds = MasterKaryawan::whereIn('id', $allowedIds)
                     ->where('is_active',1)->whereNotNull('id_department')->pluck('id_department')->unique()->toArray();
