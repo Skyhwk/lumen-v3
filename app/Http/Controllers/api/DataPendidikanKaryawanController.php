@@ -22,7 +22,7 @@ class DataPendidikanKaryawanController extends Controller
 {
    public function index(Request $request)
     {
-        $data = MasterKaryawan::with(['pendidikan_karyawan'])->where('is_active', true);
+        $data = MasterKaryawan::with(['pendidikan_karyawan'])->where('is_active', true)->where('grade','!=','DIRECTOR');
         return Datatables::of($data)->make(true);
     }
 
