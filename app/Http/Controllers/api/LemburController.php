@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use Yajra\Datatables\Datatables;
+use Yajra\DataTables\DataTables as Datatables;
 
 
 
