@@ -278,6 +278,12 @@ class CheckOrderActive extends Command
             if (in_array('no_sampel', $tableColumns)) {
                 $selectColumns[] = 'no_sampel';
             }
+            
+            foreach (['is_approve', 'is_approved'] as $approveColumn) {
+                if (in_array($approveColumn, $tableColumns)) {
+                    $selectColumns[] = $approveColumn;
+                }
+            }
 
             $selectColumns = array_values(array_filter($selectColumns, fn ($col) => in_array($col, $tableColumns)));
 
@@ -341,6 +347,22 @@ class CheckOrderActive extends Command
         }
 
         return null;
+    }
+
+    private function isLhpRecordApproved(array $lhpRecord): bool
+    {
+        foreach (['is_approve', 'is_approved'] as $column) {
+            if (!array_key_exists($column, $lhpRecord)) {
+                continue;
+            }
+
+            $value = $lhpRecord[$column];
+            if ($value === true || $value === 1 || $value === '1') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function buildHasilUji(array $sampelNumbers, array $expectedParams = [], array $steps = [], string $cfrNo = ''): array
@@ -467,7 +489,7 @@ class CheckOrderActive extends Command
                 $steps['analisa']['date'] = $steps['sampling']['date'];
             }
 
-            $tglLhpRilis = !empty($lhps['approved_at'])
+            $tglLhpRilis = ( !empty($lhps['approved_at']) && $this->isLhpRecordApproved($lhps) )
                 ? Carbon::parse($lhps['approved_at'])->format('Y-m-d')
                 : null;
 
