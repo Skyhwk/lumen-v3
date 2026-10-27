@@ -38,6 +38,9 @@ class MasterKaryawanController extends Controller
         'grade',
     ];
 
+    /** Tidak ditampilkan di menu Master Karyawan (frontend). */
+    private const FRONTEND_HIDDEN_KARYAWAN_IDS = [1, 2];
+
     public function index(Request $request)
     {
         $data = MasterKaryawan::with([
@@ -52,6 +55,8 @@ class MasterKaryawanController extends Controller
                 $query->where('is_active', true);
             },
         ])->where('is_active', true);
+
+        $this->excludeHiddenKaryawanFromFrontend($data);
 
         if ($request->filled('id_cabang') && $request->id_cabang !== 'all') {
             $data->where('id_cabang', (int) $request->id_cabang);
@@ -829,6 +834,7 @@ class MasterKaryawanController extends Controller
     public function getCabang(Request $request)
     {
         $base = MasterKaryawan::query()->where('is_active', true);
+        $this->excludeHiddenKaryawanFromFrontend($base);
         $this->applyKaryawanColumnSearch($base, $request);
 
         $counts = (clone $base)
@@ -900,5 +906,10 @@ class MasterKaryawanController extends Controller
             }
             $query->where($column, $keyword);
         };
+    }
+
+    private function excludeHiddenKaryawanFromFrontend($query): void
+    {
+        $query->whereNotIn('id', self::FRONTEND_HIDDEN_KARYAWAN_IDS);
     }
 }
