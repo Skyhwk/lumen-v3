@@ -600,7 +600,7 @@ class GenerateDokumenKaryawanService
             'margin_bottom' => 24,
             'margin_header' => 6,
             'margin_footer' => 10,
-            'fontDir' => array_merge($fontDirs, ['C:/Windows/Fonts']),
+            'fontDir' => array_merge($fontDirs, [resource_path('fonts/Calibri')]),
             'fontdata' => $fontData + [
                 'calibri' => [
                     'R' => 'calibri.ttf',
@@ -659,7 +659,7 @@ class GenerateDokumenKaryawanService
             'margin_bottom' => 22,
             'margin_header' => 6,
             'margin_footer' => 8,
-            'fontDir' => array_merge($fontDirs, ['C:/Windows/Fonts']),
+            'fontDir' => array_merge($fontDirs, [resource_path('fonts/Calibri')]),
             'fontdata' => $fontData + [
                 'calibri' => [
                     'R' => 'calibri.ttf',
@@ -702,7 +702,7 @@ class GenerateDokumenKaryawanService
             'margin_bottom' => 22,
             'margin_header' => 6,
             'margin_footer' => 8,
-            'fontDir' => array_merge($fontDirs, ['C:/Windows/Fonts']),
+            'fontDir' => array_merge($fontDirs, [resource_path('fonts/Calibri')]),
             'fontdata' => $fontData + [
                 'calibri' => [
                     'R' => 'calibri.ttf',
@@ -748,7 +748,7 @@ class GenerateDokumenKaryawanService
             'margin_bottom' => 22,
             'margin_header' => 7,
             'margin_footer' => 8,
-            'fontDir' => array_merge($fontDirs, ['C:/Windows/Fonts']),
+            'fontDir' => array_merge($fontDirs, [resource_path('fonts/Calibri')]),
             'fontdata' => $fontData + [
                 'calibri' => [
                     'R' => 'calibri.ttf',
@@ -808,7 +808,7 @@ class GenerateDokumenKaryawanService
             'margin_header' => 7,
             'margin_footer' => 8,
             'setAutoTopMargin' => 'stretch',
-            'fontDir' => array_merge($fontDirs, ['C:/Windows/Fonts']),
+            'fontDir' => array_merge($fontDirs, [resource_path('fonts/Calibri')]),
             'fontdata' => $fontData + [
                 'calibri' => [
                     'R' => 'calibri.ttf',
@@ -1066,6 +1066,7 @@ class GenerateDokumenKaryawanService
     private function sprjNoteFontPath(): ?string
     {
         $fonts = [
+            resource_path('fonts/Calibri/ariali.ttf'),
             'C:\\Windows\\Fonts\\ariali.ttf',
             '/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf',
             '/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf',
