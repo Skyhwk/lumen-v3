@@ -449,14 +449,19 @@ class PenyesuaianGajiHrdController extends Controller
             $currentGaji = (float) $record->current_gaji_pokok;
             $currentTunjangan = (float) $record->current_tunjangan_kerja;
 
+            SalaryAdjustmentEvaluationService::ensureHrdFinalSnapshot($record);
+
+            $financeSnapshotBeforeAppeal = [
+                'adjustment_gaji_pokok' => (float) ($record->adjustment_gaji_pokok ?? 0),
+                'adjustment_tunjangan' => (float) ($record->adjustment_tunjangan ?? 0),
+                'requested_gaji_pokok' => (float) $record->requested_gaji_pokok,
+                'requested_tunjangan_kerja' => (float) $record->requested_tunjangan_kerja,
+            ];
+
             $record->adjustment_gaji_pokok = $adjustmentGaji > 0 ? $adjustmentGaji : null;
             $record->adjustment_tunjangan = $adjustmentTunjangan > 0 ? $adjustmentTunjangan : null;
             $record->requested_gaji_pokok = $currentGaji + max(0, $adjustmentGaji);
             $record->requested_tunjangan_kerja = $currentTunjangan + max(0, $adjustmentTunjangan);
-            $record->hrd_final_adjustment_gaji_pokok = $adjustmentGaji;
-            $record->hrd_final_adjustment_tunjangan = $adjustmentTunjangan;
-            $record->hrd_final_requested_gaji_pokok = $record->requested_gaji_pokok;
-            $record->hrd_final_requested_tunjangan_kerja = $record->requested_tunjangan_kerja;
             $record->hrd_appeal_notes = $appealNotes;
             $record->finance_return_reason = null;
             $record->finance_rejected_by = null;
@@ -479,6 +484,13 @@ class PenyesuaianGajiHrdController extends Controller
                         'adjustment_tunjangan' => (float) ($record->hrd_final_adjustment_tunjangan ?? 0),
                         'requested_gaji_pokok' => (float) $record->hrd_final_requested_gaji_pokok,
                         'requested_tunjangan_kerja' => (float) $record->hrd_final_requested_tunjangan_kerja,
+                    ],
+                    'finance_before_appeal' => $financeSnapshotBeforeAppeal,
+                    'hrd_appeal_proposal' => [
+                        'adjustment_gaji_pokok' => (float) ($record->adjustment_gaji_pokok ?? 0),
+                        'adjustment_tunjangan' => (float) ($record->adjustment_tunjangan ?? 0),
+                        'requested_gaji_pokok' => (float) $record->requested_gaji_pokok,
+                        'requested_tunjangan_kerja' => (float) $record->requested_tunjangan_kerja,
                     ],
                 ]
             );
