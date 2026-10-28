@@ -8,6 +8,7 @@ use App\Models\QuotationNonKontrak;
 use Carbon\Carbon;
 use App\Models\MasterFeeSampling;
 use App\Models\Jadwal;
+use App\Models\JadwalBackdate;
 use App\Models\LiburPerusahaan;
 use App\Models\MasterWilayahSampling;
 use App\Models\MasterKaryawan;
@@ -41,7 +42,27 @@ class GenerateFeeSampling
                 ->toArray();
 
             // 3. Ambil semua jadwal sampling
-            $jadwal = Jadwal::with('persiapanHeader', 'orderDetail')
+            $jadwalBackdate = JadwalBackdate::with('persiapanHeader', 'orderDetail')
+                ->where('is_active', 1)
+                ->where('userid', $userId)
+                ->whereIn('tanggal', $tanggal)
+                ->whereHas('persiapanHeader')
+                ->where(function ($q) {
+                    $q->whereHas('quotationNonKontrak', fn($k) => $k->where('is_backdate', 1))
+                      ->orWhereHas('quotationKontrakH', fn($k) => $k->where('is_backdate', 1));
+                })
+                ->get();
+
+            $jadwalReguler = Jadwal::with('persiapanHeader', 'orderDetail')
+                ->where('is_active', 1)
+                ->where('userid', $userId)
+                ->whereIn('tanggal', $tanggal)
+                ->whereHas('persiapanHeader')
+                ->whereDoesntHave('quotationNonKontrak', fn($q) => $q->where('is_backdate', 1))
+                ->whereDoesntHave('quotationKontrakH', fn($q) => $q->where('is_backdate', 1))
+                ->get();
+
+            $jadwal = $jadwalReguler->merge($jadwalBackdate)
                 ->where('is_active', 1)
                 ->where('userid', $userId)
                 ->whereIn('tanggal', $tanggal)
