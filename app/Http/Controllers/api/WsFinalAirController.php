@@ -1013,7 +1013,7 @@ class WsFinalAirController extends Controller
 			return response()->json(['message' => 'no_sampel wajib diisi'], 422);
 		}
 
-		$orderDetail = OrderDetail::with('dataLapanganAir', 'sampelDiantar.detail')
+		$orderDetail = OrderDetail::with('dataLapanganAir')
 			->where('no_sampel', $request->no_sampel)
 			->first();
 
@@ -1029,8 +1029,16 @@ class WsFinalAirController extends Controller
 			}
 		}
 
+		$sdParsed = null;
+		if ($request->filled('sd_internal')) {
+			$decodedSd = json_decode($request->sd_internal, true);
+			if (is_array($decodedSd)) {
+				$sdParsed = $decodedSd;
+			}
+		}
+
 		$paramAll = WsFinalAirParameterService::parseOrderParameters($orderDetail->parameter);
-		$parametersDiUji = WsFinalAirParameterService::buildParametersDiUji($labParams, $orderDetail);
+		$parametersDiUji = WsFinalAirParameterService::buildParametersDiUji($labParams, $orderDetail, $sdParsed);
 		$summary = WsFinalAirParameterService::summarize($paramAll, $parametersDiUji);
 
 		$mapRow = fn ($row) => [
