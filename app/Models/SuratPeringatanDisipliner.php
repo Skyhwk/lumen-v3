@@ -19,9 +19,12 @@ class SuratPeringatanDisipliner extends Sector
     protected $casts = [
         'tanggal_terbit' => 'date',
         'tanggal_kejadian' => 'date',
+        'tanggal_berlaku_mulai' => 'date',
+        'tanggal_berlaku_selesai' => 'date',
         'is_active' => 'boolean',
         'tahun_nomor' => 'integer',
         'urutan_nomor' => 'integer',
+        'masa_berlaku_bulan' => 'integer',
         'file_size' => 'integer',
     ];
 

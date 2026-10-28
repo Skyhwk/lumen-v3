@@ -3,16 +3,42 @@
 namespace App\Services;
 
 use App\Models\EmployeeDocumentSequence;
-use App\Models\MasterCabang;
+use App\Models\MasterKaryawan;
 use App\Models\SuratPeringatanDisipliner;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
-use Mpdf\Mpdf;
 use RuntimeException;
 
 class SuratPeringatanDocumentService
 {
     private const STORAGE_DIR = 'dokumen/disipliner/surat-peringatan';
+
+    private const PAGE_BACKGROUND = 'images/dokumen-karyawan-page-background.png';
+
+    public const VALIDITY_MONTHS = [
+        SuratPeringatanDisipliner::TYPE_SP1 => 6,
+        SuratPeringatanDisipliner::TYPE_SP2 => 9,
+        SuratPeringatanDisipliner::TYPE_SP3 => 12,
+    ];
+
+    public static function defaultMasaBerlakuBulan(string $jenisPeringatan): int
+    {
+        $type = strtoupper(trim($jenisPeringatan));
+
+        return self::VALIDITY_MONTHS[$type] ?? self::VALIDITY_MONTHS[SuratPeringatanDisipliner::TYPE_SP1];
+    }
+
+    public static function defaultBentukSanksi(string $jenisPeringatan): string
+    {
+        $type = strtoupper(trim($jenisPeringatan));
+        $map = [
+            SuratPeringatanDisipliner::TYPE_SP1 => 'Surat Peringatan 1 (SP-1) dan evaluasi kinerja',
+            SuratPeringatanDisipliner::TYPE_SP2 => 'Surat Peringatan 2 (SP-2) dan tindakan disiplin lanjutan',
+            SuratPeringatanDisipliner::TYPE_SP3 => 'Surat Peringatan 3 (SP-3) dan tindakan disiplin sesuai ketentuan perusahaan',
+        ];
+
+        return $map[$type] ?? $map[SuratPeringatanDisipliner::TYPE_SP1];
+    }
 
     private const TYPE_PREFIX = [
         SuratPeringatanDisipliner::TYPE_SP1 => 'ISL/SP1/',
@@ -187,47 +213,120 @@ class SuratPeringatanDocumentService
             ? Carbon::parse($letter->tanggal_terbit)->locale('id')
             : Carbon::now()->locale('id');
 
-        $incidentDate = $letter->tanggal_kejadian
-            ? Carbon::parse($letter->tanggal_kejadian)->locale('id')
-            : null;
+        $spMeta = $this->resolveSpMeta($letter->jenis_peringatan);
+        $validityMonths = (int) ($letter->masa_berlaku_bulan ?: self::defaultMasaBerlakuBulan($spMeta['type']));
+        $validityStart = $letter->tanggal_berlaku_mulai
+            ? Carbon::parse($letter->tanggal_berlaku_mulai)->locale('id')
+            : $issueDate->copy();
+        $validityEnd = $letter->tanggal_berlaku_selesai
+            ? Carbon::parse($letter->tanggal_berlaku_selesai)->locale('id')
+            : $validityStart->copy()->addMonthsNoOverflow($validityMonths);
 
-        $previousReference = null;
-        if ($letter->suratSebelumnya) {
-            $previousReference = trim(
-                $letter->suratSebelumnya->jenis_peringatan . ' nomor ' . $letter->suratSebelumnya->nomor_surat
-            );
+        $employeeRow = MasterKaryawan::query()
+            ->with('cabang')
+            ->find($letter->karyawan_id);
+
+        $honorific = $this->resolveHonorific($employeeRow ? $employeeRow->jenis_kelamin : null);
+        $placement = '-';
+        if ($employeeRow && $employeeRow->cabang) {
+            $placement = trim((string) $employeeRow->cabang->nama_cabang) ?: '-';
         }
+        $nama = trim((string) ($detailRow->nama_lengkap ?? '')) ?: '-';
+        $nik = trim((string) ($detailRow->nik_karyawan ?? ''));
+        $employeeNameNik = $nik !== '' ? $nama . ' / ' . $nik : $nama;
+
+        $violationCategory = trim((string) $letter->jenis_pelanggaran);
+        $hrNotesHtml = trim((string) $letter->catatan_hrd);
+        $sanctionText = trim((string) $letter->bentuk_sanksi)
+            ?: self::defaultBentukSanksi($spMeta['type']);
+
+        $signatoryName = trim((string) ($letter->nama_penandatangan ?? ''))
+            ?: trim((string) ($letter->published_by ?? ''))
+            ?: '-';
+        $signatoryTitle = trim((string) ($letter->jabatan_penandatangan ?? ''))
+            ?: 'Human Resources';
 
         $html = view('disipliner.surat-peringatan', [
-            'warningTypeLabel' => $letter->jenis_peringatan,
-            'documentNumber' => $letter->nomor_surat,
-            'employeeName' => $detailRow->nama_lengkap ?? '-',
-            'employeeNik' => $detailRow->nik_karyawan ?? '-',
-            'divisionName' => $detailRow->nama_divisi ?? ($detailRow->department ?? '-'),
-            'positionName' => $detailRow->jabatan ?? '-',
-            'incidentDateLabel' => $incidentDate ? $incidentDate->translatedFormat('d F Y') : '-',
-            'violationCategory' => trim((string) $letter->jenis_pelanggaran) ?: '-',
+            'spLevelNumber' => $spMeta['number'],
+            'spLevelRoman' => $spMeta['roman'],
+            'refNumber' => $this->formatRefNumber($letter, $issueDate, $spMeta['number']),
+            'employeeNameNik' => $employeeNameNik,
+            'divisionName' => trim((string) ($detailRow->nama_divisi ?? ($detailRow->department ?? ''))) ?: '-',
+            'positionName' => trim((string) ($detailRow->jabatan ?? '')) ?: '-',
+            'placementName' => $placement,
+            'violationCategory' => $violationCategory,
             'violationDescription' => trim((string) $letter->uraian_pelanggaran) ?: '<p>-</p>',
-            'previousReference' => $previousReference,
+            'hrNotesHtml' => $hrNotesHtml !== '' ? $hrNotesHtml : '',
+            'sanctionText' => $sanctionText,
+            'validityMonths' => $validityMonths,
+            'validityMonthsTerbilang' => $this->terbilang($validityMonths),
+            'validityStartLabel' => $validityStart->translatedFormat('d F Y'),
+            'validityEndLabel' => $validityEnd->translatedFormat('d F Y'),
+            'honorific' => $honorific,
+            'nextSpLabel' => $spMeta['next_label'],
             'issueDateLong' => $issueDate->translatedFormat('d F Y'),
-            'issueDateShort' => $issueDate->translatedFormat('d F Y'),
-            'company' => $this->resolveCompanyHeader(),
+            'signatoryName' => $signatoryName,
+            'signatoryTitle' => $signatoryTitle,
         ])->render();
 
-        $mpdf = new Mpdf([
+        $fontDirs = (new \Mpdf\Config\ConfigVariables())->getDefaults()['fontDir'];
+        $fontData = (new \Mpdf\Config\FontVariables())->getDefaults()['fontdata'];
+
+        $pdf = new MpdfService([
             'mode' => 'utf-8',
             'format' => 'A4',
-            'orientation' => 'P',
-            'margin_left' => 20,
-            'margin_right' => 20,
-            'margin_top' => 20,
-            'margin_bottom' => 20,
-            'default_font' => 'times',
+            'margin_left' => 14,
+            'margin_right' => 14,
+            'margin_top' => 34,
+            'margin_bottom' => 24,
+            'margin_header' => 6,
+            'margin_footer' => 10,
+            'fontDir' => array_merge($fontDirs, [resource_path('fonts/Calibri')]),
+            'fontdata' => $fontData + [
+                'calibri' => [
+                    'R' => 'calibri.ttf',
+                    'B' => 'calibrib.ttf',
+                    'I' => 'calibrii.ttf',
+                    'BI' => 'calibriz.ttf',
+                ],
+            ],
+            'default_font' => 'calibri',
         ]);
 
-        $mpdf->WriteHTML($html);
+        $logo = file_exists(public_path('isl_logo.png'))
+            ? public_path('isl_logo.png')
+            : public_path('img/isl_logo.png');
 
-        return $mpdf->Output('', 'S');
+        $headerHtml =
+            '<table width="100%" style="font-family:calibri,sans-serif; border-collapse:collapse;">'
+            . '<tr><td colspan="2" style="text-align:right; font-size:8pt; color:#666; padding:0 0 1mm;">Page {PAGENO} of {nbpg}</td></tr>'
+            . '<tr>'
+            . '<td style="width:52mm; vertical-align:middle; padding:0 0 2mm;"><img src="' . $logo . '" style="width:48mm;"></td>'
+            . '<td style="vertical-align:middle; padding:0 0 2mm;">&nbsp;</td>'
+            . '</tr></table>';
+        $pdf->SetHTMLHeader($headerHtml);
+        $pdf->SetHTMLHeader($headerHtml, 'E');
+
+        $footerHtml =
+            '<table width="100%" style="font-family:calibri,sans-serif; border-collapse:collapse; border-top:0.4px solid #9a9a9a;">'
+            . '<tr><td style="text-align:center; font-size:9.5pt; line-height:1.3; padding-top:2mm;">'
+            . 'Ruko Icon Business Park blok O no. 5 – 6<br>'
+            . 'Jl. Raya Cisauk, Sampora, Cisauk, Kab. Tangerang – 15345<br>'
+            . 'P : 021-5089-8988/89 - www.intilab.com - contact@intilab.com'
+            . '</td></tr></table>';
+
+        $pdf->SetHTMLFooter($footerHtml);
+        $pdf->SetHTMLFooter($footerHtml, 'E');
+
+        $background = resource_path(self::PAGE_BACKGROUND);
+        if (is_file($background)) {
+            $pdf->SetWatermarkImage($background, 1, [210, 297], [0, 0]);
+            $pdf->showWatermarkImage = true;
+        }
+
+        $pdf->WriteHTML($html);
+
+        return $pdf->Output('', 'S');
     }
 
     private function hasIssuedType(int $karyawanId, string $type, ?int $excludeId = null): bool
@@ -245,21 +344,88 @@ class SuratPeringatanDocumentService
         return $query->exists();
     }
 
-    private function resolveCompanyHeader(): array
+    private function resolveSpMeta(string $jenisPeringatan): array
     {
-        $logoPath = file_exists(public_path('isl_logo.png'))
-            ? public_path('isl_logo.png')
-            : public_path('img/isl_logo.png');
+        $type = strtoupper(trim($jenisPeringatan));
+        $map = [
+            SuratPeringatanDisipliner::TYPE_SP1 => ['number' => 1, 'roman' => 'I', 'next_label' => 'II (SP-2)'],
+            SuratPeringatanDisipliner::TYPE_SP2 => ['number' => 2, 'roman' => 'II', 'next_label' => 'III (SP-3)'],
+            SuratPeringatanDisipliner::TYPE_SP3 => ['number' => 3, 'roman' => 'III', 'next_label' => 'III (SP-3)'],
+        ];
 
-        $cabang = MasterCabang::query()
-            ->where('is_active', 1)
-            ->orderBy('id')
-            ->first();
+        $meta = $map[$type] ?? $map[SuratPeringatanDisipliner::TYPE_SP1];
 
         return [
-            'logo_path' => $logoPath,
-            'name' => 'PT INTI SURYA LABORATORIUM',
-            'address' => trim((string) ($cabang->alamat_cabang ?? '')),
+            'type' => $type,
+            'number' => $meta['number'],
+            'roman' => $meta['roman'],
+            'next_label' => $meta['next_label'],
         ];
+    }
+
+    private function formatRefNumber(SuratPeringatanDisipliner $letter, Carbon $issueDate, int $spNumber): string
+    {
+        $year = (int) ($letter->tahun_nomor ?: $issueDate->year);
+        $sequence = str_pad((string) ((int) $letter->urutan_nomor ?: 0), 4, '0', STR_PAD_LEFT);
+        $romanMonth = $this->romanMonth((int) $issueDate->month);
+
+        return sprintf(
+            'ISL/09-SP%d/%d-%s/%s',
+            $spNumber,
+            $year,
+            $romanMonth,
+            $sequence
+        );
+    }
+
+    private function romanMonth(int $month): string
+    {
+        $map = [
+            1 => 'I', 2 => 'II', 3 => 'III', 4 => 'IV', 5 => 'V', 6 => 'VI',
+            7 => 'VII', 8 => 'VIII', 9 => 'IX', 10 => 'X', 11 => 'XI', 12 => 'XII',
+        ];
+
+        return $map[$month] ?? (string) $month;
+    }
+
+    private function resolveHonorific(?string $gender): string
+    {
+        $normalized = strtolower(trim((string) $gender));
+
+        if (in_array($normalized, ['p', 'perempuan', 'female', 'f', 'wanita'], true)) {
+            return 'Saudari';
+        }
+
+        if (in_array($normalized, ['l', 'laki-laki', 'laki laki', 'male', 'm', 'pria'], true)) {
+            return 'Saudara';
+        }
+
+        return 'Saudara/i';
+    }
+
+    private function terbilang(int $number): string
+    {
+        $words = [
+            '', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam',
+            'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas',
+        ];
+
+        if ($number < 12) {
+            return $words[$number];
+        }
+        if ($number < 20) {
+            return trim($this->terbilang($number - 10) . ' belas');
+        }
+        if ($number < 100) {
+            return trim($this->terbilang(intdiv($number, 10)) . ' puluh ' . $this->terbilang($number % 10));
+        }
+        if ($number < 200) {
+            return trim('seratus ' . $this->terbilang($number - 100));
+        }
+        if ($number < 1000) {
+            return trim($this->terbilang(intdiv($number, 100)) . ' ratus ' . $this->terbilang($number % 100));
+        }
+
+        return (string) $number;
     }
 }

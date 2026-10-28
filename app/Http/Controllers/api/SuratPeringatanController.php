@@ -154,6 +154,17 @@ class SuratPeringatanController extends Controller
                     : null,
                 'jenis_pelanggaran' => trim((string) ($request->jenis_pelanggaran ?? $request->violation_category ?? '')) ?: null,
                 'uraian_pelanggaran' => trim((string) $this->resolveUraianPelanggaran($request)) ?: null,
+                'catatan_hrd' => trim((string) ($request->catatan_hrd ?? '')) ?: null,
+                'bentuk_sanksi' => trim((string) ($request->bentuk_sanksi ?? '')) ?: null,
+                'masa_berlaku_bulan' => $this->resolveMasaBerlakuBulan($request, $jenisPeringatan),
+                'tanggal_berlaku_mulai' => $this->resolveTanggalBerlakuMulai($request, $tanggalTerbit),
+                'tanggal_berlaku_selesai' => $this->resolveTanggalBerlakuSelesai(
+                    $request,
+                    $tanggalTerbit,
+                    $jenisPeringatan
+                ),
+                'nama_penandatangan' => trim((string) ($request->nama_penandatangan ?? '')) ?: null,
+                'jabatan_penandatangan' => trim((string) ($request->jabatan_penandatangan ?? '')) ?: null,
                 'id_surat_sebelumnya' => $idSuratSebelumnya,
                 'status' => SuratPeringatanDisipliner::STATUS_DRAFT,
                 'created_by' => $this->karyawan,
@@ -282,6 +293,13 @@ class SuratPeringatanController extends Controller
                 'spd.tanggal_kejadian',
                 'spd.jenis_pelanggaran',
                 'spd.uraian_pelanggaran',
+                'spd.catatan_hrd',
+                'spd.bentuk_sanksi',
+                'spd.masa_berlaku_bulan',
+                'spd.tanggal_berlaku_mulai',
+                'spd.tanggal_berlaku_selesai',
+                'spd.nama_penandatangan',
+                'spd.jabatan_penandatangan',
                 'spd.id_surat_sebelumnya',
                 'spd.status',
                 'spd.nama_berkas',
@@ -323,6 +341,12 @@ class SuratPeringatanController extends Controller
             : '-';
         $item->tanggal_kejadian_label = $item->tanggal_kejadian
             ? Carbon::parse($item->tanggal_kejadian)->format('d-m-Y')
+            : '-';
+        $item->tanggal_berlaku_mulai_label = !empty($item->tanggal_berlaku_mulai)
+            ? Carbon::parse($item->tanggal_berlaku_mulai)->format('d-m-Y')
+            : '-';
+        $item->tanggal_berlaku_selesai_label = !empty($item->tanggal_berlaku_selesai)
+            ? Carbon::parse($item->tanggal_berlaku_selesai)->format('d-m-Y')
             : '-';
         $item->has_document = !empty($item->file_path);
         $item->jenis_peringatan_label = $this->mapJenisPeringatanLabel($item->jenis_peringatan);
@@ -373,6 +397,13 @@ class SuratPeringatanController extends Controller
             'violation_category' => 'nullable|string|max:150',
             'uraian_pelanggaran' => 'nullable|string',
             'violation_description' => 'nullable|string',
+            'catatan_hrd' => 'nullable|string',
+            'bentuk_sanksi' => 'nullable|string|max:2000',
+            'masa_berlaku_bulan' => 'nullable|integer|min:1|max:60',
+            'tanggal_berlaku_mulai' => 'nullable|date',
+            'tanggal_berlaku_selesai' => 'nullable|date',
+            'nama_penandatangan' => 'nullable|string|max:150',
+            'jabatan_penandatangan' => 'nullable|string|max:150',
         ]);
 
         $jenis = $this->resolveJenisPeringatan($request);
@@ -402,6 +433,14 @@ class SuratPeringatanController extends Controller
             ], 422);
         }
 
+        $sanksi = trim((string) ($request->bentuk_sanksi ?? ''));
+        if ($sanksi === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bentuk sanksi wajib diisi.',
+            ], 422);
+        }
+
         return true;
     }
 
@@ -420,6 +459,41 @@ class SuratPeringatanController extends Controller
     private function resolveUraianPelanggaran(Request $request): string
     {
         return (string) ($request->uraian_pelanggaran ?? $request->violation_description ?? '');
+    }
+
+    private function resolveMasaBerlakuBulan(Request $request, string $jenisPeringatan): int
+    {
+        if ($request->filled('masa_berlaku_bulan')) {
+            return (int) $request->masa_berlaku_bulan;
+        }
+
+        return SuratPeringatanDocumentService::defaultMasaBerlakuBulan($jenisPeringatan);
+    }
+
+    private function resolveTanggalBerlakuMulai(Request $request, string $tanggalTerbit): string
+    {
+        if ($request->filled('tanggal_berlaku_mulai')) {
+            return Carbon::parse($request->tanggal_berlaku_mulai)->format('Y-m-d');
+        }
+
+        return $tanggalTerbit;
+    }
+
+    private function resolveTanggalBerlakuSelesai(
+        Request $request,
+        string $tanggalTerbit,
+        string $jenisPeringatan
+    ): string {
+        if ($request->filled('tanggal_berlaku_selesai')) {
+            return Carbon::parse($request->tanggal_berlaku_selesai)->format('Y-m-d');
+        }
+
+        $months = $this->resolveMasaBerlakuBulan($request, $jenisPeringatan);
+        $start = $request->filled('tanggal_berlaku_mulai')
+            ? Carbon::parse($request->tanggal_berlaku_mulai)
+            : Carbon::parse($tanggalTerbit);
+
+        return $start->copy()->addMonthsNoOverflow($months)->format('Y-m-d');
     }
 
     private function employeeExists(int $karyawanId): bool
