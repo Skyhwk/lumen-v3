@@ -115,6 +115,28 @@ class SalaryOverviewController extends Controller
             ->where(function ($query) {
                 $query->where('master_karyawan.status_karyawan', '!=', 'Magang/Intern')
                     ->orWhereNull('master_karyawan.status_karyawan');
-            });
+            })
+            ->where(function ($query) {
+                $query->whereNull('master_karyawan.grade')
+                    ->orWhereRaw(
+                        'UPPER(TRIM(master_karyawan.grade)) NOT IN (?, ?, ?, ?)',
+                        ['MANAGER', 'SENIOR MANAGER', 'DIRECTOR', 'DIREKSI']
+                    );
+            })
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('master_jabatan')
+                    ->whereColumn('master_jabatan.id', 'master_karyawan.id_jabatan')
+                    ->where('master_jabatan.is_active', true)
+                    ->where(function ($name) {
+                        $name->whereRaw("UPPER(master_jabatan.nama_jabatan) LIKE '%MANAGER%'")
+                            ->orWhereRaw("UPPER(master_jabatan.nama_jabatan) LIKE '%DIREKTUR%'")
+                            ->orWhereRaw("UPPER(master_jabatan.nama_jabatan) LIKE '%DIREKSI%'")
+                            ->orWhereRaw("UPPER(master_jabatan.nama_jabatan) LIKE '%DIRECTOR%'");
+                    });
+            })
+            ->whereRaw(
+                'NOT (ROUND(COALESCE(master_sallary.gaji_pokok, 0), 2) = 0 AND ROUND(COALESCE(master_sallary.tunjangan_kerja, 0), 2) = 0)'
+            );
     }
 }
