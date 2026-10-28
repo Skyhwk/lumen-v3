@@ -981,6 +981,16 @@ class RecruitmentStatusService
             }
         }
 
+        if (Schema::hasColumn('new_recruitment', 'rejected_candidate_offering')) {
+            $rejectedCandidateOffering = is_object($recruitment)
+                ? (bool) ($recruitment->rejected_candidate_offering ?? false)
+                : (bool) ($recruitment['rejected_candidate_offering'] ?? false);
+
+            if ($rejectedCandidateOffering) {
+                return true;
+            }
+        }
+
         return self::isAwaitingDirectorSalaryResubmit($recruitment)
             || self::isAwaitingFinanceResubmit($recruitment)
             || self::isAwaitingCandidateOfferingResubmit($recruitment);
@@ -1019,6 +1029,23 @@ class RecruitmentStatusService
 
                 return [
                     'source' => 'Ibu Direktur',
+                    'reason' => $reason !== null && trim((string) $reason) !== '' ? trim((string) $reason) : null,
+                ];
+            }
+        }
+
+        if (Schema::hasColumn('new_recruitment', 'rejected_candidate_offering')) {
+            $rejectedCand = is_object($recruitment)
+                ? (bool) ($recruitment->rejected_candidate_offering ?? false)
+                : (bool) ($recruitment['rejected_candidate_offering'] ?? false);
+
+            if ($rejectedCand && !self::isAwaitingFinanceResubmit($recruitment)) {
+                $reason = is_object($recruitment)
+                    ? ($recruitment->rejected_candidate_offering_reason ?? null)
+                    : ($recruitment['rejected_candidate_offering_reason'] ?? null);
+
+                return [
+                    'source' => 'Kandidat',
                     'reason' => $reason !== null && trim((string) $reason) !== '' ? trim((string) $reason) : null,
                 ];
             }
@@ -1567,8 +1594,9 @@ class RecruitmentStatusService
 
     /**
      * Sinkronkan flag section Final Decision (aktif vs ditolak sementara).
-     * rejected_salary  = penolakan Kandidat / negosiasi gaji
-     * rejected_decision = penolakan approval salary / management decision oleh Direktur
+     * rejected_candidate_offering = penolakan offering letter oleh Kandidat
+     * rejected_salary             = penolakan / negosiasi gaji oleh Direktur
+     * rejected_decision           = penolakan management decision oleh Direktur
      * Jalur Finance hanya memakai is_reject_finance* — tidak menulis rejected_salary / rejected_decision_reason.
      */
     public static function syncRejectedSectionFlags(int $recruitmentId): void
@@ -1590,6 +1618,11 @@ class RecruitmentStatusService
                 'rejected_salary_reason'   => null,
             ];
 
+            if (Schema::hasColumn('new_recruitment', 'rejected_candidate_offering')) {
+                $clearPayload['rejected_candidate_offering'] = false;
+                $clearPayload['rejected_candidate_offering_reason'] = null;
+            }
+
             if (Schema::hasColumn('new_recruitment', 'is_reject_finance')) {
                 $clearPayload['is_reject_finance'] = false;
             }
@@ -1603,14 +1636,16 @@ class RecruitmentStatusService
         $rejectedSalaryReason = null;
         $rejectedDecision = false;
         $rejectedDecisionReason = null;
+        $rejectedCandidateOffering = false;
+        $rejectedCandidateOfferingReason = null;
         $awaitingFinance = self::isAwaitingFinanceResubmit($row);
 
         if (self::isAwaitingCandidateOfferingResubmit($row)) {
             if (!self::hasHrdSalaryInputSavedAfterCandidateReject($row)) {
-                $rejectedSalary = true;
+                $rejectedCandidateOffering = true;
             }
             $candidateReason = self::getCandidateOfferingRejectReason($row);
-            $rejectedSalaryReason = $candidateReason ?: $rejectedSalaryReason;
+            $rejectedCandidateOfferingReason = $candidateReason ?: null;
         }
 
         if (self::isAwaitingDirectorSalaryNegotiateResubmit($row)) {
@@ -1627,8 +1662,9 @@ class RecruitmentStatusService
         }
 
         if (self::isAwaitingDirectorSalaryRejectResubmit($row)) {
-            $rejectedDecision = true;
-            $rejectedDecisionReason = self::getDirectorSalaryRejectReason($row);
+            $rejectedSalary = true;
+            $directorSalaryReason = self::getDirectorSalaryRejectReason($row);
+            $rejectedSalaryReason = $directorSalaryReason ?: $rejectedSalaryReason;
         }
 
         if (self::isAwaitingDirectorManagementDecisionRejectResubmit($row)) {
@@ -1636,7 +1672,7 @@ class RecruitmentStatusService
             $rejectedDecisionReason = self::getDirectorManagementDecisionRejectReason($row);
         }
 
-        $financeOnly = $awaitingFinance && !$rejectedSalary && !$rejectedDecision;
+        $financeOnly = $awaitingFinance && !$rejectedSalary && !$rejectedDecision && !$rejectedCandidateOffering;
         $updatePayload = [];
 
         if (!$financeOnly) {
@@ -1647,6 +1683,17 @@ class RecruitmentStatusService
                 $updatePayload['rejected_salary_reason'] = $rejectedSalaryReason;
             } elseif ($rejectedSalary) {
                 $updatePayload['rejected_salary_reason'] = null;
+            } else {
+                $updatePayload['rejected_salary_reason'] = null;
+            }
+
+            if (Schema::hasColumn('new_recruitment', 'rejected_candidate_offering')) {
+                $updatePayload['rejected_candidate_offering'] = $rejectedCandidateOffering;
+                if ($rejectedCandidateOfferingReason) {
+                    $updatePayload['rejected_candidate_offering_reason'] = $rejectedCandidateOfferingReason;
+                } else {
+                    $updatePayload['rejected_candidate_offering_reason'] = null;
+                }
             }
         }
 
@@ -1699,6 +1746,16 @@ class RecruitmentStatusService
         $status = strtolower(trim((string) (is_object($recruitment)
             ? ($recruitment->status ?? '')
             : ($recruitment['status'] ?? ''))));
+
+        if (Schema::hasColumn('new_recruitment', 'rejected_candidate_offering')) {
+            $rejectedCand = is_object($recruitment)
+                ? (bool) ($recruitment->rejected_candidate_offering ?? false)
+                : (bool) ($recruitment['rejected_candidate_offering'] ?? false);
+
+            if ($rejectedCand) {
+                return true;
+            }
+        }
 
         if (Schema::hasColumn('new_recruitment', 'rejected_salary')) {
             $rejectedSalary = is_object($recruitment)
@@ -1784,6 +1841,16 @@ class RecruitmentStatusService
 
         if (self::isAwaitingDirectorSalaryRejectResubmit($recruitment)) {
             return 'Rejected - Approval';
+        }
+
+        if (Schema::hasColumn('new_recruitment', 'rejected_candidate_offering')) {
+            $rejectedCand = is_object($recruitment)
+                ? (bool) ($recruitment->rejected_candidate_offering ?? false)
+                : (bool) ($recruitment['rejected_candidate_offering'] ?? false);
+
+            if ($rejectedCand) {
+                return 'Rejected - Salary Offering';
+            }
         }
 
         if (Schema::hasColumn('new_recruitment', 'rejected_salary')) {
