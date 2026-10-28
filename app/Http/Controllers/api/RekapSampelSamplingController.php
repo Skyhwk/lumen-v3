@@ -10,7 +10,7 @@ use App\Models\TcOrderDetail;
 use App\Models\Parameter;
 use App\Models\MasterKategori;
 use App\Models\MasterSubKategori;
-use App\Models\HargaParameter;
+use App\Models\KonfigurasiLabelParameter;
 use App\Models\MasterRegulasi;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Carbon\Carbon;
@@ -490,13 +490,7 @@ class RekapSampelSamplingController extends Controller
                         return explode(';', $p)[0];
                     }, json_decode($value->parameter) ?? []);
 
-                    $id_kategori = explode("-", $value->kategori_2)[0];
-                    $params = HargaParameter::where('id_kategori', $id_kategori)
-                        ->where('is_active', true)
-                        ->whereIn('id_parameter', $idParameter)
-                        ->selectRaw('volume, regen, id_parameter, nama_parameter')
-                        ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
-                        ->get();
+                    $params = KonfigurasiLabelParameter::forParameterIds($idParameter);
 
                     $param_map = [];
                     foreach ($params as $param) {

@@ -82,8 +82,6 @@ class HargaParameterController extends Controller
                 'mhp.nama_parameter',
                 'mhp.harga',
                 'mhp.tanggal_berlaku',
-                'mhp.regen',
-                'mhp.volume',
                 'mhp.created_by',
                 'mhp.created_at',
                 'mp.is_blocked',
@@ -208,8 +206,6 @@ class HargaParameterController extends Controller
                 $newParam->nama_parameter = trim($parameterOld->nama_parameter);
                 $newParam->nama_kategori = trim($parameterOld->nama_kategori);
                 $newParam->harga = str_replace('.', '', $request->harga);
-                $newParam->regen = $parameterOld->regen;
-                $newParam->volume = $parameterOld->volume;
                 $newParam->tanggal_berlaku = $tanggalBerlaku;
                 $newParam->id_hist = $parameterOld->id;
                 $newParam->status = 1;

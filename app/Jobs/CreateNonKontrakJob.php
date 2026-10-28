@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\QuotationNonKontrak;
 use App\Models\Parameter;
 use App\Models\HargaParameter;
+use App\Models\KonfigurasiLabelParameter;
 use App\Models\TemplatePaketAnalisa;
 
 class CreateNonKontrakJob extends Job
@@ -130,7 +131,7 @@ class CreateNonKontrakJob extends Job
                         }) ?? $ambil_data->first();
 
                         $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                        $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                        $volume_db[] = KonfigurasiLabelParameter::volumeOfNama($param_);
                         // $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
                         //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
                         // }) ?? $ambil_data->first();

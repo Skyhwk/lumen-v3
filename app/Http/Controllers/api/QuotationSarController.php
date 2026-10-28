@@ -26,6 +26,7 @@ use App\Models\MasterRegulasi;
 use App\Models\Parameter;
 use App\Models\HargaTransportasi;
 use App\Models\HargaParameter;
+use App\Models\KonfigurasiLabelParameter;
 use App\Models\JobTask;
 use App\Models\MasterPelanggan;
 use App\Models\KelengkapanKonfirmasiQs;
@@ -227,7 +228,7 @@ class QuotationSarController extends Controller
                                 return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
                             }) ?? $ambil_data->first();
                             $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                            $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                            $volume_db[] = KonfigurasiLabelParameter::volumeOfNama($param_);
                         }
                         $harga_pertitik = (object) [
                             'volume' => array_sum($volume_db),
@@ -1022,7 +1023,7 @@ class QuotationSarController extends Controller
                             }) ?? $ambil_data->first();
 
                             $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                            $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                            $volume_db[] = KonfigurasiLabelParameter::volumeOfNama($param_);
                         }
 
                         $harga_pertitik = (object) [
@@ -1978,7 +1979,7 @@ class QuotationSarController extends Controller
                             }) ?? $ambil_data->first();
 
                             $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                            $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                            $volume_db[] = KonfigurasiLabelParameter::volumeOfNama($param_);
                         }
 
                         $harga_pertitik = (object) [

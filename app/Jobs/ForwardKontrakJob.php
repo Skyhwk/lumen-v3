@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use App\Models\Parameter;
 use App\Models\HargaParameter;
+use App\Models\KonfigurasiLabelParameter;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
 use App\Models\RequestQr;
@@ -146,26 +147,26 @@ class ForwardKontrakJob extends Job
                         foreach ($ambil_data as $xc => $zx) {
                             if (\explode(' ', $zx->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran) {
                                 $harga_parameter[] = $zx->harga;
-                                $volume_parameter[] = $zx->volume;
+                                $volume_parameter[] = KonfigurasiLabelParameter::volumeOfNama($parameter);
                                 $found = true;
                                 break;
                             }
                             if ((count($ambil_data) - 1) == $xc && !$found) {
                                 $zx = $ambil_data[0];
                                 $harga_parameter[] = $zx->harga;
-                                $volume_parameter[] = $zx->volume;
+                                $volume_parameter[] = KonfigurasiLabelParameter::volumeOfNama($parameter);
                                 break;
                             }
                         }
                     } else if (count($ambil_data) == 1) {
                         foreach ($ambil_data as $zx) {
                             $harga_parameter[] = $zx->harga;
-                            $volume_parameter[] = $zx->volume;
+                            $volume_parameter[] = KonfigurasiLabelParameter::volumeOfNama($parameter);
                             break;
                         }
                     } else {
                         $harga_parameter[] = 0;
-                        $volume_parameter[] = 0;
+                        $volume_parameter[] = KonfigurasiLabelParameter::volumeOfNama($parameter);
                     }
                 }
 
@@ -314,26 +315,26 @@ class ForwardKontrakJob extends Job
                                 foreach ($ambil_data as $xc => $zx) {
                                     if (\explode(' ', $zx->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran) {
                                         $harga_parameter[] = $zx->harga;
-                                        $volume_parameter[] = $zx->volume;
+                                        $volume_parameter[] = KonfigurasiLabelParameter::volumeOfNama($parameter);
                                         $found = true;
                                         break;
                                     }
                                     if ((count($ambil_data) - 1) == $xc && !$found) {
                                         $zx = $ambil_data[0];
                                         $harga_parameter[] = $zx->harga;
-                                        $volume_parameter[] = $zx->volume;
+                                        $volume_parameter[] = KonfigurasiLabelParameter::volumeOfNama($parameter);
                                         break;
                                     }
                                 }
                             } else if (count($ambil_data) == 1) {
                                 foreach ($ambil_data as $zx) {
                                     $harga_parameter[] = $zx->harga;
-                                    $volume_parameter[] = $zx->volume;
+                                    $volume_parameter[] = KonfigurasiLabelParameter::volumeOfNama($parameter);
                                     break;
                                 }
                             } else {
                                 $harga_parameter[] = 0;
-                                $volume_parameter[] = 0;
+                                $volume_parameter[] = KonfigurasiLabelParameter::volumeOfNama($parameter);
                             }
                         }
 

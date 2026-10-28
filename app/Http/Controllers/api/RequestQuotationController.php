@@ -22,6 +22,7 @@ use App\Models\{
 use App\Models\JobTask;
 use App\Models\HargaTransportasi;
 use App\Models\HargaParameter;
+use App\Models\KonfigurasiLabelParameter;
 use App\Models\TemplatePenawaran;
 use App\Models\Parameter;
 use App\Models\Invoice;
@@ -655,7 +656,7 @@ class RequestQuotationController extends Controller
                             ->first();
 
                         $harga_db[] = $ambil_data->harga ?? 0;
-                        $volume_db[] = $ambil_data->volume ?? 0;
+                        $volume_db[] = KonfigurasiLabelParameter::volumeOf($idParam);
                     }
 
                     $harga_pertitik = (object) [
@@ -1613,7 +1614,7 @@ class RequestQuotationController extends Controller
                             ->first();
 
                         $harga_db[] = $ambil_data->harga ?? 0;
-                        $volume_db[] = $ambil_data->volume ?? 0;
+                        $volume_db[] = KonfigurasiLabelParameter::volumeOf($idParam);
                     }
 
                     $harga_pertitik = (object) [
@@ -2766,7 +2767,7 @@ class RequestQuotationController extends Controller
                             ->first();
 
                         $harga_db[] = $ambil_data->harga ?? 0;
-                        $volume_db[] = $ambil_data->volume ?? 0;
+                        $volume_db[] = KonfigurasiLabelParameter::volumeOf($idParam);
 
                     }
 
@@ -2960,13 +2961,8 @@ class RequestQuotationController extends Controller
                                 ->orderBy('tanggal_berlaku', 'desc')
                                 ->first();
 
-                            if ($ambil_data) {
-                                $harga_parameter[] = $ambil_data->harga ?? 0;
-                                $volume_parameter[] = $ambil_data->volume ?? 0;
-                            } else {
-                                $harga_parameter[] = 0;
-                                $volume_parameter[] = 0;
-                            }
+                            $harga_parameter[] = $ambil_data->harga ?? 0;
+                            $volume_parameter[] = KonfigurasiLabelParameter::volumeOf($idParam);
                         }
 
                         $vol_db = array_sum($volume_parameter);
@@ -4324,7 +4320,7 @@ class RequestQuotationController extends Controller
                             ->first();
 
                         $harga_db[] = $ambil_data->harga ?? 0;
-                        $volume_db[] = $ambil_data->volume ?? 0;
+                        $volume_db[] = KonfigurasiLabelParameter::volumeOf($idParam);
 
                     }
 
@@ -4484,7 +4480,7 @@ class RequestQuotationController extends Controller
                                 ->first();
 
                             $harga_parameter[] = $ambil_data->harga ?? 0;
-                            $volume_parameter[] = $ambil_data->volume ?? 0;
+                            $volume_parameter[] = KonfigurasiLabelParameter::volumeOf($idParam);
                         }
 
                         $vol_db = array_sum($volume_parameter);

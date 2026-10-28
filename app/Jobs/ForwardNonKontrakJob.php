@@ -8,6 +8,7 @@ use App\Models\TemplatePaketAnalisa;
 use App\Models\QuotationNonKontrak;
 use App\Models\Parameter;
 use App\Models\HargaParameter;
+use App\Models\KonfigurasiLabelParameter;
 use App\Models\RequestQr;
 use App\Services\Notification;
 use App\Services\GetAtasan;
@@ -122,11 +123,12 @@ class ForwardNonKontrakJob extends Job
                         array_push($parameter, $cek_par->nama_lab);
                     }
 
-                    $harga_pertitik = HargaParameter::select(DB::raw("SUM(harga) as total_harga, SUM(volume) as volume"))
+                    $harga_pertitik = HargaParameter::select(DB::raw("SUM(harga) as total_harga"))
                         ->where('is_active', true)
                         ->whereIn('nama_parameter', $parameter)
                         ->where('id_kategori', $kategori)
                         ->first();
+                    $harga_pertitik->volume = KonfigurasiLabelParameter::sumVolumeByNama($parameter);
 
                     if ($harga_pertitik->volume != null) {
                         $vol += floatval($harga_pertitik->volume);

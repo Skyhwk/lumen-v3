@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\{
-    QuotationKontrakH,QuotationKontrakD,SamplingPlan,QuotationNonKontrak,Jadwal,AnalystFormula,Colorimetri,OrderHeader,OrderDetail,Invoice,PersiapanSampelHeader,PersiapanSampelDetail,LhpsAirDetail,LhpsAirCustom,MasterBakumutu,HargaParameter,KelengkapanKonfirmasiQs,Parameter,DataLapanganAir,LhpUdaraPsikologiHeader,SampelTidakSelesai,MasterKaryawan,QrDocument,DataLapanganPartikulatMeter,DetailSenyawaVolatile,DetailLingkunganHidup,DataLapanganDirectLain,DetailLingkunganKerja,DetailMicrobiologi,DataLapanganKebisinganPersonal,DataLapanganKebisingan,DataLapanganCahaya,DataLapanganGetaran,DataLapanganGetaranPersonal,DataLapanganIklimPanas,DataLapanganIklimDingin,DataLapanganSwab,DataLapanganErgonomi,DataLapanganDebuPersonal,DataLapanganMedanLM,DataLapanganSinarUV,DataLapanganPsikologi,DataLapanganEmisiKendaraan,DataLapanganEmisiCerobong,DataLapanganIsokinetikHasil,Gravimetri,MasterPelanggan,Titrimetri,WsValueAir, DataLapanganIsokinetikBeratMolekul,DataLapanganIsokinetikKadarAir,DataLapanganIsokinetikPenentuanKecepatanLinier,DataLapanganIsokinetikSurveiLapangan,DataLapanganKebisinganBySoundMeter,DataLapanganKecerahan,DataLapanganLapisanMinyak,DataLapanganMicrobiologi,DataLapanganSampah,DataLapanganSenyawaVolatile,DataLapanganUnion,DataLimbah,DataPsikologi,DetailFlowMeter,DetailSoundMeter,DailyQsd,SertifikatWebinarHeader,SertifikatWebinarDetail,LayoutCertificate,JenisFont,TemplateBackground,MasterTargetSales,SarHeader,TemplatePaketAnalisa,DataLapanganEmisiOrder,LhpsAdverseOdorHeader,LhpsAirHeader,LhpsEmisiCHeader,LhpsEmisiHeader,LhpsEmisiIsokinetikHeader,LhpsErgonomiHeader,LhpsGetaranHeader,LhpsHygieneSanitasiHeader,LhpsIklimHeader,LhpsKebisinganHeader,LhpsKebisinganPersonalHeader,LhpsLingHeader,LhpsMedanLMHeader,LhpsMicrobiologiHeader,LhpsPadatanHeader,LhpsPencahayaanHeader,LhpsSinarUVHeader,LhpsSwabTesHeader,RekapLiburKalender,LinkLhp
+    QuotationKontrakH,QuotationKontrakD,SamplingPlan,QuotationNonKontrak,Jadwal,AnalystFormula,Colorimetri,OrderHeader,OrderDetail,Invoice,PersiapanSampelHeader,PersiapanSampelDetail,LhpsAirDetail,LhpsAirCustom,MasterBakumutu,HargaParameter,KonfigurasiLabelParameter,KelengkapanKonfirmasiQs,Parameter,DataLapanganAir,LhpUdaraPsikologiHeader,SampelTidakSelesai,MasterKaryawan,QrDocument,DataLapanganPartikulatMeter,DetailSenyawaVolatile,DetailLingkunganHidup,DataLapanganDirectLain,DetailLingkunganKerja,DetailMicrobiologi,DataLapanganKebisinganPersonal,DataLapanganKebisingan,DataLapanganCahaya,DataLapanganGetaran,DataLapanganGetaranPersonal,DataLapanganIklimPanas,DataLapanganIklimDingin,DataLapanganSwab,DataLapanganErgonomi,DataLapanganDebuPersonal,DataLapanganMedanLM,DataLapanganSinarUV,DataLapanganPsikologi,DataLapanganEmisiKendaraan,DataLapanganEmisiCerobong,DataLapanganIsokinetikHasil,Gravimetri,MasterPelanggan,Titrimetri,WsValueAir, DataLapanganIsokinetikBeratMolekul,DataLapanganIsokinetikKadarAir,DataLapanganIsokinetikPenentuanKecepatanLinier,DataLapanganIsokinetikSurveiLapangan,DataLapanganKebisinganBySoundMeter,DataLapanganKecerahan,DataLapanganLapisanMinyak,DataLapanganMicrobiologi,DataLapanganSampah,DataLapanganSenyawaVolatile,DataLapanganUnion,DataLimbah,DataPsikologi,DetailFlowMeter,DetailSoundMeter,DailyQsd,SertifikatWebinarHeader,SertifikatWebinarDetail,LayoutCertificate,JenisFont,TemplateBackground,MasterTargetSales,SarHeader,TemplatePaketAnalisa,DataLapanganEmisiOrder,LhpsAdverseOdorHeader,LhpsAirHeader,LhpsEmisiCHeader,LhpsEmisiHeader,LhpsEmisiIsokinetikHeader,LhpsErgonomiHeader,LhpsGetaranHeader,LhpsHygieneSanitasiHeader,LhpsIklimHeader,LhpsKebisinganHeader,LhpsKebisinganPersonalHeader,LhpsLingHeader,LhpsMedanLMHeader,LhpsMicrobiologiHeader,LhpsPadatanHeader,LhpsPencahayaanHeader,LhpsSinarUVHeader,LhpsSwabTesHeader,RekapLiburKalender,LinkLhp
 };
 use App\Jobs\CombineLHPJob;
 use App\Services\{
@@ -1224,10 +1224,7 @@ class TestingController extends Controller
                                     }, json_decode($value->parameter, true) ?? []);
 
                                     // Ambil parameter dari HargaParameter
-                                    $params = HargaParameter::where('id_kategori', $id_kategori)
-                                        ->where('is_active', true)
-                                        ->whereIn('nama_parameter', $parameter_names)
-                                        ->get();
+                                    $params = KonfigurasiLabelParameter::forNamaParameters($parameter_names);
 
                                     // Mapping parameter -> object
                                     $param_map = [];
@@ -1732,7 +1729,15 @@ class TestingController extends Controller
                             $parts = explode(';', $item);
                             return $parts[1] ?? null;
                         }, $raw);
-                        $chekRegen = HargaParameter::whereIn('nama_parameter', $parameter)->get(['nama_parameter', 'regen', 'nama_kategori']);
+                        $chekRegen = KonfigurasiLabelParameter::query()
+                            ->leftJoin('parameter as p', 'konfigurasi_label_parameter.id_parameter', '=', 'p.id')
+                            ->whereIn('konfigurasi_label_parameter.nama_parameter', $parameter)
+                            ->where('konfigurasi_label_parameter.is_active', true)
+                            ->get([
+                                'konfigurasi_label_parameter.nama_parameter',
+                                'konfigurasi_label_parameter.regen',
+                                'p.nama_kategori',
+                            ]);
                         return response()->json(["data" => $chekRegen], 200);
                     }
                 case 'cs_render':
@@ -3223,7 +3228,7 @@ class TestingController extends Controller
                                         return explode(' ', $itemHarga->created_at)[0] > $quotation->tgl_penawaran;
                                     }) ?? $ambil_data->first();
 
-                                    $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                                    $volume_db[] = KonfigurasiLabelParameter::volumeOfNama($param_);
                                 }
 
                                 $vol = array_sum($volume_db);
@@ -5278,10 +5283,7 @@ class TestingController extends Controller
                     }, json_decode($value->parameter) ?? []);
 
                     $id_kategori = explode("-", $value->kategori_2)[0];
-                    $params = HargaParameter::where('id_kategori', $id_kategori)
-                        ->where('is_active', true)
-                        ->whereIn('nama_parameter', $parameter_names)
-                        ->get();
+                    $params = KonfigurasiLabelParameter::forNamaParameters($parameter_names);
 
                     $param_map = [];
                     foreach ($params as $param) {

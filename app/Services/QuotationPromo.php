@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use App\Models\KonfigurasiLabelParameter;
 
 class QuotationPromo
 {
@@ -81,12 +82,12 @@ class QuotationPromo
                 ->where('is_active', 1)->orderBy('tanggal_berlaku', 'desc')->first();
             if (array_key_exists((string) $parameterId, $overrides)) {
                 $prices[] = $overrides[(string) $parameterId];
-                $volumes[] = (float) ($price->volume ?? 0);
+                $volumes[] = (float) KonfigurasiLabelParameter::volumeOf($parameterId);
                 continue;
             }
             if (!$price && empty($row->is_promo)) throw new \InvalidArgumentException('Harga parameter belum tersedia untuk tanggal penawaran. Periksa master harga.');
             $prices[] = (float) ($price->harga ?? 0);
-            $volumes[] = (float) ($price->volume ?? 0);
+            $volumes[] = (float) KonfigurasiLabelParameter::volumeOf($parameterId);
         }
         return [$prices, $volumes];
     }

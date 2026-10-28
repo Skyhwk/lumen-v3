@@ -6,7 +6,7 @@ use Illuminate\Support\Str;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 use App\Models\OrderDetail;
-use App\Models\HargaParameter;
+use App\Models\KonfigurasiLabelParameter;
 use App\Models\KonfigurasiPraSampling;
 
 class SyncPersiapanService
@@ -35,10 +35,9 @@ class SyncPersiapanService
                 [$orderedParamId, $orderedParamName] = explode(';', $orderedParam);
 
                 if ($orderedCategoryName == 'air') {
-                    $bottleType = optional(HargaParameter::where([
+                    $bottleType = optional(KonfigurasiLabelParameter::where([
                         'id_parameter' => $orderedParamId,
                         'is_active' => true,
-                        'status'=> false,
                     ])->first())->regen;
 
                     if ($bottleType) {
@@ -139,11 +138,7 @@ class SyncPersiapanService
         if ($orderedCategoryName == 'air') {
             $parameter_names = array_map(fn($p) => explode(';', $p)[1], json_decode($orderDetail->parameter) ?? []);
 
-            $params = HargaParameter::where('id_kategori', $orderedCategoryId)
-                ->where('is_active', true)
-                ->where('status', false)
-                ->whereIn('nama_parameter', $parameter_names)
-                ->get();
+            $params = KonfigurasiLabelParameter::forNamaParameters($parameter_names);
 
             $param_map = [];
             foreach ($params as $param) {

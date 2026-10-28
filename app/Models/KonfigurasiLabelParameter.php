@@ -26,4 +26,56 @@ class KonfigurasiLabelParameter extends Sector
     {
         return $this->belongsTo(Parameter::class, 'id_parameter', 'id');
     }
+
+    public static function queryActive()
+    {
+        return static::query()->where('is_active', true);
+    }
+
+    public static function forParameterIds($ids)
+    {
+        if (empty($ids)) {
+            return collect();
+        }
+
+        return static::queryActive()
+            ->whereIn('id_parameter', $ids)
+            ->get(['volume', 'regen', 'id_parameter', 'nama_parameter']);
+    }
+
+    public static function forNamaParameters($names)
+    {
+        if (empty($names)) {
+            return collect();
+        }
+
+        return static::queryActive()
+            ->whereIn('nama_parameter', $names)
+            ->get(['volume', 'regen', 'id_parameter', 'nama_parameter']);
+    }
+
+    public static function volumeOf($idParameter)
+    {
+        return static::queryActive()
+            ->where('id_parameter', $idParameter)
+            ->value('volume') ?? 0;
+    }
+
+    public static function volumeOfNama($namaParameter)
+    {
+        return static::queryActive()
+            ->where('nama_parameter', $namaParameter)
+            ->value('volume') ?? 0;
+    }
+
+    public static function sumVolumeByNama($names)
+    {
+        if (empty($names)) {
+            return 0;
+        }
+
+        return (float) static::queryActive()
+            ->whereIn('nama_parameter', $names)
+            ->sum('volume');
+    }
 }

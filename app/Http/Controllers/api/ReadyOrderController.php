@@ -21,7 +21,7 @@ use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use App\Models\MasterKaryawan;
 use App\Models\Jadwal;
-use App\Models\HargaParameter;
+use App\Models\KonfigurasiLabelParameter;
 use App\Models\FtcT;
 use App\Models\Ftc;
 use App\Http\Controllers\Controller;
@@ -1348,14 +1348,7 @@ class ReadyOrderController extends Controller
                             return explode(';', $p)[0];
                         }, $value->parameter);
 
-                        $id_kategori = explode("-", $value->kategori_1)[0];
-
-                        $params = HargaParameter::where('id_kategori', $id_kategori)
-                            ->where('is_active', true)
-                            ->whereIn('id_parameter', $idParameter)
-                            ->selectRaw('volume, regen, id_parameter, nama_parameter')
-                            ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
-                            ->get();
+                        $params = KonfigurasiLabelParameter::forParameterIds($idParameter);
 
                         $param_map = [];
                         foreach ($params as $param) {
@@ -1864,14 +1857,7 @@ class ReadyOrderController extends Controller
                             return explode(';', $p)[0];
                         }, $value->parameter);
 
-                        $id_kategori = explode("-", $value->kategori_1)[0];
-
-                        $params = HargaParameter::where('id_kategori', $id_kategori)
-                            ->where('is_active', true)
-                            ->whereIn('id_parameter', $idParameter)
-                            ->selectRaw('volume, regen, id_parameter, nama_parameter')
-                            ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
-                            ->get();
+                        $params = KonfigurasiLabelParameter::forParameterIds($idParameter);
 
                         $param_map = [];
                         foreach ($params as $param) {
@@ -2443,13 +2429,7 @@ class ReadyOrderController extends Controller
                                         return explode(';', $p)[0];
                                     }, $value->parameter);
 
-                                    $id_kategori = explode("-", $value->kategori_1)[0];
-                                    $params = HargaParameter::where('id_kategori', $id_kategori)
-                                        ->where('is_active', true)
-                                        ->whereIn('id_parameter', $idParameter)
-                                        ->selectRaw('volume, regen, id_parameter, nama_parameter')
-                                        ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
-                                        ->get();
+                                    $params = KonfigurasiLabelParameter::forParameterIds($idParameter);
 
                                     $param_map = [];
                                     foreach ($params as $param) {
@@ -3206,14 +3186,7 @@ class ReadyOrderController extends Controller
                             return explode(';', $p)[0];
                         }, $value->parameter);
 
-                        $id_kategori = explode("-", $value->kategori_1)[0];
-
-                        $params = HargaParameter::where('id_kategori', $id_kategori)
-                            ->where('is_active', true)
-                            ->whereIn('id_parameter', $idParameter)
-                            ->selectRaw('volume, regen, id_parameter, nama_parameter')
-                            ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
-                            ->get();
+                        $params = KonfigurasiLabelParameter::forParameterIds($idParameter);
 
                         $param_map = [];
                         foreach ($params as $param) {

@@ -19,10 +19,13 @@ class MasterBotolController extends Controller
 
 
     public function getBotolOptions(){
-        $botol = DB::table('master_harga_parameter')
-        ->select('regen')
-        ->distinct()
-        ->get();
+        $botol = DB::table('konfigurasi_label_parameter')
+            ->select('regen')
+            ->where('is_active', true)
+            ->whereNotNull('regen')
+            ->where('regen', '!=', '')
+            ->distinct()
+            ->get();
 
         return response()->json($botol);
     }

@@ -1412,9 +1412,8 @@ class LimsFppsController extends Controller
 
         if (empty($paramIds)) return '';
 
-        $hargaParams = \App\Models\HargaParameter::whereIn('id_parameter', $paramIds)
+        $hargaParams = \App\Models\KonfigurasiLabelParameter::whereIn('id_parameter', $paramIds)
             ->where('is_active', true)
-            ->where('status', 0)
             ->whereNotNull('regen')
             ->get(['id_parameter', 'regen', 'volume'])
             ->keyBy('id_parameter');
