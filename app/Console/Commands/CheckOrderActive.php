@@ -271,14 +271,20 @@ class CheckOrderActive extends Command
                 $keyColumn = null;
             }
 
-            $selectColumns = ['no_order', 'created_at', 'approved_at'];
+            $selectColumns = ['no_order', 'created_at'];
             if ($keyColumn !== null) {
                 array_unshift($selectColumns, $keyColumn);
             }
             if (in_array('no_sampel', $tableColumns)) {
                 $selectColumns[] = 'no_sampel';
             }
-            
+
+            foreach ($this->lhpReleaseDateColumns() as $releaseDateColumn) {
+                if (in_array($releaseDateColumn, $tableColumns)) {
+                    $selectColumns[] = $releaseDateColumn;
+                }
+            }
+
             foreach (['is_approve', 'is_approved'] as $approveColumn) {
                 if (in_array($approveColumn, $tableColumns)) {
                     $selectColumns[] = $approveColumn;
@@ -349,6 +355,14 @@ class CheckOrderActive extends Command
         return null;
     }
 
+    private function lhpReleaseDateColumns(): array
+    {
+        return [
+            'tanggal_lhp',
+            'tanggal_rilis_lhp'
+        ];
+    }
+
     private function isLhpRecordApproved(array $lhpRecord): bool
     {
         foreach (['is_approve', 'is_approved'] as $column) {
@@ -363,6 +377,23 @@ class CheckOrderActive extends Command
         }
 
         return false;
+    }
+
+    private function resolveLhpReleaseDate(array $lhpRecord): ?string
+    {
+        if (!$this->isLhpRecordApproved($lhpRecord)) {
+            return null;
+        }
+
+        foreach ($this->lhpReleaseDateColumns() as $column) {
+            if (empty($lhpRecord[$column])) {
+                continue;
+            }
+
+            return Carbon::parse($lhpRecord[$column])->format('Y-m-d');
+        }
+
+        return null;
     }
 
     private function buildHasilUji(array $sampelNumbers, array $expectedParams = [], array $steps = [], string $cfrNo = ''): array
@@ -489,22 +520,24 @@ class CheckOrderActive extends Command
                 $steps['analisa']['date'] = $steps['sampling']['date'];
             }
 
-            $tglLhpRilis = ( !empty($lhps['approved_at']) && $this->isLhpRecordApproved($lhps) )
-                ? Carbon::parse($lhps['approved_at'])->format('Y-m-d')
-                : null;
+            $tglLhpRilis = $this->resolveLhpReleaseDate($lhps);
 
             $steps['lhp_release']['date'] = $tglLhpRilis;
+
+            if(($tglLhpRilis != null && $steps['drafting']['date'] !=null ) && ($tglLhpRilis < $steps['drafting']['date'])) {
+                $steps['drafting']['date'] = $tglLhpRilis;
+            }
         }
 
         $steps = LhpStepSequence::normalize($steps);
         $tglLhpRilis = $steps['lhp_release']['date'] ?? $tglLhpRilis;
         $steps['activeStep'] = $this->detectActiveStep($steps);
 
-       $lhpRilis = (($d['status'] ?? null) === 3) || ($steps['activeStep'] === 5);
-       $sampelNumbers = $group->pluck('no_sampel')->toArray();
-       $parameterHasil = json_decode($d['parameter'] ?? '', true);
-       $parameterRegulasi = $this->buildParameterRegulasi($d['parameter'] ?? '', $allParameter);
-       $kategori_2 = $d['kategori_2'] ?? '';
+        $lhpRilis = (($d['status'] ?? null) === 3) || ($steps['activeStep'] === 5);
+        $sampelNumbers = $group->pluck('no_sampel')->toArray();
+        $parameterHasil = json_decode($d['parameter'] ?? '', true);
+        $parameterRegulasi = $this->buildParameterRegulasi($d['parameter'] ?? '', $allParameter);
+        $kategori_2 = $d['kategori_2'] ?? '';
 
         $result = [
             'no_order'      => $d['no_order'],
