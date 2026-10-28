@@ -425,7 +425,10 @@ class RegistrasiCustomerController extends Controller
             // get pelanggan
             $namaPelanggan = MasterPelanggan::select('id_pelanggan', 'nama_pelanggan')->whereIn('id_pelanggan', $pelangganId)->get();
             //karywan
-            $pic = MasterKaryawan::select('nama_lengkap', 'email', 'no_telpon')->where('nama_lengkap', $header->created_by)->first();
+            $pic = MasterKaryawan::select('nama_lengkap', 'email', 'no_telpon', 'no_telpon_perusahaan')->where('nama_lengkap', $header->created_by)->first();
+            if ($pic) {
+                $pic->no_telpon = !empty($pic->no_telpon_perusahaan) ? $pic->no_telpon_perusahaan : $pic->no_telpon;
+            }
             foreach ($namaPelanggan as $key => $value) {
                 $tempPerushaan[] = $value->nama_pelanggan . ' [' . $value->id_pelanggan . ']';
             }
