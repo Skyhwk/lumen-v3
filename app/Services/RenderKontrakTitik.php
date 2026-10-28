@@ -966,7 +966,8 @@ class RenderKontrak
             $no_telp = "";
 
             $add = ($data->sales->nama_lengkap != null) ? $data->sales->nama_lengkap : "-";
-            $no_telp = ($data->sales->no_telpon != null) ? " (" . $data->sales->no_telpon . ")" : "";
+            $salesPhone = $data->sales ? (!empty($data->sales->no_telpon_perusahaan) ? $data->sales->no_telpon_perusahaan : $data->sales->no_telpon) : null;
+            $no_telp = !empty($salesPhone) ? " (" . $salesPhone . ")" : "";
             $updd = ($data->updated_by != null) ? $data->updated_by : "-";
             $st = ($data->is_approved == 0) ? "NOT APPROVED" : "APPROVED";
 

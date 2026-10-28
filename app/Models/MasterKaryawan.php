@@ -207,4 +207,20 @@ class MasterKaryawan extends Sector implements AuthenticatableContract
     {
         return $this->hasOne(FeeKaryawan::class, 'id_karyawan', 'id')->where('is_active', true);
     }
+
+    /**
+     * Mengambil nomor telepon untuk proses sales/bisnis.
+     * Memprioritaskan no_telpon_perusahaan dengan fallback ke no_telpon pribadi.
+     */
+    public function getNoTelponSalesAttribute(): ?string
+    {
+        $company = trim((string) ($this->no_telpon_perusahaan ?? ''));
+        if ($company !== '') {
+            return $company;
+        }
+
+        $personal = trim((string) ($this->no_telpon ?? ''));
+
+        return $personal !== '' ? $personal : null;
+    }
 }

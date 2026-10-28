@@ -673,7 +673,8 @@ trait RenderNonKontrak
             $no_telp = "";
             $app = "-";
             $add = $data->sales->nama_lengkap;
-            $no_telp = " (" . $data->sales->no_telpon . ")";
+            $salesPhone = $data->sales ? (!empty($data->sales->no_telpon_perusahaan) ? $data->sales->no_telpon_perusahaan : $data->sales->no_telpon) : null;
+            $no_telp = !empty($salesPhone) ? " (" . $salesPhone . ")" : "";
             $upd = $data->updated_by;
             if ($data->approve == 0) {
                 $st = "NOT APPROVED";

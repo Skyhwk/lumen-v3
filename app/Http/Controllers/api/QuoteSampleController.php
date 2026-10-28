@@ -318,7 +318,8 @@ class QuoteSampleController extends Controller
                 $no_telp = '';
                 if ($data->sales != null) {
                     $add = $data->sales->nama_lengkap;
-                    $no_telp = ' (' . $data->sales->no_telpon . ')';
+                    $salesPhone = !empty($data->sales->no_telpon_perusahaan) ? $data->sales->no_telpon_perusahaan : $data->sales->no_telpon;
+                    $no_telp = !empty($salesPhone) ? ' (' . $salesPhone . ')' : '';
                 }
                 $kontrak = $this->tanggal_indonesia($value->periode_kontrak, 'period');
                 // dump($value->periode_kontrak);
@@ -616,7 +617,8 @@ class QuoteSampleController extends Controller
             $no_telp = '';
             if ($data->sales != null) {
                 $add = $data->sales->nama_lengkap;
-                $no_telp = ' (' . $data->sales->no_telpon . ')';
+                $salesPhone = !empty($data->sales->no_telpon_perusahaan) ? $data->sales->no_telpon_perusahaan : $data->sales->no_telpon;
+                $no_telp = !empty($salesPhone) ? ' (' . $salesPhone . ')' : '';
             }
 
             $mpdfConfig = array(
