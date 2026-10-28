@@ -46,6 +46,7 @@ class Kernel extends ConsoleKernel
         Commands\SyncSpecificLimsData::class,
         Commands\TruncateLimsTesting::class,
         Commands\SyncShioElemen::class,
+        Commands\SyncNoTelponPerusahaanSalesCommand::class,
         Commands\BackfillPersiapanSampel::class,
         Commands\GenerateWsFinalApproval::class,
         Commands\SyncOrderDetaolFromJadwal::class,

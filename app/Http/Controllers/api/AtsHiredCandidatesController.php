@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use App\Helpers\MasterKaryawanCompanyPhoneHelper;
 use Yajra\DataTables\Facades\DataTables;
 use App\Http\Controllers\api\Concerns\OrdersAtsDataTableColumns;
 use App\Http\Controllers\api\Concerns\ServesAtsClientSideList;
@@ -769,6 +770,15 @@ class AtsHiredCandidatesController extends Controller
         $karyawan->provinsi = data_get($request, 'contact.province');
         $karyawan->kota = data_get($request, 'contact.city');
         $karyawan->no_telpon = data_get($request, 'contact.phone') ?: $recruitment->no_telepon;
+        if (Schema::hasColumn('master_karyawan', 'no_telpon_perusahaan')) {
+            $karyawan->no_telpon_perusahaan = MasterKaryawanCompanyPhoneHelper::resolve(
+                [
+                    'phone' => $karyawan->no_telpon,
+                    'company_phone' => data_get($request, 'contact.company_phone'),
+                ],
+                data_get($request, 'employee.position')
+            );
+        }
         $karyawan->kode_pos = data_get($request, 'contact.postal_code');
         $karyawan->privilage_cabang = json_encode($privBranches);
         $karyawan->image = $imageName;

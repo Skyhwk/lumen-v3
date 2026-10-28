@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 
 use Carbon\Carbon;
 
@@ -23,8 +24,10 @@ use App\Models\{
 };
 
 use App\Jobs\NonaktifKaryawanJob;
+use App\Services\MasterKaryawanSupplementarySaveService;
 use App\Services\MasterSallaryNikSyncService;
 use App\Services\PayrollRecordSyncService;
+use App\Helpers\MasterKaryawanCompanyPhoneHelper;
 use App\Helpers\ShioElemenHelper;
 
 class MasterKaryawanController extends Controller
@@ -51,6 +54,8 @@ class MasterKaryawanController extends Controller
                 $query->where('is_active', true);
             },
             'sertifikat_karyawan',
+            'keahlian_karyawan',
+            'keahlian_bahasa_karyawan',
             'kontak_darurat' => function ($query) {
                 $query->where('is_active', true);
             },
@@ -89,6 +94,7 @@ class MasterKaryawanController extends Controller
                 'country' => $row->negara,
                 'city' => $row->kota,
                 'phone' => $row->no_telpon,
+                'company_phone' => $row->no_telpon_perusahaan,
                 'province' => $row->provinsi,
                 'postal_code' => $row->kode_pos
             ];
@@ -118,38 +124,84 @@ class MasterKaryawanController extends Controller
             ];
         })
             ->addColumn('pendidikan', function ($row) {
-                $rows = $row->pendidikan_karyawan
-                    ->filter(function ($item) {
-                        return (int) ($item->is_active ?? 1) !== 0
-                            && (trim((string) $item->jenjang) !== '' || trim((string) $item->institusi) !== '');
-                    })
-                    ->sortByDesc(function ($item) {
-                        return sprintf('%04d-%06d', (int) $item->tahun_lulus, (int) $item->id);
-                    })
-                    ->values()
+                return $this->mapEducationRows($row);
+            })
+            ->addColumn('education', function ($row) {
+                return $this->mapEducationRows($row);
+            })
+            ->addColumn('medical', function ($row) {
+                $m = $row->medical;
+                if (!$m) {
+                    return [];
+                }
+
+                return [
+                    'tinggi_badan' => $m->tinggi_badan,
+                    'berat_badan' => $m->berat_badan,
+                    'rate_mata' => $m->rate_mata,
+                    'golongan_darah' => $m->golongan_darah,
+                    'penyakit_bawaan_lahir' => $m->penyakit_bawaan_lahir,
+                    'penyakit_lahir' => $m->penyakit_bawaan_lahir,
+                    'penyakit_kronis' => $m->penyakit_kronis,
+                    'riwayat_kecelakaan' => $m->riwayat_kecelakaan,
+                    'obat_rutin' => $m->obat_rutin,
+                    'gangguan_mental' => $m->gangguan_mental,
+                    'alergi' => $m->alergi,
+                    'keterangan_mata' => $m->keterangan_mata,
+                ];
+            })
+            ->addColumn('certificate', function ($row) {
+                return $this->relationItems($row, 'sertifikat_karyawan')
                     ->map(function ($item) {
                         return [
                             'id' => $item->id,
-                            'jenjang' => $item->jenjang,
-                            'institusi' => $item->institusi,
-                            'jurusan' => $item->jurusan,
-                            'tahun_masuk' => $item->tahun_masuk,
-                            'tahun_lulus' => $item->tahun_lulus,
-                            'kota' => $item->kota,
+                            'nama_sertifikat' => $item->nama_sertifikat,
+                            'tipe_sertifikat' => $item->tipe_sertifikat,
+                            'nomor_sertifikat' => $item->nomor_sertifikat,
+                            'deskripsi_sertifikat' => $item->deskripsi_sertifikat,
+                            'tgl_sertifikat' => $item->tgl_sertifikat,
+                            'tgl_exp_sertifikat' => $item->tgl_exp_sertifikat,
                         ];
                     })
+                    ->values()
                     ->all();
-
-                if ($rows) {
-                    return $rows;
-                }
-
-                $decoded = json_decode($row->getOriginal('pendidikan') ?: '[]', true);
-                return is_array($decoded) ? $decoded : [];
+            })
+            ->addColumn('experience', function ($row) {
+                return $this->mapExperienceRows($row);
+            })
+            ->addColumn('skill', function ($row) {
+                return $this->relationItems($row, 'keahlian_karyawan')
+                    ->map(function ($item) {
+                        return [
+                            'id' => $item->id,
+                            'keahlian' => $item->keahlian,
+                            'rate' => $item->rate,
+                        ];
+                    })
+                    ->values()
+                    ->all();
+            })
+            ->addColumn('languages', function ($row) {
+                return $this->relationItems($row, 'keahlian_bahasa_karyawan')
+                    ->map(function ($item) {
+                        return [
+                            'id' => $item->id,
+                            'bahasa' => $item->bahasa,
+                            'baca' => $item->baca,
+                            'tulis' => $item->tulis,
+                            'dengar' => $item->dengar,
+                            'bicara' => $item->bicara,
+                        ];
+                    })
+                    ->values()
+                    ->all();
+            })
+            ->addColumn('payroll', function ($row) {
+                return [];
             })
             ->addColumn('kontak_darurat', function ($row) {
                 $seen = [];
-                return $row->kontak_darurat
+                return $this->relationItems($row, 'kontak_darurat')
                     ->filter(function ($item) use (&$seen) {
                         if ((int) ($item->is_active ?? 1) === 0) {
                             return false;
@@ -462,12 +514,8 @@ class MasterKaryawanController extends Controller
                 ];
 
                 if ($request->has('contact')) {
-                    $dataKaryawan['alamat'] = $request->contact['address'];
-                    $dataKaryawan['negara'] = $request->contact['country'];
-                    $dataKaryawan['provinsi'] = $request->contact['province'];
-                    $dataKaryawan['kota'] = $request->contact['city'];
-                    $dataKaryawan['no_telpon'] = $request->contact['phone'];
-                    $dataKaryawan['kode_pos'] = $request->contact['postal_code'];
+                    $positionId = $request->employee['position'] ?? $karyawan->id_jabatan;
+                    $this->applyContactPayload($dataKaryawan, $request->contact, $positionId);
                 }
 
                 if ($request->has('employee')) {
@@ -511,6 +559,17 @@ class MasterKaryawanController extends Controller
                     $dataKaryawan['cost_center'] = $request->employee['ccenter'];
                     $dataKaryawan['tgl_pra_pensiun'] = ($request->employee['ppdate'] != '' ? $request->employee['ppdate'] : null);
                     $dataKaryawan['tgl_pensiun'] = ($request->employee['pdate'] != '' ? $request->employee['pdate'] : null);
+                }
+
+                if (
+                    $request->has('employee')
+                    && !$request->has('contact')
+                    && Schema::hasColumn('master_karyawan', 'no_telpon_perusahaan')
+                ) {
+                    $dataKaryawan['no_telpon_perusahaan'] = MasterKaryawanCompanyPhoneHelper::resolve([
+                        'phone' => $karyawan->no_telpon,
+                        'company_phone' => $karyawan->no_telpon_perusahaan,
+                    ], $request->employee['position']);
                 }
 
                 if ($request->has('access')) {
@@ -585,6 +644,8 @@ class MasterKaryawanController extends Controller
                     }
                 }
 
+                app(MasterKaryawanSupplementarySaveService::class)->sync($karyawan->id, $request, $this->karyawan);
+
                 return response()->json(['message' => 'Karyawan updated successfully'], 200);
             });
         } else {
@@ -613,12 +674,8 @@ class MasterKaryawanController extends Controller
                 ];
 
                 if ($request->has('contact')) {
-                    $dataKaryawan['alamat'] = $request->contact['address'];
-                    $dataKaryawan['negara'] = $request->contact['country'];
-                    $dataKaryawan['provinsi'] = $request->contact['province'];
-                    $dataKaryawan['kota'] = $request->contact['city'];
-                    $dataKaryawan['no_telpon'] = $request->contact['phone'];
-                    $dataKaryawan['kode_pos'] = $request->contact['postal_code'];
+                    $positionId = $request->employee['position'] ?? null;
+                    $this->applyContactPayload($dataKaryawan, $request->contact, $positionId);
                 }
 
                 if ($request->has('employee')) {
@@ -703,6 +760,8 @@ class MasterKaryawanController extends Controller
                     $karyawan->user_id = $user->id;
                     $karyawan->save();
                 }
+
+                app(MasterKaryawanSupplementarySaveService::class)->sync($karyawan->id, $request, $this->karyawan);
 
                 return response()->json(['message' => 'Karyawan created successfully'], 201);
             });
@@ -909,5 +968,123 @@ class MasterKaryawanController extends Controller
     private function excludeHiddenKaryawanFromFrontend($query): void
     {
         $query->whereNotIn('id', self::FRONTEND_HIDDEN_KARYAWAN_IDS);
+    }
+
+    /**
+     * @param  array<string, mixed>  $dataKaryawan
+     * @param  array<string, mixed>  $contact
+     */
+    private function relationItems($row, string $relation): \Illuminate\Support\Collection
+    {
+        $value = $row->{$relation} ?? null;
+
+        if ($value instanceof \Illuminate\Support\Collection) {
+            return $value;
+        }
+
+        if (is_array($value)) {
+            return collect($value);
+        }
+
+        return collect([]);
+    }
+
+    private function mapExperienceRows($row): array
+    {
+        $mapped = $this->relationItems($row, 'pengalaman_kerja')
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'nama_perusahaan' => $item->nama_perusahaan,
+                    'lokasi_perusahaan' => $item->lokasi_perusahaan,
+                    'posisi_kerja' => $item->posisi_kerja,
+                    'tgl_mulai_kerja' => $item->tgl_mulai_kerja,
+                    'tgl_berakhir_kerja' => $item->tgl_berakhir_kerja,
+                    'alasan_keluar' => $item->alasan_keluar,
+                ];
+            })
+            ->values()
+            ->all();
+
+        if ($mapped !== []) {
+            return $mapped;
+        }
+
+        $raw = $row->getAttributes()['pengalaman_kerja'] ?? null;
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+
+        $decoded = is_string($raw) ? json_decode($raw, true) : $raw;
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        return collect($decoded)
+            ->filter(fn ($item) => is_array($item))
+            ->map(function ($item) {
+                return [
+                    'id' => $item['id'] ?? null,
+                    'nama_perusahaan' => $item['nama_perusahaan'] ?? null,
+                    'lokasi_perusahaan' => $item['lokasi_perusahaan'] ?? null,
+                    'posisi_kerja' => $item['posisi_kerja'] ?? null,
+                    'tgl_mulai_kerja' => $item['tgl_mulai_kerja'] ?? $item['mulai_kerja'] ?? $item['tanggal_mulai'] ?? null,
+                    'tgl_berakhir_kerja' => $item['tgl_berakhir_kerja'] ?? $item['akhir_kerja'] ?? $item['tanggal_selesai'] ?? null,
+                    'alasan_keluar' => $item['alasan_keluar'] ?? $item['alasan_resign'] ?? null,
+                ];
+            })
+            ->filter(function ($item) {
+                return trim((string) ($item['nama_perusahaan'] ?? '')) !== ''
+                    || trim((string) ($item['posisi_kerja'] ?? '')) !== '';
+            })
+            ->values()
+            ->all();
+    }
+
+    private function mapEducationRows($row): array
+    {
+        $rows = $this->relationItems($row, 'pendidikan_karyawan')
+            ->filter(function ($item) {
+                return (int) ($item->is_active ?? 1) !== 0
+                    && (trim((string) $item->jenjang) !== '' || trim((string) $item->institusi) !== '');
+            })
+            ->sortByDesc(function ($item) {
+                return sprintf('%04d-%06d', (int) $item->tahun_lulus, (int) $item->id);
+            })
+            ->values()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'jenjang' => $item->jenjang,
+                    'institusi' => $item->institusi,
+                    'jurusan' => $item->jurusan,
+                    'tahun_masuk' => $item->tahun_masuk,
+                    'tahun_lulus' => $item->tahun_lulus,
+                    'kota' => $item->kota,
+                ];
+            })
+            ->all();
+
+        if ($rows) {
+            return $rows;
+        }
+
+        $decoded = json_decode($row->getOriginal('pendidikan') ?: '[]', true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private function applyContactPayload(array &$dataKaryawan, array $contact, $positionId): void
+    {
+        $dataKaryawan['alamat'] = $contact['address'] ?? null;
+        $dataKaryawan['negara'] = $contact['country'] ?? null;
+        $dataKaryawan['provinsi'] = $contact['province'] ?? null;
+        $dataKaryawan['kota'] = $contact['city'] ?? null;
+        $dataKaryawan['no_telpon'] = $contact['phone'] ?? null;
+        $dataKaryawan['kode_pos'] = $contact['postal_code'] ?? null;
+
+        if (Schema::hasColumn('master_karyawan', 'no_telpon_perusahaan')) {
+            $dataKaryawan['no_telpon_perusahaan'] = MasterKaryawanCompanyPhoneHelper::resolve($contact, $positionId);
+        }
     }
 }
