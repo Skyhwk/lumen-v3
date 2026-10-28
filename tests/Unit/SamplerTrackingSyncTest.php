@@ -225,6 +225,64 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertNotNull($this->service->checkoutBasWarning($memberB->id));
     }
 
+    public function testCheckoutBasWarningBypassedWhenSeparateSessionsForSameCompanyHave24Jam(): void
+    {
+        $connection = $this->db->getConnection('mysql');
+        $session24h = SamplerTrackingSession::create([
+            'team_key' => 'shk-24h',
+            'tanggal_sampling' => '2026-09-17',
+            'nama_perusahaan' => 'SHK KEVA INDONESIA, PT',
+            'no_order' => 'IPSD012602',
+            'durasi' => '1 x 24 Jam',
+            'is_active' => true,
+        ]);
+        $member24h = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $session24h->id,
+            'sampler_id' => 101,
+            'sampler_name' => 'Ali Fahmi Amrullah',
+            'durasi' => '1 x 24 Jam',
+            'is_active' => true,
+        ]);
+
+        $sessionSesaat = SamplerTrackingSession::create([
+            'team_key' => 'shk-sesaat',
+            'tanggal_sampling' => '2026-09-17',
+            'nama_perusahaan' => 'SHK KEVA INDONESIA, PT',
+            'no_order' => 'IPSD012602',
+            'durasi' => 'Sesaat',
+            'is_active' => true,
+        ]);
+        $memberSesaat = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $sessionSesaat->id,
+            'sampler_id' => 102,
+            'sampler_name' => 'Marcellius Raka Hardi Aditya',
+            'durasi' => 'Sesaat',
+            'is_active' => true,
+        ]);
+
+        if (!$connection->getSchemaBuilder()->hasColumn('persiapan_sampel_header', 'no_order')) {
+            $connection->getSchemaBuilder()->table('persiapan_sampel_header', function (\Illuminate\Database\Schema\Blueprint $table) {
+                $table->string('no_order')->nullable();
+            });
+        }
+
+        $connection->table('persiapan_sampel_header')->insert([
+            'no_order' => 'IPSD012602',
+            'no_quotation' => 'Q-SHK',
+            'tanggal_sampling' => '2026-09-17',
+            'is_active' => true,
+            'is_emailed_bas' => 0,
+        ]);
+
+        // Marcellius (Sesaat) di PT SHK KEVA INDONESIA di-bypass dari validasi BAS
+        $this->assertNull($this->service->checkoutBasWarning($memberSesaat->id));
+
+        // Ali Fahmi (1 x 24 Jam) tetap wajib validasi BAS
+        $warning24h = $this->service->checkoutBasWarning($member24h->id);
+        $this->assertNotNull($warning24h);
+        $this->assertSame('Anda tidak dapat checkout dikarenakan BAS belum disubmit.', $warning24h['message']);
+    }
+
     public function testRouteCannotChangeAfterDeparture(): void
     {
         $today = \Carbon\Carbon::now('Asia/Jakarta')->toDateString();
