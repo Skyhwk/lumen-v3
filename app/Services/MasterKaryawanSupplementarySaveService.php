@@ -55,8 +55,41 @@ class MasterKaryawanSupplementarySaveService
         return [];
     }
 
+    /** @param array<string, mixed> $medical */
+    public static function normalizeMedicalInput(array $medical): array
+    {
+        $defaults = [
+            'tinggi_badan' => null,
+            'berat_badan' => null,
+            'rate_mata' => null,
+            'golongan_darah' => null,
+            'penyakit_lahir' => null,
+            'penyakit_bawaan_lahir' => null,
+            'penyakit_kronis' => null,
+            'riwayat_kecelakaan' => null,
+            'obat_rutin' => null,
+            'gangguan_mental' => null,
+            'alergi' => null,
+            'keterangan_mata' => null,
+        ];
+
+        $merged = array_merge($defaults, $medical);
+
+        $penyakitLahir = trim((string) ($merged['penyakit_lahir'] ?? ''));
+        $penyakitBawaan = trim((string) ($merged['penyakit_bawaan_lahir'] ?? ''));
+        if ($penyakitBawaan === '' && $penyakitLahir !== '') {
+            $merged['penyakit_bawaan_lahir'] = $penyakitLahir;
+        } elseif ($penyakitLahir === '' && $penyakitBawaan !== '') {
+            $merged['penyakit_lahir'] = $penyakitBawaan;
+        }
+
+        return $merged;
+    }
+
     private function syncMedical(int $karyawanId, array $medical, $actorId, string $timestamp): void
     {
+        $medical = self::normalizeMedicalInput($medical);
+
         $payload = [
             'tinggi_badan' => $this->nullableString($medical['tinggi_badan'] ?? null),
             'berat_badan' => $this->nullableString($medical['berat_badan'] ?? null),

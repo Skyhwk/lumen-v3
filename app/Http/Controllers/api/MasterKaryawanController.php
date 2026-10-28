@@ -591,33 +591,6 @@ class MasterKaryawanController extends Controller
 
                 $karyawan->update($dataKaryawan);
 
-                if ($request->has('medical') && isset($request->medical['tinggi_badan']) && $request->medical['tinggi_badan'] != '') {
-                    $dataMedical = [
-                        'tinggi_badan' => $request->medical['tinggi_badan'],
-                        'berat_badan' => $request->medical['berat_badan'],
-                        'rate_mata' => $request->medical['rate_mata'],
-                        'golongan_darah' => $request->medical['golongan_darah'],
-                        'penyakit_bawaan_lahir' => $request->medical['penyakit_lahir'],
-                        'penyakit_kronis' => $request->medical['penyakit_kronis'],
-                        'riwayat_kecelakaan' => $request->medical['riwayat_kecelakaan'],
-                    ];
-
-                    if (isset($request->medical['keterangan_mata']) && $request->medical['keterangan_mata'] != 'true') {
-                        $dataMedical['keterangan_mata'] = $request->medical['keterangan_mata'];
-                    } else {
-                        $dataMedical['keterangan_mata'] = null;
-                    }
-
-                    $checkMedical = MedicalCheckup::where('karyawan_id', $karyawan->id)->first();
-
-                    if ($checkMedical) {
-                        $checkMedical->update($dataMedical);
-                    } else {
-                        $dataMedical['karyawan_id'] = $karyawan->id;
-                        MedicalCheckup::create($dataMedical);
-                    }
-                }
-
                 if ($request->has('access') && isset($request->access['username']) && $request->access['username'] != '') {
                     $dataUser = [
                         'username' => $request->access['username'],
@@ -724,27 +697,6 @@ class MasterKaryawanController extends Controller
                 $dataKaryawan['created_at'] = DATE('Y-m-d H:i:s');
 
                 $karyawan = MasterKaryawan::create($dataKaryawan);
-
-                if ($request->has('medical') && isset($request->medical['tinggi_badan']) && $request->medical['tinggi_badan'] != '') {
-                    $dataMedical = [
-                        'karyawan_id' => $karyawan->id,
-                        'tinggi_badan' => $request->medical['tinggi_badan'],
-                        'berat_badan' => $request->medical['berat_badan'],
-                        'golongan_darah' => $request->medical['golongan_darah'],
-                        'rate_mata' => $request->medical['rate_mata'],
-                        'penyakit_bawaan_lahir' => $request->medical['penyakit_lahir'],
-                        'penyakit_kronis' => $request->medical['penyakit_kronis'],
-                        'riwayat_kecelakaan' => $request->medical['riwayat_kecelakaan'],
-                    ];
-
-                    if (isset($request->medical['keterangan_mata']) && $request->medical['keterangan_mata'] != 'true') {
-                        $dataMedical['keterangan_mata'] = $request->medical['keterangan_mata'];
-                    } else {
-                        $dataMedical['keterangan_mata'] = null;
-                    }
-
-                    MedicalCheckup::create($dataMedical);
-                }
 
                 if ($request->has('access') && isset($request->access['username']) && $request->access['username'] != '') {
                     $dataUser = [
