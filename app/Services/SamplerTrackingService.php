@@ -2979,51 +2979,85 @@ public function buildTrackingRows($sessions)
         $session = $member->session;
         $memberDuration = $this->resolveMemberDuration($member);
 
-        $sessionQuery = SamplerTrackingSession::where('is_active', true)
-            ->whereDate('tanggal_sampling', $session->tanggal_sampling);
-
-        if ($session->no_order && $session->no_quotation) {
-            $sessionQuery->where(function ($q) use ($session) {
-                $q->where('no_order', $session->no_order)
-                    ->orWhere('no_quotation', $session->no_quotation);
-            });
-        } elseif ($session->no_order) {
-            $sessionQuery->where('no_order', $session->no_order);
-        } elseif ($session->no_quotation) {
-            $sessionQuery->where('no_quotation', $session->no_quotation);
-        } else {
-            $sessionQuery->where('id', $session->id);
-        }
-
-        $relatedSessionIds = $sessionQuery->pluck('id')->all();
-        if (empty($relatedSessionIds)) {
-            $relatedSessionIds = [$session->id];
-        }
-
-        $teammates = SamplerTrackingMember::whereIn('sampler_tracking_session_id', $relatedSessionIds)
+        // Cari sesi-sesi pada hari sampling yang sama untuk order/quotation/perusahaan terkait
+        $sessionQuery = SamplerTrackingSession::with(['activeMembers'])
             ->where('is_active', true)
-            ->get();
+            ->whereDate('tanggal_sampling', $session->tanggal_sampling)
+            ->where(function ($query) use ($session) {
+                $hasCondition = false;
 
-        if ($teammates->isEmpty() && $session->relationLoaded('activeMembers') && $session->activeMembers) {
-            $teammates = $session->activeMembers;
+                if (!empty($session->no_order)) {
+                    $query->orWhere('no_order', $session->no_order);
+                    $hasCondition = true;
+                }
+
+                if (!empty($session->no_quotation)) {
+                    $query->orWhere('no_quotation', $session->no_quotation);
+                    $hasCondition = true;
+                }
+
+                if (!empty($session->id_sampling)) {
+                    $query->orWhere('id_sampling', $session->id_sampling);
+                    $hasCondition = true;
+                }
+
+                if (!empty($session->nama_perusahaan)) {
+                    $query->orWhere('nama_perusahaan', $session->nama_perusahaan);
+                    $hasCondition = true;
+                }
+
+                if (!$hasCondition) {
+                    $query->where('id', $session->id);
+                }
+            });
+
+        $relatedSessions = $sessionQuery->get();
+        if ($relatedSessions->isEmpty()) {
+            $relatedSessions = collect([$session]);
         }
 
-        $hasLongerTeammate = $teammates->contains(function ($other) use ($member, $memberDuration) {
-            if ((string) $other->id === (string) $member->id) {
-                return false;
-            }
-            if ($member->sampler_id && (string) $other->sampler_id === (string) $member->sampler_id) {
-                return false;
-            }
-            if ($member->sampler_name && strcasecmp(trim((string) $other->sampler_name), trim((string) $member->sampler_name)) === 0) {
-                return false;
+        $hasLongerTeammate = $relatedSessions->contains(function ($otherSession) use ($session, $member, $memberDuration) {
+            $otherSessionDuration = $this->resolveDurationValue($otherSession->durasi);
+            $otherMembers = $otherSession->activeMembers ?: collect();
+
+            $hasOtherSampler = $otherMembers->contains(function ($otherMember) use ($member) {
+                if ((string) $otherMember->id === (string) $member->id) {
+                    return false;
+                }
+                if ($member->sampler_id && (string) $otherMember->sampler_id === (string) $member->sampler_id) {
+                    return false;
+                }
+                if ($member->sampler_name && strcasecmp(trim((string) $otherMember->sampler_name), trim((string) $member->sampler_name)) === 0) {
+                    return false;
+                }
+                return true;
+            });
+
+            // Jika sesi lain di lokasi/order/perusahaan ini memiliki durasi lebih panjang
+            if (($hasOtherSampler || (string) $otherSession->id !== (string) $session->id) && $otherSessionDuration > $memberDuration) {
+                return true;
             }
 
-            return $this->resolveMemberDuration($other) > $memberDuration;
+            return $otherMembers->contains(function ($otherMember) use ($member, $memberDuration, $otherSession) {
+                if ((string) $otherMember->id === (string) $member->id) {
+                    return false;
+                }
+                if ($member->sampler_id && (string) $otherMember->sampler_id === (string) $member->sampler_id) {
+                    return false;
+                }
+                if ($member->sampler_name && strcasecmp(trim((string) $otherMember->sampler_name), trim((string) $member->sampler_name)) === 0) {
+                    return false;
+                }
+
+                $otherMember->setRelation('session', $otherSession);
+                $otherMemberDuration = $this->resolveMemberDuration($otherMember);
+
+                return $otherMemberDuration > $memberDuration;
+            });
         });
 
         // Anggota dengan durasi lebih pendek/sesaat tidak diwajibkan validasi BAS
-        // jika ada rekan tim di order yang sama yang masih menjalankan durasi lanjutan (misal 24 jam).
+        // jika ada rekan tim di order/lokasi yang sama yang masih menjalankan durasi lanjutan (misal 24 jam).
         if ($hasLongerTeammate) {
             return null;
         }
@@ -3065,14 +3099,47 @@ public function buildTrackingRows($sessions)
             return 0;
         }
 
-        $duration = SamplerTrackingActivity::duration($member);
-        if ($duration === 0 && empty($member->effective_duration) && empty($member->durasi_personal)) {
-            if ($member->session && $member->session->durasi !== null && $member->session->durasi !== '') {
-                return max(0, (int) $member->session->durasi);
+        foreach (['effective_duration', 'durasi_personal', 'duration', 'durasi'] as $field) {
+            if (isset($member->$field) && $member->$field !== null && trim((string) $member->$field) !== '') {
+                return $this->resolveDurationValue($member->$field);
             }
         }
 
-        return $duration;
+        if ($member->session && $member->session->durasi !== null && trim((string) $member->session->durasi) !== '') {
+            return $this->resolveDurationValue($member->session->durasi);
+        }
+
+        return 0;
+    }
+
+    protected function resolveDurationValue($value)
+    {
+        if ($value === null || trim((string) $value) === '') {
+            return 0;
+        }
+
+        if (is_numeric($value)) {
+            return max(0, (int) $value);
+        }
+
+        $trimmed = strtolower(trim((string) $value));
+        if ($trimmed === 'sesaat' || strpos($trimmed, 'sesaat') !== false) {
+            return 0;
+        }
+
+        if ($trimmed === '8 jam' || strpos($trimmed, '8 jam') !== false) {
+            return 1;
+        }
+
+        if (preg_match('/(\d+)\s*x\s*24\s*jam/i', $trimmed, $matches)) {
+            return max(2, ((int) $matches[1]) + 1);
+        }
+
+        if (strpos($trimmed, '24 jam') !== false) {
+            return 2;
+        }
+
+        return max(0, (int) $value);
     }
 
     protected function isBasDocumentFilled($value)
