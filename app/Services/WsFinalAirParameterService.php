@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\OrderDetail;
+use App\Models\SampelDiantar;
 use Illuminate\Support\Collection;
 
 class WsFinalAirParameterService
@@ -59,6 +60,54 @@ class WsFinalAirParameterService
         })->filter(fn ($row) => $row['value'] !== '')->values();
     }
 
+    /** @return array<int, array<string, mixed>>|null */
+    public static function decodeInternalDataJson(?string $raw): ?array
+    {
+        if ($raw === null || trim($raw) === '') {
+            return null;
+        }
+
+        $normalized = str_replace('&quot;', '"', $raw);
+        $decoded = json_decode(html_entity_decode($normalized), true);
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * Cari baris internal_data untuk no_sampel — scan semua header & detail (sama ModalEvaluation.js).
+     */
+    public static function findSdInternalRowForSample(string $noOrder, string $noSampel): ?array
+    {
+        $headers = SampelDiantar::with('detail')
+            ->where('no_order', $noOrder)
+            ->get();
+
+        foreach ($headers as $header) {
+            foreach ($header->detail as $detail) {
+                $decoded = self::decodeInternalDataJson($detail->internal_data);
+                if (!$decoded) {
+                    continue;
+                }
+
+                foreach ($decoded as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+                    if ((string) ($row['no_sampel'] ?? '') !== $noSampel) {
+                        continue;
+                    }
+                    if (array_key_exists('is_active', $row) && $row['is_active'] === false) {
+                        continue;
+                    }
+
+                    return $row;
+                }
+            }
+        }
+
+        return null;
+    }
+
     /**
      * Samakan dengan ModalEvaluation.js (SD / sampel diantar).
      */
@@ -68,31 +117,10 @@ class WsFinalAirParameterService
             return null;
         }
 
-        $sampelDiantar = $orderDetail->sampelDiantar;
-        if (!$sampelDiantar || !$sampelDiantar->relationLoaded('detail')) {
-            return null;
-        }
-
-        $noSampel = $orderDetail->no_sampel;
-
-        foreach ($sampelDiantar->detail as $detail) {
-            if (empty($detail->internal_data)) {
-                continue;
-            }
-
-            $decoded = json_decode(str_replace('&quot;', '"', $detail->internal_data), true);
-            if (!is_array($decoded)) {
-                continue;
-            }
-
-            foreach ($decoded as $row) {
-                if (($row['no_sampel'] ?? null) === $noSampel) {
-                    return $row;
-                }
-            }
-        }
-
-        return null;
+        return self::findSdInternalRowForSample(
+            (string) $orderDetail->no_order,
+            (string) $orderDetail->no_sampel
+        );
     }
 
     /**
