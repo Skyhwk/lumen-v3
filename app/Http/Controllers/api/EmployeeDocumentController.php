@@ -24,13 +24,39 @@ class EmployeeDocumentController extends Controller
     public function index(Request $request)
     {
         $data = MasterKaryawan::query()
-            ->where('is_active', true)
-            ->where('grade', '!=', 'DIRECTOR')
+            ->select([
+                'master_karyawan.*',
+                'master_jabatan.nama_jabatan',
+                'master_cabang.nama_cabang',
+            ])
+            ->leftJoin('master_jabatan', function ($join) {
+                $join->on('master_karyawan.id_jabatan', '=', 'master_jabatan.id')
+                    ->where('master_jabatan.is_active', true);
+            })
+            ->leftJoin('master_cabang', function ($join) {
+                $join->on('master_karyawan.id_cabang', '=', 'master_cabang.id')
+                    ->where('master_cabang.is_active', true);
+            })
+            ->where('master_karyawan.is_active', true)
+            ->where('master_karyawan.grade', '!=', 'DIRECTOR')
             ->withCount(['employeeDocuments as dokumen_count' => function ($query) {
                 $query->where('is_active', 1);
             }]);
 
-        return Datatables::of($data)->make(true);
+        return Datatables::of($data)
+            ->filterColumn('nama_jabatan', function ($query, $keyword) {
+                $query->where('master_jabatan.nama_jabatan', 'like', "%{$keyword}%");
+            })
+            ->orderColumn('nama_jabatan', function ($query, $order) {
+                $query->orderBy('master_jabatan.nama_jabatan', $order);
+            })
+            ->filterColumn('nama_cabang', function ($query, $keyword) {
+                $query->where('master_cabang.nama_cabang', 'like', "%{$keyword}%");
+            })
+            ->orderColumn('nama_cabang', function ($query, $order) {
+                $query->orderBy('master_cabang.nama_cabang', $order);
+            })
+            ->make(true);
     }
 
     public function documentTypes()
