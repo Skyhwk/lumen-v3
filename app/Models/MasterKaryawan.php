@@ -138,6 +138,16 @@ class MasterKaryawan extends Sector implements AuthenticatableContract
     {
         return $this->hasMany(PengalamanKerjaKaryawan::class, 'karyawan_id')->where('is_active', true);
     }
+
+    public function keahlian_karyawan()
+    {
+        return $this->hasMany(KeahlianKaryawan::class, 'karyawan_id');
+    }
+
+    public function keahlian_bahasa_karyawan()
+    {
+        return $this->hasMany(KeahlianBahasaKaryawan::class, 'karyawan_id');
+    }
     // public function rekap()
     // {
     //     return $this->hasMany(RekapMasukKerja::class, 'karyawan_id', 'id')->where('is_active', true);
