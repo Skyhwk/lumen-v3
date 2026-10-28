@@ -419,6 +419,7 @@ class RequestQuotationController extends Controller
     public function getTemplateList(Request $request)
     {
         $jabatan = $request->attributes->get('user')->karyawan->grade;
+        $idJabatan = MasterKaryawan::where('id', $this->user_id)->first()->id_jabatan;
         $query = TemplatePenawaran::where('tipe', $request->mode)
             ->where('is_active', true);
 
@@ -431,7 +432,11 @@ class RequestQuotationController extends Controller
             $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
             $query->whereIn('created_by', $bawahan);
         } else {
-            $query->where('created_by', $this->karyawan);
+            if (in_array((int) $idJabatan, [24, 148], true)) {
+                $query->whereIn('created_by', [$this->karyawan, 'Lani Febriana Safitri']);
+            } else {
+                $query->where('created_by', $this->karyawan);
+            }
         }
 
         $data = $query->get();

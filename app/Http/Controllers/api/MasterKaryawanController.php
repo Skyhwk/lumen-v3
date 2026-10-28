@@ -54,7 +54,7 @@ class MasterKaryawanController extends Controller
             'kontak_darurat' => function ($query) {
                 $query->where('is_active', true);
             },
-        ])->where('is_active', true);
+        ])->where('is_active', true)->where('grade', '!=', 'DIRECTOR');
 
         $this->excludeHiddenKaryawanFromFrontend($data);
 

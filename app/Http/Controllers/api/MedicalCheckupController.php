@@ -21,7 +21,7 @@ class MedicalCheckupController extends Controller
 {
     public function index(Request $request)
     {
-        $data = MasterKaryawan::with(['medical'])->where('is_active', true);
+        $data = MasterKaryawan::with(['medical'])->where('is_active', true)->where('grade','!=','DIRECTOR');
         return Datatables::of($data)->make(true);
     }
 
