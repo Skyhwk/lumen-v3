@@ -197,4 +197,25 @@ class MasterKaryawan extends Sector implements AuthenticatableContract
     {
         return $this->hasOne(FeeKaryawan::class, 'id_karyawan', 'id')->where('is_active', true);
     }
+
+    /**
+     * Nomor telepon PIC Sales untuk dokumen/email quotation.
+     * Prioritas: no_telpon_perusahaan, fallback no_telpon.
+     */
+    public function phoneForQuotation(): string
+    {
+        $company = trim((string) ($this->no_telpon_perusahaan ?? ''));
+        if ($company !== '') {
+            return $company;
+        }
+
+        return trim((string) ($this->no_telpon ?? ''));
+    }
+
+    public function quotationPhoneLabel(): string
+    {
+        $phone = $this->phoneForQuotation();
+
+        return $phone !== '' ? ' (' . $phone . ')' : '';
+    }
 }

@@ -571,7 +571,7 @@ class RenderData
             $upd = "-";
             $user = MasterKaryawan::where('id', $data->sales_id)->first();
             $add = $user->nama_lengkap;
-            $no_telp = " (" . $user->no_telpon . ")";
+            $no_telp = $user->quotationPhoneLabel();
             if ($data->updateby != null) {
                 $upd = $data->updateby->nama_lengkap;
             }
@@ -1174,7 +1174,7 @@ class RenderData
             $updd = "-";
             $user = MasterKaryawan::where('id', $data->sales_id)->first();
             $add = $user->nama_lengkap;
-            $no_telp = " (" . $user->no_telpon . ")";
+            $no_telp = $user->quotationPhoneLabel();
             if ($data->updateby != null) {
                 $updd = $data->updateby->nama_lengkap;
             }
@@ -3162,7 +3162,7 @@ class RenderData
             $app = "-";
             $user = MasterKaryawan::where('id', $data->sales_id)->first();
             $add = $user->nama_lengkap;
-            $no_telp = " (" . $user->no_telpon . ")";
+            $no_telp = $user->quotationPhoneLabel();
             // if ($data->updateby != null) {
             $upd = $data->nama_update;
             // }
@@ -3694,7 +3694,7 @@ class RenderData
             $no_telp = "";
 
             $add = ($data->nama_add != null) ? $data->nama_add : "-";
-            $no_telp = ($data->no_telpon != null) ? " (" . $data->no_telpon . ")" : "";
+            $no_telp = $data->sales ? $data->sales->quotationPhoneLabel() : (($data->no_telpon != null) ? " (" . $data->no_telpon . ")" : "");
             $updd = ($data->nama_update != null) ? $data->nama_update : "-";
             $st = ($data->approve == 0) ? "NOT APPROVED" : "APPROVED";
 

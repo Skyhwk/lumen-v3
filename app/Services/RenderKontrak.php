@@ -980,7 +980,7 @@ class RenderKontrak
             $no_telp = "";
 
             $add = ($data->sales->nama_lengkap != null) ? $data->sales->nama_lengkap : "-";
-            $no_telp = ($data->sales->no_telpon != null) ? " (" . $data->sales->no_telpon . ")" : "";
+            $no_telp = $data->sales->quotationPhoneLabel();
             $updd = ($data->updated_by != null) ? $data->updated_by : "-";
             $st = ($data->is_approved == 0) ? "NOT APPROVED" : "APPROVED";
 

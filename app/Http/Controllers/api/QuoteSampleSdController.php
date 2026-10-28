@@ -371,7 +371,7 @@ class QuoteSampleSdController extends Controller
                 $no_telp = '';
                 if ($data->sales != null) {
                     $add = $data->sales->nama_lengkap;
-                    $no_telp = ' (' . $data->sales->no_telpon . ')';
+                    $no_telp = $data->sales->quotationPhoneLabel();
                 }
 
                 $kontrak = $this->tanggal_indonesia($value->periode_kontrak, 'period');
@@ -634,7 +634,7 @@ class QuoteSampleSdController extends Controller
             $no_telp = '';
             if ($data->sales != null) {
                 $add = $data->sales->nama_lengkap;
-                $no_telp = ' (' . $data->sales->no_telpon . ')';
+                $no_telp = $data->sales->quotationPhoneLabel();
             }
 
             $mpdfConfig = array(

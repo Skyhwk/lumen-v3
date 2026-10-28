@@ -1097,7 +1097,7 @@ class RenderNonKontrak
             $no_telp = "";
             $app = "-";
             $add = $data->sales->nama_lengkap;
-            $no_telp = " (" . $data->sales->no_telpon . ")";
+            $no_telp = $data->sales->quotationPhoneLabel();
             $upd = $data->updated_by;
             if ($data->is_approved == 0) {
                 $st = "NOT APPROVED";
