@@ -2977,6 +2977,57 @@ public function buildTrackingRows($sessions)
         }
 
         $session = $member->session;
+        $memberDuration = $this->resolveMemberDuration($member);
+
+        $sessionQuery = SamplerTrackingSession::where('is_active', true)
+            ->whereDate('tanggal_sampling', $session->tanggal_sampling);
+
+        if ($session->no_order && $session->no_quotation) {
+            $sessionQuery->where(function ($q) use ($session) {
+                $q->where('no_order', $session->no_order)
+                    ->orWhere('no_quotation', $session->no_quotation);
+            });
+        } elseif ($session->no_order) {
+            $sessionQuery->where('no_order', $session->no_order);
+        } elseif ($session->no_quotation) {
+            $sessionQuery->where('no_quotation', $session->no_quotation);
+        } else {
+            $sessionQuery->where('id', $session->id);
+        }
+
+        $relatedSessionIds = $sessionQuery->pluck('id')->all();
+        if (empty($relatedSessionIds)) {
+            $relatedSessionIds = [$session->id];
+        }
+
+        $teammates = SamplerTrackingMember::whereIn('sampler_tracking_session_id', $relatedSessionIds)
+            ->where('is_active', true)
+            ->get();
+
+        if ($teammates->isEmpty() && $session->relationLoaded('activeMembers') && $session->activeMembers) {
+            $teammates = $session->activeMembers;
+        }
+
+        $hasLongerTeammate = $teammates->contains(function ($other) use ($member, $memberDuration) {
+            if ((string) $other->id === (string) $member->id) {
+                return false;
+            }
+            if ($member->sampler_id && (string) $other->sampler_id === (string) $member->sampler_id) {
+                return false;
+            }
+            if ($member->sampler_name && strcasecmp(trim((string) $other->sampler_name), trim((string) $member->sampler_name)) === 0) {
+                return false;
+            }
+
+            return $this->resolveMemberDuration($other) > $memberDuration;
+        });
+
+        // Anggota dengan durasi lebih pendek/sesaat tidak diwajibkan validasi BAS
+        // jika ada rekan tim di order yang sama yang masih menjalankan durasi lanjutan (misal 24 jam).
+        if ($hasLongerTeammate) {
+            return null;
+        }
+
         $query = PersiapanSampelHeader::where('is_active', true)
             ->whereDate('tanggal_sampling', $session->tanggal_sampling);
 
@@ -3006,6 +3057,22 @@ public function buildTrackingRows($sessions)
             'tanggal_sampling' => $session->tanggal_sampling,
             'sampler' => $member->sampler_name,
         ];
+    }
+
+    protected function resolveMemberDuration($member)
+    {
+        if (!$member) {
+            return 0;
+        }
+
+        $duration = SamplerTrackingActivity::duration($member);
+        if ($duration === 0 && empty($member->effective_duration) && empty($member->durasi_personal)) {
+            if ($member->session && $member->session->durasi !== null && $member->session->durasi !== '') {
+                return max(0, (int) $member->session->durasi);
+            }
+        }
+
+        return $duration;
     }
 
     protected function isBasDocumentFilled($value)
@@ -3317,14 +3384,14 @@ public function buildTrackingRows($sessions)
         return in_array($column, $this->columnsByTable[$table], true);
     }
 
-    protected function hasActiveSchedule($session, $member)
+    public function hasActiveSchedule($session, $member)
     {
         $latestQuotation = $session->no_order
             ? OrderHeader::where('no_order', $session->no_order)
                 ->where('is_active', true)
                 ->orderByDesc('id')
                 ->value('no_document')
-            : null;
+            : $session->no_quotation;
 
         if (!$latestQuotation) {
             return false;

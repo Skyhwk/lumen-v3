@@ -56,8 +56,21 @@ class RecruitmentStatusService
         return null;
     }
 
+    public static function isCurrentlyInFinanceReview($recruitment): bool
+    {
+        $status = strtolower(trim((string) (is_object($recruitment)
+            ? ($recruitment->status ?? '')
+            : ($recruitment['status'] ?? ''))));
+
+        return in_array($status, ['finance_review', 'finance review', 'waiting_approve_finance'], true);
+    }
+
     public static function isAwaitingCandidateOfferingResubmit($recruitment): bool
     {
+        if (self::isCurrentlyInFinanceReview($recruitment)) {
+            return false;
+        }
+
         $history = self::parseMetaHistory($recruitment);
         $rejectedIndex = null;
 
@@ -73,7 +86,11 @@ class RecruitmentStatusService
         }
 
         for ($i = $rejectedIndex + 1; $i < count($history); $i++) {
-            if (($history[$i]['status'] ?? '') === 'candidate_offering_sent') {
+            if (in_array((string) ($history[$i]['status'] ?? ''), [
+                'candidate_offering_sent',
+                'waiting_approve_finance',
+                'finance_approved',
+            ], true)) {
                 return false;
             }
         }
@@ -128,6 +145,10 @@ class RecruitmentStatusService
 
     public static function isAwaitingCandidateOfferingNegotiateResubmit($recruitment): bool
     {
+        if (self::isCurrentlyInFinanceReview($recruitment)) {
+            return false;
+        }
+
         $history = self::parseMetaHistory($recruitment);
         $negotiatedIndex = null;
 
@@ -143,7 +164,11 @@ class RecruitmentStatusService
         }
 
         for ($i = $negotiatedIndex + 1; $i < count($history); $i++) {
-            if (($history[$i]['status'] ?? '') === 'candidate_offering_sent') {
+            if (in_array((string) ($history[$i]['status'] ?? ''), [
+                'candidate_offering_sent',
+                'waiting_approve_finance',
+                'finance_approved',
+            ], true)) {
                 return false;
             }
         }
@@ -342,6 +367,10 @@ class RecruitmentStatusService
      */
     public static function isAwaitingCandidateOfferingResponse($recruitment): bool
     {
+        if (self::isCurrentlyInFinanceReview($recruitment)) {
+            return false;
+        }
+
         if (self::isAwaitingCandidateOfferingResubmit($recruitment)) {
             return false;
         }
@@ -505,6 +534,10 @@ class RecruitmentStatusService
 
     public static function isAwaitingDirectorSalaryResubmit($recruitment): bool
     {
+        if (self::isCurrentlyInFinanceReview($recruitment)) {
+            return false;
+        }
+
         $history = self::parseMetaHistory($recruitment);
         $decisionIndex = self::getLatestDirectorSalaryResubmitIndex($history);
 
@@ -515,6 +548,7 @@ class RecruitmentStatusService
         for ($i = $decisionIndex + 1; $i < count($history); $i++) {
             $status = (string) ($history[$i]['status'] ?? '');
             if (in_array($status, [
+                'waiting_approve_finance',
                 'candidate_offering_sent',
                 'finance_approved',
                 'candidate_offering_approved',
@@ -1063,6 +1097,10 @@ class RecruitmentStatusService
 
     public static function isAwaitingFinanceResubmit($recruitment): bool
     {
+        if (self::isCurrentlyInFinanceReview($recruitment)) {
+            return false;
+        }
+
         $history = self::parseMetaHistory($recruitment);
         $rejectedIndex = self::getLatestFinanceRejectIndex($history);
 
@@ -1115,7 +1153,7 @@ class RecruitmentStatusService
                 }
             }
 
-            return false;
+            return true;
         }
 
         for ($i = $lastWaitingIndex + 1; $i < count($history); $i++) {
@@ -1568,7 +1606,9 @@ class RecruitmentStatusService
         $awaitingFinance = self::isAwaitingFinanceResubmit($row);
 
         if (self::isAwaitingCandidateOfferingResubmit($row)) {
-            $rejectedSalary = true;
+            if (!self::hasHrdSalaryInputSavedAfterCandidateReject($row)) {
+                $rejectedSalary = true;
+            }
             $candidateReason = self::getCandidateOfferingRejectReason($row);
             $rejectedSalaryReason = $candidateReason ?: $rejectedSalaryReason;
         }
@@ -1603,7 +1643,11 @@ class RecruitmentStatusService
             $updatePayload['rejected_decision'] = $rejectedDecision;
             $updatePayload['rejected_decision_reason'] = $rejectedDecision ? ($rejectedDecisionReason ?: null) : null;
             $updatePayload['rejected_salary'] = $rejectedSalary;
-            $updatePayload['rejected_salary_reason'] = $rejectedSalary ? ($rejectedSalaryReason ?: null) : null;
+            if ($rejectedSalaryReason) {
+                $updatePayload['rejected_salary_reason'] = $rejectedSalaryReason;
+            } elseif ($rejectedSalary) {
+                $updatePayload['rejected_salary_reason'] = null;
+            }
         }
 
         if (Schema::hasColumn('new_recruitment', 'is_reject_finance')) {

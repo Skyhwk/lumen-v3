@@ -161,6 +161,70 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame(1, $member->events()->where('event_type', 'checkout')->count());
     }
 
+    public function testCheckoutBasWarningBypassedWhenTeammateHasLongerDuration(): void
+    {
+        // Sampler A: sesaat (durasi 0)
+        $this->schedule(['userid' => 10, 'sampler' => 'Asep', 'durasi' => 0]);
+        // Sampler B: 1x24 Jam (durasi 2)
+        $this->schedule(['userid' => 20, 'sampler' => 'Budi', 'durasi' => 2]);
+
+        $session = $this->prepare('2026-09-17')->first();
+        $memberA = $session->activeMembers()->where('sampler_name', 'Asep')->firstOrFail();
+        $memberB = $session->activeMembers()->where('sampler_name', 'Budi')->firstOrFail();
+
+        $connection = $this->db->getConnection('mysql');
+        $connection->table('persiapan_sampel_header')->where('no_quotation', 'Q1')->update([
+            'is_emailed_bas' => 0,
+        ]);
+
+        // Sampler A (sesaat) harus di-bypass karena rekan timnya (Budi) memiliki durasi 24 jam (> 0)
+        $this->assertNull($this->service->checkoutBasWarning($memberA->id));
+
+        // Sampler B (24 jam) tetap wajib BAS karena durasinya yang terpanjang
+        $warningB = $this->service->checkoutBasWarning($memberB->id);
+        $this->assertNotNull($warningB);
+        $this->assertSame('Anda tidak dapat checkout dikarenakan BAS belum disubmit.', $warningB['message']);
+
+        // Sampler A dapat melakukan checkout tanpa error
+        $this->service->storeEvent(['member_id' => $memberA->id, 'event_type' => 'departure']);
+        $this->service->storeEvent(['member_id' => $memberA->id, 'event_type' => 'checkin']);
+        $this->service->storeEvent(['member_id' => $memberA->id, 'event_type' => 'checkout']);
+        $this->assertSame(1, $memberA->events()->where('event_type', 'checkout')->count());
+
+        // Sampler B tetap ditolak checkout sebelum BAS di-email (departure & checkin sudah di-inherit dari tim)
+        try {
+            $this->service->storeEvent(['member_id' => $memberB->id, 'event_type' => 'checkout']);
+            $this->fail('Checkout must require emailed BAS for the 24-hour teammate.');
+        } catch (ValidationException $exception) {
+            $this->assertSame('Anda tidak dapat checkout dikarenakan BAS belum disubmit.', $exception->errors()['event_type'][0]);
+        }
+        $this->assertSame(0, $memberB->events()->where('event_type', 'checkout')->count());
+
+        // Setelah BAS di-email, Sampler B dapat checkout
+        $connection->table('persiapan_sampel_header')->where('no_quotation', 'Q1')->update(['is_emailed_bas' => 1]);
+        $this->service->storeEvent(['member_id' => $memberB->id, 'event_type' => 'checkout']);
+        $this->assertSame(1, $memberB->events()->where('event_type', 'checkout')->count());
+    }
+
+    public function testCheckoutBasWarningEnforcedWhenAllTeammatesHaveSameDuration(): void
+    {
+        $this->schedule(['userid' => 10, 'sampler' => 'Asep', 'durasi' => 0]);
+        $this->schedule(['userid' => 20, 'sampler' => 'Budi', 'durasi' => 0]);
+
+        $session = $this->prepare('2026-09-17')->first();
+        $memberA = $session->activeMembers()->where('sampler_name', 'Asep')->firstOrFail();
+        $memberB = $session->activeMembers()->where('sampler_name', 'Budi')->firstOrFail();
+
+        $connection = $this->db->getConnection('mysql');
+        $connection->table('persiapan_sampel_header')->where('no_quotation', 'Q1')->update([
+            'is_emailed_bas' => 0,
+        ]);
+
+        // Keduanya tetap wajib validasi BAS karena durasinya sama-sama sesaat
+        $this->assertNotNull($this->service->checkoutBasWarning($memberA->id));
+        $this->assertNotNull($this->service->checkoutBasWarning($memberB->id));
+    }
+
     public function testRouteCannotChangeAfterDeparture(): void
     {
         $today = \Carbon\Carbon::now('Asia/Jakarta')->toDateString();

@@ -621,7 +621,7 @@ class AtsFinalDecisionController extends Controller
                 if ($status === 'finance_review') {
                     return [
                         'code' => 'finance_review',
-                        'label' => 'Disetujui Kandidat (Dalam Review Finance)',
+                        'label' => 'Awaiting Finance',
                         'email_sent_at' => $emailSentAt,
                     ];
                 }
