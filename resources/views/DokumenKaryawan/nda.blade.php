@@ -18,7 +18,7 @@
     .clause .roman { width: 11mm; }
     .sign { width: 100%; border-collapse: collapse; margin-top: 6mm; }
     .sign td { width: 50%; text-align: center; vertical-align: top; border: none; padding: 0 2mm; }
-    .sign .space { height: 24mm; }
+    .sign .space { height: 17mm; }
     .sign .name { font-weight: bold; }
 </style>
 
