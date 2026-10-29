@@ -40,6 +40,7 @@ class Kernel extends ConsoleKernel
         Commands\SyncQsdForecast::class,
         Commands\MonitorQsdRevenue::class,
         Commands\MonitorQsdForecast::class,
+        Commands\RecalculateQsdLogs::class,
         Commands\UpdateJatuhTempo::class,
         Commands\UpdateOrderDetailKonsultan::class,
         Commands\SyncLimsData::class,
@@ -126,6 +127,14 @@ class Kernel extends ConsoleKernel
             ->dailyAt('23:30')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping(30);
+        // $schedule->command('qsd:monitor-revenue')
+        //     ->everyFiveMinutes()
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping(10);
+        // $schedule->command('qsd:monitor-forecast')
+        //     ->everyFiveMinutes()
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping(10);
         // $schedule->command('absensi:generate-monthly')
         //     ->monthlyOn(1, '10:00')
         //     ->timezone('Asia/Jakarta')
