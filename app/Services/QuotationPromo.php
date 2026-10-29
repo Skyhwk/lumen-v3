@@ -81,12 +81,12 @@ class QuotationPromo
                 ->where('is_active', 1)->orderBy('tanggal_berlaku', 'desc')->first();
             if (array_key_exists((string) $parameterId, $overrides)) {
                 $prices[] = $overrides[(string) $parameterId];
-                $volumes[] = (float) ($price->volume ?? 0);
+                $volumes[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($parameterId, explode('-', $row->kategori_1)[0], $price->volume ?? 0);
                 continue;
             }
             if (!$price && empty($row->is_promo)) throw new \InvalidArgumentException('Harga parameter belum tersedia untuk tanggal penawaran. Periksa master harga.');
             $prices[] = (float) ($price->harga ?? 0);
-            $volumes[] = (float) ($price->volume ?? 0);
+            $volumes[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($parameterId, explode('-', $row->kategori_1)[0], $price->volume ?? 0);
         }
         return [$prices, $volumes];
     }

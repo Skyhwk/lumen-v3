@@ -1419,12 +1419,15 @@ class LimsFppsController extends Controller
             ->get(['id_parameter', 'regen', 'volume'])
             ->keyBy('id_parameter');
 
+        $labelConfigs = \App\Helpers\ParameterLabelConfigHelper::getLabelConfigs($paramIds);
+
         $groups = [];
 
         foreach ($paramIds as $id) {
             $nama = $paramNames[$id] ?? '';
-            $regen = isset($hargaParams[$id]) ? $hargaParams[$id]->regen : 'ORI';
-            $volume = isset($hargaParams[$id]) ? (float)$hargaParams[$id]->volume : 0;
+            $cfg = $labelConfigs->get($id);
+            $regen = ($cfg && !empty($cfg->regen)) ? $cfg->regen : (isset($hargaParams[$id]) ? $hargaParams[$id]->regen : 'ORI');
+            $volume = ($cfg && $cfg->volume !== null && $cfg->volume !== '') ? (float) $cfg->volume : (isset($hargaParams[$id]) ? (float) $hargaParams[$id]->volume : 0);
 
             $analisisSegeraParams = ['pH', 'DO', 'Suhu', 'Salinitas', 'CO2', 'Residual Klorin', 'Bau'];
             
