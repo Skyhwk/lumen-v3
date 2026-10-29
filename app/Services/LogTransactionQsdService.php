@@ -137,13 +137,13 @@ class LogTransactionQsdService
                     }
                 });
 
-            // STEP 4: Menangkap Order yang di-HARD REMOVE
+            // STEP 4: Menangkap Order yang di-HARD REMOVE atau Pindah Bulan
             $deletedOrders = $latestLogs->except($processedOrders);
 
             foreach ($deletedOrders as $orderId => $logData) {
                 $lastOrderTotal = round((float) $logData->order_total, 2);
 
-                if ($lastOrderTotal > 0) {
+                if ($lastOrderTotal > 0.01) {
                     $currentGrandTotal -= $lastOrderTotal;
 
                     $insertData[] = [
@@ -152,6 +152,21 @@ class LogTransactionQsdService
                         'tanggal_kelompok' => $logData->tanggal_kelompok,
                         'revenue'          => $lastOrderTotal,
                         'status'           => 'pengurangan',
+                        'total'            => $currentGrandTotal,
+                        'is_revisi'        => true,
+                        'created_at'       => $now,
+                    ];
+                } elseif ($lastOrderTotal < -0.01) {
+                    // Auto-Balancing: Menetralkan order yang saldonya minus (orphan reduction)
+                    $correction = abs($lastOrderTotal);
+                    $currentGrandTotal += $correction;
+
+                    $insertData[] = [
+                        'no_order'         => $orderId,
+                        'periode'          => $logData->periode,
+                        'tanggal_kelompok' => $logData->tanggal_kelompok,
+                        'revenue'          => $correction,
+                        'status'           => 'penambahan',
                         'total'            => $currentGrandTotal,
                         'is_revisi'        => true,
                         'created_at'       => $now,
@@ -175,6 +190,7 @@ class LogTransactionQsdService
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
             ]);
+            throw $e;
         }
 
         return $countInsert;
@@ -212,17 +228,15 @@ class LogTransactionQsdService
             $latestLogs = DB::table('qsd_forecast_transaction_log')
                 ->select(
                     'no_penawaran',
-                    'periode',
+                    DB::raw('MAX(periode) as periode'),
                     DB::raw('MAX(tanggal_sampling_min) as tanggal_sampling_min'),
                     DB::raw('SUM(CASE WHEN status = "penambahan" THEN revenue_forecast ELSE -revenue_forecast END) as order_total'),
                     DB::raw('MAX(forecast_order) as is_ordered')
                 )
                 ->whereBetween('tanggal_sampling_min', [$startOfMonth, $endOfMonth])
-                ->groupBy('no_penawaran', 'periode')
+                ->groupBy('no_penawaran')
                 ->get()
-                ->keyBy(function ($item) {
-                    return $item->no_penawaran . '|' . $item->periode;
-                });
+                ->keyBy('no_penawaran');
 
             $activePenawaran = [];
             $insertData = [];
@@ -240,7 +254,7 @@ class LogTransactionQsdService
                         $penawaranId = $row->no_quotation;
                         if (empty($penawaranId)) continue;
 
-                        $uniqueKey = $penawaranId . '|' . $row->periode;
+                        $uniqueKey = $penawaranId;
                         $parsedValue = self::parseRevenueForecast($row->revenue_forecast);
 
                         if (!isset($groupedForecasts[$uniqueKey])) {
@@ -308,7 +322,7 @@ class LogTransactionQsdService
             foreach ($deletedQuotations as $uniqueKey => $logEntry) {
                 $lastOrderTotal = round((float) $logEntry->order_total, 2);
 
-                if ((int)$logEntry->is_ordered === 1 || $lastOrderTotal <= 0) {
+                if ((int)$logEntry->is_ordered === 1 || $lastOrderTotal <= 0.01) {
                     continue;
                 }
 
@@ -342,6 +356,7 @@ class LogTransactionQsdService
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
             ]);
+            throw $e;
         }
 
         return $countInsert;
