@@ -21,6 +21,12 @@ class KonfigurasiPraSamplingController extends Controller
         return Datatables::of($data)->make(true);
     }
 
+    public function indexBotol(){
+        $botol = DB::table('master_botol')->get();
+
+        return Datatables::of($botol)->make(true);
+    }
+
     public function getAllKategori()
     {
         $data = MasterKategori::where('is_active', true)->where('is_active', true)->where('id', '!=', 1)->get();
@@ -30,6 +36,66 @@ class KonfigurasiPraSamplingController extends Controller
             'data' => $data,
             'message' => 'Available kategori data retrieved successfully',
         ], 200);
+    }
+
+    public function getBotolOptions(){
+        $botol = DB::table('master_botol')
+            ->whereNotNull('nama_botol')
+            ->where('nama_botol', '!=', '')
+            ->select('id', 'nama_botol', 'volume')
+            ->get();
+
+        return response()->json($botol);
+    }
+
+    public function storeBotol(Request $request){
+        // dd($request->all());
+        DB::beginTransaction();
+        try {
+            DB::table('master_botol')->insert([
+                'nama_botol' => $request->nama_botol,
+                'volume' => $request->volume,
+                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'created_by' => $this->karyawan
+            ]);
+            DB::commit();
+            return response()->json(['message' => 'Data botol berhasil ditambahkan']);
+        } catch (\Throwable $th) {
+            //throw $th;
+            DB::rollBack();
+            return response()->json(['message' => 'Gagal menambahkan data botol', 'error' => $th->getMessage()], 500);
+        }
+    }
+
+    public function updateBotol(Request $request){
+        DB::beginTransaction();
+        try {
+            DB::table('master_botol')->where('id', $request->id)->update([
+                'nama_botol' => $request->nama_botol,
+                'volume' => $request->volume,
+                'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'updated_by' => $this->karyawan
+            ]);
+            DB::commit();
+            return response()->json(['message' => 'Data botol berhasil diupdate']);
+        } catch (\Throwable $th) {
+            //throw $th;
+            DB::rollBack();
+            return response()->json(['message' => 'Gagal mengupdate data botol', 'error' => $th->getMessage()], 500);
+        }
+    }
+
+    public function destroyBotol(Request $request){
+        DB::beginTransaction();
+        try {
+            DB::table('master_botol')->where('id', $request->id)->delete();
+            DB::commit();
+            return response()->json(['message' => 'Data botol berhasil dihapus']);
+        } catch (\Throwable $th) {
+            //throw $th;
+            DB::rollBack();
+            return response()->json(['message' => 'Gagal menghapus data botol', 'error' => $th->getMessage()], 500);
+        }
     }
 
     public function getAllParameter()
