@@ -50,9 +50,14 @@ class SamplerTrackingTroubleService
         return array_keys(self::SAMPLER_FOLLOW_UP_ACTIONS);
     }
 
-    public static function startDate()
+    public static function startDate($deadlineDay = null)
     {
-        return max('2026-09-21', env('SAMPLER_TRACKING_TROUBLE_START_DATE', '2026-09-21'));
+        $end = $deadlineDay
+            ? Carbon::parse($deadlineDay, 'Asia/Jakarta')
+            : Carbon::now('Asia/Jakarta')->subDay();
+
+        // Fifteen calendar dates, including the deadline day.
+        return $end->startOfDay()->subDays(14)->toDateString();
     }
 
     protected function ready()
@@ -114,10 +119,19 @@ class SamplerTrackingTroubleService
         $useDailyJourneyReturn = !$wasReopened
             || ($stopsComplete && $dailyMembers->isNotEmpty() && $ownMaxDuration < $maxDailyDuration);
         $journeyMembers = $useDailyJourneyReturn ? $dailyMembers : ($wasReopened ? $members : $dailyMembers);
-        $complete = $stopsComplete && $members->every(function ($member) use ($date) {
-            return (new SamplerTrackingService())->departureForMember($member, $date) !== null;
-        })
-           && $journeyMembers->contains(function ($member) { return SamplerTrackingActivity::hasEvent($member, 'return'); });
+        if ($useDailyJourneyReturn) {
+            $journey = new SamplerTrackingJourney();
+            $complete = $stopsComplete && $members->every(function ($member) use ($journey, $date) {
+                return $journey->isComplete($member, $date);
+            });
+        } else {
+            // Explicit recovery still requires a return on this reopened assignment.
+            $complete = $stopsComplete && $members->every(function ($member) use ($date) {
+                return (new SamplerTrackingService())->departureForMember($member, $date) !== null;
+            }) && $journeyMembers->contains(function ($member) {
+                return SamplerTrackingActivity::hasEvent($member, 'return');
+            });
+        }
         $sessionDue = $this->dueDate($date, $members->max(function ($member) {
             return SamplerTrackingActivity::duration($member);
         }));
@@ -186,11 +200,8 @@ class SamplerTrackingTroubleService
     {
         $this->ready();
         $this->pruneStaleOpenTroubles();
-        $startDate = self::startDate();
         $day = $day ?: Carbon::now('Asia/Jakarta')->subDay()->toDateString();
-        if ($day < $startDate) {
-            return 0;
-        }
+        $startDate = self::startDate($day);
 
         $trackingService = app(SamplerTrackingService::class);
 

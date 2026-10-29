@@ -15,6 +15,7 @@ class Kernel extends ConsoleKernel
     protected $commands = [
         Commands\SyncSamplerTracking::class,
         Commands\CollectSamplerTrackingTroubles::class,
+        Commands\BackfillSamplerTrackingHistory::class,
         Commands\CleanOldRequestLogs::class,
         Commands\ScheduleEverySecond::class,
         Commands\CacheCommand::class,

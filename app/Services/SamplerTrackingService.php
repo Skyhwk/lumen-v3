@@ -405,10 +405,15 @@ class SamplerTrackingService
                 throw ValidationException::withMessages(['jadwal' => ['Revisi QT memiliki beberapa kandidat activity. Riwayat tidak dipindahkan.']]);
             }
             $target = $candidates->first()->first();
+            $beforeHistory = SamplerTrackingHistory::snapshot($session);
             $this->rekeySessions([$session->team_key => $this->makeTeamKey($target)]);
             SamplerTrackingSession::where('id', $session->id)->update([
                 'no_quotation' => $target->no_quotation,
                 'no_order' => $this->resolveOrderNumber($target),
+            ]);
+            SamplerTrackingHistory::append((int) $session->id, 'schedule_changed', [
+                'reason' => 'quotation_revision', 'before' => $beforeHistory,
+                'after' => SamplerTrackingHistory::snapshot($session->fresh()),
             ]);
             $revised[] = $target->no_quotation;
         }
@@ -481,6 +486,12 @@ class SamplerTrackingService
             return;
         }
 
+        foreach (SamplerTrackingSession::whereIn('id', $sessionIds)->get() as $session) {
+            SamplerTrackingHistory::append((int) $session->id, 'session_deactivated', [
+                'reason' => 'schedule_voided', 'before' => SamplerTrackingHistory::snapshot($session),
+            ]);
+        }
+
         SamplerTrackingSession::whereIn('id', $sessionIds)->update($sessionUpdate);
 
         $memberUpdate = $this->onlyExistingColumns((new SamplerTrackingMember())->getTable(), ['is_active' => false]);
@@ -519,6 +530,9 @@ class SamplerTrackingService
             });
 
         foreach ($sessions as $session) {
+            SamplerTrackingHistory::append((int) $session->id, 'session_deactivated', [
+                'reason' => 'schedule_team_voided', 'before' => SamplerTrackingHistory::snapshot($session),
+            ]);
             $session->fill($this->onlyExistingColumns($session->getTable(), ['is_active' => false]));
             $session->save();
 
@@ -544,6 +558,11 @@ class SamplerTrackingService
         }
         $affectedDates = array_keys($affectedScopes);
 
+        $historySessions = [];
+        foreach ($before as $row) {
+            $oldSession = $this->findActiveSessionForScheduleRow($row, $quotation);
+            if ($oldSession) $historySessions[(int) $row->id] = (int) $oldSession->id;
+        }
         $rescheduledIds = $this->rescheduledJadwalIds($before, $after);
         $this->deactivateRescheduledSessions($before, $rescheduledIds, $quotation);
 
@@ -581,6 +600,30 @@ class SamplerTrackingService
             if ($editedKeys->contains($session->team_key) && $previousMembers->has($session->id)) {
                 $this->inheritCorrectedTeamEvents($session, $previousMembers->get($session->id));
             }
+            $oldRows = $before->filter(function ($row) use ($mapping, $session, $keyFor) {
+                $oldKey = $keyFor($row);
+                return ($mapping[$oldKey] ?? $oldKey) === $session->team_key
+                    && $this->normalizeScheduleDate($row->tanggal) === $this->normalizeScheduleDate($session->tanggal_sampling);
+            });
+            $newRows = $after->filter(function ($row) use ($keyFor, $session) {
+                return $keyFor($row) === $session->team_key;
+            });
+            (new SamplerTrackingCheckoutReconciliation())->reconcile($session, $oldRows, $newRows);
+        }
+
+        foreach ($before as $oldRow) {
+            $newRow = $afterById->get($oldRow->id);
+            $oldSessionId = $historySessions[(int) $oldRow->id] ?? null;
+            if (!$newRow || !$oldSessionId || $oldRow->getAttributes() === $newRow->getAttributes()) continue;
+            $newSession = $sessions->firstWhere('team_key', $this->makeTeamKey($newRow));
+            if ($newSession && (int) $newSession->id !== $oldSessionId) {
+                SamplerTrackingHistory::link($oldSessionId, (int) $newSession->id, 'same_schedule_row_changed');
+            }
+            SamplerTrackingHistory::append($newSession ? (int) $newSession->id : $oldSessionId, 'source_schedule_changed', [
+                'actor' => $newRow->updated_by ?? null, 'source_updated_at' => $newRow->updated_at ?? null,
+                'source_schedule_id' => (int) $newRow->id,
+                'before_schedule' => $oldRow->getAttributes(), 'after_schedule' => $newRow->getAttributes(),
+            ]);
         }
 
         return $sessions;
@@ -648,6 +691,9 @@ class SamplerTrackingService
             if (!$session) {
                 continue;
             }
+            SamplerTrackingHistory::append((int) $session->id, 'session_deactivated', [
+                'reason' => 'sampling_date_changed', 'before' => SamplerTrackingHistory::snapshot($session),
+            ]);
             SamplerTrackingSession::where('id', $session->id)->update($sessionUpdate);
             if ($memberUpdate !== []) {
                 SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)->update($memberUpdate);
@@ -724,7 +770,14 @@ class SamplerTrackingService
                 $values['is_auto'] = true;
                 $values['sequence_no'] = $this->nextSequence($member->id);
                 $values['note'] = $this->inheritedTeamEventNote($event, 'Koreksi anggota sejak awal');
-                SamplerTrackingEvent::create($this->onlyExistingColumns((new SamplerTrackingEvent())->getTable(), $values));
+                $copied = SamplerTrackingEvent::create($this->onlyExistingColumns((new SamplerTrackingEvent())->getTable(), $values));
+                SamplerTrackingHistory::append((int) $member->sampler_tracking_session_id, 'activity_inherited', [
+                    'event_id' => (int) $copied->id, 'source_event_id' => (int) $event->id,
+                    'event_type' => $event->event_type, 'event_at' => $event->event_at,
+                    'triggered_by_member_id' => $values['triggered_by_member_id'],
+                    'affected' => [['member_id' => (int) $member->id, 'sampler_id' => $member->sampler_id,
+                        'name' => $member->sampler_name, 'effective_duration' => $member->effective_duration]],
+                ]);
             }
         }
     }
@@ -758,6 +811,11 @@ class SamplerTrackingService
 
             $session->team_key = $newKey;
             $session->save();
+            if ($oldKey !== $newKey) {
+                SamplerTrackingHistory::append((int) $session->id, 'session_identity_changed', [
+                    'before_team_key' => $oldKey, 'after_team_key' => $newKey,
+                ]);
+            }
         }
     }
 
@@ -791,9 +849,14 @@ class SamplerTrackingService
             $creationKeys[] = $key;
             $previous = SamplerTrackingSession::where('team_key', $key)->lockForUpdate()->first();
             if ($previous) {
+                $beforeHistory = SamplerTrackingHistory::snapshot($previous);
                 $previous->team_key = sha1('archived|' . $previous->id . '|' . $key);
                 $previous->is_active = false;
                 $previous->save();
+                SamplerTrackingHistory::append((int) $previous->id, 'session_archived', [
+                    'reason' => 'new_schedule_for_same_identity', 'before' => $beforeHistory,
+                    'after' => SamplerTrackingHistory::snapshot($previous),
+                ]);
                 (new SamplerTrackingTroubleService())->deactivateForSessions([$previous->id]);
             }
         }
@@ -891,6 +954,7 @@ class SamplerTrackingService
                 return $this->makeTeamKey($row);
             })->each(function ($rows, $teamKey) use ($now, &$sessions, &$activeTeamKeys, $creationKeys, $quotation, $date, $jadwals) {
                 $first = $rows->first();
+                $replacedSessionId = null;
                 $keeper = $this->findRescheduleKeeperSession($first, $quotation, $date, $teamKey, $jadwals);
                 if ($keeper) {
                     $emptyAtKey = SamplerTrackingSession::where('team_key', $teamKey)
@@ -898,6 +962,7 @@ class SamplerTrackingService
                         ->where('is_active', true)
                         ->first();
                     if ($emptyAtKey && !SamplerTrackingEvent::where('sampler_tracking_session_id', $emptyAtKey->id)->exists()) {
+                        $replacedSessionId = (int) $emptyAtKey->id;
                         $this->archiveTrackingSession($emptyAtKey);
                     }
                     $session = $keeper;
@@ -930,6 +995,7 @@ class SamplerTrackingService
                 }
                 if ($canMaterialize && $session->exists && !$session->is_active
                     && SamplerTrackingEvent::where('sampler_tracking_session_id', $session->id)->exists()) {
+                    $replacedSessionId = (int) $session->id;
                     $this->archiveTrackingSession($session);
                     $session = new SamplerTrackingSession();
                     $session->team_key = $teamKey;
@@ -938,6 +1004,22 @@ class SamplerTrackingService
                     ->where('is_active', true)
                     ->first();
                 $samplingPlan = SamplingPlan::find($first->id_sampling);
+                $wasExistingSession = $session->exists;
+                $beforeHistory = $wasExistingSession ? SamplerTrackingHistory::snapshot($session) : null;
+                if (!$wasExistingSession && !$replacedSessionId) {
+                    // Match the exact archived identity, never just a company/date match.
+                    $archivedMatches = SamplerTrackingSession::whereDate('tanggal_sampling', $visitDate)
+                        ->where('no_quotation', $visitQuotation)->where('is_active', false)->get()
+                        ->filter(function ($old) use ($teamKey) {
+                            return in_array($old->team_key, [
+                                sha1('archived|' . $old->id . '|' . $teamKey),
+                                sha1('archived|reschedule|' . $old->id . '|' . $teamKey),
+                            ], true);
+                        });
+                    if ($archivedMatches->count() === 1) {
+                        $replacedSessionId = (int) $archivedMatches->first()->id;
+                    }
+                }
 
                 $session->fill($this->onlyExistingColumns($session->getTable(), [
                     'team_key' => $teamKey,
@@ -1033,13 +1115,29 @@ class SamplerTrackingService
                     }
                 }
 
+                $afterHistory = SamplerTrackingHistory::snapshot($session);
+                if (!$wasExistingSession || $beforeHistory !== $afterHistory) {
+                    SamplerTrackingHistory::append((int) $session->id,
+                        $wasExistingSession ? 'schedule_changed' : 'session_created', [
+                            'actor' => $first->updated_by ?? $first->created_by ?? null,
+                            'source_schedule_ids' => $rows->pluck('id')->values()->all(),
+                            'source_updated_at' => $rows->max('updated_at'),
+                            'before' => $beforeHistory,
+                            'after' => $afterHistory,
+                        ]);
+                }
+                if ($replacedSessionId) {
+                    SamplerTrackingHistory::link($replacedSessionId, (int) $session->id, 'schedule_replacement');
+                }
+
                 $sessions[] = $session;
             });
 
             if ($deactivateMissingSessions) {
                 $sessionInactiveUpdate = $this->onlyExistingColumns((new SamplerTrackingSession())->getTable(), ['is_active' => false]);
                 if (count($sessionInactiveUpdate) > 0) {
-                    SamplerTrackingSession::where('tanggal_sampling', $date)
+                    $sessionsToDeactivate = SamplerTrackingSession::where('tanggal_sampling', $date)
+                        ->where('is_active', true)
                         ->when($quotation !== null, function ($query) use ($quotation) {
                             $query->where('no_quotation', $quotation);
                         })
@@ -1049,7 +1147,15 @@ class SamplerTrackingService
                         ->when(count($scopeTeamKeys) > 0, function ($query) use ($scopeTeamKeys) {
                             $query->whereIn('team_key', $scopeTeamKeys);
                         })
-                        ->update($sessionInactiveUpdate);
+                        ->get();
+                    foreach ($sessionsToDeactivate as $inactiveSession) {
+                        $beforeHistory = SamplerTrackingHistory::snapshot($inactiveSession);
+                        $inactiveSession->is_active = false;
+                        $inactiveSession->save();
+                        SamplerTrackingHistory::append((int) $inactiveSession->id, 'session_deactivated', [
+                            'reason' => 'removed_from_active_schedule', 'before' => $beforeHistory,
+                        ]);
+                    }
                     $inactiveSessionIds = SamplerTrackingSession::whereDate('tanggal_sampling', $date)
                         ->where('is_active', false)->pluck('id');
                     SamplerTrackingMember::whereIn('sampler_tracking_session_id', $inactiveSessionIds)
@@ -1391,6 +1497,7 @@ class SamplerTrackingService
             return;
         }
 
+        $beforeHistory = SamplerTrackingHistory::snapshot($session);
         $session->team_key = sha1('archived|reschedule|' . $session->id . '|' . ($session->team_key ?: ''));
         $session->is_active = false;
         $session->save();
@@ -1399,6 +1506,10 @@ class SamplerTrackingService
         if ($memberUpdate !== []) {
             SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)->update($memberUpdate);
         }
+        SamplerTrackingHistory::append((int) $session->id, 'session_archived', [
+            'before' => $beforeHistory,
+            'after' => SamplerTrackingHistory::snapshot($session),
+        ]);
         (new SamplerTrackingTroubleService())->deactivateForSessions([$session->id]);
     }
 
@@ -1487,6 +1598,7 @@ class SamplerTrackingService
         ?SamplerTrackingSession $emptyDuplicate = null
     ): void {
         $teamKey = $this->makeTeamKey($jadwalFirst);
+        $beforeHistory = SamplerTrackingHistory::snapshot($keeper);
 
         if ($emptyDuplicate && (int) $emptyDuplicate->id !== (int) $keeper->id) {
             $this->archiveTrackingSession($emptyDuplicate);
@@ -1532,6 +1644,18 @@ class SamplerTrackingService
         $memberActive = $this->onlyExistingColumns((new SamplerTrackingMember())->getTable(), ['is_active' => true]);
         if ($memberActive !== []) {
             SamplerTrackingMember::where('sampler_tracking_session_id', $keeper->id)->update($memberActive);
+        }
+        $afterHistory = SamplerTrackingHistory::snapshot($keeper);
+        if ($beforeHistory !== $afterHistory) {
+            SamplerTrackingHistory::append((int) $keeper->id, 'schedule_changed', [
+                'actor' => $jadwalFirst->updated_by ?? $jadwalFirst->created_by ?? null,
+                'source_schedule_ids' => [$jadwalFirst->id],
+                'before' => $beforeHistory,
+                'after' => $afterHistory,
+            ]);
+        }
+        if ($emptyDuplicate && (int) $emptyDuplicate->id !== (int) $keeper->id) {
+            SamplerTrackingHistory::link((int) $emptyDuplicate->id, (int) $keeper->id, 'reschedule_keeper');
         }
     }
     public function listByDate($date = null, $samplerId = null, $samplerName = null, $sessionIds = null)
@@ -2599,6 +2723,7 @@ public function buildTrackingRows($sessions)
             $photo = $photos[0] ?? null;
             $latitude = $this->normalizeCoordinate($payload['latitude'] ?? $payload['lat'] ?? null);
             $longitude = $this->normalizeCoordinate($payload['longitude'] ?? $payload['longi'] ?? $payload['long'] ?? null);
+            $eventAt = $payload['event_at'] ?? $this->now();
 
             foreach ($members as $targetMember) {
                 if ((string) $targetMember->id !== (string) $member->id
@@ -2627,8 +2752,33 @@ public function buildTrackingRows($sessions)
                     'bas_warning_message' => null,
                     'is_auto' => $targetMember->id !== $member->id,
                     'sequence_no' => $this->nextSequence($targetMember->id),
-                    'event_at' => $payload['event_at'] ?? $this->now(),
+                    'event_at' => $eventAt,
                 ]));
+            }
+
+            foreach (collect($events)->groupBy('sampler_tracking_session_id') as $sessionId => $sessionEvents) {
+                SamplerTrackingHistory::append((int) $sessionId, 'activity_recorded', [
+                    'event_type' => $eventType,
+                    'event_at' => (string) ($sessionEvents->first()->event_at ?? $this->now()),
+                    'triggered_by' => [
+                        'member_id' => (int) $member->id,
+                        'sampler_id' => $member->sampler_id,
+                        'name' => $member->sampler_name,
+                        'effective_duration' => $member->effective_duration,
+                    ],
+                    'state' => SamplerTrackingHistory::snapshot(SamplerTrackingSession::findOrFail($sessionId)),
+                    'affected' => $sessionEvents->map(function ($event) {
+                        $target = SamplerTrackingMember::find($event->sampler_tracking_member_id);
+                        return [
+                            'event_id' => (int) $event->id,
+                            'member_id' => (int) $event->sampler_tracking_member_id,
+                            'sampler_id' => $target ? $target->sampler_id : null,
+                            'name' => $target ? $target->sampler_name : null,
+                            'effective_duration' => $target ? $target->effective_duration : null,
+                            'automatic' => (bool) $event->is_auto,
+                        ];
+                    })->values()->all(),
+                ]);
             }
 
             return collect($events);
@@ -2670,7 +2820,7 @@ public function buildTrackingRows($sessions)
                 throw ValidationException::withMessages(['event_at' => ['Waktu Pulang harus setelah check out dan tidak boleh melebihi waktu sekarang.']]);
             }
 
-            return SamplerTrackingEvent::create($this->onlyExistingColumns((new SamplerTrackingEvent())->getTable(), [
+            $created = SamplerTrackingEvent::create($this->onlyExistingColumns((new SamplerTrackingEvent())->getTable(), [
                 'sampler_tracking_session_id' => $member->sampler_tracking_session_id,
                 'sampler_tracking_member_id' => $member->id,
                 'triggered_by_member_id' => null,
@@ -2685,6 +2835,14 @@ public function buildTrackingRows($sessions)
                 'sequence_no' => $this->nextSequence($member->id),
                 'event_at' => $returnAt->toDateTimeString(),
             ]));
+            SamplerTrackingHistory::append((int) $sessionId, 'activity_corrected', [
+                'event_id' => (int) $created->id, 'event_type' => 'return',
+                'event_at' => $created->event_at, 'actor_id' => $actorId,
+                'actor' => $actorName, 'reason' => trim($reason),
+                'affected' => [['member_id' => (int) $member->id, 'sampler_id' => $member->sampler_id,
+                    'name' => $member->sampler_name]],
+            ]);
+            return $created;
         }, 5);
     }
 
@@ -2930,7 +3088,7 @@ public function buildTrackingRows($sessions)
                 continue;
             }
 
-            SamplerTrackingEvent::create($this->onlyExistingColumns($eventModel->getTable(), [
+            $copied = SamplerTrackingEvent::create($this->onlyExistingColumns($eventModel->getTable(), [
                 'sampler_tracking_session_id' => $member->sampler_tracking_session_id,
                 'sampler_tracking_member_id' => $member->id,
                 'triggered_by_member_id' => $sourceEvent->triggered_by_member_id ?: $sourceEvent->sampler_tracking_member_id,
@@ -2949,6 +3107,13 @@ public function buildTrackingRows($sessions)
                 'sequence_no' => $this->nextSequence($member->id),
                 'event_at' => $sourceEvent->event_at,
             ]));
+            SamplerTrackingHistory::append((int) $member->sampler_tracking_session_id, 'activity_inherited', [
+                'event_id' => (int) $copied->id, 'source_event_id' => (int) $sourceEvent->id,
+                'event_type' => $sourceEvent->event_type, 'event_at' => $sourceEvent->event_at,
+                'triggered_by_member_id' => $copied->triggered_by_member_id,
+                'affected' => [['member_id' => (int) $member->id, 'sampler_id' => $member->sampler_id,
+                    'name' => $member->sampler_name, 'effective_duration' => $member->effective_duration]],
+            ]);
         }
     }
 
@@ -3275,6 +3440,15 @@ public function buildTrackingRows($sessions)
                 ]);
             }
             foreach ($routes as $route) {
+                $previousOrder = DB::table($table)
+                    ->where('tanggal_sampling', $date)
+                    ->where('sampler_key', $route['sampler_key'])
+                    ->where('is_active', 1)
+                    ->orderBy('route_order')
+                    ->pluck('sampler_tracking_session_id')->map(function ($id) { return (int) $id; })->all();
+                if (!$previousOrder) {
+                    $previousOrder = $route['sessions']->pluck('id')->map(function ($id) { return (int) $id; })->all();
+                }
                 DB::table($table)
                     ->where('tanggal_sampling', $date)
                     ->where('sampler_key', $route['sampler_key'])
@@ -3310,6 +3484,22 @@ public function buildTrackingRows($sessions)
                         'created_by' => $actorName,
                         'created_at' => $now,
                     ]));
+                }
+                if ($previousOrder !== $route['ordered_ids']) {
+                    foreach (array_unique(array_merge($previousOrder, $route['ordered_ids'])) as $sessionId) {
+                        SamplerTrackingHistory::append((int) $sessionId, 'route_changed', [
+                            'actor' => $actorName,
+                            'sampler_id' => $route['sampler_id'],
+                            'sampler_name' => $route['sampler_name'],
+                            'reason' => $reason,
+                            'before_session_ids' => $previousOrder,
+                            'after_session_ids' => $route['ordered_ids'],
+                            'stops' => $route['sessions']->map(function ($session) {
+                                return ['session_id' => (int) $session->id, 'company' => $session->nama_perusahaan,
+                                    'order' => $session->no_order];
+                            })->values()->all(),
+                        ]);
+                    }
                 }
             }
         }, 5);
@@ -3591,6 +3781,18 @@ public function buildTrackingRows($sessions)
                 $members = SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)->get();
                 foreach ($members as $member) {
                     if (!$this->memberMatchesJadwalSampler($member, $jadwalRows)) {
+                        $removedEvents = SamplerTrackingEvent::where('sampler_tracking_member_id', $member->id)
+                            ->where('is_auto', 1)->get();
+                        if ($removedEvents->isNotEmpty()) {
+                            SamplerTrackingHistory::append((int) $session->id, 'automatic_events_removed', [
+                                'reason' => 'member_no_longer_in_schedule',
+                                'member_id' => (int) $member->id, 'sampler_name' => $member->sampler_name,
+                                'events' => $removedEvents->map(function ($event) {
+                                    return ['event_id' => (int) $event->id, 'event_type' => $event->event_type,
+                                        'event_at' => $event->event_at, 'triggered_by_member_id' => $event->triggered_by_member_id];
+                                })->all(),
+                            ]);
+                        }
                         SamplerTrackingEvent::where('sampler_tracking_member_id', $member->id)
                             ->where('is_auto', 1)
                             ->delete();
@@ -3608,6 +3810,12 @@ public function buildTrackingRows($sessions)
                             : null;
                         if ($triggerMember
                             && !$this->membersShareSessionJadwalTeam($session, $member, $triggerMember)) {
+                            SamplerTrackingHistory::append((int) $session->id, 'automatic_events_removed', [
+                                'reason' => 'different_schedule_team',
+                                'member_id' => (int) $member->id, 'sampler_name' => $member->sampler_name,
+                                'events' => [['event_id' => (int) $event->id, 'event_type' => $event->event_type,
+                                    'event_at' => $event->event_at, 'triggered_by_member_id' => $event->triggered_by_member_id]],
+                            ]);
                             $event->delete();
                         }
                     }
@@ -3740,11 +3948,18 @@ public function buildTrackingRows($sessions)
                 continue;
             }
 
+            $movedEventIds = SamplerTrackingEvent::where('sampler_tracking_member_id', $legacyMember->id)->pluck('id')->all();
             SamplerTrackingEvent::where('sampler_tracking_member_id', $legacyMember->id)
                 ->update([
                     'sampler_tracking_session_id' => $session->id,
                     'sampler_tracking_member_id' => $member->id,
                 ]);
+            SamplerTrackingHistory::link((int) $sibling->id, (int) $session->id, 'sampler_evidence_moved');
+            SamplerTrackingHistory::append((int) $session->id, 'activity_moved', [
+                'from_session_id' => (int) $sibling->id, 'to_session_id' => (int) $session->id,
+                'from_member_id' => (int) $legacyMember->id, 'to_member_id' => (int) $member->id,
+                'sampler_name' => $member->sampler_name, 'event_ids' => $movedEventIds,
+            ]);
 
             return;
         }
@@ -3753,6 +3968,8 @@ public function buildTrackingRows($sessions)
     protected function mergeDuplicateSession($keeper, $duplicate)
     {
         DB::transaction(function () use ($keeper, $duplicate) {
+            $movedEventIds = SamplerTrackingEvent::where('sampler_tracking_session_id', $duplicate->id)->pluck('id')->all();
+            $beforeHistory = SamplerTrackingHistory::snapshot($keeper);
             $duplicateMembers = SamplerTrackingMember::where('sampler_tracking_session_id', $duplicate->id)->get();
 
             foreach ($duplicateMembers as $duplicateMember) {
@@ -3787,6 +4004,12 @@ public function buildTrackingRows($sessions)
 
             $duplicate->fill($this->onlyExistingColumns($duplicate->getTable(), ['is_active' => false]));
             $duplicate->save();
+            SamplerTrackingHistory::link((int) $duplicate->id, (int) $keeper->id, 'duplicate_session_merged');
+            SamplerTrackingHistory::append((int) $keeper->id, 'session_merged', [
+                'from_session_id' => (int) $duplicate->id, 'to_session_id' => (int) $keeper->id,
+                'event_ids' => $movedEventIds, 'before' => $beforeHistory,
+                'after' => SamplerTrackingHistory::snapshot($keeper),
+            ]);
         });
     }
     protected function findMember($sessionId, $row)
