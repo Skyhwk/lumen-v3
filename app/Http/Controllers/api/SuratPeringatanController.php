@@ -5,7 +5,9 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\MasterKaryawan;
 use App\Models\SuratPeringatanDisipliner;
+use App\Services\GenerateQrDocumentSuratPeringatan;
 use App\Services\SuratPeringatanDocumentService;
+use App\Support\QrDocumentsStorage;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +28,16 @@ class SuratPeringatanController extends Controller
             $jenis = $this->resolveJenisPeringatan($request);
             if ($jenis !== '') {
                 $query->where('spd.jenis_peringatan', $jenis);
+            }
+
+            $workflowTab = strtolower(trim((string) $request->input('workflow_tab', 'pembuatan')));
+            if ($workflowTab === 'pengesahan') {
+                $query->where('spd.status', SuratPeringatanDisipliner::STATUS_DRAFT);
+            } else {
+                $query->whereIn('spd.status', [
+                    SuratPeringatanDisipliner::STATUS_DRAFT,
+                    SuratPeringatanDisipliner::STATUS_ISSUED,
+                ]);
             }
 
             if ($request->filled('status')) {
@@ -88,6 +100,35 @@ class SuratPeringatanController extends Controller
         ], 200);
     }
 
+    public function tabCounts(Request $request)
+    {
+        $periode = (int) $request->input('periode', date('Y'));
+
+        $base = SuratPeringatanDisipliner::query()
+            ->where('is_active', true);
+
+        if ($periode >= 2000) {
+            $base->whereYear('tanggal_terbit', $periode);
+        }
+
+        $pembuatan = (clone $base)->whereIn('status', [
+            SuratPeringatanDisipliner::STATUS_DRAFT,
+            SuratPeringatanDisipliner::STATUS_ISSUED,
+        ])->count();
+
+        $pengesahan = (clone $base)
+            ->where('status', SuratPeringatanDisipliner::STATUS_DRAFT)
+            ->count();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'pembuatan' => $pembuatan,
+                'pengesahan' => $pengesahan,
+            ],
+        ], 200);
+    }
+
     public function suggestType(Request $request)
     {
         $this->validate($request, [
@@ -131,10 +172,7 @@ class SuratPeringatanController extends Controller
             $documentService->assertCanIssue($jenisPeringatan, $karyawanId);
 
             $tanggalTerbit = Carbon::parse($this->resolveTanggalTerbit($request))->format('Y-m-d');
-            $sequence = $documentService->allocateDocumentNumber(
-                $jenisPeringatan,
-                (int) date('Y', strtotime($tanggalTerbit))
-            );
+            $nomorData = $this->resolveNomorSuratData($request, $tanggalTerbit);
 
             $idSuratSebelumnya = $request->filled('id_surat_sebelumnya')
                 ? (int) $request->id_surat_sebelumnya
@@ -145,9 +183,9 @@ class SuratPeringatanController extends Controller
             $letter = SuratPeringatanDisipliner::create([
                 'karyawan_id' => $karyawanId,
                 'jenis_peringatan' => $jenisPeringatan,
-                'nomor_surat' => $sequence['nomor_surat'],
-                'tahun_nomor' => $sequence['tahun'],
-                'urutan_nomor' => $sequence['urutan'],
+                'nomor_surat' => $nomorData['nomor_surat'],
+                'tahun_nomor' => $nomorData['tahun_nomor'],
+                'urutan_nomor' => $nomorData['urutan_nomor'],
                 'tanggal_terbit' => $tanggalTerbit,
                 'tanggal_kejadian' => $request->filled('tanggal_kejadian')
                     ? Carbon::parse($request->tanggal_kejadian)->format('Y-m-d')
@@ -163,36 +201,270 @@ class SuratPeringatanController extends Controller
                     $tanggalTerbit,
                     $jenisPeringatan
                 ),
-                'nama_penandatangan' => trim((string) ($request->nama_penandatangan ?? '')) ?: null,
-                'jabatan_penandatangan' => trim((string) ($request->jabatan_penandatangan ?? '')) ?: null,
                 'id_surat_sebelumnya' => $idSuratSebelumnya,
                 'status' => SuratPeringatanDisipliner::STATUS_DRAFT,
                 'created_by' => $this->karyawan,
-                'updated_by' => $this->karyawan,
                 'is_active' => true,
                 'created_at' => $now,
-                'updated_at' => $now,
             ]);
 
             $detail = $this->findActiveRecord($letter->id);
             $letter->load('suratSebelumnya');
             $documentService->generateAndStorePdf($letter, $detail);
 
-            $letter->status = SuratPeringatanDisipliner::STATUS_ISSUED;
-            $letter->published_by = $this->karyawan;
-            $letter->updated_by = $this->karyawan;
-            $letter->save();
-
             DB::commit();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Surat peringatan berhasil diterbitkan.',
+                'message' => 'Surat peringatan berhasil dibuat. Menunggu pengesahan.',
                 'data' => $this->decorate($this->findActiveRecord($letter->id)),
             ], 200);
         } catch (\Throwable $ex) {
             DB::rollBack();
 
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function update(Request $request, SuratPeringatanDocumentService $documentService)
+    {
+        DB::beginTransaction();
+
+        try {
+            $this->validate($request, [
+                'id' => 'required|integer',
+            ]);
+
+            $letter = SuratPeringatanDisipliner::query()
+                ->where('id', (int) $request->id)
+                ->where('is_active', true)
+                ->first();
+
+            if ($letter === null) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Surat peringatan tidak ditemukan.',
+                ], 404);
+            }
+
+            if ($letter->status !== SuratPeringatanDisipliner::STATUS_DRAFT) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hanya draf yang belum disahkan yang dapat diubah.',
+                ], 422);
+            }
+
+            $validation = $this->validatePayload($request, (int) $letter->id);
+            if ($validation !== true) {
+                DB::rollBack();
+
+                return $validation;
+            }
+
+            $karyawanId = (int) $request->karyawan_id;
+            if (!$this->employeeExists($karyawanId)) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data karyawan tidak ditemukan.',
+                ], 404);
+            }
+
+            $jenisPeringatan = $this->resolveJenisPeringatan($request);
+            $documentService->assertCanIssue($jenisPeringatan, $karyawanId, $letter->id);
+
+            $tanggalTerbit = Carbon::parse($this->resolveTanggalTerbit($request))->format('Y-m-d');
+            $nomorData = $this->resolveNomorSuratData($request, $tanggalTerbit);
+
+            $idSuratSebelumnya = $request->filled('id_surat_sebelumnya')
+                ? (int) $request->id_surat_sebelumnya
+                : $documentService->resolveIdSuratSebelumnya($karyawanId, $jenisPeringatan);
+
+            $now = Carbon::now();
+
+            $letter->fill([
+                'karyawan_id' => $karyawanId,
+                'jenis_peringatan' => $jenisPeringatan,
+                'nomor_surat' => $nomorData['nomor_surat'],
+                'tahun_nomor' => $nomorData['tahun_nomor'],
+                'urutan_nomor' => $nomorData['urutan_nomor'],
+                'tanggal_terbit' => $tanggalTerbit,
+                'tanggal_kejadian' => $request->filled('tanggal_kejadian')
+                    ? Carbon::parse($request->tanggal_kejadian)->format('Y-m-d')
+                    : null,
+                'jenis_pelanggaran' => trim((string) ($request->jenis_pelanggaran ?? $request->violation_category ?? '')) ?: null,
+                'uraian_pelanggaran' => trim((string) $this->resolveUraianPelanggaran($request)) ?: null,
+                'catatan_hrd' => trim((string) ($request->catatan_hrd ?? '')) ?: null,
+                'bentuk_sanksi' => trim((string) ($request->bentuk_sanksi ?? '')) ?: null,
+                'masa_berlaku_bulan' => $this->resolveMasaBerlakuBulan($request, $jenisPeringatan),
+                'tanggal_berlaku_mulai' => $this->resolveTanggalBerlakuMulai($request, $tanggalTerbit),
+                'tanggal_berlaku_selesai' => $this->resolveTanggalBerlakuSelesai(
+                    $request,
+                    $tanggalTerbit,
+                    $jenisPeringatan
+                ),
+                'id_surat_sebelumnya' => $idSuratSebelumnya,
+                'updated_by' => $this->karyawan,
+                'updated_at' => $now,
+            ]);
+            $letter->save();
+
+            $detail = $this->findActiveRecord($letter->id);
+            $letter->load('suratSebelumnya');
+            $documentService->generateAndStorePdf($letter, $detail);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Surat peringatan berhasil diperbarui.',
+                'data' => $this->decorate($this->findActiveRecord($letter->id)),
+            ], 200);
+        } catch (\Throwable $ex) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function approve(
+        Request $request,
+        SuratPeringatanDocumentService $documentService,
+        GenerateQrDocumentSuratPeringatan $qrService
+    ) {
+        DB::beginTransaction();
+
+        try {
+            $record = $this->findActiveRecord($this->resolveId($request));
+            if ($record === null) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Surat peringatan tidak ditemukan.',
+                ], 404);
+            }
+
+            $letter = SuratPeringatanDisipliner::query()
+                ->where('id', $record->id)
+                ->where('is_active', true)
+                ->first();
+
+            if ($letter === null || $letter->status !== SuratPeringatanDisipliner::STATUS_DRAFT) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Surat peringatan tidak dapat disahkan (bukan status draf).',
+                ], 422);
+            }
+
+            $qrFile = $qrService->sync($letter, $record, $this->karyawan);
+
+            $svgPath = QrDocumentsStorage::svgPath($qrFile);
+            if (!is_file($svgPath)) {
+                throw new \RuntimeException('QR tidak tersimpan di: ' . $svgPath);
+            }
+
+            $letter->file_qr = $qrFile;
+            $letter->status = SuratPeringatanDisipliner::STATUS_ISSUED;
+            $letter->published_by = $this->karyawan;
+            $letter->updated_by = $this->karyawan;
+            $letter->updated_at = Carbon::now();
+            $letter->save();
+            $letter->refresh();
+
+            $detail = $this->findActiveRecord($letter->id);
+            $letter->load('suratSebelumnya');
+            $documentService->generateAndStorePdf($letter, $detail ?? $record);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Surat peringatan berhasil disahkan.',
+                'data' => $this->decorate($this->findActiveRecord($letter->id)),
+            ], 200);
+        } catch (\Throwable $ex) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function repairQr(Request $request, GenerateQrDocumentSuratPeringatan $qrService)
+    {
+        try {
+            $record = $this->findActiveRecord($this->resolveId($request));
+            if ($record === null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Surat peringatan tidak ditemukan.',
+                ], 404);
+            }
+
+            $letter = SuratPeringatanDisipliner::query()
+                ->where('id', $record->id)
+                ->where('is_active', true)
+                ->first();
+
+            if ($letter === null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Surat peringatan tidak ditemukan.',
+                ], 404);
+            }
+
+            $linked = trim((string) ($letter->file_qr ?? ''));
+            if ($linked !== '' && GenerateQrDocumentSuratPeringatan::ensurePublicSvgForFile($linked)) {
+                $svgPath = QrDocumentsStorage::svgPath($linked);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'QR sudah ada; tidak dibuat ulang.',
+                    'data' => [
+                        'file_qr' => $linked,
+                        'svg_path' => $svgPath,
+                    ],
+                ], 200);
+            }
+
+            $qrFile = $qrService->sync($letter, $record, $this->karyawan);
+            $svgPath = QrDocumentsStorage::svgPath($qrFile);
+
+            if (!is_file($svgPath)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'QR gagal disimpan ke: ' . $svgPath,
+                ], 422);
+            }
+
+            $letter->file_qr = $qrFile;
+            $letter->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'QR berhasil disimpan.',
+                'data' => [
+                    'file_qr' => $qrFile,
+                    'svg_path' => $svgPath,
+                ],
+            ], 200);
+        } catch (\Throwable $ex) {
             return response()->json([
                 'success' => false,
                 'message' => $ex->getMessage(),
@@ -216,6 +488,15 @@ class SuratPeringatanController extends Controller
                     'success' => false,
                     'message' => 'Surat peringatan tidak ditemukan.',
                 ], 404);
+            }
+
+            if ($record->status !== SuratPeringatanDisipliner::STATUS_DRAFT) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hanya draf yang belum disahkan yang dapat dihapus.',
+                ], 422);
             }
 
             $now = Carbon::now();
@@ -255,12 +536,13 @@ class SuratPeringatanController extends Controller
 
             $letter = SuratPeringatanDisipliner::with('suratSebelumnya')->find($record->id);
 
-            try {
-                $pdfBinary = $documentService->readPdfBinary($letter);
-            } catch (\Throwable $e) {
-                $pdfBinary = $documentService->renderPdf($letter, $record);
-                $documentService->generateAndStorePdf($letter, $record);
+            if (!empty($letter->file_qr)) {
+                GenerateQrDocumentSuratPeringatan::ensurePublicSvgForFile($letter->file_qr);
             }
+
+            // Preview/cetak selalu render ulang dari blade terbaru (hindari PDF lama di disk).
+            $pdfBinary = $documentService->renderPdf($letter, $record);
+            $documentService->generateAndStorePdf($letter, $record);
 
             return response()->json([
                 'success' => true,
@@ -298,13 +580,12 @@ class SuratPeringatanController extends Controller
                 'spd.masa_berlaku_bulan',
                 'spd.tanggal_berlaku_mulai',
                 'spd.tanggal_berlaku_selesai',
-                'spd.nama_penandatangan',
-                'spd.jabatan_penandatangan',
                 'spd.id_surat_sebelumnya',
                 'spd.status',
                 'spd.nama_berkas',
                 'spd.file_path',
                 'spd.file_size',
+                'spd.file_qr',
                 'spd.created_by',
                 'spd.updated_by',
                 'spd.published_by',
@@ -349,14 +630,18 @@ class SuratPeringatanController extends Controller
             ? Carbon::parse($item->tanggal_berlaku_selesai)->format('d-m-Y')
             : '-';
         $item->has_document = !empty($item->file_path);
+        $item->has_qr = !empty($item->file_qr);
+        $item->can_approve = $item->status === SuratPeringatanDisipliner::STATUS_DRAFT;
         $item->jenis_peringatan_label = $this->mapJenisPeringatanLabel($item->jenis_peringatan);
         $item->dibuat_oleh_label = trim((string) ($item->created_by ?? '')) ?: '-';
-        $item->diubah_oleh_label = trim((string) ($item->updated_by ?? '')) ?: '-';
+        $updatedBy = trim((string) ($item->updated_by ?? ''));
+        $item->was_edited = $updatedBy !== '';
+        $item->diubah_oleh_label = $item->was_edited ? $updatedBy : '-';
         $item->diterbitkan_oleh_label = trim((string) ($item->published_by ?? '')) ?: '-';
         $item->created_at_label = $item->created_at
             ? Carbon::parse($item->created_at)->format('d-m-Y H:i')
             : '-';
-        $item->updated_at_label = $item->updated_at
+        $item->updated_at_label = $item->was_edited && $item->updated_at
             ? Carbon::parse($item->updated_at)->format('d-m-Y H:i')
             : '-';
 
@@ -377,7 +662,7 @@ class SuratPeringatanController extends Controller
     private function mapStatusLabel(?string $status): string
     {
         $map = [
-            SuratPeringatanDisipliner::STATUS_DRAFT => 'Draf',
+            SuratPeringatanDisipliner::STATUS_DRAFT => 'Menunggu pengesahan',
             SuratPeringatanDisipliner::STATUS_ISSUED => 'Terbit',
             SuratPeringatanDisipliner::STATUS_CANCELLED => 'Dibatalkan',
         ];
@@ -385,7 +670,7 @@ class SuratPeringatanController extends Controller
         return $map[$status] ?? (string) $status;
     }
 
-    private function validatePayload(Request $request)
+    private function validatePayload(Request $request, ?int $excludeLetterId = null)
     {
         $this->validate($request, [
             'karyawan_id' => 'required|integer',
@@ -402,8 +687,8 @@ class SuratPeringatanController extends Controller
             'masa_berlaku_bulan' => 'nullable|integer|min:1|max:60',
             'tanggal_berlaku_mulai' => 'nullable|date',
             'tanggal_berlaku_selesai' => 'nullable|date',
-            'nama_penandatangan' => 'nullable|string|max:150',
-            'jabatan_penandatangan' => 'nullable|string|max:150',
+            'nomor_surat' => 'nullable|string|max:100',
+            'document_number' => 'nullable|string|max:100',
         ]);
 
         $jenis = $this->resolveJenisPeringatan($request);
@@ -441,6 +726,27 @@ class SuratPeringatanController extends Controller
             ], 422);
         }
 
+        $nomorSurat = trim((string) ($request->nomor_surat ?? $request->document_number ?? ''));
+        if ($nomorSurat === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nomor surat wajib diisi.',
+            ], 422);
+        }
+
+        $duplicateQuery = SuratPeringatanDisipliner::query()
+            ->where('is_active', true)
+            ->where('nomor_surat', $nomorSurat);
+        if ($excludeLetterId !== null) {
+            $duplicateQuery->where('id', '!=', $excludeLetterId);
+        }
+        if ($duplicateQuery->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nomor surat sudah digunakan. Gunakan nomor lain.',
+            ], 422);
+        }
+
         return true;
     }
 
@@ -459,6 +765,23 @@ class SuratPeringatanController extends Controller
     private function resolveUraianPelanggaran(Request $request): string
     {
         return (string) ($request->uraian_pelanggaran ?? $request->violation_description ?? '');
+    }
+
+    private function resolveNomorSuratData(Request $request, string $tanggalTerbit): array
+    {
+        $nomorSurat = trim((string) ($request->nomor_surat ?? $request->document_number ?? ''));
+
+        $year = (int) date('Y', strtotime($tanggalTerbit));
+        $urutan = 0;
+        if (preg_match('/(\d{1,6})$/', $nomorSurat, $matches)) {
+            $urutan = (int) $matches[1];
+        }
+
+        return [
+            'nomor_surat' => $nomorSurat,
+            'tahun_nomor' => $year,
+            'urutan_nomor' => max(0, $urutan),
+        ];
     }
 
     private function resolveMasaBerlakuBulan(Request $request, string $jenisPeringatan): int

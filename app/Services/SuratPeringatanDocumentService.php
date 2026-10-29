@@ -4,10 +4,13 @@ namespace App\Services;
 
 use App\Models\EmployeeDocumentSequence;
 use App\Models\MasterKaryawan;
+use App\Models\QrDocument;
 use App\Models\SuratPeringatanDisipliner;
+use App\Support\DokumenPageBackgroundWithNote;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class SuratPeringatanDocumentService
 {
@@ -186,7 +189,9 @@ class SuratPeringatanDocumentService
         $letter->nama_berkas = $fileName;
         $letter->file_path = $relativePath;
         $letter->file_size = filesize($fullPath) ?: null;
+        $letter->timestamps = false;
         $letter->save();
+        $letter->timestamps = true;
 
         return $letter->fresh();
     }
@@ -240,16 +245,17 @@ class SuratPeringatanDocumentService
         $sanctionText = trim((string) $letter->bentuk_sanksi)
             ?: self::defaultBentukSanksi($spMeta['type']);
 
-        $signatoryName = trim((string) ($letter->nama_penandatangan ?? ''))
-            ?: trim((string) ($letter->published_by ?? ''))
-            ?: '-';
-        $signatoryTitle = trim((string) ($letter->jabatan_penandatangan ?? ''))
-            ?: 'Human Resources';
+        $qrImagePath = $this->resolveQrImageForPdf(trim((string) ($letter->file_qr ?? '')));
+
+        $refNumber = trim((string) $letter->nomor_surat)
+            ?: $this->formatRefNumber($letter, $issueDate, $spMeta['number']);
+        $headerTitle = 'SURAT PERINGATAN ' . $spMeta['roman'] . ' (SP-' . $spMeta['number'] . ')';
+        $headerRef = 'Ref : ' . $refNumber;
 
         $html = view('disipliner.surat-peringatan', [
             'spLevelNumber' => $spMeta['number'],
             'spLevelRoman' => $spMeta['roman'],
-            'refNumber' => $this->formatRefNumber($letter, $issueDate, $spMeta['number']),
+            'refNumber' => $refNumber,
             'employeeNameNik' => $employeeNameNik,
             'divisionName' => trim((string) ($detailRow->nama_divisi ?? ($detailRow->department ?? ''))) ?: '-',
             'positionName' => trim((string) ($detailRow->jabatan ?? '')) ?: '-',
@@ -265,8 +271,8 @@ class SuratPeringatanDocumentService
             'honorific' => $honorific,
             'nextSpLabel' => $spMeta['next_label'],
             'issueDateLong' => $issueDate->translatedFormat('d F Y'),
-            'signatoryName' => $signatoryName,
-            'signatoryTitle' => $signatoryTitle,
+            'qrImagePath' => $qrImagePath,
+            'isApproved' => $letter->status === SuratPeringatanDisipliner::STATUS_ISSUED,
         ])->render();
 
         $fontDirs = (new \Mpdf\Config\ConfigVariables())->getDefaults()['fontDir'];
@@ -297,12 +303,18 @@ class SuratPeringatanDocumentService
             ? public_path('isl_logo.png')
             : public_path('img/isl_logo.png');
 
+        $headerTitleEsc = htmlspecialchars($headerTitle, ENT_QUOTES, 'UTF-8');
+        $headerRefEsc = htmlspecialchars($headerRef, ENT_QUOTES, 'UTF-8');
+
         $headerHtml =
             '<table width="100%" style="font-family:calibri,sans-serif; border-collapse:collapse;">'
             . '<tr><td colspan="2" style="text-align:right; font-size:8pt; color:#666; padding:0 0 1mm;">Page {PAGENO} of {nbpg}</td></tr>'
             . '<tr>'
             . '<td style="width:52mm; vertical-align:middle; padding:0 0 2mm;"><img src="' . $logo . '" style="width:48mm;"></td>'
-            . '<td style="vertical-align:middle; padding:0 0 2mm;">&nbsp;</td>'
+            . '<td style="vertical-align:middle; text-align:center; padding:0 0 2mm 2mm;">'
+            . '<div style="font-size:16pt; font-weight:bold; line-height:1.2;">' . $headerTitleEsc . '</div>'
+            . '<div style="font-size:10pt; font-weight:bold; margin-top:1.5mm;">' . $headerRefEsc . '</div>'
+            . '</td>'
             . '</tr></table>';
         $pdf->SetHTMLHeader($headerHtml);
         $pdf->SetHTMLHeader($headerHtml, 'E');
@@ -318,15 +330,23 @@ class SuratPeringatanDocumentService
         $pdf->SetHTMLFooter($footerHtml);
         $pdf->SetHTMLFooter($footerHtml, 'E');
 
-        $background = resource_path(self::PAGE_BACKGROUND);
-        if (is_file($background)) {
+        $backgroundSource = resource_path(self::PAGE_BACKGROUND);
+        $background = $backgroundSource;
+        if (is_file($backgroundSource)) {
+            $background = DokumenPageBackgroundWithNote::withSystemNote(
+                $backgroundSource,
+                Carbon::now()->format('YmdGi')
+            );
             $pdf->SetWatermarkImage($background, 1, [210, 297], [0, 0]);
             $pdf->showWatermarkImage = true;
         }
 
         $pdf->WriteHTML($html);
 
-        return $pdf->Output('', 'S');
+        $output = $pdf->Output('', 'S');
+        DokumenPageBackgroundWithNote::deleteIfTemporary($background, $backgroundSource);
+
+        return $output;
     }
 
     private function hasIssuedType(int $karyawanId, string $type, ?int $excludeId = null): bool
@@ -342,6 +362,48 @@ class SuratPeringatanDocumentService
         }
 
         return $query->exists();
+    }
+
+    private function resolveQrImageForPdf(?string $qrFile): ?string
+    {
+        if ($qrFile === null || $qrFile === '') {
+            return null;
+        }
+
+        $qrRecord = QrDocument::query()
+            ->where('file', $qrFile)
+            ->where('type_document', GenerateQrDocumentSuratPeringatan::TYPE_DOCUMENT)
+            ->first();
+
+        if ($qrRecord && !empty($qrRecord->kode_qr)) {
+            $tempDir = storage_path('app/tmp-sp-qr');
+            if (!is_dir($tempDir)) {
+                mkdir($tempDir, 0755, true);
+            }
+
+            $pngPath = $tempDir . DIRECTORY_SEPARATOR . uniqid('sp_qr_', true) . '.png';
+
+            try {
+                QrCode::format('png')
+                    ->size(120)
+                    ->margin(0)
+                    ->generate('https://www.intilab.com/validation/' . $qrRecord->kode_qr, $pngPath);
+
+                if (is_file($pngPath)) {
+                    return str_replace('\\', '/', $pngPath);
+                }
+            } catch (\Throwable $th) {
+                // fallback SVG
+            }
+        }
+
+        try {
+            $svgPath = \App\Support\QrDocumentsStorage::svgPath($qrFile);
+        } catch (\InvalidArgumentException $e) {
+            return null;
+        }
+
+        return is_file($svgPath) ? str_replace('\\', '/', $svgPath) : null;
     }
 
     private function resolveSpMeta(string $jenisPeringatan): array

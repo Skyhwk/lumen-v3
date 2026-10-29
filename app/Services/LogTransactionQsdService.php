@@ -137,13 +137,13 @@ class LogTransactionQsdService
                     }
                 });
 
-            // STEP 4: Menangkap Order yang di-HARD REMOVE
+            // STEP 4: Menangkap Order yang di-HARD REMOVE atau Pindah Bulan
             $deletedOrders = $latestLogs->except($processedOrders);
 
             foreach ($deletedOrders as $orderId => $logData) {
                 $lastOrderTotal = round((float) $logData->order_total, 2);
 
-                if ($lastOrderTotal > 0) {
+                if ($lastOrderTotal > 0.01) {
                     $currentGrandTotal -= $lastOrderTotal;
 
                     $insertData[] = [
@@ -152,6 +152,21 @@ class LogTransactionQsdService
                         'tanggal_kelompok' => $logData->tanggal_kelompok,
                         'revenue'          => $lastOrderTotal,
                         'status'           => 'pengurangan',
+                        'total'            => $currentGrandTotal,
+                        'is_revisi'        => true,
+                        'created_at'       => $now,
+                    ];
+                } elseif ($lastOrderTotal < -0.01) {
+                    // Auto-Balancing: Menetralkan order yang saldonya minus (orphan reduction)
+                    $correction = abs($lastOrderTotal);
+                    $currentGrandTotal += $correction;
+
+                    $insertData[] = [
+                        'no_order'         => $orderId,
+                        'periode'          => $logData->periode,
+                        'tanggal_kelompok' => $logData->tanggal_kelompok,
+                        'revenue'          => $correction,
+                        'status'           => 'penambahan',
                         'total'            => $currentGrandTotal,
                         'is_revisi'        => true,
                         'created_at'       => $now,
@@ -175,6 +190,7 @@ class LogTransactionQsdService
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
             ]);
+            throw $e;
         }
 
         return $countInsert;
@@ -212,17 +228,15 @@ class LogTransactionQsdService
             $latestLogs = DB::table('qsd_forecast_transaction_log')
                 ->select(
                     'no_penawaran',
-                    'periode',
+                    DB::raw('MAX(periode) as periode'),
                     DB::raw('MAX(tanggal_sampling_min) as tanggal_sampling_min'),
                     DB::raw('SUM(CASE WHEN status = "penambahan" THEN revenue_forecast ELSE -revenue_forecast END) as order_total'),
                     DB::raw('MAX(forecast_order) as is_ordered')
                 )
                 ->whereBetween('tanggal_sampling_min', [$startOfMonth, $endOfMonth])
-                ->groupBy('no_penawaran', 'periode')
+                ->groupBy('no_penawaran')
                 ->get()
-                ->keyBy(function ($item) {
-                    return $item->no_penawaran . '|' . $item->periode;
-                });
+                ->keyBy('no_penawaran');
 
             $activePenawaran = [];
             $insertData = [];
@@ -240,7 +254,7 @@ class LogTransactionQsdService
                         $penawaranId = $row->no_quotation;
                         if (empty($penawaranId)) continue;
 
-                        $uniqueKey = $penawaranId . '|' . $row->periode;
+                        $uniqueKey = $penawaranId;
                         $parsedValue = self::parseRevenueForecast($row->revenue_forecast);
 
                         if (!isset($groupedForecasts[$uniqueKey])) {
@@ -263,38 +277,35 @@ class LogTransactionQsdService
                 $currentValue = round($data['total_revenue'], 2);
                 $lastOrderTotal = 0.0;
                 $isNewPenawaran = true;
-                $wasOrdered = false;
 
                 if ($latestLogs->has($uniqueKey)) {
                     $log = $latestLogs->get($uniqueKey);
                     $lastOrderTotal = round((float) $log->order_total, 2);
-                    $wasOrdered = (int) $log->is_ordered === 1;
                     $isNewPenawaran = false;
                 }
 
-                if (!$isNewPenawaran && !$wasOrdered && abs($currentValue - $lastOrderTotal) < 0.01) {
+                if (!$isNewPenawaran && abs($currentValue - $lastOrderTotal) < 0.01) {
                     continue;
                 }
 
-                if ($isNewPenawaran || $wasOrdered) {
+                $revenueDiff = round($currentValue - $lastOrderTotal, 2);
+                if (abs($revenueDiff) < 0.01) {
+                    continue;
+                }
+
+                if ($revenueDiff > 0) {
                     $status = 'penambahan';
-                    $revenueDiff = round($currentValue - $lastOrderTotal, 2);
-                    $currentGrandTotal += $revenueDiff;
-                } elseif ($currentValue > $lastOrderTotal) {
-                    $status = 'penambahan';
-                    $revenueDiff = round($currentValue - $lastOrderTotal, 2);
                     $currentGrandTotal += $revenueDiff;
                 } else {
                     $status = 'pengurangan';
-                    $revenueDiff = round($lastOrderTotal - $currentValue, 2);
-                    $currentGrandTotal -= $revenueDiff;
+                    $currentGrandTotal -= abs($revenueDiff);
                 }
 
                 $insertData[] = [
                     'no_penawaran'         => $data['no_quotation'],
                     'periode'              => $data['periode'],
                     'tanggal_sampling_min' => $data['tanggal_sampling_min'],
-                    'revenue_forecast'     => $revenueDiff,
+                    'revenue_forecast'     => abs($revenueDiff),
                     'status'               => $status,
                     'total'                => $currentGrandTotal,
                     'forecast_order'       => 0,
@@ -302,28 +313,41 @@ class LogTransactionQsdService
                 ];
             }
 
-            // STEP 4: Deteksi Status Berubah Menjadi Order (Hard Delete dari Forecast)
+            // STEP 4: Deteksi Status Berubah Menjadi Order atau Pindah Bulan (Hard Delete dari Forecast bulan ini)
             $deletedQuotations = $latestLogs->except($activePenawaran);
 
             foreach ($deletedQuotations as $uniqueKey => $logEntry) {
                 $lastOrderTotal = round((float) $logEntry->order_total, 2);
 
-                if ((int)$logEntry->is_ordered === 1 || $lastOrderTotal <= 0) {
-                    continue;
+                if ($lastOrderTotal > 0.01) {
+                    $currentGrandTotal -= $lastOrderTotal;
+
+                    $insertData[] = [
+                        'no_penawaran'         => $logEntry->no_penawaran,
+                        'periode'              => $logEntry->periode,
+                        'tanggal_sampling_min' => $logEntry->tanggal_sampling_min,
+                        'revenue_forecast'     => $lastOrderTotal,
+                        'status'               => 'pengurangan',
+                        'total'                => $currentGrandTotal,
+                        'forecast_order'       => 1,
+                        'created_at'           => $now,
+                    ];
+                } elseif ($lastOrderTotal < -0.01) {
+                    // Auto-Balancing: Netralkan jika penawaran yang sudah tidak aktif memiliki saldo minus
+                    $correction = abs($lastOrderTotal);
+                    $currentGrandTotal += $correction;
+
+                    $insertData[] = [
+                        'no_penawaran'         => $logEntry->no_penawaran,
+                        'periode'              => $logEntry->periode,
+                        'tanggal_sampling_min' => $logEntry->tanggal_sampling_min,
+                        'revenue_forecast'     => $correction,
+                        'status'               => 'penambahan',
+                        'total'                => $currentGrandTotal,
+                        'forecast_order'       => 0,
+                        'created_at'           => $now,
+                    ];
                 }
-
-                $currentGrandTotal -= $lastOrderTotal;
-
-                $insertData[] = [
-                    'no_penawaran'         => $logEntry->no_penawaran,
-                    'periode'              => $logEntry->periode,
-                    'tanggal_sampling_min' => $logEntry->tanggal_sampling_min,
-                    'revenue_forecast'     => $lastOrderTotal,
-                    'status'               => 'pengurangan',
-                    'total'                => $currentGrandTotal,
-                    'forecast_order'       => 1,
-                    'created_at'           => $now,
-                ];
             }
 
             // STEP 5: Batch Insert ke Log
@@ -342,6 +366,7 @@ class LogTransactionQsdService
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
             ]);
+            throw $e;
         }
 
         return $countInsert;

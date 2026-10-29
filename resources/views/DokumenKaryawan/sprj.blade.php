@@ -1,7 +1,7 @@
 <style>
     body {
         font-family: Arial, sans-serif;
-        font-size: 11pt;
+        font-size: 10pt;
         line-height: 1.50;
         color: #111;
         text-align: justify;
@@ -11,7 +11,7 @@
     .article-title {
         text-align: center;
         font-weight: bold;
-        margin: 6mm 0 3.5mm;
+        margin: 6mm 0 3mm;
         line-height: 1.3;
     }
     .identity { width: 100%; border-collapse: collapse; margin: 2mm 0; }
@@ -144,8 +144,6 @@
     </tr>
 </table>
 
-<div class="page-break"></div>
-
 <table class="clause">
     <tr>
         <td class="number">2.</td>
@@ -243,8 +241,6 @@
     </tr>
 </table>
 
-<div class="page-break"></div>
-
 <div class="article-title"><div>Pasal 6</div><div>Sanksi</div></div>
 <table class="clause">
     <tr>
@@ -290,6 +286,8 @@
     </tr>
 </table>
 
+<div class="page-break"></div>
+
 <div class="article-title"><div>Pasal 7</div><div>Upah Masa Pelatihan dan Cara Pembayaran</div></div>
 <table class="clause">
     <tr>
@@ -318,8 +316,6 @@
         sampai dengan <strong>{{ $tanggalPencadanganSelesai }}</strong>.
     </p>
 @endif
-
-<div class="page-break"></div>
 
 <table class="clause">
     <tr>
@@ -428,6 +424,8 @@
         </td>
     </tr>
 </table>
+
+<div class="page-break"></div>
 
 <div class="article-title"><div>Pasal 10</div><div>Lain-Lain</div></div>
 <table class="clause">
