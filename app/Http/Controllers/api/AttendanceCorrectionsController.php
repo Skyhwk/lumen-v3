@@ -32,6 +32,27 @@ class AttendanceCorrectionsController extends Controller
             ->addColumn('atasan_steps', function ($row) {
                 return $this->atasanStepsForRow($row);
             })
+            ->filterColumn('karyawan', function ($query, $keyword) {
+                $ids = MasterKaryawan::query()
+                    ->where('nama_lengkap', 'like', "%{$keyword}%")
+                    ->pluck('id');
+
+                $query->where(function ($sub) use ($keyword, $ids) {
+                    if ($ids->isNotEmpty()) {
+                        $sub->whereIn('employee_id', $ids);
+                    }
+                    $sub->orWhere('created_by', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('approved_atasan_by', function ($query, $keyword) {
+                $query->where('approved_atasan_by', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('approved_hrd_by', function ($query, $keyword) {
+                $query->where('approved_hrd_by', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('approved_hrd_at', function ($query, $keyword) {
+                $query->where('approved_hrd_at', 'like', "%{$keyword}%");
+            })
             ->make(true);
     }
 
