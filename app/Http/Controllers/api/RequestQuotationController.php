@@ -655,7 +655,7 @@ class RequestQuotationController extends Controller
                             ->first();
 
                         $harga_db[] = $ambil_data->harga ?? 0;
-                        $volume_db[] = $ambil_data->volume ?? 0;
+                        $volume_db[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($idParam, $kategori, $ambil_data->volume ?? 0);
                     }
 
                     $harga_pertitik = (object) [
@@ -1613,7 +1613,7 @@ class RequestQuotationController extends Controller
                             ->first();
 
                         $harga_db[] = $ambil_data->harga ?? 0;
-                        $volume_db[] = $ambil_data->volume ?? 0;
+                        $volume_db[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($idParam, $kategori, $ambil_data->volume ?? 0);
                     }
 
                     $harga_pertitik = (object) [
@@ -2766,7 +2766,7 @@ class RequestQuotationController extends Controller
                             ->first();
 
                         $harga_db[] = $ambil_data->harga ?? 0;
-                        $volume_db[] = $ambil_data->volume ?? 0;
+                        $volume_db[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($idParam, $kategori, $ambil_data->volume ?? 0);
 
                     }
 
@@ -2962,7 +2962,7 @@ class RequestQuotationController extends Controller
 
                             if ($ambil_data) {
                                 $harga_parameter[] = $ambil_data->harga ?? 0;
-                                $volume_parameter[] = $ambil_data->volume ?? 0;
+                                $volume_parameter[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($idParam, $id_kategori, $ambil_data->volume ?? 0);
                             } else {
                                 $harga_parameter[] = 0;
                                 $volume_parameter[] = 0;
@@ -4324,7 +4324,7 @@ class RequestQuotationController extends Controller
                             ->first();
 
                         $harga_db[] = $ambil_data->harga ?? 0;
-                        $volume_db[] = $ambil_data->volume ?? 0;
+                        $volume_db[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($idParam, $kategori, $ambil_data->volume ?? 0);
 
                     }
 
@@ -4484,7 +4484,7 @@ class RequestQuotationController extends Controller
                                 ->first();
 
                             $harga_parameter[] = $ambil_data->harga ?? 0;
-                            $volume_parameter[] = $ambil_data->volume ?? 0;
+                            $volume_parameter[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($idParam, $id_kategori, $ambil_data->volume ?? 0);
                         }
 
                         $vol_db = array_sum($volume_parameter);

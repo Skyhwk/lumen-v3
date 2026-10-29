@@ -130,7 +130,7 @@ class CreateNonKontrakJob extends Job
                         }) ?? $ambil_data->first();
 
                         $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                        $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                        $volume_db[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($cek_harga_parameter->id_parameter ?? null, $kategori, $cek_harga_parameter->volume ?? 0);
                         // $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
                         //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
                         // }) ?? $ambil_data->first();
