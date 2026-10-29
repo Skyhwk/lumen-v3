@@ -8,25 +8,27 @@ use Illuminate\Support\Facades\Log;
 
 class ScheduleLogTransactionQsd extends Command
 {
-    protected $signature = 'logTransactionQsd:run {--type=all : revenue, forecast, or all}';
+    protected $signature = 'logTransactionQsd:run {--type=all : revenue, forecast, or all} {--periode= : Format YYYY-MM (misal: 2026-06)}';
 
     protected $description = 'Sync QSD revenue & forecast transaction logs';
 
     public function handle()
     {
         $type = strtolower($this->option('type') ?? 'all');
+        $targetPeriode = $this->option('periode');
 
         try {
-            printf("\n[LogTransactionQsd] [%s] Start...", date('Y-m-d H:i:s'));
+            $infoPeriode = $targetPeriode ? " Periode: {$targetPeriode}" : "";
+            printf("\n[LogTransactionQsd] [%s] Start%s...", date('Y-m-d H:i:s'), $infoPeriode);
 
             if ($type === 'revenue') {
-                $count = LogTransactionQsdService::syncRevenue();
+                $count = LogTransactionQsdService::syncRevenue($targetPeriode);
                 printf("\n[LogTransactionQsd] Revenue logs inserted: %d", $count);
             } elseif ($type === 'forecast') {
-                $count = LogTransactionQsdService::syncForecast();
+                $count = LogTransactionQsdService::syncForecast($targetPeriode);
                 printf("\n[LogTransactionQsd] Forecast logs inserted: %d", $count);
             } else {
-                $result = LogTransactionQsdService::run();
+                $result = LogTransactionQsdService::run($targetPeriode);
                 printf("\n[LogTransactionQsd] Revenue logs: %d, Forecast logs: %d", $result['revenue_logs'], $result['forecast_logs']);
             }
 

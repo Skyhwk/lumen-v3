@@ -11,9 +11,11 @@
     .rules .head { text-align: center; font-weight: bold; }
     .rules .num { width: 12mm; text-align: center; font-weight: bold; }
     .rules .ttd { width: 46mm; height: 14mm; }
+    .rules tr.compact td { padding-top: 0.5mm; padding-bottom: 0.5mm; }
+    .rules tr.compact .ttd { height: 7mm; }
     .sign { width: 70mm; border-collapse: collapse; margin-top: 5mm; }
     .sign td { text-align: left; border: none; padding: 0; }
-    .sign .space { height: 24mm; }
+    .sign .space { height: 18mm; }
     .name-line { border-collapse: collapse; }
     .name-line td { font-weight: bold; border: none; border-bottom: 0.6px solid #111; padding: 0 0 0.3mm; text-align: left; }
     .sign .role { font-style: italic; font-size: 10.5pt; padding-top: 0.6mm; }
@@ -42,11 +44,11 @@
         <td><strong>Peraturan Umum No. : Per-Um/09/22-VII</strong><br>a. Bagian I – Kewajiban dan Larangan</td>
         <td class="ttd">&nbsp;</td>
     </tr>
-    <tr>
+    <tr class="compact">
         <td>b. Bagian II – Kehadiran</td>
         <td class="ttd">&nbsp;</td>
     </tr>
-    <tr>
+    <tr class="compact">
         <td>c. Bagian III – Upah Kerja</td>
         <td class="ttd">&nbsp;</td>
     </tr>
@@ -72,15 +74,15 @@
         <td><strong>Peraturan Perusahaan terkait Karyawan Pelatihan (SK Direktur No. : ISL/SK-Dir/23-XII/003)</strong><br>a. Bagian A – Jenis Status Karyawan</td>
         <td class="ttd">&nbsp;</td>
     </tr>
-    <tr>
+    <tr class="compact">
         <td>b. Bagian B – Cuti Khusus</td>
         <td class="ttd">&nbsp;</td>
     </tr>
-    <tr>
+    <tr class="compact">
         <td>c. Bagian C – Cuti Tahunan</td>
         <td class="ttd">&nbsp;</td>
     </tr>
-    <tr>
+    <tr class="compact">
         <td>d. Bagian D – Pengakhiran Hubungan Kerja</td>
         <td class="ttd">&nbsp;</td>
     </tr>

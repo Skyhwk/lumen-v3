@@ -427,10 +427,13 @@ class PengecekanKesehatanController extends Controller
         }
 
         $stetoskop = $this->normalizeStetoskop($request->stetoskop);
-        if (!in_array($stetoskop, [EmployeeHealthCheck::STOK_NORMAL, EmployeeHealthCheck::STOK_ADA_KELAINAN], true)) {
+        if (
+            $stetoskop !== null
+            && !in_array($stetoskop, [EmployeeHealthCheck::STOK_NORMAL, EmployeeHealthCheck::STOK_ADA_KELAINAN], true)
+        ) {
             return response()->json([
                 'success' => false,
-                'message' => 'Stetoskop wajib dipilih (normal / ada_kelainan)',
+                'message' => 'Stetoskop tidak valid (normal / ada_kelainan)',
             ], 422);
         }
 
@@ -488,6 +491,10 @@ class PengecekanKesehatanController extends Controller
 
     private function normalizeStetoskop($value)
     {
+        if ($value === null || trim((string) $value) === '') {
+            return null;
+        }
+
         $normalized = strtolower(trim(str_replace('-', '_', (string) $value)));
         if (in_array($normalized, ['normal', 'ada_kelainan', 'ada kelainan'], true)) {
             return $normalized === 'normal'

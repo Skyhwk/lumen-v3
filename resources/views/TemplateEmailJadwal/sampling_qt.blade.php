@@ -97,7 +97,7 @@
         <strong>PENTING</strong>: Apabila konfirmasi belum kami terima, status booking jadwal ini akan secara otomatis dibatalkan dan dipindahkan ke jadwal sampling berikutnya yang tersedia.
     </p>
     <p>
-        Jika terdapat perubahan yang perlu disesuaikan, atau jika Anda memiliki pertanyaan lebih lanjut, silakan segera hubungi Departemen Sales kami ({{ $sales->nama_lengkap }} - {{ $sales->no_telpon }})
+        Jika terdapat perubahan yang perlu disesuaikan, atau jika Anda memiliki pertanyaan lebih lanjut, silakan segera hubungi Departemen Sales kami ({{ $sales->nama_lengkap }} - {{ $sales->no_telpon_perusahaan ?: $sales->no_telpon }})
         atau melalui telepon 021-5089-8988/89.
     </p>
     <br>

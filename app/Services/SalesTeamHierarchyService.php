@@ -316,7 +316,7 @@ class SalesTeamHierarchyService
     /** User di luar divisi sales: akses penuh seluruh data tim sales di dashboard POS. */
     public function viewerHasOrgWideAccess(MasterKaryawan $viewer): bool
     {
-        if ((int) $viewer->id === 1) {
+        if ((int) $viewer->id === 1 || (int) $viewer->id === 1128) {
             return true;
         }
 

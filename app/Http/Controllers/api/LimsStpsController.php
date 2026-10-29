@@ -579,7 +579,7 @@ class LimsStpsController extends Controller
                                         'status_sampling' => $vv->kategori_1,
                                         'keterangan_lain' => $sp->keterangan_lain,
                                         'nama_lengkap' => $sales->nama_lengkap,
-                                        'no_telpon' => $sales->no_telpon,
+                                        'no_telpon' => $sales ? (!empty($sales->no_telpon_perusahaan) ? $sales->no_telpon_perusahaan : $sales->no_telpon) : null,
                                         'tgl_sampling' => $jadwal->tanggal,
                                         'jam_sampling' => $jadwal->jam,
                                         'keterangan_1' => $vv->keterangan_1,

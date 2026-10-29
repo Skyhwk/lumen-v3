@@ -207,6 +207,13 @@ class CandidateOfferingDecisionService
             ]
         );
 
+        if (Schema::hasColumn('new_recruitment', 'rejected_candidate_offering')) {
+            DB::table('new_recruitment')->where('id', $recruitment->id)->update([
+                'rejected_candidate_offering' => 1,
+                'rejected_candidate_offering_reason' => $rejectReason,
+            ]);
+        }
+
         $fresh = DB::table('new_recruitment')->where('id', $recruitment->id)->first();
 
         return [

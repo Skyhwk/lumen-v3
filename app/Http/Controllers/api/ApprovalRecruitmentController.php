@@ -77,7 +77,7 @@ class ApprovalRecruitmentController extends Controller
 
         $isHiredOrTraining = in_array($status, ['hired', 'training', 'accepted', 'completed'], true);
         $isRejectedDecision = (int) ($row->rejected_decision ?? 0) === 1 && $row->status != 'management_decision';
-        $isAnyRejected = ($status === 'rejected' || (int) ($row->rejected_salary ?? 0) === 1 || $isRejectedDecision);
+        $isAnyRejected = ($status === 'rejected' || (int) ($row->rejected_salary ?? 0) === 1 || (int) ($row->rejected_candidate_offering ?? 0) === 1 || $isRejectedDecision);
         $hasOffer = !empty(optional($row->sallaryOffer)->email_sent_at);
 
         $rawWaiting = RecruitmentStatusService::isAwaitingDirectorSalaryApproval($row);
@@ -288,6 +288,9 @@ class ApprovalRecruitmentController extends Controller
                 }
                 if (!empty($row->rejected_salary_reason)) {
                     return $row->rejected_salary_reason;
+                }
+                if (!empty($row->rejected_candidate_offering_reason)) {
+                    return $row->rejected_candidate_offering_reason;
                 }
                 return RecruitmentStatusService::getDirectorSalaryRejectReason($row) ?? '-';
             });

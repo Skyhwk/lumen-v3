@@ -111,6 +111,14 @@ class SalaryOverviewController extends Controller
                     ->where('master_divisi.is_active', true);
             })
             ->where('master_sallary.is_active', true)
-            ->whereNotNull('master_sallary.id_karyawan');
+            ->whereNotNull('master_sallary.id_karyawan')
+            ->where(function ($query) {
+                $query->where('master_karyawan.status_karyawan', '!=', 'Magang/Intern')
+                    ->orWhereNull('master_karyawan.status_karyawan');
+            })
+            ->whereRaw('UPPER(TRIM(master_karyawan.grade)) = ?', ['STAFF'])
+            ->whereRaw(
+                'NOT (ROUND(COALESCE(master_sallary.gaji_pokok, 0), 2) = 0 AND ROUND(COALESCE(master_sallary.tunjangan_kerja, 0), 2) = 0)'
+            );
     }
 }

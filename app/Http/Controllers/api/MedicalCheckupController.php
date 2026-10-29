@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\MedicalCheckup;
 use Validator;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\BuildsHrisEmployeeIndexDatatable;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -19,16 +20,119 @@ use Exception;
 
 class MedicalCheckupController extends Controller
 {
+    use BuildsHrisEmployeeIndexDatatable;
+
     public function index(Request $request)
     {
-        $data = MasterKaryawan::with(['medical'])->where('is_active', true)->where('grade','!=','DIRECTOR');
-        return Datatables::of($data)->make(true);
+        $data = $this->hrisEmployeeBaseQuery();
+
+        return $this->applyHrisEmployeeContextColumns(Datatables::of($data))
+            ->addColumn('status_rekam_medis', function ($row) {
+                return $this->medicalRecord($row) ? 'Sudah ada' : 'Belum ada';
+            })
+            ->addColumn('ringkasan_medis', function ($row) {
+                return $this->medicalSummary($row);
+            })
+            ->addColumn('jumlah_rekam_medis', function ($row) {
+                return $this->medicalRecord($row) ? 1 : 0;
+            })
+            ->filterColumn('status_rekam_medis', function ($query, $keyword) {
+                $normalized = strtolower(trim($keyword));
+                if (in_array($normalized, ['sudah', 'ada', 'sudah ada'], true)) {
+                    $query->whereHas('medical', function ($sub) {
+                        $this->applyActiveScope($sub);
+                    });
+                } elseif (in_array($normalized, ['belum', 'belum ada', 'kosong'], true)) {
+                    $query->whereDoesntHave('medical', function ($sub) {
+                        $this->applyActiveScope($sub);
+                    });
+                }
+            })
+            ->filterColumn('ringkasan_medis', function ($query, $keyword) {
+                $query->whereHas('medical', function ($sub) use ($keyword) {
+                    $this->applyActiveScope($sub)->where(function ($w) use ($keyword) {
+                        $w->where('golongan_darah', 'like', '%' . $keyword . '%')
+                            ->orWhere('tinggi_badan', 'like', '%' . $keyword . '%')
+                            ->orWhere('berat_badan', 'like', '%' . $keyword . '%');
+                    });
+                });
+            })
+            ->filterColumn('jumlah_rekam_medis', function ($query, $keyword) {
+                if (!is_numeric($keyword)) {
+                    return;
+                }
+                if ((int) $keyword >= 1) {
+                    $query->whereHas('medical', function ($sub) {
+                        $this->applyActiveScope($sub);
+                    });
+                } else {
+                    $query->whereDoesntHave('medical', function ($sub) {
+                        $this->applyActiveScope($sub);
+                    });
+                }
+            })
+            ->make(true);
     }
 
-    public function showById(Request $request) 
+    public function showById(Request $request)
     {
-        $data = MedicalCheckup::where('karyawan_id', $request->karyawan_id)->where('is_active', true);
-        return Datatables::of($data)->make(true);
+        $karyawanId = (int) $request->karyawan_id;
+        if ($karyawanId <= 0) {
+            return response()->json(['data' => []], 200);
+        }
+
+        $rows = MedicalCheckup::where('karyawan_id', $karyawanId)
+            ->where(function ($q) {
+                $this->applyActiveScope($q);
+            })
+            ->orderByDesc('id')
+            ->get();
+
+        return response()->json(['data' => $rows->values()->all()], 200);
+    }
+
+    private function medicalRecord($row)
+    {
+        static $cache = [];
+        $karyawanId = (int) ($row->id ?? 0);
+        if ($karyawanId <= 0) {
+            return null;
+        }
+        if (array_key_exists($karyawanId, $cache)) {
+            return $cache[$karyawanId];
+        }
+
+        $record = MedicalCheckup::where('karyawan_id', $karyawanId)
+            ->where(function ($q) {
+                $this->applyActiveScope($q);
+            })
+            ->orderByDesc('id')
+            ->first();
+
+        $cache[$karyawanId] = $record;
+
+        return $record;
+    }
+
+    private function medicalSummary($row): string
+    {
+        $medical = $this->medicalRecord($row);
+        if (!$medical) {
+            return '-';
+        }
+
+        $parts = [];
+        $gol = trim((string) ($medical->golongan_darah ?? ''));
+        if ($gol !== '') {
+            $parts[] = 'Gol. ' . $gol;
+        }
+        $tb = trim((string) ($medical->tinggi_badan ?? ''));
+        $bb = trim((string) ($medical->berat_badan ?? ''));
+        if ($tb !== '' || $bb !== '') {
+            $parts[] = trim($tb . ' cm / ' . $bb . ' kg', ' /');
+        }
+
+        return $parts ? implode(' · ', $parts) : 'Data tersedia';
     }
 
     public function store(Request $request)

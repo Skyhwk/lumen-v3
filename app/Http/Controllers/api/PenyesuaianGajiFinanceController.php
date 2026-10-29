@@ -228,12 +228,40 @@ class PenyesuaianGajiFinanceController extends Controller
 
             SalaryAdjustmentEvaluationService::ensureHrdFinalSnapshot($record);
 
+            $adjustmentGaji = $this->parseAmount(
+                $request->adjustment_gaji_pokok ?? $record->adjustment_gaji_pokok
+            );
+            $adjustmentTunjangan = $this->parseAmount(
+                $request->adjustment_tunjangan ?? $record->adjustment_tunjangan
+            );
+            $financeNotes = trim((string) ($request->finance_final_adjustment_notes ?? ''));
+
+            $currentGaji = (float) $record->current_gaji_pokok;
+            $currentTunjangan = (float) $record->current_tunjangan_kerja;
+
+            if ($adjustmentGaji > 0 || $adjustmentTunjangan > 0) {
+                $record->adjustment_gaji_pokok = $adjustmentGaji > 0 ? $adjustmentGaji : null;
+                $record->adjustment_tunjangan = $adjustmentTunjangan > 0 ? $adjustmentTunjangan : null;
+                $record->requested_gaji_pokok = $currentGaji + max(0, $adjustmentGaji);
+                $record->requested_tunjangan_kerja = $currentTunjangan + max(0, $adjustmentTunjangan);
+            }
+            if ($financeNotes !== '') {
+                $record->finance_final_adjustment_notes = $financeNotes;
+            }
+
             $record->status = SalaryAdjustmentWorkflowService::STATUS_FINANCE_RETURNED;
             $record->finance_return_reason = $reason;
             $record->finance_rejected_by = $this->karyawan;
             $record->finance_rejected_at = Carbon::now();
             $record->updated_by = $this->karyawan;
             $record->save();
+
+            $financeSnapshot = [
+                'adjustment_gaji_pokok' => (float) ($record->adjustment_gaji_pokok ?? 0),
+                'adjustment_tunjangan' => (float) ($record->adjustment_tunjangan ?? 0),
+                'requested_gaji_pokok' => (float) $record->requested_gaji_pokok,
+                'requested_tunjangan_kerja' => (float) $record->requested_tunjangan_kerja,
+            ];
 
             SalaryAdjustmentLogService::log(
                 $record->id,
@@ -250,6 +278,8 @@ class PenyesuaianGajiFinanceController extends Controller
                         'requested_gaji_pokok' => (float) ($record->hrd_final_requested_gaji_pokok ?? 0),
                         'requested_tunjangan_kerja' => (float) ($record->hrd_final_requested_tunjangan_kerja ?? 0),
                     ],
+                    'finance_return_snapshot' => $financeSnapshot,
+                    'finance_final_adjustment_notes' => $financeNotes !== '' ? $financeNotes : null,
                 ]
             );
 

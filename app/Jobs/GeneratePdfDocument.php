@@ -37,7 +37,7 @@ class GeneratePdfDocument extends Job
                 ->leftJoin('master_karyawan as a', 'request_quotation.nama_sales', '=', 'a.id')
                 ->leftJoin('master_karyawan as b', 'request_quotation.updated_by', '=', 'b.nama_lengkap')
                 ->leftJoin('master_cabang as c', 'request_quotation.id_cabang', '=', 'c.id')
-                ->select(DB::raw('a.nama_lengkap nama_add, a.no_telpon, b.nama_lengkap nama_update, request_quotation.*, c.*'))
+                ->select(DB::raw("a.nama_lengkap nama_add, COALESCE(NULLIF(a.no_telpon_perusahaan, ''), a.no_telpon) as no_telpon, b.nama_lengkap nama_update, request_quotation.*, c.*"))
                 ->where('request_quotation.id', $data['id'])
                 ->where('request_quotation.is_active', true)
                 ->first();
@@ -53,7 +53,7 @@ class GeneratePdfDocument extends Job
                 ->leftJoin('master_karyawan as a', 'request_quotation_kontrak_H.nama_sales', '=', 'a.id')
                 ->leftJoin('master_karyawan as b', 'request_quotation_kontrak_H.updated_by', '=', 'b.nama_lengkap')
                 ->leftJoin('master_cabang as c', 'request_quotation_kontrak_H.id_cabang', '=', 'c.id')
-                ->select(DB::raw('a.nama_lengkap nama_add, a.no_telpon, b.nama_lengkap nama_update, request_quotation_kontrak_H.*, c.*'))
+                ->select(DB::raw("a.nama_lengkap nama_add, COALESCE(NULLIF(a.no_telpon_perusahaan, ''), a.no_telpon) as no_telpon, b.nama_lengkap nama_update, request_quotation_kontrak_H.*, c.*"))
                 ->where('request_quotation_kontrak_H.id', $data['id'])
                 ->where('request_quotation_kontrak_H.is_active', true)
                 ->first();

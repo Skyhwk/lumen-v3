@@ -138,6 +138,16 @@ class MasterKaryawan extends Sector implements AuthenticatableContract
     {
         return $this->hasMany(PengalamanKerjaKaryawan::class, 'karyawan_id')->where('is_active', true);
     }
+
+    public function keahlian_karyawan()
+    {
+        return $this->hasMany(KeahlianKaryawan::class, 'karyawan_id');
+    }
+
+    public function keahlian_bahasa_karyawan()
+    {
+        return $this->hasMany(KeahlianBahasaKaryawan::class, 'karyawan_id');
+    }
     // public function rekap()
     // {
     //     return $this->hasMany(RekapMasukKerja::class, 'karyawan_id', 'id')->where('is_active', true);
@@ -196,5 +206,21 @@ class MasterKaryawan extends Sector implements AuthenticatableContract
     public function feeKaryawan()
     {
         return $this->hasOne(FeeKaryawan::class, 'id_karyawan', 'id')->where('is_active', true);
+    }
+
+    /**
+     * Mengambil nomor telepon untuk proses sales/bisnis.
+     * Memprioritaskan no_telpon_perusahaan dengan fallback ke no_telpon pribadi.
+     */
+    public function getNoTelponSalesAttribute(): ?string
+    {
+        $company = trim((string) ($this->no_telpon_perusahaan ?? ''));
+        if ($company !== '') {
+            return $company;
+        }
+
+        $personal = trim((string) ($this->no_telpon ?? ''));
+
+        return $personal !== '' ? $personal : null;
     }
 }
