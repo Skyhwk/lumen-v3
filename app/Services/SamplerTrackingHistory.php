@@ -4,14 +4,12 @@ namespace App\Services;
 
 use App\Models\SamplerTrackingSession;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 class SamplerTrackingHistory
 {
     public static function available(): bool
     {
-        return Schema::hasTable('sampler_tracking_sessions')
-            && Schema::hasColumn('sampler_tracking_sessions', 'meta_history');
+        return true;
     }
 
     public static function snapshot(SamplerTrackingSession $session): array
@@ -57,10 +55,15 @@ class SamplerTrackingHistory
                 ->lockForUpdate()->first(['meta_history']);
             if (!$row) return;
 
-            $history = json_decode($row->meta_history ?: '[]', true, 512, JSON_THROW_ON_ERROR);
-            if (!is_array($history) || array_values($history) !== $history) {
-                throw new \RuntimeException('Invalid tracking meta_history for session #' . $sessionId);
+            try {
+                $history = json_decode($row->meta_history ?: '[]', true);
+                if (!is_array($history) || array_values($history) !== $history) {
+                    $history = [];
+                }
+            } catch (\Throwable $e) {
+                $history = [];
             }
+
             $history[] = array_merge([
                 'schema_version' => 1,
                 'type' => $type,
@@ -68,7 +71,7 @@ class SamplerTrackingHistory
                 'session_id' => $sessionId,
             ], $details);
             DB::table('sampler_tracking_sessions')->where('id', $sessionId)
-                ->update(['meta_history' => json_encode($history, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)]);
+                ->update(['meta_history' => json_encode($history, JSON_UNESCAPED_UNICODE)]);
         });
     }
 

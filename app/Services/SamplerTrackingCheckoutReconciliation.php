@@ -87,7 +87,10 @@ class SamplerTrackingCheckoutReconciliation
                 }
             }
             $revision = hash('sha256', json_encode([$beforeRows->map->getAttributes()->all(), $afterRows->map->getAttributes()->all()]));
-            $history = json_decode($session->meta_history ?: '[]', true, 512, JSON_THROW_ON_ERROR);
+            $history = json_decode($session->meta_history ?: '[]', true);
+            if (!is_array($history)) {
+                $history = [];
+            }
             $key = 'checkout-reconciliation:' . $revision;
             if (collect($history)->contains('evaluation_key', $key)) return;
             $actors = $afterRows->filter(function ($row) use ($beforeRows) {

@@ -20,6 +20,8 @@ class SamplerTrackingService
     protected $columnsByTable = [];
     protected $orderNumbersByQuotation = [];
     protected $teamLockNotice = null;
+    protected $orderQuotationCache = [];
+    protected $activeScheduleCheckCache = [];
 
     protected function now()
     {
@@ -1761,7 +1763,7 @@ class SamplerTrackingService
             ->whereHas('member', function ($query) use ($member, $date) {
                 $query->where('sampler_id', $member->sampler_id)->where('is_active', true)
                     ->whereHas('session', function ($session) use ($date) {
-                        $session->where('is_active', true)->whereDate('tanggal_sampling', '<=', $date);
+                        $session->where('is_active', true)->where('tanggal_sampling', '<=', $date);
                     });
             })
             ->when($checkin, function ($query) use ($checkin) {
@@ -3643,27 +3645,39 @@ public function buildTrackingRows($sessions)
 
     public function hasActiveSchedule($session, $member)
     {
-        $latestQuotation = $session->no_order
-            ? OrderHeader::where('no_order', $session->no_order)
-                ->where('is_active', true)
-                ->orderByDesc('id')
-                ->value('no_document')
-            : $session->no_quotation;
-
-        if (!$latestQuotation) {
-            return false;
+        $cacheKey = ($session->no_order ?: '') . '|' . ($session->no_quotation ?: '') . '|' . $session->tanggal_sampling . '|' . ($member->sampler_id ?: $member->sampler_name) . '|' . $session->team_key;
+        if (isset($this->activeScheduleCheckCache[$cacheKey])) {
+            return $this->activeScheduleCheckCache[$cacheKey];
         }
 
-        return Jadwal::where('is_active', true)
+        if ($session->no_order) {
+            if (!array_key_exists($session->no_order, $this->orderQuotationCache)) {
+                $this->orderQuotationCache[$session->no_order] = OrderHeader::where('no_order', $session->no_order)
+                    ->where('is_active', true)
+                    ->orderByDesc('id')
+                    ->value('no_document');
+            }
+            $latestQuotation = $this->orderQuotationCache[$session->no_order];
+        } else {
+            $latestQuotation = $session->no_quotation;
+        }
+
+        if (!$latestQuotation) {
+            return $this->activeScheduleCheckCache[$cacheKey] = false;
+        }
+
+        $has = Jadwal::where('is_active', true)
             ->where('no_quotation', $latestQuotation)
-            ->whereDate('tanggal', $session->tanggal_sampling)
+            ->where('tanggal', $session->tanggal_sampling)
             ->when($member->sampler_id, function ($query) use ($member) {
                 $query->where('userid', $member->sampler_id);
             }, function ($query) use ($member) {
                 $query->where('sampler', $member->sampler_name);
-            })->lockForUpdate()->get()->contains(function ($row) use ($session) {
+            })->get()->contains(function ($row) use ($session) {
                 return $this->makeTeamKey($row) === $session->team_key;
             });
+
+        return $this->activeScheduleCheckCache[$cacheKey] = $has;
     }
 
     protected function makeTeamKey($row)

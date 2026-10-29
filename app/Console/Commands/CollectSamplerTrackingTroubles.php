@@ -14,12 +14,14 @@ class CollectSamplerTrackingTroubles extends Command
         {--sampler-id=* : Batasi ke sampler ID tertentu}
         {--sync-today : Sinkron activity hari ini sebelum collect trouble}
         {--prune-stale : Tutup trouble terbuka yang sudah tidak relevan (session kosong/hilang/selesai)}';
-    protected $description = 'Cari trouble baru dari 15 tanggal sampling terakhir sampai batas deadline (default kemarin WIB).';
+    protected $description = 'Cari trouble baru dari 10 tanggal sampling terakhir sampai batas deadline (default kemarin WIB).';
 
     public function handle(SamplerTrackingTroubleService $service, SamplerTrackingService $trackingService)
     {
         if ($this->option('prune-stale')) {
-            $cleared = $service->pruneStaleOpenTroubles();
+            $date = $this->option('date');
+            $startDate = $date ? SamplerTrackingTroubleService::startDate($date) : SamplerTrackingTroubleService::startDate();
+            $cleared = $service->pruneStaleOpenTroubles($startDate);
             $archived = $trackingService->pruneEmptyShellSessions();
             $this->info("Trouble stale di-clear: {$cleared}");
             $this->info("Session shell di-archive: {$archived}");
