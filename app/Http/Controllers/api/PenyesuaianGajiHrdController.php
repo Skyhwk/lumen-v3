@@ -430,18 +430,12 @@ class PenyesuaianGajiHrdController extends Controller
             return response()->json(['success' => false, 'message' => 'Keterangan banding wajib diisi'], 422);
         }
 
-        $adjustmentGaji = $this->parseAmount(
-            $request->adjustment_gaji_pokok ?? $record->hrd_final_adjustment_gaji_pokok ?? $record->adjustment_gaji_pokok
-        );
-        $adjustmentTunjangan = $this->parseAmount(
-            $request->adjustment_tunjangan ?? $record->hrd_final_adjustment_tunjangan ?? $record->adjustment_tunjangan
-        );
-        if ($adjustmentGaji <= 0 && $adjustmentTunjangan <= 0) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Minimal salah satu penyesuaian gaji pokok atau tunjangan harus diisi',
-            ], 400);
-        }
+        $adjustmentGaji = $request->has('adjustment_gaji_pokok')
+            ? $this->parseAmount($request->adjustment_gaji_pokok)
+            : $this->parseAmount($record->hrd_final_adjustment_gaji_pokok ?? $record->adjustment_gaji_pokok);
+        $adjustmentTunjangan = $request->has('adjustment_tunjangan')
+            ? $this->parseAmount($request->adjustment_tunjangan)
+            : $this->parseAmount($record->hrd_final_adjustment_tunjangan ?? $record->adjustment_tunjangan);
 
         DB::connection('mysql')->beginTransaction();
         try {
