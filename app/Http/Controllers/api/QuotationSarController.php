@@ -227,7 +227,7 @@ class QuotationSarController extends Controller
                                 return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
                             }) ?? $ambil_data->first();
                             $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                            $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                            $volume_db[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($cek_harga_parameter->id_parameter ?? null, $kategori_, $cek_harga_parameter->volume ?? 0);
                         }
                         $harga_pertitik = (object) [
                             'volume' => array_sum($volume_db),
@@ -1022,7 +1022,7 @@ class QuotationSarController extends Controller
                             }) ?? $ambil_data->first();
 
                             $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                            $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                            $volume_db[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($cek_harga_parameter->id_parameter ?? null, $kategori_, $cek_harga_parameter->volume ?? 0);
                         }
 
                         $harga_pertitik = (object) [
@@ -1978,7 +1978,7 @@ class QuotationSarController extends Controller
                             }) ?? $ambil_data->first();
 
                             $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                            $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                            $volume_db[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($cek_harga_parameter->id_parameter ?? null, $kategori_, $cek_harga_parameter->volume ?? 0);
                         }
 
                         $harga_pertitik = (object) [

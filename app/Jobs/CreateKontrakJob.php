@@ -185,7 +185,7 @@ class CreateKontrakJob extends Job
                     }) ?? $ambil_data->first();
 
                     $harga_db[] = $cek_harga_parameter->harga ?? 0;
-                    $volume_db[] = $cek_harga_parameter->volume ?? 0;
+                    $volume_db[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($cek_harga_parameter->id_parameter ?? null, $kategori, $cek_harga_parameter->volume ?? 0);
 
                 }
 
@@ -307,21 +307,21 @@ class CreateKontrakJob extends Job
                             foreach ($ambil_data as $xc => $zx) {
                                 if (\explode(' ', $zx->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran) {
                                     $harga_parameter[] = $zx->harga;
-                                    $volume_parameter[] = $zx->volume;
+                                    $volume_parameter[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($zx->id_parameter ?? null, $id_kategori, $zx->volume ?? 0);
                                     $found = true;
                                     break;
                                 }
                                 if ((count($ambil_data) - 1) == $xc && !$found) {
                                     $zx = $ambil_data[0];
                                     $harga_parameter[] = $zx->harga;
-                                    $volume_parameter[] = $zx->volume;
+                                    $volume_parameter[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($zx->id_parameter ?? null, $id_kategori, $zx->volume ?? 0);
                                     break;
                                 }
                             }
                         } else if (count($ambil_data) == 1) {
                             foreach ($ambil_data as $zx) {
                                 $harga_parameter[] = $zx->harga;
-                                $volume_parameter[] = $zx->volume;
+                                $volume_parameter[] = \App\Helpers\ParameterLabelConfigHelper::resolveVolume($zx->id_parameter ?? null, $id_kategori, $zx->volume ?? 0);
                                 break;
                             }
                         } else {
