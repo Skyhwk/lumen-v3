@@ -11,6 +11,9 @@ class EmployeeHealthCheck extends Sector
     protected $guarded = [];
 
     public const TENSI_RENDAH = 'Rendah';
+    public const TENSI_CUKUP_RENDAH = 'Cukup Rendah';
+    public const TENSI_CUKUP_NORMAL = 'Cukup Normal';
+    public const TENSI_NORMAL = 'Normal';
     public const TENSI_RATA_RATA = 'Rata-Rata';
     public const TENSI_TINGGI = 'Tinggi';
 
@@ -26,12 +29,20 @@ class EmployeeHealthCheck extends Sector
 
     public static function classifyTensi(int $tensiSistolik): string
     {
-        if ($tensiSistolik <= 90) {
+        if ($tensiSistolik < 91) {
             return self::TENSI_RENDAH;
         }
 
-        if ($tensiSistolik <= 135) {
-            return self::TENSI_RATA_RATA;
+        if ($tensiSistolik <= 99) {
+            return self::TENSI_CUKUP_RENDAH;
+        }
+
+        if ($tensiSistolik <= 119) {
+            return self::TENSI_CUKUP_NORMAL;
+        }
+
+        if ($tensiSistolik <= 129) {
+            return self::TENSI_NORMAL;
         }
 
         return self::TENSI_TINGGI;
