@@ -495,7 +495,7 @@ class GenerateDokumenKaryawanService
             'margin_left' => 22,
             'margin_right' => 22,
             'margin_top' => 32,
-            'margin_bottom' => 22,
+            'margin_bottom' => 24,
             'margin_header' => 6,
             'margin_footer' => 10,
             'fontDir' => array_merge($fontDirs, [resource_path('fonts/Calibri')]),
