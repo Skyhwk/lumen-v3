@@ -12,6 +12,7 @@ use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\HrTableMode;
 use App\Services\Hr\LegacyHrMirror;
 use App\Services\Hr\WorkflowStatus;
+use App\Support\Greatday\KaryawanPresentation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -32,6 +33,28 @@ class AttendanceCorrectionsController extends Controller
             ->addColumn('atasan_steps', function ($row) {
                 return $this->atasanStepsForRow($row);
             })
+            ->editColumn('karyawan', function ($row) {
+                $k = $row->karyawan;
+                if (!$k) {
+                    return null;
+                }
+
+                return [
+                    'nama_lengkap' => $k->nama_lengkap,
+                    'nik_karyawan' => $k->nik_karyawan,
+                    'image' => $k->image,
+                    'jabatan' => KaryawanPresentation::jabatanLabel($k),
+                    'department' => KaryawanPresentation::divisiLabel($k),
+                ];
+            })
+            ->addColumn('jabatan_karyawan', function ($row) {
+                $k = $row->karyawan;
+                if (!$k) {
+                    return '-';
+                }
+
+                return KaryawanPresentation::jabatanLabel($k) ?: '-';
+            })
             ->filterColumn('karyawan', function ($query, $keyword) {
                 $ids = MasterKaryawan::query()
                     ->where('nama_lengkap', 'like', "%{$keyword}%")
@@ -43,6 +66,26 @@ class AttendanceCorrectionsController extends Controller
                     }
                     $sub->orWhere('created_by', 'like', "%{$keyword}%");
                 });
+            })
+            ->filterColumn('jabatan_karyawan', function ($query, $keyword) {
+                $ids = MasterKaryawan::query()
+                    ->where(function ($q) use ($keyword) {
+                        $q->where('jabatan', 'like', "%{$keyword}%")
+                            ->orWhereIn('id_jabatan', function ($sub) use ($keyword) {
+                                $sub->select('id')
+                                    ->from('master_jabatan')
+                                    ->where('nama_jabatan', 'like', "%{$keyword}%");
+                            });
+                    })
+                    ->pluck('id');
+
+                if ($ids->isEmpty()) {
+                    $query->whereRaw('0 = 1');
+
+                    return;
+                }
+
+                $query->whereIn('employee_id', $ids);
             })
             ->filterColumn('approved_atasan_by', function ($query, $keyword) {
                 $query->where('approved_atasan_by', 'like', "%{$keyword}%");

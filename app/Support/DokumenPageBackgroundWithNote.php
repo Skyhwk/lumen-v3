@@ -44,8 +44,8 @@ class DokumenPageBackgroundWithNote
             $lineGap
         );
         $roomBelow = imagesy($image) - $borderY;
-        if ($roomBelow > $lineGap + (int) round(4 * $scale)) {
-            $firstBaseline = $borderY + (int) round(4.1 * $scale);
+        if ($roomBelow > $lineGap + (int) round(5 * $scale)) {
+            $firstBaseline = $borderY + (int) round(5.2 * $scale);
             $secondBaseline = $firstBaseline + $lineGap;
         } else {
             $right = (int) round(196 * $scale);
@@ -74,12 +74,12 @@ class DokumenPageBackgroundWithNote
     {
         $height = imagesy($image);
         $width = imagesx($image);
-        $neededBelow = $lineGap + (int) round(6.5 * $scale);
-        if (($height - $borderY) >= $neededBelow) {
+        // Ruang di bawah garis untuk 2 baris note + jarak aman cetak fisik
+        $neededBelow = $lineGap + (int) round(12 * $scale);
+        $target = $height - $neededBelow;
+        if ($borderY <= $target) {
             return $borderY;
         }
-
-        $target = $height - $neededBelow;
         $left = null;
         $right = null;
         for ($x = 0; $x < $width; $x++) {
