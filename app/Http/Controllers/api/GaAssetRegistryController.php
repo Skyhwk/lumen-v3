@@ -208,7 +208,7 @@ class GaAssetRegistryController extends Controller
         $ids = $this->exportIdList($request);
 
         try {
-            $result = app(GaAssetQrPdfService::class)->export($ids);
+            $result = app(GaAssetQrPdfService::class)->export($ids, $this->karyawan ?: 'GA Asset System');
 
             return response()->json([
                 'message' => $result['count'] . ' QR aset berhasil diexport.',
