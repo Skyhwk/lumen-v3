@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\MasterKaryawan;
 use App\Models\SuratPeringatanDisipliner;
 use App\Services\GenerateQrDocumentSuratPeringatan;
+use App\Services\DisiplinerPdfFixingService;
 use App\Services\SuratPeringatanDocumentService;
 use App\Support\QrDocumentsStorage;
 use Carbon\Carbon;
@@ -208,10 +209,6 @@ class SuratPeringatanController extends Controller
                 'created_at' => $now,
             ]);
 
-            $detail = $this->findActiveRecord($letter->id);
-            $letter->load('suratSebelumnya');
-            $documentService->generateAndStorePdf($letter, $detail);
-
             DB::commit();
 
             return response()->json([
@@ -317,9 +314,7 @@ class SuratPeringatanController extends Controller
             ]);
             $letter->save();
 
-            $detail = $this->findActiveRecord($letter->id);
-            $letter->load('suratSebelumnya');
-            $documentService->generateAndStorePdf($letter, $detail);
+            $documentService->invalidateStoredPdf($letter);
 
             DB::commit();
 
@@ -385,9 +380,7 @@ class SuratPeringatanController extends Controller
             $letter->save();
             $letter->refresh();
 
-            $detail = $this->findActiveRecord($letter->id);
-            $letter->load('suratSebelumnya');
-            $documentService->generateAndStorePdf($letter, $detail ?? $record);
+            $documentService->invalidateStoredPdf($letter);
 
             DB::commit();
 
@@ -406,8 +399,11 @@ class SuratPeringatanController extends Controller
         }
     }
 
-    public function repairQr(Request $request, GenerateQrDocumentSuratPeringatan $qrService)
-    {
+    public function repairQr(
+        Request $request,
+        GenerateQrDocumentSuratPeringatan $qrService,
+        SuratPeringatanDocumentService $documentService
+    ) {
         try {
             $record = $this->findActiveRecord($this->resolveId($request));
             if ($record === null) {
@@ -455,6 +451,7 @@ class SuratPeringatanController extends Controller
 
             $letter->file_qr = $qrFile;
             $letter->save();
+            $documentService->invalidateStoredPdf($letter);
 
             return response()->json([
                 'success' => true,
@@ -523,6 +520,28 @@ class SuratPeringatanController extends Controller
         }
     }
 
+    public function rerenderPdf(Request $request, DisiplinerPdfFixingService $fixingService)
+    {
+        try {
+            $this->validate($request, [
+                'id' => 'required|integer',
+            ]);
+
+            $data = $fixingService->regenerate(DisiplinerPdfFixingService::JENIS_SP, (int) $request->id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'PDF surat peringatan berhasil di-render ulang.',
+                'data' => $data,
+            ], 200);
+        } catch (\Throwable $ex) {
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
+        }
+    }
+
     public function printPdf(Request $request, SuratPeringatanDocumentService $documentService)
     {
         try {
@@ -540,9 +559,9 @@ class SuratPeringatanController extends Controller
                 GenerateQrDocumentSuratPeringatan::ensurePublicSvgForFile($letter->file_qr);
             }
 
-            // Preview/cetak selalu render ulang dari blade terbaru (hindari PDF lama di disk).
-            $pdfBinary = $documentService->renderPdf($letter, $record);
-            $documentService->generateAndStorePdf($letter, $record);
+            $letter->load('suratSebelumnya');
+            $pdfBinary = $documentService->resolvePdfBinary($letter, $record);
+            $letter->refresh();
 
             return response()->json([
                 'success' => true,
@@ -550,6 +569,7 @@ class SuratPeringatanController extends Controller
                 'data' => base64_encode($pdfBinary),
                 'pdf_ready' => true,
                 'file_name' => $letter->nama_berkas ?: ($letter->nomor_surat . '.pdf'),
+                'file_path' => $letter->file_path,
             ], 200);
         } catch (\Throwable $ex) {
             return response()->json([

@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\GenerateQrDocumentSuratPeringatan;
+use App\Services\GenerateQrDocumentDisipliner;
 use App\Support\QrDocumentsStorage;
 use Illuminate\Http\Request;
 
@@ -16,7 +16,7 @@ class QrDocumentAssetController extends Controller
             return response()->json(['message' => '404 not found'], 404);
         }
 
-        GenerateQrDocumentSuratPeringatan::ensurePublicSvgForFile($base);
+        GenerateQrDocumentDisipliner::ensurePublicSvgForFile($base);
 
         try {
             $path = QrDocumentsStorage::svgPath($base);

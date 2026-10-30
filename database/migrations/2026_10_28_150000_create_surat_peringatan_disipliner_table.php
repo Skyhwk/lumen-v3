@@ -35,6 +35,7 @@ return new class extends Migration
             $table->string('nama_berkas', 255)->nullable();
             $table->text('file_path')->nullable();
             $table->unsignedBigInteger('file_size')->nullable();
+            $table->string('file_qr', 255)->nullable();
             $table->string('created_by', 150)->nullable();
             $table->string('updated_by', 150)->nullable();
             $table->string('published_by', 150)->nullable()->comment('Petugas HR saat surat diterbitkan');

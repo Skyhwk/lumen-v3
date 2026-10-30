@@ -595,6 +595,7 @@ class AtsHiredCandidatesController extends Controller
             'city' => optional($profile)->kota_domisili ?: optional($profile)->kota_ktp,
             'phone' => $recruitment->no_telepon,
             'postal_code' => optional($profile)->kode_pos_domisili ?: optional($profile)->kode_pos_ktp,
+            'company_phone' => '',
         ];
 
         $grade = strtoupper(trim((string) optional($pr)->grade_master_karyawan));
@@ -755,7 +756,11 @@ class AtsHiredCandidatesController extends Controller
         $karyawan->id_cabang = data_get($request, 'employee.branch') ?: null;
         $karyawan->status_karyawan = data_get($request, 'employee.estatus', 'Training');
         $karyawan->tgl_mulai_kerja = data_get($request, 'employee.sdate') ?: null;
-        $karyawan->tgl_berakhir_kontrak = data_get($request, 'employee.ecdate') ?: null;
+        $karyawan->tgl_berakhir_kontrak = $this->resolveAgreementEndDate(
+            $karyawan->tgl_mulai_kerja,
+            data_get($request, 'payroll.satuan_jangka_waktu'),
+            data_get($request, 'payroll.jumlah_jangka_waktu')
+        ) ?: (data_get($request, 'employee.ecdate') ?: null);
         $karyawan->id_jabatan = data_get($request, 'employee.position') ?: null;
         $karyawan->kategori_grade = data_get($request, 'employee.gradec');
         $karyawan->grade = data_get($request, 'employee.grade');
@@ -961,7 +966,10 @@ class AtsHiredCandidatesController extends Controller
         ], $payrollSettings), $now);
         $payrollCounts['master_sallary'] = 1;
 
-        if ($payrollSettings['metode_pembayaran_gaji'] === 'transfer') {
+        $punyaRekening = data_get($request, 'payroll.punya_rekening_payroll', null);
+        $simpanRekening = $punyaRekening === null
+            || !in_array($punyaRekening, [0, '0', false, 'false'], true);
+        if ($simpanRekening) {
             $rekening = $this->payrollRekeningPayload($request);
             if ($rekening !== []) {
                 $this->upsertPayroll('rekening_karyawan', $karyawan->id, $nikKaryawan, $namaKaryawan, $rekening, $now);
@@ -969,28 +977,42 @@ class AtsHiredCandidatesController extends Controller
             }
         }
 
-        if ($bpjsKes > 0 || !empty($noBpjsKs)) {
+        $adaBpjsKes = data_get($request, 'payroll.ada_bpjs_kes', null);
+        $bpjsKesEnabled = $adaBpjsKes === null
+            ? ($bpjsKes > 0 || !empty($noBpjsKs))
+            : !in_array($adaBpjsKes, [0, '0', false, 'false'], true);
+
+        if ($bpjsKesEnabled && ($bpjsKes > 0 || !empty($noBpjsKs))) {
+            $rateKaryawanKes = $this->parsePercentRate(data_get($request, 'payroll.potongan_karyawan_bpjs_kes'), 0.5);
+            $rateKantorKes = $this->parsePercentRate(data_get($request, 'payroll.potongan_kantor_bpjs_kes'), 2);
             $this->upsertPayroll('bpjs_kesehatan', $karyawan->id, $nikKaryawan, $namaKaryawan, [
                 'gaji_pokok' => $gajiPokok,
                 'no_bpjs' => $noBpjsKs,
-                'potongan_karyawan' => 0.005,
+                'potongan_karyawan' => $rateKaryawanKes,
                 'nominal_potongan_karyawan' => $bpjsKes,
-                'potongan_kantor' => 0.02,
-                'nominal_potongan_kantor' => $gajiPokok * 0.02,
+                'potongan_kantor' => $rateKantorKes,
+                'nominal_potongan_kantor' => $gajiPokok * $rateKantorKes,
                 'bulan_efektif' => $effectiveMonth,
             ], $now);
             $payrollCounts['bpjs_kesehatan'] = 1;
         }
 
-        if ($bpjsTk > 0 || !empty($noBpjsTk)) {
+        $adaBpjsTk = data_get($request, 'payroll.ada_bpjs_tk', null);
+        $bpjsTkEnabled = $adaBpjsTk === null
+            ? ($bpjsTk > 0 || !empty($noBpjsTk))
+            : !in_array($adaBpjsTk, [0, '0', false, 'false'], true);
+
+        if ($bpjsTkEnabled && ($bpjsTk > 0 || !empty($noBpjsTk))) {
+            $rateKaryawanTk = $this->parsePercentRate(data_get($request, 'payroll.potongan_karyawan_bpjs_tk'), 3);
+            $rateKantorTk = $this->parsePercentRate(data_get($request, 'payroll.potongan_kantor_bpjs_tk'), 1);
             $this->upsertPayroll('bpjs_tk', $karyawan->id, $nikKaryawan, $namaKaryawan, [
                 'gaji_pokok' => $gajiPokok,
                 'no_bpjs_tk' => $noBpjsTk,
-                'potongan_karyawan' => 0.03,
+                'potongan_karyawan' => $rateKaryawanTk,
                 'nominal_potongan_karyawan' => $bpjsTk,
                 'sumber_potongan' => data_get($request, 'payroll.sumber_potongan_bpjs_tk'),
-                'potongan_kantor' => 0.01,
-                'nominal_potongan_kantor' => $gajiPokok * 0.01,
+                'potongan_kantor' => $rateKantorTk,
+                'nominal_potongan_kantor' => $gajiPokok * $rateKantorTk,
                 'bulan_efektif' => $effectiveMonth,
             ], $now);
             $payrollCounts['bpjs_tk'] = 1;
@@ -1005,7 +1027,12 @@ class AtsHiredCandidatesController extends Controller
             $payrollCounts['pph_21'] = 1;
         }
 
-        if ($pencadangan > 0) {
+        $adaPencadangan = data_get($request, 'payroll.ada_pencadangan', null);
+        $pencadanganEnabled = $adaPencadangan === null
+            ? ($pencadangan > 0)
+            : !in_array($adaPencadangan, [0, '0', false, 'false'], true);
+
+        if ($pencadanganEnabled && $pencadangan > 0) {
             $this->upsertPayroll('pencadangan_upah', $karyawan->id, $nikKaryawan, $namaKaryawan, [
                 'nominal' => $pencadangan,
                 'nominal_berjalan' => -$pencadangan,
@@ -1261,6 +1288,23 @@ class AtsHiredCandidatesController extends Controller
         return substr($name, 0, 30);
     }
 
+    private function resolveAgreementEndDate($startDate, $unit, $amount): ?string
+    {
+        $count = (int) $amount;
+        if (empty($startDate) || $count < 1 || !in_array($unit, ['bulan', 'tahun'], true)) {
+            return null;
+        }
+
+        try {
+            $start = Carbon::parse($startDate);
+            $end = $unit === 'tahun' ? $start->copy()->addYears($count) : $start->copy()->addMonths($count);
+
+            return $end->format('Y-m-d');
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
     private function resolveContractEndDate($startDate)
     {
         if (empty($startDate)) {
@@ -1339,24 +1383,30 @@ class AtsHiredCandidatesController extends Controller
             return 'Jadwal pembayaran THR maksimal 100 karakter.';
         }
 
-        $metode = trim((string) data_get($request, 'payroll.metode_pembayaran_gaji', ''));
-        if (!in_array($metode, ['tunai', 'transfer'], true)) {
-            return 'Metode pembayaran gaji harus Tunai atau Transfer.';
-        }
-
+        $adaBpjsTk = data_get($request, 'payroll.ada_bpjs_tk', 1);
+        $bpjsTkEnabled = !in_array($adaBpjsTk, [0, '0', false, 'false'], true);
         $sumberPotonganBpjsTk = trim((string) data_get($request, 'payroll.sumber_potongan_bpjs_tk', ''));
-        if (!in_array($sumberPotonganBpjsTk, ['gaji_pokok', 'umr_kota', 'lainnya'], true)) {
+        if ($bpjsTkEnabled && !in_array($sumberPotonganBpjsTk, ['gaji_pokok', 'umr_kota', 'lainnya'], true)) {
             return 'Sumber potongan BPJS Ketenagakerjaan harus Gaji Pokok, UMR Kota, atau Lainnya.';
         }
 
-        $hariKerjaError = $this->validatePayrollInteger(
-            data_get($request, 'payroll.jumlah_hari_kerja'),
-            'Jumlah hari kerja per bulan',
-            1,
-            31
+        $satuanJangkaWaktu = trim((string) data_get($request, 'payroll.satuan_jangka_waktu', ''));
+        if (!in_array($satuanJangkaWaktu, ['bulan', 'tahun'], true)) {
+            return 'Jangka waktu perjanjian harus Bulanan atau Tahunan.';
+        }
+        $jangkaWaktuError = $this->validatePayrollPositiveInteger(
+            data_get($request, 'payroll.jumlah_jangka_waktu'),
+            'Jumlah jangka waktu perjanjian'
         );
-        if ($hariKerjaError !== null) {
-            return $hariKerjaError;
+        if ($jangkaWaktuError !== null) {
+            return $jangkaWaktuError;
+        }
+        if ($this->resolveAgreementEndDate(
+            data_get($request, 'employee.sdate'),
+            $satuanJangkaWaktu,
+            data_get($request, 'payroll.jumlah_jangka_waktu')
+        ) === null) {
+            return 'Tanggal masuk kerja wajib diisi untuk menghitung akhir jangka waktu perjanjian.';
         }
 
         $jadwalError = $this->validatePayrollInteger(
@@ -1369,7 +1419,10 @@ class AtsHiredCandidatesController extends Controller
             return $jadwalError;
         }
 
-        if ($metode === 'transfer') {
+        $punyaRekening = data_get($request, 'payroll.punya_rekening_payroll', null);
+        $periksaRekening = $punyaRekening === null
+            || !in_array($punyaRekening, [0, '0', false, 'false'], true);
+        if ($periksaRekening) {
             $limits = [
                 'nama_bank' => [255, 'Nama bank'],
                 'cabang_bank' => [150, 'Cabang bank'],
@@ -1382,6 +1435,18 @@ class AtsHiredCandidatesController extends Controller
                     return $rule[1] . ' maksimal ' . $rule[0] . ' karakter.';
                 }
             }
+        }
+
+        return null;
+    }
+
+    private function validatePayrollPositiveInteger($value, string $label): ?string
+    {
+        if ($value === null || trim((string) $value) === '') {
+            return $label . ' wajib diisi.';
+        }
+        if (!preg_match('/^\d+$/', trim((string) $value)) || (int) $value < 1) {
+            return $label . ' harus berupa angka minimal 1.';
         }
 
         return null;
@@ -1408,9 +1473,10 @@ class AtsHiredCandidatesController extends Controller
     {
         return [
             'jadwal_pembayaran_thr' => trim((string) data_get($request, 'payroll.jadwal_pembayaran_thr')),
-            'metode_pembayaran_gaji' => trim((string) data_get($request, 'payroll.metode_pembayaran_gaji')),
-            'jumlah_hari_kerja' => (int) data_get($request, 'payroll.jumlah_hari_kerja'),
+            'metode_pembayaran_gaji' => 'transfer',
             'jadwal_penggajian' => (int) data_get($request, 'payroll.jadwal_penggajian'),
+            'satuan_jangka_waktu' => trim((string) data_get($request, 'payroll.satuan_jangka_waktu')),
+            'jumlah_jangka_waktu' => (int) data_get($request, 'payroll.jumlah_jangka_waktu'),
         ];
     }
 
@@ -1441,6 +1507,15 @@ class AtsHiredCandidatesController extends Controller
         }
 
         return (float) preg_replace('/[^\d.-]/', '', (string) $value);
+    }
+
+    private function parsePercentRate($value, float $fallbackPercent): float
+    {
+        if ($value === null || trim((string) $value) === '') {
+            return $fallbackPercent / 100;
+        }
+
+        return $this->parseNumeric($value) / 100;
     }
 
     private function parseDecimalNullable($value): ?float
@@ -1617,15 +1692,16 @@ class AtsHiredCandidatesController extends Controller
         }
 
         $aliases = [
-            'menikah' => 'Married',
-            'married' => 'Married',
-            'belum menikah' => 'Single',
-            'single' => 'Single',
-            'cerai' => 'Divorced',
-            'divorced' => 'Divorced',
-            'cerai mati' => 'Death Divorce',
-            'death divorced' => 'Death Divorce',
-            'death divorce' => 'Death Divorce',
+            'menikah' => 'Menikah',
+            'married' => 'Menikah',
+            'belum menikah' => 'Belum Menikah',
+            'single' => 'Belum Menikah',
+            'cerai hidup' => 'Cerai Hidup',
+            'cerai' => 'Cerai Hidup',
+            'divorced' => 'Cerai Hidup',
+            'cerai mati' => 'Cerai Mati',
+            'death divorced' => 'Cerai Mati',
+            'death divorce' => 'Cerai Mati',
         ];
 
         if (isset($aliases[$normalized])) {
@@ -1633,7 +1709,7 @@ class AtsHiredCandidatesController extends Controller
         }
 
         $trimmed = trim((string) $value);
-        $allowed = ['Single', 'Married', 'Divorced', 'Death Divorce'];
+        $allowed = ['Belum Menikah', 'Menikah', 'Cerai Hidup', 'Cerai Mati'];
 
         return in_array($trimmed, $allowed, true) ? $trimmed : null;
     }
