@@ -63,6 +63,7 @@ class ApprovalAppPenyesuaianDetailService
                 'jabatan' => $namaJabatan !== '-' ? $namaJabatan : ($record->jabatan ?: '-'),
                 'divisi' => optional($employee->divisi)->nama_divisi ?? null,
             ], app(ApprovalAppInboxService::class)->employeePhotoFields($employee)),
+            'employee_career' => (new EmployeeCareerContextService())->buildForApprovalApp($employee),
             'request' => [
                 'no_document' => $record->no_document,
                 'request_type' => $record->request_type ?: EmployeeAdjustmentTypeRegistry::TYPE_PENYESUAIAN_GAJI,
