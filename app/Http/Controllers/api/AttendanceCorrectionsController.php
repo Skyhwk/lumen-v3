@@ -22,7 +22,7 @@ class AttendanceCorrectionsController extends Controller
 
     public function index(Request $request)
     {
-        $data = AttendanceCorrections::with('karyawan');
+        $data = AttendanceCorrections::with(['karyawan.jabatan']);
 
         if ($request->has('status')) {
             $data->where('status', $request->status);
@@ -31,6 +31,23 @@ class AttendanceCorrectionsController extends Controller
         return datatables()->of($data)
             ->addColumn('atasan_steps', function ($row) {
                 return $this->atasanStepsForRow($row);
+            })
+            ->addColumn('jabatan_karyawan', function ($row) {
+                $jabatan = optional($row->karyawan)->jabatan;
+                if (is_object($jabatan)) {
+                    return $jabatan->nama_jabatan ?: '-';
+                }
+
+                return $jabatan ?: '-';
+            })
+            ->filterColumn('jabatan_karyawan', function ($query, $keyword) {
+                $ids = MasterKaryawan::query()
+                    ->whereHas('jabatan', function ($jabatanQuery) use ($keyword) {
+                        $jabatanQuery->where('nama_jabatan', 'like', "%{$keyword}%");
+                    })
+                    ->pluck('id');
+
+                $query->whereIn('employee_id', $ids->isEmpty() ? [0] : $ids);
             })
             ->filterColumn('karyawan', function ($query, $keyword) {
                 $ids = MasterKaryawan::query()
