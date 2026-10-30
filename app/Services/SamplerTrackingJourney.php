@@ -10,12 +10,67 @@ use Illuminate\Support\Collection;
 /** Read-only journey matching for trouble assessment. */
 class SamplerTrackingJourney
 {
-    /** @var array<string, Collection> */
-    protected static $samplerEventsCache = [];
-
-    public static function clearCache(): void
+    /** Only started assignments may extend an open journey; schedules alone cannot. */
+    public function extension(SamplerTrackingMember $member, string $date, string $baseDue, $asOf = null): ?array
     {
-        self::$samplerEventsCache = [];
+        $checkin = $member->events->where('event_type', 'checkin')->sortBy('event_at')->first();
+        if (!$member->sampler_id || !$checkin || !$checkin->event_at) return null;
+        $asOf = $asOf ? Carbon::parse($asOf, 'Asia/Jakarta') : Carbon::now('Asia/Jakarta');
+        $asOf = $asOf->min(Carbon::now('Asia/Jakarta'));
+        if (Carbon::parse($checkin->event_at, 'Asia/Jakarta')->gt($asOf)) return null;
+        $departure = $this->eventsForSampler($member->sampler_id)->with('member.session')
+            ->where('event_type', 'departure')->where('event_at', '<=', $checkin->event_at)
+            ->whereHas('member.session', function ($query) use ($date) {
+                $query->whereDate('tanggal_sampling', '<=', $date);
+            })->orderByDesc('event_at')->orderByDesc('id')->first();
+        if (!$departure || !$departure->member || !$departure->member->session) return null;
+        $departureDate = $departure->member->session->tanggal_sampling;
+        if ($this->eventsForSampler($member->sampler_id)->where('event_type', 'return')
+            ->where('event_at', '>=', $departure->event_at)->where('event_at', '<', $checkin->event_at)
+            ->whereHas('member.session', function ($query) use ($departureDate) {
+                $query->whereDate('tanggal_sampling', '>=', $departureDate);
+            })->exists()) return null;
+        $due = $baseDue;
+        $cursor = (string) $checkin->event_at;
+        $inclusive = true;
+        $links = [];
+        do {
+            // Advance in deadline windows, never scan an unbounded year of history.
+            $window = Carbon::parse($due, 'Asia/Jakarta')->endOfDay()->min($asOf)->toDateTimeString();
+            if ($window < $cursor) break;
+            $events = $this->eventsForSampler($member->sampler_id)->with('member.session')
+                ->where('event_at', $inclusive ? '>=' : '>', $cursor)->where('event_at', '<=', $window)
+                ->orderBy('event_at')->orderBy('id')->get();
+            $stopped = false;
+            foreach ($events as $event) {
+                if ($event->event_type === 'departure' && (string) $event->event_at > (string) $departure->event_at) {
+                    $stopped = true;
+                    break;
+                }
+                $source = optional($event->member)->session;
+                if (!$source) continue;
+                if ($event->event_type === 'return' && $source->tanggal_sampling >= $departureDate) {
+                    $stopped = true;
+                    break;
+                }
+                if ($event->event_type !== 'checkin' || (string) $event->event_at < (string) $checkin->event_at
+                    || $source->tanggal_sampling <= $date
+                    || $source->tanggal_sampling > Carbon::parse($event->event_at)->toDateString()
+                    || Carbon::parse($event->event_at)->toDateString() > $due) continue;
+                $candidate = Carbon::parse($source->tanggal_sampling)->addDays(max(0, SamplerTrackingActivity::duration($event->member) - 1))->toDateString();
+                if ($candidate <= $due) continue;
+                $links[] = ['session_id' => (int) $source->id, 'order' => $source->no_order,
+                    'event_id' => (int) $event->id, 'checkin_at' => (string) $event->event_at,
+                    'duration' => SamplerTrackingActivity::duration($event->member), 'previous_due' => $due, 'due_date' => $candidate];
+                $due = $candidate;
+            }
+            $cursor = $window;
+            $inclusive = false;
+        } while (!$stopped && $due > substr($window, 0, 10) && $window < $asOf->toDateTimeString());
+
+        return $links ? ['sampler_id' => $member->sampler_id, 'name' => $member->sampler_name,
+            'departure_event_id' => (int) $departure->id, 'departure_at' => (string) $departure->event_at,
+            'base_due_date' => $baseDue, 'due_date' => $due, 'assignments' => $links] : null;
     }
 
     public function isComplete(SamplerTrackingMember $member, string $date): bool

@@ -86,7 +86,7 @@ class SamplerTrackingTroubleService
         }
     }
 
-    protected function progress($samplerId, $date, $sessionId)
+    protected function progress($samplerId, $date, $sessionId, $asOf = null)
     {
         $cacheKey = $samplerId . '|' . $date;
         if (!isset($this->progressSessionsCache[$cacheKey])) {
@@ -168,8 +168,20 @@ class SamplerTrackingTroubleService
             }));
         });
         $dailyDue = ($wasReopened && !$useDailyJourneyReturn) ? $sessionDue : $journeyDue;
-
-        return ['complete' => $complete, 'stops_complete' => $stopsComplete, 'due_date' => $dailyDue ?: $sessionDue];
+        $due = $dailyDue ?: $sessionDue;
+        $extension = null;
+        // A missing checkout keeps its own deadline. Continuation only defers the final return.
+        if ($stopsComplete && !$wasReopened) {
+            foreach ($members as $member) {
+                $candidate = (new SamplerTrackingJourney())->extension($member, $date, $due, $asOf);
+                if ($candidate && $candidate['due_date'] > $due) {
+                    $extension = $candidate;
+                    $due = $candidate['due_date'];
+                }
+            }
+        }
+        return ['complete' => $complete, 'stops_complete' => $stopsComplete, 'due_date' => $due,
+            'journey_extension' => $extension];
     }
 
     protected function dueDate($date, $duration)
@@ -294,20 +306,11 @@ class SamplerTrackingTroubleService
                 }
             }
 
-            $session = $sessionsById[$assignment->tracking_session_id] ?? null;
-            if (!$session || !$session->is_active || !$trackingService->sessionHasMeaningfulTrackingData($session)) {
-                continue;
+            $progress = $this->progress($assignment->sampler_id, $assignment->activity_date, $assignment->tracking_session_id,
+                Carbon::parse($day, 'Asia/Jakarta')->endOfDay());
+            if (!empty($progress['journey_extension'])) {
+                $this->recordJourneyExtension((int) $assignment->tracking_session_id, $progress['journey_extension']);
             }
-            if ($session->no_order) {
-                $member = $session->activeMembers->first(function ($candidate) use ($assignment) {
-                    return (string) $candidate->sampler_id === (string) $assignment->sampler_id;
-                });
-                if (!$member || !$trackingService->hasActiveSchedule($session, $member)) {
-                    continue;
-                }
-            }
-
-            $progress = $this->progress($assignment->sampler_id, $assignment->activity_date, $assignment->tracking_session_id);
             if ($progress['complete'] || !$this->isPastDue($progress, $day)) continue;
             // A completed short stop shares the final journey return; missing
             // check-in/checkout must still receive its own recovery ticket.
@@ -377,7 +380,26 @@ class SamplerTrackingTroubleService
         return $cleared;
     }
 
-    public function shouldAutoClearOpenTrouble($trouble, SamplerTrackingService $trackingService = null, $sessionsById = null, $sessionsWithEvents = null): bool
+    protected function recordJourneyExtension(int $sessionId, array $extension): void
+    {
+        if (!SamplerTrackingHistory::available()) return;
+        DB::transaction(function () use ($sessionId, $extension) {
+            $session = DB::table('sampler_tracking_sessions')->where('id', $sessionId)->lockForUpdate()->first(['meta_history']);
+            if (!$session) return;
+            $history = json_decode($session->meta_history ?: '[]', true, 512, JSON_THROW_ON_ERROR);
+            $key = 'journey-extension:' . hash('sha256', json_encode($extension));
+            if (collect($history)->contains('extension_key', $key)) return;
+            SamplerTrackingHistory::append($sessionId, 'journey_deadline_extended', [
+                'actor' => 'Sistem — pengecekan trouble', 'extension_key' => $key,
+                'reason' => 'Penugasan lanjutan sudah Check In sebelum deadline, tanpa Pulang atau Berangkat baru.',
+                'summary' => $extension['name'] . ': batas Pulang ' . $extension['base_due_date'] . ' → ' . $extension['due_date']
+                    . '. Checkout tiap order tetap wajib.',
+                'journey_extension' => $extension,
+            ]);
+        });
+    }
+
+    public function shouldAutoClearOpenTrouble($trouble, SamplerTrackingService $trackingService = null): bool
     {
         $trackingService = $trackingService ?: app(SamplerTrackingService::class);
         $sessionId = (int) ($trouble->tracking_session_id ?? 0);
