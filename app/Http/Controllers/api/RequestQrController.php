@@ -417,7 +417,10 @@ class RequestQrController extends Controller
                         ->first();
 
                     if ($harga_pertitik->volume != null) {
-                        $vol += floatval($harga_pertitik->volume);
+                        $labelVol = \App\Helpers\ParameterLabelConfigHelper::isKategoriAir($kategori)
+                            ? \App\Models\KonfigurasiLabelParameter::whereIn('nama_parameter', $parameter)->where('is_active', true)->sum('volume')
+                            : null;
+                        $vol += floatval($labelVol ?: $harga_pertitik->volume);
                     }
 
                     $titik = $item['jumlah_titik'];
@@ -779,7 +782,10 @@ class RequestQrController extends Controller
                         ->first();
 
                     if ($harga_pertitik->volume != null) {
-                        $vol += floatval($harga_pertitik->volume);
+                        $labelVol = \App\Helpers\ParameterLabelConfigHelper::isKategoriAir($kategori)
+                            ? \App\Models\KonfigurasiLabelParameter::whereIn('nama_parameter', $parameter)->where('is_active', true)->sum('volume')
+                            : null;
+                        $vol += floatval($labelVol ?: $harga_pertitik->volume);
                     }
 
                     $titik = $item['jumlah_titik'];

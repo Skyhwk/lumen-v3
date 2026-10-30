@@ -502,6 +502,7 @@ class RekapSampelSamplingController extends Controller
                     foreach ($params as $param) {
                         $param_map[$param->nama_parameter] = $param;
                     }
+                    \App\Helpers\ParameterLabelConfigHelper::enrichParamMap($param_map, $idParameter, $id_kategori);
 
                     $botol_volumes = [];
                     foreach (json_decode($value->parameter) ?? [] as $parameter) {
