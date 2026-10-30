@@ -10,6 +10,14 @@ use Illuminate\Support\Collection;
 /** Read-only journey matching for trouble assessment. */
 class SamplerTrackingJourney
 {
+    /** @var array<string, Collection> */
+    protected static $samplerEventsCache = [];
+
+    public static function clearCache(): void
+    {
+        self::$samplerEventsCache = [];
+    }
+
     /** Only started assignments may extend an open journey; schedules alone cannot. */
     public function extension(SamplerTrackingMember $member, string $date, string $baseDue, $asOf = null): ?array
     {
