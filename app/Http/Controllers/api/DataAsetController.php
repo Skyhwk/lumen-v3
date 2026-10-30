@@ -459,13 +459,13 @@ class DataAsetController extends Controller
     private function generateQRAset($no_cs, $data) {
         $filename = str_replace('.','-',microtime(true));
         $path = public_path() . "/qr_assets/" . $filename . '.svg';
-        if (!file_exists(dirname(public_path() . "/qr_assets/"))) {
-            mkdir(dirname(public_path() . "/qr_assets/"), 0755, true);
+        if (!is_dir(dirname($path))) {
+            mkdir(dirname($path), 0755, true);
         }
 
-        $unique = str_replace('.','-',microtime(true));
+        $unique = \App\Services\AssetQrValidationService::newToken();
 
-        QrCode::size(200)->generate($unique, $path);
+        QrCode::size(200)->generate(\App\Services\AssetQrValidationService::url($unique), $path);
 
         $dataQr = [
             'type_document' => 'asset',
@@ -485,6 +485,6 @@ class DataAsetController extends Controller
 
         DB::table('qr_documents')->insert($dataQr);
 
-        return [$filename . '.svg', $filename];
+        return [$filename . '.svg', $unique];
     }
 }
