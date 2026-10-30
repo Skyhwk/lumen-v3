@@ -628,6 +628,100 @@ class SamplerTrackingSyncTest extends TestCase
         ]);
     }
 
+    public function testContinuousJourneyExtendsReturnDeadlineAcrossDifferentOrders(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-10-30 08:00:00', 'Asia/Jakarta'));
+        [$first, $person] = $this->troubleAssignment('first-order', '2026-10-28', 2);
+        [$next, $nextPerson] = $this->troubleAssignment('different-order', '2026-10-29', 2);
+        foreach ([['departure', '2026-10-28 06:18:12'], ['checkin', '2026-10-28 08:19:01'], ['checkout', '2026-10-29 08:52:08']] as [$type, $at]) {
+            $this->recordTroubleJourneyEvent($first, $person, $type, $at);
+        }
+        $this->recordTroubleJourneyEvent($next, $nextPerson, 'checkin', '2026-10-29 09:29:05');
+        $progress = $this->troubleProgress($first);
+        $this->assertSame('2026-10-30', $progress['due_date']);
+        $this->assertFalse($progress['complete']);
+        $this->assertTrue($progress['stops_complete']);
+        $this->assertSame($next->id, $progress['journey_extension']['assignments'][0]['session_id']);
+        $service = new \App\Services\SamplerTrackingTroubleService();
+        $this->assertSame(0, $service->collect('2026-10-29', [10]));
+        $this->assertSame(0, $service->collect('2026-10-29', [10]));
+        $logs = collect(json_decode($first->fresh()->meta_history, true))->where('type', 'journey_deadline_extended');
+        $this->assertCount(1, $logs);
+        // Existing false trouble is ignored while the extended deadline has not passed.
+        $this->db->getConnection('mysql')->table('sampler_tracking_troubles')->insert([
+            'sampler_id' => 10, 'tracking_session_id' => $first->id, 'activity_date' => '2026-10-28', 'is_active' => 1, 'is_clear' => 0,
+        ]);
+        $this->assertCount(0, $service->unresolved(10));
+        $service->assertAllowed(10, '2026-10-29', $next->id);
+        // A final return on the continuing assignment completes the first order's journey too.
+        $this->recordTroubleJourneyEvent($next, $nextPerson, 'checkout', '2026-10-30 07:00:00');
+        $this->recordTroubleJourneyEvent($next, $nextPerson, 'return', '2026-10-30 07:30:00');
+        $this->assertTrue($this->troubleProgress($first)['complete']);
+        $this->assertTrue($this->troubleProgress($next)['complete']);
+    }
+
+    /** @dataProvider continuationBoundaries */
+    public function testContinuousJourneyCannotUseUnrelatedOrLateWork(string $boundary): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-10-31 08:00:00', 'Asia/Jakarta'));
+        [$first, $person] = $this->troubleAssignment('original-order', '2026-10-28', 2);
+        [$next, $nextPerson] = $this->troubleAssignment('next-order', '2026-10-29', 2);
+        foreach ([['departure', '2026-10-28 06:00:00'], ['checkin', '2026-10-28 08:00:00'], ['checkout', '2026-10-29 07:00:00']] as [$type, $at]) {
+            $this->recordTroubleJourneyEvent($first, $person, $type, $at);
+        }
+        if (in_array($boundary, ['return', 'departure'], true)) {
+            $this->recordTroubleJourneyEvent($first, $person, $boundary, '2026-10-29 08:00:00');
+        }
+        if ($boundary === 'other_sampler') { $nextPerson->sampler_id = 20; $nextPerson->save(); }
+        if ($boundary === 'inactive') { $next->is_active = false; $next->save(); }
+        if ($boundary !== 'schedule_only') {
+            $this->recordTroubleJourneyEvent($next, $nextPerson, 'checkin', $boundary === 'late' ? '2026-10-30 09:00:00' : '2026-10-29 09:00:00');
+        }
+        $progress = $this->troubleProgress($first);
+        $this->assertSame('2026-10-29', $progress['due_date']);
+        $this->assertNull($progress['journey_extension']);
+    }
+
+    public function continuationBoundaries(): array
+    {
+        return array_map(function ($value) { return [$value]; }, ['return', 'departure', 'late', 'other_sampler', 'inactive', 'schedule_only']);
+    }
+
+    public function testContinuousJourneyDoesNotHideMissingCheckoutAndEventuallyBecomesDue(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-10-31 08:00:00', 'Asia/Jakarta'));
+        [$first, $person] = $this->troubleAssignment('missing-first-checkout', '2026-10-28', 2);
+        [$next, $nextPerson] = $this->troubleAssignment('continuing-work', '2026-10-29', 2);
+        $this->recordTroubleJourneyEvent($first, $person, 'departure', '2026-10-28 06:00:00');
+        $this->recordTroubleJourneyEvent($first, $person, 'checkin', '2026-10-28 08:00:00');
+        $this->recordTroubleJourneyEvent($next, $nextPerson, 'checkin', '2026-10-29 09:00:00');
+        $this->assertSame('2026-10-29', $this->troubleProgress($first)['due_date']);
+        $this->assertFalse($this->troubleProgress($first)['stops_complete']);
+        $this->recordTroubleJourneyEvent($first, $person, 'checkout', '2026-10-29 08:00:00');
+        $service = new \App\Services\SamplerTrackingTroubleService();
+        $this->assertSame(0, $service->collect('2026-10-29', [10]));
+        $this->assertSame(2, $service->collect('2026-10-30', [10]));
+    }
+
+    public function testContinuousJourneySupportsChainedExtensionsAndHistoricalCutoff(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-10-31 08:00:00', 'Asia/Jakarta'));
+        [$first, $person] = $this->troubleAssignment('chain-first', '2026-10-28', 2);
+        foreach ([['departure', '2026-10-28 06:00:00'], ['checkin', '2026-10-28 08:00:00'], ['checkout', '2026-10-29 07:00:00']] as [$type, $at]) {
+            $this->recordTroubleJourneyEvent($first, $person, $type, $at);
+        }
+        foreach (['2026-10-29', '2026-10-30'] as $date) {
+            [$next, $nextPerson] = $this->troubleAssignment('chain-' . $date, $date, 2);
+            $this->recordTroubleJourneyEvent($next, $nextPerson, 'checkin', $date . ' 09:00:00');
+        }
+        $this->assertSame('2026-10-31', $this->troubleProgress($first)['due_date']);
+        $method = new \ReflectionMethod(\App\Services\SamplerTrackingTroubleService::class, 'progress');
+        $method->setAccessible(true);
+        $historical = $method->invoke(new \App\Services\SamplerTrackingTroubleService(), 10, '2026-10-28', $first->id, '2026-10-29 23:59:59');
+        $this->assertSame('2026-10-30', $historical['due_date']);
+        $this->assertCount(1, $historical['journey_extension']['assignments']);
+    }
+
     private function troubleProgress($session): array
     {
         $service = new \App\Services\SamplerTrackingTroubleService();
