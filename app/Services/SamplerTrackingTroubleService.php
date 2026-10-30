@@ -399,7 +399,7 @@ class SamplerTrackingTroubleService
         });
     }
 
-    public function shouldAutoClearOpenTrouble($trouble, SamplerTrackingService $trackingService = null): bool
+    public function shouldAutoClearOpenTrouble($trouble, SamplerTrackingService $trackingService = null, $sessionsById = null, $sessionsWithEvents = null): bool
     {
         $trackingService = $trackingService ?: app(SamplerTrackingService::class);
         $sessionId = (int) ($trouble->tracking_session_id ?? 0);
