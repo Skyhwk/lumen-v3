@@ -33,7 +33,6 @@ class AttendanceCorrectionsController extends Controller
             ->addColumn('atasan_steps', function ($row) {
                 return $this->atasanStepsForRow($row);
             })
-<<<<<<< HEAD
             ->addColumn('jabatan_karyawan', function ($row) {
                 $jabatan = optional($row->karyawan)->jabatan;
                 if (is_object($jabatan)) {
@@ -50,29 +49,6 @@ class AttendanceCorrectionsController extends Controller
                     ->pluck('id');
 
                 $query->whereIn('employee_id', $ids->isEmpty() ? [0] : $ids);
-=======
-            ->editColumn('karyawan', function ($row) {
-                $k = $row->karyawan;
-                if (!$k) {
-                    return null;
-                }
-
-                return [
-                    'nama_lengkap' => $k->nama_lengkap,
-                    'nik_karyawan' => $k->nik_karyawan,
-                    'image' => $k->image,
-                    'jabatan' => KaryawanPresentation::jabatanLabel($k),
-                    'department' => KaryawanPresentation::divisiLabel($k),
-                ];
-            })
-            ->addColumn('jabatan_karyawan', function ($row) {
-                $k = $row->karyawan;
-                if (!$k) {
-                    return '-';
-                }
-
-                return KaryawanPresentation::jabatanLabel($k) ?: '-';
->>>>>>> 21abe1630888f1ac54ad4e0524290ae27d568b54
             })
             ->filterColumn('karyawan', function ($query, $keyword) {
                 $ids = MasterKaryawan::query()
