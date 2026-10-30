@@ -32,34 +32,54 @@ class BankDataCustomerController extends Controller
 {
     public function index(Request $request)
     {
-        $data = MasterPelanggan::with([
-            'kontak_pelanggan',
-            'alamat_pelanggan',
-            'pic_pelanggan',
-            'order_customer'
-        ])
-            ->where('is_active', true)
-            ->whereNull('sales_id')
-            ->whereNull('sales_penanggung_jawab');
+        $orderedCustomers = DB::table('order_header')
+            ->select('id_pelanggan as ordered_id_pelanggan')
+            ->where('is_active', 1)
+            ->distinct();
+
+        $data = MasterPelanggan::query()
+            ->withOnly(['kontak_pelanggan:id,pelanggan_id,no_tlp_perusahaan'])
+            ->select([
+                'master_pelanggan.id',
+                'master_pelanggan.id_pelanggan',
+                'master_pelanggan.npwp',
+                'master_pelanggan.nama_pelanggan',
+                'master_pelanggan.wilayah',
+                'master_pelanggan.sales_penanggung_jawab',
+                'master_pelanggan.created_by',
+                'master_pelanggan.created_at',
+            ])
+            ->selectRaw('(ordered_customers.ordered_id_pelanggan IS NOT NULL) as has_order')
+            ->leftJoinSub($orderedCustomers, 'ordered_customers', function ($join) {
+                $join->on('ordered_customers.ordered_id_pelanggan', '=', 'master_pelanggan.id_pelanggan');
+            })
+            ->where('master_pelanggan.is_active', true)
+            ->whereNull('master_pelanggan.sales_id')
+            ->whereNull('master_pelanggan.sales_penanggung_jawab');
 
         return Datatables::of($data)
-            ->filterColumn('order_customer', function ($query, $keyword) {
-                if (str_contains('ordered', strtolower($keyword))) {
-                    $query->whereHas('order_customer');
+            ->filterColumn('has_order', function ($query, $keyword) {
+                $kw = strtolower(trim($keyword));
+                $wantsOrdered = str_contains($kw, 'order') || $kw === '1';
+                if ($wantsOrdered) {
+                    $query->whereNotNull('ordered_customers.ordered_id_pelanggan');
                 } else {
-                    $query->whereDoesntHave('order_customer');
+                    $query->whereNull('ordered_customers.ordered_id_pelanggan');
                 }
             })
+            ->orderColumn('has_order', 'has_order $1')
             ->filterColumn('telpon', function ($query, $keyword) {
                 $query->whereHas('kontak_pelanggan', function ($q) use ($keyword) {
                     $q->where('no_tlp_perusahaan', 'like', "%{$keyword}%");
                 });
             })
             ->orderColumn('telpon', function ($query, $orderDirection) {
-                $query->with(['kontak_pelanggan' => function ($q) use ($orderDirection) {
-                    $q->orderBy('no_tlp_perusahaan', $orderDirection);
-                }]);
+                $dir = strtolower($orderDirection) === 'desc' ? 'desc' : 'asc';
+                $query->orderByRaw(
+                    '(select min(kontak_pelanggan.no_tlp_perusahaan) from kontak_pelanggan where kontak_pelanggan.pelanggan_id = master_pelanggan.id and kontak_pelanggan.is_active = 1) ' . $dir
+                );
             })
+            ->skipTotalRecords()
             ->make(true);
     }
 
