@@ -171,29 +171,29 @@
             </p>
 
             <table class="sp-gap-lg" width="100%" cellpadding="0" cellspacing="0"><tr><td>&nbsp;</td></tr></table>
-            <div class="sign-block">
-                <p class="sign-date">Tangerang, {{ $issueDateLong }}</p>
-                <table class="sp-gap-lg" width="100%" cellpadding="0" cellspacing="0"><tr><td>&nbsp;</td></tr></table>
-                @if(!empty($qrImagePath))
-                    <table class="sign-qr-row" width="100%" cellpadding="0" cellspacing="0">
-                        <tr>
-                            <td align="left">
-                                <img
-                                    src="{{ $qrImagePath }}"
-                                    alt="QR Pengesahan"
-                                    width="40"
-                                    height="40"
-                                    style="width: 17mm; height: 17mm; max-width: 17mm; max-height: 17mm; margin-left: 8%;"
-                                >
-                            </td>
-                        </tr>
-                    </table>
-                @else
-                    <p style="font-size: 10pt; color: #666; margin: 2mm 0 0 0; text-align: left;">
-                        Menunggu pengesahan (QR)
-                    </p>
-                @endif
-            </div>
+            
         </td>
     </tr>
 </table>
+<div class="sign-block" style="margin-left: 10mm; margin-top: 5mm;">
+    <p class="sign-date">Tangerang, {{ $issueDateLong }}</p>
+    @if(!empty($qrImagePath))
+        <table class="sign-qr-row" width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+                <td align="left">
+                    <img
+                        src="{{ $qrImagePath }}"
+                        alt="QR Pengesahan"
+                        width="40"
+                        height="40"
+                        style="width: 17mm; height: 17mm; max-width: 17mm; max-height: 17mm; margin-left: 8%;"
+                    >
+                </td>
+            </tr>
+        </table>
+    @else
+        <p style="font-size: 10pt; color: #666; margin: 2mm 0 0 0; text-align: left;">
+            Menunggu pengesahan (QR)
+        </p>
+    @endif
+</div>

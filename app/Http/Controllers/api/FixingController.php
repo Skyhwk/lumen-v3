@@ -67,6 +67,7 @@ use App\Services\SendEmail;
 
 
 use App\Services\GenerateFeeSampling;
+use App\Services\DisiplinerPdfFixingService;
 use App\Services\FdlBasTimingExportService;
 use App\Services\RenderInvoice;
 use App\Services\RenderInvoiceTitik;
@@ -3786,6 +3787,54 @@ class FixingController extends Controller
             ], 500);
         } finally {
             $assessmentService->cleanupDocuments($documents);
+        }
+    }
+
+    public function searchDisiplinerDocument(Request $request, DisiplinerPdfFixingService $service)
+    {
+        $this->validate($request, [
+            'q' => 'required|string|min:1|max:120',
+            'jenis' => 'nullable|in:sp,bak,st',
+        ]);
+
+        try {
+            $items = $service->search(
+                (string) $request->input('q'),
+                $request->filled('jenis') ? (string) $request->jenis : null
+            );
+
+            return response()->json([
+                'success' => true,
+                'data' => $items,
+            ], 200);
+        } catch (\Throwable $ex) {
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function rerenderPdfDisipliner(Request $request, DisiplinerPdfFixingService $service)
+    {
+        $this->validate($request, [
+            'jenis' => 'required|in:sp,bak,st',
+            'id' => 'required|integer|min:1',
+        ]);
+
+        try {
+            $data = $service->regenerate((string) $request->jenis, (int) $request->id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'PDF dokumen disipliner berhasil di-render ulang.',
+                'data' => $data,
+            ], 200);
+        } catch (\Throwable $ex) {
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
         }
     }
 }

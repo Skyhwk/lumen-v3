@@ -6,9 +6,11 @@ use App\Models\EmployeeDocumentSequence;
 use App\Models\MasterKaryawan;
 use App\Models\QrDocument;
 use App\Models\SuratPeringatanDisipliner;
+use App\Support\DisiplinerHonorific;
 use App\Support\DokumenPageBackgroundWithNote;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use RuntimeException;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
@@ -167,8 +169,70 @@ class SuratPeringatanDocumentService
         });
     }
 
+    public function hasStoredPdf(SuratPeringatanDisipliner $letter): bool
+    {
+        $relativePath = trim((string) ($letter->file_path ?? ''));
+        if ($relativePath === '') {
+            return false;
+        }
+
+        $fullPath = public_path(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $relativePath));
+
+        return is_file($fullPath) && filesize($fullPath) > 0;
+    }
+
+    /** Hapus arsip PDF agar view berikutnya render ulang (setelah edit / pengesahan QR). */
+    public function invalidateStoredPdf(SuratPeringatanDisipliner $letter): void
+    {
+        $relativePath = trim((string) ($letter->file_path ?? ''));
+        if ($relativePath !== '') {
+            $fullPath = public_path(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $relativePath));
+            if (is_file($fullPath)) {
+                @unlink($fullPath);
+            }
+        }
+
+        if ($letter->file_path || $letter->nama_berkas || $letter->file_size) {
+            $letter->nama_berkas = null;
+            $letter->file_path = null;
+            $letter->file_size = null;
+            $letter->timestamps = false;
+            $letter->save();
+            $letter->timestamps = true;
+        }
+    }
+
+    /**
+     * Ambil PDF dari arsip disk jika ada; jika tidak, render lalu simpan.
+     */
+    public function resolvePdfBinary(SuratPeringatanDisipliner $letter, object $detailRow): string
+    {
+        if ($this->hasStoredPdf($letter)) {
+            return $this->readPdfBinary($letter);
+        }
+
+        $this->generateAndStorePdf($letter, $detailRow);
+
+        return $this->readPdfBinary($letter->fresh());
+    }
+
+    /** Paksa render ulang dari blade terbaru dan timpa arsip PDF di disk. */
+    public function regenerateStoredPdf(SuratPeringatanDisipliner $letter, object $detailRow): SuratPeringatanDisipliner
+    {
+        $linkedQr = trim((string) ($letter->file_qr ?? ''));
+        if ($linkedQr !== '') {
+            GenerateQrDocumentDisipliner::ensurePublicSvgForFile($linkedQr);
+        }
+
+        $letter->load('suratSebelumnya');
+
+        return $this->generateAndStorePdf($letter, $detailRow);
+    }
+
     public function generateAndStorePdf(SuratPeringatanDisipliner $letter, object $detailRow): SuratPeringatanDisipliner
     {
+        $previousRelativePath = trim((string) ($letter->file_path ?? ''));
+
         $pdfBinary = $this->renderPdf($letter, $detailRow);
         $directory = public_path(self::STORAGE_DIR . '/' . $letter->karyawan_id);
 
@@ -186,6 +250,13 @@ class SuratPeringatanDocumentService
 
         $relativePath = self::STORAGE_DIR . '/' . $letter->karyawan_id . '/' . $fileName;
 
+        if ($previousRelativePath !== '' && $previousRelativePath !== $relativePath) {
+            $oldFullPath = public_path(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $previousRelativePath));
+            if (is_file($oldFullPath)) {
+                @unlink($oldFullPath);
+            }
+        }
+
         $letter->nama_berkas = $fileName;
         $letter->file_path = $relativePath;
         $letter->file_size = filesize($fullPath) ?: null;
@@ -198,16 +269,18 @@ class SuratPeringatanDocumentService
 
     public function readPdfBinary(SuratPeringatanDisipliner $letter): string
     {
-        if (!$letter->file_path) {
-            throw new RuntimeException('File surat peringatan belum tersedia.');
+        if (!$this->hasStoredPdf($letter)) {
+            throw new RuntimeException('File surat peringatan belum tersedia di server.');
         }
 
-        $fullPath = public_path($letter->file_path);
-        if (!is_file($fullPath)) {
-            throw new RuntimeException('File surat peringatan tidak ditemukan di server.');
+        $fullPath = public_path(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, (string) $letter->file_path));
+        $binary = file_get_contents($fullPath);
+
+        if ($binary === false || $binary === '') {
+            throw new RuntimeException('File surat peringatan tidak dapat dibaca.');
         }
 
-        return file_get_contents($fullPath);
+        return $binary;
     }
 
     public function renderPdf(SuratPeringatanDisipliner $letter, object $detailRow): string
@@ -231,12 +304,13 @@ class SuratPeringatanDocumentService
             ->with('cabang')
             ->find($letter->karyawan_id);
 
-        $honorific = $this->resolveHonorific($employeeRow ? $employeeRow->jenis_kelamin : null);
+        $honorific = DisiplinerHonorific::fromJenisKelamin($employeeRow ? $employeeRow->jenis_kelamin : null);
         $placement = '-';
         if ($employeeRow && $employeeRow->cabang) {
             $placement = trim((string) $employeeRow->cabang->nama_cabang) ?: '-';
         }
-        $nama = trim((string) ($detailRow->nama_lengkap ?? '')) ?: '-';
+        $namaRaw = trim((string) ($detailRow->nama_lengkap ?? ''));
+        $nama = $namaRaw !== '' ? Str::title(mb_strtolower($namaRaw, 'UTF-8')) : '-';
         $nik = trim((string) ($detailRow->nik_karyawan ?? ''));
         $employeeNameNik = $nik !== '' ? $nama . ' / ' . $nik : $nama;
 
@@ -249,7 +323,7 @@ class SuratPeringatanDocumentService
 
         $refNumber = trim((string) $letter->nomor_surat)
             ?: $this->formatRefNumber($letter, $issueDate, $spMeta['number']);
-        $headerTitle = 'SURAT PERINGATAN ' . $spMeta['roman'] . ' (SP-' . $spMeta['number'] . ')';
+        $headerTitle = 'SURAT PERINGATAN ' . $spMeta['number'] . ' (SP-' . $spMeta['number'] . ')';
         $headerRef = 'Ref : ' . $refNumber;
 
         $html = view('disipliner.surat-peringatan', [
@@ -372,7 +446,7 @@ class SuratPeringatanDocumentService
 
         $qrRecord = QrDocument::query()
             ->where('file', $qrFile)
-            ->where('type_document', GenerateQrDocumentSuratPeringatan::TYPE_DOCUMENT)
+            ->where('type_document', GenerateQrDocumentDisipliner::TYPE_SURAT_PERINGATAN)
             ->first();
 
         if ($qrRecord && !empty($qrRecord->kode_qr)) {
@@ -410,9 +484,9 @@ class SuratPeringatanDocumentService
     {
         $type = strtoupper(trim($jenisPeringatan));
         $map = [
-            SuratPeringatanDisipliner::TYPE_SP1 => ['number' => 1, 'roman' => 'I', 'next_label' => 'II (SP-2)'],
-            SuratPeringatanDisipliner::TYPE_SP2 => ['number' => 2, 'roman' => 'II', 'next_label' => 'III (SP-3)'],
-            SuratPeringatanDisipliner::TYPE_SP3 => ['number' => 3, 'roman' => 'III', 'next_label' => 'III (SP-3)'],
+            SuratPeringatanDisipliner::TYPE_SP1 => ['number' => 1, 'roman' => 'I', 'next_label' => '2 (SP-2)'],
+            SuratPeringatanDisipliner::TYPE_SP2 => ['number' => 2, 'roman' => 'II', 'next_label' => '3 (SP-3)'],
+            SuratPeringatanDisipliner::TYPE_SP3 => ['number' => 3, 'roman' => 'III', 'next_label' => '3 (SP-3)'],
         ];
 
         $meta = $map[$type] ?? $map[SuratPeringatanDisipliner::TYPE_SP1];
@@ -448,21 +522,6 @@ class SuratPeringatanDocumentService
         ];
 
         return $map[$month] ?? (string) $month;
-    }
-
-    private function resolveHonorific(?string $gender): string
-    {
-        $normalized = strtolower(trim((string) $gender));
-
-        if (in_array($normalized, ['p', 'perempuan', 'female', 'f', 'wanita'], true)) {
-            return 'Saudari';
-        }
-
-        if (in_array($normalized, ['l', 'laki-laki', 'laki laki', 'male', 'm', 'pria'], true)) {
-            return 'Saudara';
-        }
-
-        return 'Saudara/i';
     }
 
     private function terbilang(int $number): string
