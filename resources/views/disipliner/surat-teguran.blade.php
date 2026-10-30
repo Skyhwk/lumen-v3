@@ -32,20 +32,36 @@
     }
     .list-block p { margin-bottom: 2mm; }
     .closing { margin: 0 0 3mm 0; }
-    .sign-block { margin-top: 8mm; text-align: left; }
-    .sign-date { margin: 0 0 4mm 0; }
+    .sign-block {
+        width: 100%;
+        page-break-inside: avoid;
+    }
+    .sign-date {
+        margin: 0 0 4mm 0;
+        text-align: left;
+    }
+    .sign-qr-row {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1mm;
+    }
+    .sign-qr-row td {
+        padding: 0;
+        text-align: left;
+        vertical-align: top;
+    }
+    .sign-qr-row img {
+        width: 12mm;
+        height: 12mm;
+        max-width: 12mm;
+        max-height: 12mm;
+    }
     .sign-name {
         font-weight: bold;
         text-decoration: underline;
         margin-top: 2mm;
     }
     .sign-title { font-style: italic; margin-top: 1mm; }
-    .sign-qr-row img {
-        width: 17mm;
-        height: 17mm;
-        max-width: 17mm;
-        max-height: 17mm;
-    }
 </style>
 
 <table class="field-line">
@@ -111,23 +127,27 @@
     Demikian Surat Teguran ini dibuat agar dapat diperhatikan dan dipatuhi dengan sebaik-baiknya oleh {{ $honorific }}.
 </p>
 
-<div class="sign-block" style="margin-left: 10mm;">
+<div style="page-break-inside: avoid;">
+<div class="sign-block" style="margin-left: 10mm; margin-top: 5mm;">
     <p class="sign-date">Tangerang, {{ $issueDateLong }}</p>
     @if(!empty($qrImagePath))
         <table class="sign-qr-row" width="100%" cellpadding="0" cellspacing="0">
             <tr>
                 <td align="left">
-                    <img src="{{ $qrImagePath }}" alt="QR Pengesahan" width="40" height="40">
+                    <img
+                        src="{{ $qrImagePath }}"
+                        alt="QR Pengesahan"
+                        width="40"
+                        height="40"
+                        style="width: 17mm; height: 17mm; max-width: 17mm; max-height: 17mm; margin-left: 8%;"
+                    >
                 </td>
             </tr>
         </table>
     @else
-        <p style="font-size: 10pt; color: #666; margin: 2mm 0 0 0;">Menunggu pengesahan (QR)</p>
+        <p style="font-size: 10pt; color: #666; margin: 2mm 0 0 0; text-align: left;">
+            Menunggu pengesahan (QR)
+        </p>
     @endif
-    @if(!empty($signatoryName))
-        <div class="sign-name">{{ $signatoryName }}</div>
-    @endif
-    @if(!empty($signatoryTitle))
-        <div class="sign-title">{{ $signatoryTitle }}</div>
-    @endif
+</div>
 </div>

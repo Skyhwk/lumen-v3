@@ -3837,4 +3837,41 @@ class FixingController extends Controller
             ], 422);
         }
     }
+
+    public function updateDisiplinerDocumentStatus(Request $request, DisiplinerPdfFixingService $service)
+    {
+        $this->validate($request, [
+            'jenis' => 'required|in:sp,bak,st',
+            'id' => 'required|integer|min:1',
+            'status' => 'required|in:draft,issued,cancelled',
+        ]);
+
+        try {
+            $data = $service->updateStatus(
+                (string) $request->jenis,
+                (int) $request->id,
+                (string) $request->status,
+                (string) ($this->karyawan ?: 'Fixing Tools')
+            );
+
+            Log::info('Fixing: update status dokumen disipliner', [
+                'jenis' => $request->jenis,
+                'id' => (int) $request->id,
+                'status' => $request->status,
+                'actor' => $this->karyawan,
+                'actor_id' => (int) $this->user_id,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Status dokumen disipliner berhasil diperbarui.',
+                'data' => $data,
+            ], 200);
+        } catch (\Throwable $ex) {
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
+        }
+    }
 }

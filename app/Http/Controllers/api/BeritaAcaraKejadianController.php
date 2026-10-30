@@ -557,6 +557,7 @@ class BeritaAcaraKejadianController extends Controller
                 'data' => base64_encode($pdfBinary),
                 'pdf_ready' => true,
                 'file_name' => $document->nama_berkas ?: ($document->nomor_surat . '.pdf'),
+                'file_path' => $document->file_path,
             ], 200);
         } catch (\Throwable $ex) {
             return response()->json([

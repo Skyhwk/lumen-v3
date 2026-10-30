@@ -489,6 +489,7 @@ class SuratTeguranController extends Controller
                 'data' => base64_encode($pdfBinary),
                 'pdf_ready' => true,
                 'file_name' => $letter->nama_berkas ?: ($letter->nomor_surat . '.pdf'),
+                'file_path' => $letter->file_path,
             ], 200);
         } catch (\Throwable $ex) {
             return response()->json([

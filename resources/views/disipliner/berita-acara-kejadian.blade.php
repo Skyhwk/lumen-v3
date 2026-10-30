@@ -45,8 +45,30 @@
         height: 6.2mm;
     }
     .closing { margin: 3mm 0 6mm; }
-    .sign-block { text-align: left; }
-    .sign-date-line { margin: 0 0 8mm; }
+    .sign-block {
+        width: 100%;
+        page-break-inside: avoid;
+    }
+    .sign-date {
+        margin: 0 0 4mm 0;
+        text-align: left;
+    }
+    .sign-qr-row {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1mm;
+    }
+    .sign-qr-row td {
+        padding: 0;
+        text-align: left;
+        vertical-align: top;
+    }
+    .sign-qr-row img {
+        width: 12mm;
+        height: 12mm;
+        max-width: 12mm;
+        max-height: 12mm;
+    }
     .sign-line { border-bottom: 0.35mm solid #111; width: 55mm; margin-top: 2mm; }
     .strike { text-decoration: line-through; }
 </style>
@@ -230,7 +252,9 @@
             </tr>
         </table>
     @else
-        <div style="height: 16mm;">&nbsp;</div>
+        <p style="font-size: 10pt; color: #666; margin: 2mm 0 0 0; text-align: left;">
+            Menunggu pengesahan (QR)
+        </p>
     @endif
     <div class="sign-line"></div>
 </div>

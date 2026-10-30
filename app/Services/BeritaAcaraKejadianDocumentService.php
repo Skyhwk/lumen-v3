@@ -6,6 +6,8 @@ use App\Models\BeritaAcaraKejadianDisipliner;
 use App\Support\BeritaAcaraKejadianDampak;
 use App\Models\MasterKaryawan;
 use App\Models\QrDocument;
+use App\Support\DisiplinerPdfHeader;
+use App\Support\DisiplinerPdfLayout;
 use App\Support\DokumenPageBackgroundWithNote;
 use Carbon\Carbon;
 use RuntimeException;
@@ -202,15 +204,7 @@ class BeritaAcaraKejadianDocumentService
         $fontDirs = (new \Mpdf\Config\ConfigVariables())->getDefaults()['fontDir'];
         $fontData = (new \Mpdf\Config\FontVariables())->getDefaults()['fontdata'];
 
-        $pdf = new MpdfService([
-            'mode' => 'utf-8',
-            'format' => 'A4',
-            'margin_left' => 14,
-            'margin_right' => 14,
-            'margin_top' => 34,
-            'margin_bottom' => 32,
-            'margin_header' => 6,
-            'margin_footer' => 14,
+        $pdf = new MpdfService(DisiplinerPdfLayout::mpdfPageConfig([
             'fontDir' => array_merge($fontDirs, [resource_path('fonts/Calibri')]),
             'fontdata' => $fontData + [
                 'calibri' => [
@@ -221,27 +215,14 @@ class BeritaAcaraKejadianDocumentService
                 ],
             ],
             'default_font' => 'calibri',
-        ]);
+        ]));
 
-        $logo = file_exists(public_path('isl_logo.png'))
-            ? public_path('isl_logo.png')
-            : public_path('img/isl_logo.png');
-
-        $headerTitleEsc = htmlspecialchars($headerTitle, ENT_QUOTES, 'UTF-8');
-        $headerRefEsc = htmlspecialchars($headerRef, ENT_QUOTES, 'UTF-8');
-
-        $headerHtml =
-            '<table width="100%" style="font-family:calibri,sans-serif; border-collapse:collapse;">'
-            . '<tr><td colspan="2" style="text-align:right; font-size:8pt; color:#666; padding:0 0 1mm;">Page {PAGENO} of {nbpg}</td></tr>'
-            . '<tr>'
-            . '<td style="width:52mm; vertical-align:middle; padding:0 0 2mm;"><img src="' . $logo . '" style="width:48mm;"></td>'
-            . '<td style="vertical-align:middle; text-align:center; padding:0 0 2mm 2mm;">'
-            . '<div style="font-size:16pt; font-weight:bold; line-height:1.2;">' . $headerTitleEsc . '</div>'
-            . '<div style="font-size:10pt; font-weight:bold; margin-top:1.5mm;">' . $headerRefEsc . '</div>'
-            . '</td>'
-            . '</tr>'
-            . '<tr><td colspan="2" style="border-bottom:0.5px solid #888; padding:0; line-height:0;">&nbsp;</td></tr>'
-            . '</table>';
+        $headerHtml = DisiplinerPdfHeader::build(
+            DisiplinerPdfHeader::resolveLogoPath(),
+            $headerTitle,
+            $headerRef,
+            true
+        );
         $pdf->SetHTMLHeader($headerHtml);
         $pdf->SetHTMLHeader($headerHtml, 'E');
 

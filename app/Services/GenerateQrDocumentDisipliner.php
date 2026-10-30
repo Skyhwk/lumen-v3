@@ -144,7 +144,7 @@ class GenerateQrDocumentDisipliner
                 'jenis_peringatan' => trim((string) ($document->jenis_peringatan ?? '')),
                 'uraian_pelanggaran' => $uraianPlain !== '' ? $uraianPlain : '-',
                 'modul' => 'disipliner',
-                'jenis_dokumen' => 'surat_peringatan',
+                'jenis_dokumen' => 'Surat Peringatan',
             ];
         }
 
@@ -157,7 +157,7 @@ class GenerateQrDocumentDisipliner
                 'perihal' => trim((string) ($document->perihal ?? '')) ?: '-',
                 'uraian_kejadian' => $uraianPlain !== '' ? $uraianPlain : '-',
                 'modul' => 'disipliner',
-                'jenis_dokumen' => 'berita_acara_kejadian',
+                'jenis_dokumen' => 'Berita Acara Kejadian',
             ];
         }
 
@@ -170,7 +170,7 @@ class GenerateQrDocumentDisipliner
                 'perihal' => trim((string) ($document->perihal ?? '')) ?: '-',
                 'uraian_pelanggaran' => $uraianPlain !== '' ? $uraianPlain : '-',
                 'modul' => 'disipliner',
-                'jenis_dokumen' => 'surat_teguran',
+                'jenis_dokumen' => 'Surat Teguran',
             ];
         }
 

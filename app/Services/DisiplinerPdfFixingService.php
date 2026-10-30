@@ -5,11 +5,26 @@ namespace App\Services;
 use App\Models\BeritaAcaraKejadianDisipliner;
 use App\Models\SuratPeringatanDisipliner;
 use App\Models\SuratTeguranDisipliner;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class DisiplinerPdfFixingService
 {
+    /** @var array<string, list<string>> */
+    private const STATUS_TRANSITIONS = [
+        SuratPeringatanDisipliner::STATUS_DRAFT => [
+            SuratPeringatanDisipliner::STATUS_ISSUED,
+            SuratPeringatanDisipliner::STATUS_CANCELLED,
+        ],
+        SuratPeringatanDisipliner::STATUS_ISSUED => [
+            SuratPeringatanDisipliner::STATUS_DRAFT,
+            SuratPeringatanDisipliner::STATUS_CANCELLED,
+        ],
+        SuratPeringatanDisipliner::STATUS_CANCELLED => [
+            SuratPeringatanDisipliner::STATUS_DRAFT,
+        ],
+    ];
     public const JENIS_SP = 'sp';
 
     public const JENIS_BAK = 'bak';
@@ -64,6 +79,162 @@ class DisiplinerPdfFixingService
         }
 
         throw new RuntimeException('Jenis dokumen disipliner tidak valid.');
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function allowedStatusTargets(?string $currentStatus): array
+    {
+        $current = (string) $currentStatus;
+
+        return self::STATUS_TRANSITIONS[$current] ?? [];
+    }
+
+    public function updateStatus(string $jenis, int $id, string $newStatus, string $updatedBy): array
+    {
+        $jenis = strtolower(trim($jenis));
+        $newStatus = strtolower(trim($newStatus));
+
+        if (!in_array($newStatus, [
+            SuratPeringatanDisipliner::STATUS_DRAFT,
+            SuratPeringatanDisipliner::STATUS_ISSUED,
+            SuratPeringatanDisipliner::STATUS_CANCELLED,
+        ], true)) {
+            throw new RuntimeException('Status tujuan tidak valid.');
+        }
+
+        return DB::transaction(function () use ($jenis, $id, $newStatus, $updatedBy) {
+            if ($jenis === self::JENIS_SP) {
+                return $this->applyStatusChangeSuratPeringatan($id, $newStatus, $updatedBy);
+            }
+
+            if ($jenis === self::JENIS_BAK) {
+                return $this->applyStatusChangeBeritaAcaraKejadian($id, $newStatus, $updatedBy);
+            }
+
+            if ($jenis === self::JENIS_ST) {
+                return $this->applyStatusChangeSuratTeguran($id, $newStatus, $updatedBy);
+            }
+
+            throw new RuntimeException('Jenis dokumen disipliner tidak valid.');
+        });
+    }
+
+    private function applyStatusChangeSuratPeringatan(int $id, string $newStatus, string $updatedBy): array
+    {
+        $letter = SuratPeringatanDisipliner::query()
+            ->where('id', $id)
+            ->where('is_active', true)
+            ->first();
+
+        if ($letter === null) {
+            throw new RuntimeException('Surat peringatan tidak ditemukan.');
+        }
+
+        $this->assertStatusTransition($letter->status, $newStatus);
+
+        $letter->status = $newStatus;
+        $letter->updated_by = $updatedBy;
+        $letter->updated_at = Carbon::now();
+
+        if ($newStatus === SuratPeringatanDisipliner::STATUS_DRAFT) {
+            $letter->published_by = null;
+        }
+
+        $letter->save();
+
+        return $this->formatStatusResult(self::JENIS_SP, $letter);
+    }
+
+    private function applyStatusChangeBeritaAcaraKejadian(int $id, string $newStatus, string $updatedBy): array
+    {
+        $document = BeritaAcaraKejadianDisipliner::query()
+            ->where('id', $id)
+            ->where('is_active', true)
+            ->first();
+
+        if ($document === null) {
+            throw new RuntimeException('Berita acara kejadian tidak ditemukan.');
+        }
+
+        $this->assertStatusTransition($document->status, $newStatus);
+
+        $document->status = $newStatus;
+        $document->updated_by = $updatedBy;
+        $document->updated_at = Carbon::now();
+
+        if ($newStatus === BeritaAcaraKejadianDisipliner::STATUS_DRAFT) {
+            $document->published_by = null;
+        }
+
+        $document->save();
+
+        return $this->formatStatusResult(self::JENIS_BAK, $document);
+    }
+
+    private function applyStatusChangeSuratTeguran(int $id, string $newStatus, string $updatedBy): array
+    {
+        $letter = SuratTeguranDisipliner::query()
+            ->where('id', $id)
+            ->where('is_active', true)
+            ->first();
+
+        if ($letter === null) {
+            throw new RuntimeException('Surat teguran tidak ditemukan.');
+        }
+
+        $this->assertStatusTransition($letter->status, $newStatus);
+
+        $letter->status = $newStatus;
+        $letter->updated_by = $updatedBy;
+        $letter->updated_at = Carbon::now('Asia/Jakarta');
+
+        if ($newStatus === SuratTeguranDisipliner::STATUS_DRAFT) {
+            $letter->published_by = null;
+        }
+
+        $letter->save();
+
+        return $this->formatStatusResult(self::JENIS_ST, $letter);
+    }
+
+    private function assertStatusTransition(?string $currentStatus, string $newStatus): void
+    {
+        $current = (string) $currentStatus;
+
+        if ($current === $newStatus) {
+            throw new RuntimeException('Status dokumen sudah ' . $this->mapStatusLabel($newStatus) . '.');
+        }
+
+        $allowed = $this->allowedStatusTargets($current);
+        if (!in_array($newStatus, $allowed, true)) {
+            throw new RuntimeException(
+                'Perubahan status dari '
+                . $this->mapStatusLabel($current)
+                . ' ke '
+                . $this->mapStatusLabel($newStatus)
+                . ' tidak diizinkan.'
+            );
+        }
+    }
+
+    private function formatStatusResult(string $jenis, $model): array
+    {
+        $jenisLabels = [
+            self::JENIS_SP => 'Surat Peringatan',
+            self::JENIS_BAK => 'Berita Acara Kejadian',
+            self::JENIS_ST => 'Surat Teguran',
+        ];
+
+        return [
+            'jenis' => $jenis,
+            'jenis_label' => $jenisLabels[$jenis] ?? $jenis,
+            'id' => (int) $model->id,
+            'nomor_surat' => (string) $model->nomor_surat,
+            'status' => (string) $model->status,
+            'status_label' => $this->mapStatusLabel($model->status),
+        ];
     }
 
     private function regenerateSuratPeringatan(int $id): array
@@ -179,6 +350,7 @@ class DisiplinerPdfFixingService
             ->whereIn('spd.status', [
                 SuratPeringatanDisipliner::STATUS_DRAFT,
                 SuratPeringatanDisipliner::STATUS_ISSUED,
+                SuratPeringatanDisipliner::STATUS_CANCELLED,
             ])
             ->select(
                 'spd.id',
@@ -217,6 +389,7 @@ class DisiplinerPdfFixingService
             ->whereIn('bak.status', [
                 BeritaAcaraKejadianDisipliner::STATUS_DRAFT,
                 BeritaAcaraKejadianDisipliner::STATUS_ISSUED,
+                BeritaAcaraKejadianDisipliner::STATUS_CANCELLED,
             ])
             ->select(
                 'bak.id',
@@ -255,6 +428,7 @@ class DisiplinerPdfFixingService
             ->whereIn('std.status', [
                 SuratTeguranDisipliner::STATUS_DRAFT,
                 SuratTeguranDisipliner::STATUS_ISSUED,
+                SuratTeguranDisipliner::STATUS_CANCELLED,
             ])
             ->select(
                 'std.id',
@@ -367,6 +541,9 @@ class DisiplinerPdfFixingService
             BeritaAcaraKejadianDisipliner::STATUS_ISSUED => 'Terbit',
             SuratTeguranDisipliner::STATUS_DRAFT => 'Menunggu pengesahan',
             SuratTeguranDisipliner::STATUS_ISSUED => 'Terbit',
+            SuratPeringatanDisipliner::STATUS_CANCELLED => 'Dibatalkan',
+            BeritaAcaraKejadianDisipliner::STATUS_CANCELLED => 'Dibatalkan',
+            SuratTeguranDisipliner::STATUS_CANCELLED => 'Dibatalkan',
         ];
 
         return $map[$status] ?? (string) $status;

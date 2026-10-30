@@ -61,6 +61,7 @@
     }
     .sign-block {
         width: 100%;
+        page-break-inside: avoid;
     }
     .sign-date {
         margin: 0 0 4mm 0;
@@ -175,6 +176,7 @@
         </td>
     </tr>
 </table>
+<div style="page-break-inside: avoid;">
 <div class="sign-block" style="margin-left: 10mm; margin-top: 5mm;">
     <p class="sign-date">Tangerang, {{ $issueDateLong }}</p>
     @if(!empty($qrImagePath))
@@ -196,4 +198,5 @@
             Menunggu pengesahan (QR)
         </p>
     @endif
+</div>
 </div>
