@@ -87,6 +87,9 @@ class SamplerTrackingSyncTest extends TestCase
         });
         require_once __DIR__ . '/../../database/migrations/2026_06_29_100000_create_sampler_tracking_tables.php';
         (new \CreateSamplerTrackingTables())->up();
+        $schema->table('sampler_tracking_sessions', function (Blueprint $table) {
+            $table->longText('meta_history')->nullable();
+        });
         require_once __DIR__ . '/../../database/migrations/2026_09_15_100000_create_sampler_tracking_troubles.php';
         (new \CreateSamplerTrackingTroubles())->up();
         require_once __DIR__ . '/../../database/migrations/2026_09_18_120000_add_unblock_detail_to_sampler_tracking_troubles.php';
@@ -115,6 +118,192 @@ class SamplerTrackingSyncTest extends TestCase
             Container::setInstance($this->previousContainer);
         }
         parent::tearDown();
+    }
+
+    /** @dataProvider checkoutDurationChanges */
+    public function testScheduleEditReopensLongerCheckoutEvenForOriginalActor(array $after, int $triggerIndex): void
+    {
+        $rows = [];
+        foreach ($after as $index => $duration) {
+            $rows[] = $this->schedule(['userid' => 10 + $index, 'sampler' => 'Sampler ' . $index, 'durasi' => 0]);
+        }
+        $session = $this->prepare('2026-09-17')->first();
+        $members = $session->activeMembers()->orderBy('id')->get();
+        $trigger = $members[$triggerIndex];
+        $db = $this->db->getConnection('mysql');
+        $proofs = [];
+        foreach ($members as $member) {
+            foreach (['departure', 'checkin', 'checkout', 'return'] as $offset => $type) {
+                $id = $db->table('sampler_tracking_events')->insertGetId([
+                    'sampler_tracking_session_id' => $session->id,
+                    'sampler_tracking_member_id' => $member->id,
+                    'triggered_by_member_id' => $trigger->id,
+                    'movement_group' => 'CYCLE-1', 'event_type' => $type,
+                    'event_at' => '2026-09-17 ' . (8 + $offset) . ':00:00',
+                    'is_auto' => $member->id !== $trigger->id, 'photo' => 'proof.jpg', 'note' => 'Original proof',
+                ]);
+                $proofs[$member->id][$type] = $id;
+            }
+        }
+        $before = $this->service->snapshotSchedules('Q1');
+        foreach ($rows as $index => $row) {
+            $row->durasi_personal = $after[$index];
+            $row->save();
+        }
+        $this->service->syncScheduleEdit($before, 'Q1');
+        foreach ($members as $index => $member) {
+            $retained = $after[$index] === min($after);
+            $this->assertSame($retained ? 1 : 0, $member->events()->where('event_type', 'checkout')->count());
+            $this->assertSame($retained ? 1 : 0, $member->events()->where('event_type', 'return')->count());
+            $this->assertSame(2, $member->events()->whereIn('event_type', ['departure', 'checkin'])->count());
+        }
+        $history = collect(json_decode($session->fresh()->meta_history, true));
+        $audit = $history->firstWhere('type', 'checkout_schedule_evaluated');
+        $this->assertCount(count($after), $audit['affected']);
+        $this->assertCount(count(array_filter($after, function ($value) use ($after) { return $value > min($after); })) * 2, $audit['removed_events']);
+        $this->assertSame('Tidak diketahui', $audit['actor']);
+        foreach ($audit['removed_events'] as $event) {
+            $this->assertSame('proof.jpg', $event['photo']);
+            $this->assertSame('Original proof', $event['note']);
+            $this->assertEquals($trigger->id, $event['triggered_by_member_id']);
+        }
+        // A new checkout and return after the evaluation must survive job retries and normal sync.
+        foreach ($members as $index => $member) {
+            if ($after[$index] === min($after)) continue;
+            foreach (['checkout', 'return'] as $offset => $type) {
+                $db->table('sampler_tracking_events')->insert([
+                    'sampler_tracking_session_id' => $session->id, 'sampler_tracking_member_id' => $member->id,
+                    'triggered_by_member_id' => $member->id, 'movement_group' => 'CYCLE-1',
+                    'event_type' => $type, 'event_at' => '2026-09-18 ' . (10 + $offset) . ':00:00',
+                ]);
+            }
+        }
+        $ids = $db->table('sampler_tracking_events')->orderBy('id')->pluck('id')->all();
+        $this->service->syncScheduleEdit($before, 'Q1');
+        $this->service->syncQuotation('Q1');
+        $this->assertSame($ids, $db->table('sampler_tracking_events')->orderBy('id')->pluck('id')->all());
+        $this->assertCount(1, collect(json_decode($session->fresh()->meta_history, true))->where('type', 'checkout_schedule_evaluated'));
+    }
+
+    public function checkoutDurationChanges(): array
+    {
+        return [
+            'actor extended' => [[2, 0], 0],
+            'automatic member extended' => [[0, 2], 0],
+            'three durations' => [[2, 3, 4], 2],
+            'shortest tied' => [[2, 2, 4], 2],
+        ];
+    }
+
+    public function testCheckoutReconciliationPreservesIndependentCheckoutAndOtherCycles(): void
+    {
+        [$session, $members, $before, $after] = $this->checkoutReconciliationFixture();
+        $db = $this->db->getConnection('mysql');
+        // A later checkout by the extended member is independent of the original team action.
+        $db->table('sampler_tracking_events')->where('sampler_tracking_member_id', $members[0]->id)
+            ->where('event_type', 'checkout')->update(['event_at' => '2026-09-18 10:00:00']);
+        $ids = $db->table('sampler_tracking_events')->orderBy('id')->pluck('id')->all();
+        (new \App\Services\SamplerTrackingCheckoutReconciliation())->reconcile($session, $before, $after);
+        $this->assertSame($ids, $db->table('sampler_tracking_events')->orderBy('id')->pluck('id')->all());
+        $this->assertEmpty(collect(json_decode($session->fresh()->meta_history, true))->last()['removed_events']);
+    }
+
+    public function testCheckoutReconciliationDoesNotTouchDifferentMovementGroups(): void
+    {
+        [$session, $members, $before, $after] = $this->checkoutReconciliationFixture();
+        $db = $this->db->getConnection('mysql');
+        $db->table('sampler_tracking_events')->where('sampler_tracking_member_id', $members[1]->id)
+            ->update(['movement_group' => 'OTHER-CYCLE']);
+        (new \App\Services\SamplerTrackingCheckoutReconciliation())->reconcile($session, $before, $after);
+        $this->assertSame(4, $db->table('sampler_tracking_events')->count());
+    }
+
+    public function testCheckoutReconciliationDoesNotReopenReturnAfterNewDeparture(): void
+    {
+        [$session, $members, $before, $after] = $this->checkoutReconciliationFixture();
+        $db = $this->db->getConnection('mysql');
+        $db->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $session->id, 'sampler_tracking_member_id' => $members[0]->id,
+            'triggered_by_member_id' => $members[0]->id, 'event_type' => 'departure',
+            'movement_group' => 'CYCLE-1', 'event_at' => '2026-09-17 10:30:00',
+        ]);
+        (new \App\Services\SamplerTrackingCheckoutReconciliation())->reconcile($session, $before, $after);
+        $this->assertSame(0, $members[0]->events()->where('event_type', 'checkout')->count());
+        $this->assertSame(1, $members[0]->events()->where('event_type', 'return')->count());
+        $this->assertSame(1, $members[1]->events()->where('event_type', 'checkout')->count());
+    }
+
+    public function testCheckoutReconciliationRollsBackAuditIfEventDeletionFails(): void
+    {
+        [$session, $members, $before, $after] = $this->checkoutReconciliationFixture();
+        $db = $this->db->getConnection('mysql');
+        $originalHistory = $session->fresh()->meta_history;
+        $db->unprepared("CREATE TRIGGER reject_event_delete BEFORE DELETE ON sampler_tracking_events BEGIN SELECT RAISE(ABORT, 'test delete failure'); END");
+        try {
+            (new \App\Services\SamplerTrackingCheckoutReconciliation())->reconcile($session, $before, $after);
+            $this->fail('Deletion must fail in this fixture.');
+        } catch (\Illuminate\Database\QueryException $exception) {
+            $this->assertStringContainsString('test delete failure', $exception->getMessage());
+        }
+        $this->assertSame(4, $db->table('sampler_tracking_events')->count());
+        $this->assertSame($originalHistory, $session->fresh()->meta_history);
+    }
+
+    public function testCheckoutReconciliationDoesNothingWithoutDurationChange(): void
+    {
+        [$session, $members, $before, $after] = $this->checkoutReconciliationFixture();
+        $originalHistory = $session->fresh()->meta_history;
+        (new \App\Services\SamplerTrackingCheckoutReconciliation())->reconcile($session, $after, $after);
+        $this->assertSame($originalHistory, $session->fresh()->meta_history);
+        $this->assertSame(4, $this->db->getConnection('mysql')->table('sampler_tracking_events')->count());
+    }
+
+    public function testExtendedActorCanCheckoutAgainThroughNormalEventValidation(): void
+    {
+        $this->schedule(['durasi' => 0, 'sampler' => 'Extended actor']);
+        $this->schedule(['userid' => 20, 'durasi' => 0, 'sampler' => 'Goni']);
+        $session = $this->prepare('2026-09-17')->first();
+        $actor = $session->activeMembers()->orderBy('id')->firstOrFail();
+        $goni = $session->activeMembers()->where('sampler_id', 20)->firstOrFail();
+        $this->db->getConnection('mysql')->table('persiapan_sampel_header')->update(['is_emailed_bas' => 1]);
+        foreach (['departure', 'checkin', 'checkout', 'return'] as $type) {
+            $this->service->storeEvent(['member_id' => $actor->id, 'event_type' => $type]);
+        }
+        $originalGoniIds = $goni->events()->orderBy('id')->pluck('id')->all();
+        $before = $this->service->snapshotSchedules('Q1');
+        $this->db->getConnection('mysql')->table('jadwal')->where('userid', 10)->update(['durasi_personal' => 2]);
+        $this->service->syncScheduleEdit($before, 'Q1');
+        $this->assertSame(0, $actor->events()->where('event_type', 'checkout')->count());
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-18 10:00:00', 'Asia/Jakarta'));
+        $this->service->storeEvent(['member_id' => $actor->id, 'event_type' => 'checkout']);
+        $this->service->storeEvent(['member_id' => $actor->id, 'event_type' => 'return']);
+        $this->assertSame(1, $actor->events()->where('event_type', 'checkout')->count());
+        $this->assertSame(1, $actor->events()->where('event_type', 'return')->count());
+        $this->assertSame($originalGoniIds, $goni->events()->orderBy('id')->pluck('id')->all());
+    }
+
+    private function checkoutReconciliationFixture(): array
+    {
+        $row = $this->schedule(['durasi' => 0, 'sampler' => 'Extended actor']);
+        $this->schedule(['userid' => 20, 'durasi' => 0, 'sampler' => 'Goni']);
+        $session = $this->prepare('2026-09-17')->first();
+        $members = $session->activeMembers()->orderBy('id')->get();
+        foreach ($members as $member) {
+            foreach (['checkout', 'return'] as $index => $type) {
+                $this->db->getConnection('mysql')->table('sampler_tracking_events')->insert([
+                    'sampler_tracking_session_id' => $session->id, 'sampler_tracking_member_id' => $member->id,
+                    'triggered_by_member_id' => $members[0]->id, 'is_auto' => $member->id !== $members[0]->id,
+                    'movement_group' => 'CYCLE-1', 'event_type' => $type,
+                    'event_at' => '2026-09-17 ' . (10 + $index) . ':00:00',
+                ]);
+            }
+        }
+        $before = $this->service->snapshotSchedules('Q1');
+        $row->durasi_personal = 2;
+        $row->save();
+        $members[0]->effective_duration = 2;
+        $members[0]->save();
+        return [$session, $members, $before, $this->service->snapshotSchedules('Q1')];
     }
 
     public function testCheckoutRequiresEmailedBasEvenWhenDraftExists(): void
@@ -407,6 +596,110 @@ class SamplerTrackingSyncTest extends TestCase
             'sampler_name' => 'Asep', 'effective_duration' => $duration, 'is_active' => true,
         ]);
         return [$session, $member];
+    }
+
+    public function testTroubleCollectionUsesFifteenDatesWithoutDroppingExistingOlderTrouble(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-10-29 10:00:00', 'Asia/Jakarta'));
+        $service = new \App\Services\SamplerTrackingTroubleService();
+        $this->assertSame('2026-10-14', $service::startDate());
+        $this->assertSame('2026-12-27', $service::startDate('2027-01-10'));
+        [$old] = $this->troubleAssignment('old-unresolved', '2026-09-21');
+        $this->db->getConnection('mysql')->table('sampler_tracking_troubles')->insert([
+            'sampler_id' => 10, 'tracking_session_id' => $old->id,
+            'activity_date' => '2026-09-21', 'is_active' => 1, 'is_clear' => 0,
+        ]);
+        $this->troubleAssignment('outside-window', '2026-10-13');
+        $this->troubleAssignment('first-in-window', '2026-10-14');
+        $this->troubleAssignment('last-in-window', '2026-10-28');
+        $this->troubleAssignment('today-excluded', '2026-10-29');
+        $this->assertSame(2, $service->collect(null, [10]));
+        $dates = $this->db->getConnection('mysql')->table('sampler_tracking_troubles')
+            ->orderBy('activity_date')->pluck('activity_date')->all();
+        $this->assertSame(['2026-09-21', '2026-10-14', '2026-10-28'], $dates);
+        $this->assertTrue($service->unresolved(10)->contains('tracking_session_id', $old->id));
+    }
+
+    private function recordTroubleJourneyEvent($session, $member, $type, $at): void
+    {
+        $this->db->getConnection('mysql')->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $session->id, 'sampler_tracking_member_id' => $member->id,
+            'event_type' => $type, 'event_at' => $at,
+        ]);
+    }
+
+    private function troubleProgress($session): array
+    {
+        $service = new \App\Services\SamplerTrackingTroubleService();
+        $method = new \ReflectionMethod($service, 'progress');
+        $method->setAccessible(true);
+        return $method->invoke($service, 10, $session->tanggal_sampling, $session->id);
+    }
+
+    public function testTroubleJourneyAcceptsReturnOnNextDatesSessionAndClearsFalseTrouble(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-10-29 10:00:00', 'Asia/Jakarta'));
+        [$night, $person] = $this->troubleAssignment('night-journey', '2026-10-20', 2);
+        [$day, $nextPerson] = $this->troubleAssignment('next-day-stop', '2026-10-21', 0);
+        foreach ([['departure', '2026-10-20 06:00:00'], ['checkin', '2026-10-20 08:00:00'], ['checkout', '2026-10-21 05:00:00']] as [$type, $at]) {
+            $this->recordTroubleJourneyEvent($night, $person, $type, $at);
+        }
+        foreach ([['checkin', '2026-10-21 08:00:00'], ['checkout', '2026-10-21 12:00:00'], ['return', '2026-10-21 13:00:00']] as [$type, $at]) {
+            $this->recordTroubleJourneyEvent($day, $nextPerson, $type, $at);
+        }
+        $service = new \App\Services\SamplerTrackingTroubleService();
+        $this->assertTrue($this->troubleProgress($night)['complete']);
+        $this->assertTrue($this->troubleProgress($day)['complete']);
+        $this->assertSame(0, $service->collect(null, [10]));
+        $this->db->getConnection('mysql')->table('sampler_tracking_troubles')->insert([
+            'sampler_id' => 10, 'tracking_session_id' => $night->id,
+            'activity_date' => '2026-10-20', 'is_active' => 1, 'is_clear' => 0,
+        ]);
+        $this->assertCount(0, $service->unresolved(10));
+        $this->assertEquals(1, $this->db->getConnection('mysql')->table('sampler_tracking_troubles')->value('is_clear'));
+    }
+
+    public function testTroubleJourneyIgnoresLateReturnFromOlderAssignment(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-10-29 10:00:00', 'Asia/Jakarta'));
+        [$old, $oldPerson] = $this->troubleAssignment('late-old-return', '2026-10-19');
+        [$morning, $morningPerson] = $this->troubleAssignment('current-departure', '2026-10-20');
+        [$stop, $person] = $this->troubleAssignment('current-afternoon', '2026-10-20');
+        $this->recordTroubleJourneyEvent($morning, $morningPerson, 'departure', '2026-10-20 06:00:00');
+        $this->recordTroubleJourneyEvent($old, $oldPerson, 'return', '2026-10-20 12:00:00');
+        foreach ([['checkin', '2026-10-20 13:00:00'], ['checkout', '2026-10-20 15:00:00'], ['return', '2026-10-20 16:00:00']] as [$type, $at]) {
+            $this->recordTroubleJourneyEvent($stop, $person, $type, $at);
+        }
+        $this->assertTrue($this->troubleProgress($stop)['complete']);
+        // Removing the real journey's return must not let the older return complete this stop.
+        $this->db->getConnection('mysql')->table('sampler_tracking_events')
+            ->where('sampler_tracking_member_id', $person->id)->where('event_type', 'return')->delete();
+        $this->assertFalse($this->troubleProgress($stop)['complete']);
+    }
+
+    public function testTroubleJourneyDoesNotBorrowReturnAfterANewDeparture(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-10-29 10:00:00', 'Asia/Jakarta'));
+        [$old, $person] = $this->troubleAssignment('unreturned-night', '2026-10-20', 2);
+        [$new, $nextPerson] = $this->troubleAssignment('new-journey', '2026-10-21');
+        foreach ([['departure', '2026-10-20 06:00:00'], ['checkin', '2026-10-20 08:00:00'], ['checkout', '2026-10-21 05:00:00']] as [$type, $at]) {
+            $this->recordTroubleJourneyEvent($old, $person, $type, $at);
+        }
+        $this->recordTroubleJourneyEvent($new, $nextPerson, 'departure', '2026-10-21 06:00:00');
+        $this->recordTroubleJourneyEvent($new, $nextPerson, 'return', '2026-10-21 15:00:00');
+        $this->assertFalse($this->troubleProgress($old)['complete']);
+    }
+
+    public function testTroubleJourneyStillRequiresCheckoutAndReturnAfterCheckout(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-10-29 10:00:00', 'Asia/Jakarta'));
+        [$stop, $person] = $this->troubleAssignment('missing-checkout-journey', '2026-10-20');
+        foreach ([['departure', '2026-10-20 06:00:00'], ['checkin', '2026-10-20 08:00:00'], ['return', '2026-10-20 12:00:00']] as [$type, $at]) {
+            $this->recordTroubleJourneyEvent($stop, $person, $type, $at);
+        }
+        $this->assertFalse($this->troubleProgress($stop)['complete']);
+        $this->recordTroubleJourneyEvent($stop, $person, 'checkout', '2026-10-20 13:00:00');
+        $this->assertFalse($this->troubleProgress($stop)['complete']);
     }
 
     private function finishTroubleAssignment($session, $member)

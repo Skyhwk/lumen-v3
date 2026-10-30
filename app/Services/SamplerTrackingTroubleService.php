@@ -50,9 +50,31 @@ class SamplerTrackingTroubleService
         return array_keys(self::SAMPLER_FOLLOW_UP_ACTIONS);
     }
 
-    public static function startDate()
+    public static function startDate($deadlineDay = null)
     {
-        return max('2026-09-21', env('SAMPLER_TRACKING_TROUBLE_START_DATE', '2026-09-21'));
+        $end = $deadlineDay
+            ? Carbon::parse($deadlineDay, 'Asia/Jakarta')
+            : Carbon::now('Asia/Jakarta')->subDay();
+
+        // Batasi 10 hari kalender terakhir (termasuk batas deadline)
+        return $end->startOfDay()->subDays(9)->toDateString();
+    }
+
+    protected $journey;
+    protected $progressSessionsCache = [];
+
+    public function journey(): SamplerTrackingJourney
+    {
+        if (!$this->journey) {
+            $this->journey = new SamplerTrackingJourney();
+        }
+        return $this->journey;
+    }
+
+    public function clearCaches(): void
+    {
+        $this->progressSessionsCache = [];
+        SamplerTrackingJourney::clearCache();
     }
 
     protected function ready()
@@ -66,14 +88,18 @@ class SamplerTrackingTroubleService
 
     protected function progress($samplerId, $date, $sessionId)
     {
-        $sessions = SamplerTrackingSession::with('activeMembers.events')->where('is_active', true)
-            ->where(function ($q) {
-                $q->whereNull('nama_perusahaan')
-                    ->orWhereRaw('LOWER(TRIM(nama_perusahaan)) != ?', ['cuti']);
-            })
-            ->whereDate('tanggal_sampling', $date)->whereHas('activeMembers', function ($query) use ($samplerId) {
-                $query->where('sampler_id', $samplerId);
-        })->get();
+        $cacheKey = $samplerId . '|' . $date;
+        if (!isset($this->progressSessionsCache[$cacheKey])) {
+            $this->progressSessionsCache[$cacheKey] = SamplerTrackingSession::with('activeMembers.events')->where('is_active', true)
+                ->where(function ($q) {
+                    $q->whereNull('nama_perusahaan')
+                        ->orWhereRaw('LOWER(TRIM(nama_perusahaan)) != ?', ['cuti']);
+                })
+                ->where('tanggal_sampling', $date)->whereHas('activeMembers', function ($query) use ($samplerId) {
+                    $query->where('sampler_id', $samplerId);
+            })->get();
+        }
+        $sessions = $this->progressSessionsCache[$cacheKey];
         $session = $sessions->firstWhere('id', $sessionId);
         // A schedule correction can temporarily leave a legacy trouble
         // pointing at a session whose member has been superseded. Missing
@@ -114,10 +140,19 @@ class SamplerTrackingTroubleService
         $useDailyJourneyReturn = !$wasReopened
             || ($stopsComplete && $dailyMembers->isNotEmpty() && $ownMaxDuration < $maxDailyDuration);
         $journeyMembers = $useDailyJourneyReturn ? $dailyMembers : ($wasReopened ? $members : $dailyMembers);
-        $complete = $stopsComplete && $members->every(function ($member) use ($date) {
-            return (new SamplerTrackingService())->departureForMember($member, $date) !== null;
-        })
-           && $journeyMembers->contains(function ($member) { return SamplerTrackingActivity::hasEvent($member, 'return'); });
+        if ($useDailyJourneyReturn) {
+            $journey = $this->journey();
+            $complete = $stopsComplete && $members->every(function ($member) use ($journey, $date) {
+                return $journey->isComplete($member, $date);
+            });
+        } else {
+            // Explicit recovery still requires a return on this reopened assignment.
+            $complete = $stopsComplete && $members->every(function ($member) use ($date) {
+                return (new SamplerTrackingService())->departureForMember($member, $date) !== null;
+            }) && $journeyMembers->contains(function ($member) {
+                return SamplerTrackingActivity::hasEvent($member, 'return');
+            });
+        }
         $sessionDue = $this->dueDate($date, $members->max(function ($member) {
             return SamplerTrackingActivity::duration($member);
         }));
@@ -185,12 +220,12 @@ class SamplerTrackingTroubleService
     public function collect($day = null, array $samplerIds = [])
     {
         $this->ready();
-        $this->pruneStaleOpenTroubles();
-        $startDate = self::startDate();
+        $this->clearCaches();
         $day = $day ?: Carbon::now('Asia/Jakarta')->subDay()->toDateString();
-        if ($day < $startDate) {
-            return 0;
-        }
+        $startDate = self::startDate($day);
+
+        // Batasi pembersihan trouble stale ke rentang tanggal yang relevan (10 hari terakhir)
+        $this->pruneStaleOpenTroubles($startDate);
 
         $trackingService = app(SamplerTrackingService::class);
 
@@ -205,7 +240,7 @@ class SamplerTrackingTroubleService
                 TRIM(COALESCE(s.nama_perusahaan, '')) != ''
                 OR TRIM(COALESCE(s.no_order, '')) != ''
             )")
-            ->whereDate('s.tanggal_sampling', '>=', $startDate)->whereDate('s.tanggal_sampling', '<=', $day)
+            ->whereBetween('s.tanggal_sampling', [$startDate, $day])
             ->when($samplerIds, function ($query) use ($samplerIds) { $query->whereIn('m.sampler_id', $samplerIds); })
             ->whereNotNull('m.sampler_id')
             ->select($this->assignmentDurationColumns())
@@ -222,28 +257,31 @@ class SamplerTrackingTroubleService
             }
         }
 
+        $sessionIds = $assignments->pluck('tracking_session_id')->unique()->filter()->values()->all();
+        $sessionsById = [];
+        $existingTroubles = [];
+        if (!empty($sessionIds)) {
+            $sessionsById = SamplerTrackingSession::with('activeMembers')
+                ->whereIn('id', $sessionIds)
+                ->get()
+                ->keyBy('id');
+
+            $existingTroubles = DB::table(self::TABLE)
+                ->whereIn('tracking_session_id', $sessionIds)
+                ->select('sampler_id', 'tracking_session_id')
+                ->get()
+                ->mapWithKeys(function ($row) {
+                    return [$row->sampler_id . '|' . $row->tracking_session_id => true];
+                })
+                ->all();
+        }
+
         $count = 0;
         foreach ($assignments as $assignment) {
             if (!$assignment->sampler_id) continue;
 
-            $session = SamplerTrackingSession::with('activeMembers')->find($assignment->tracking_session_id);
-            if (!$session || !$session->is_active || !$trackingService->sessionHasMeaningfulTrackingData($session)) {
-                continue;
-            }
-            if ($session->no_order) {
-                $member = $session->activeMembers->first(function ($candidate) use ($assignment) {
-                    return (string) $candidate->sampler_id === (string) $assignment->sampler_id;
-                });
-                if (!$member || !$trackingService->hasActiveSchedule($session, $member)) {
-                    continue;
-                }
-            }
-
-            $exists = DB::table(self::TABLE)
-                ->where('sampler_id', $assignment->sampler_id)
-                ->where('tracking_session_id', $assignment->tracking_session_id)
-                ->exists();
-            if ($exists) continue;
+            $troubleKey = $assignment->sampler_id . '|' . $assignment->tracking_session_id;
+            if (isset($existingTroubles[$troubleKey])) continue;
 
             $key = $this->journeyKey($assignment);
             $journeyDue = $journeyDueByKey[$key] ?? null;
@@ -256,24 +294,41 @@ class SamplerTrackingTroubleService
                 }
             }
 
+            $session = $sessionsById[$assignment->tracking_session_id] ?? null;
+            if (!$session || !$session->is_active || !$trackingService->sessionHasMeaningfulTrackingData($session)) {
+                continue;
+            }
+            if ($session->no_order) {
+                $member = $session->activeMembers->first(function ($candidate) use ($assignment) {
+                    return (string) $candidate->sampler_id === (string) $assignment->sampler_id;
+                });
+                if (!$member || !$trackingService->hasActiveSchedule($session, $member)) {
+                    continue;
+                }
+            }
+
             $progress = $this->progress($assignment->sampler_id, $assignment->activity_date, $assignment->tracking_session_id);
             if ($progress['complete'] || !$this->isPastDue($progress, $day)) continue;
             // A completed short stop shares the final journey return; missing
             // check-in/checkout must still receive its own recovery ticket.
             $ownDue = $this->dueDate($assignment->activity_date, $this->assignmentDuration($assignment));
             if ($journeyCount > 1 && $ownDue < $journeyDue && $progress['stops_complete']) continue;
-            $count += DB::table(self::TABLE)->insertOrIgnore([
+            $inserted = DB::table(self::TABLE)->insertOrIgnore([
                 'sampler_id' => $assignment->sampler_id,
                 'tracking_session_id' => $assignment->tracking_session_id,
                 'activity_date' => $assignment->activity_date, 'is_active' => 1, 'is_clear' => 0,
                 'created_at' => Carbon::now('Asia/Jakarta'), 'updated_at' => Carbon::now('Asia/Jakarta'),
             ]);
+            if ($inserted) {
+                $count++;
+                $existingTroubles[$troubleKey] = true;
+            }
         }
         return $count;
     }
 
     /** Close obsolete trouble records whose assignment is gone, empty, or complete. */
-    public function pruneStaleOpenTroubles(): int
+    public function pruneStaleOpenTroubles($startDate = null): int
     {
         if (!Schema::hasTable(self::TABLE) || !Schema::hasColumn(self::TABLE, 'is_active')) {
             return 0;
@@ -282,15 +337,36 @@ class SamplerTrackingTroubleService
         $trackingService = app(SamplerTrackingService::class);
         $cleared = 0;
 
-        DB::table(self::TABLE)
+        $query = DB::table(self::TABLE)
             ->where('is_active', 1)
             ->where(function ($query) {
                 $query->where('is_clear', 0)->orWhereNotNull('reopened_at');
-            })
-            ->orderBy('id')
+            });
+
+        if ($startDate) {
+            $query->where('activity_date', '>=', $startDate);
+        }
+
+        $query->orderBy('id')
             ->chunkById(200, function ($troubles) use (&$cleared, $trackingService) {
+                $sessionIds = $troubles->pluck('tracking_session_id')->filter()->unique()->values()->all();
+                $sessionsById = [];
+                $sessionsWithEvents = [];
+                if (!empty($sessionIds)) {
+                    $sessionsById = SamplerTrackingSession::with('activeMembers')
+                        ->whereIn('id', $sessionIds)
+                        ->get()
+                        ->keyBy('id');
+                    $sessionsWithEvents = SamplerTrackingEvent::whereIn('sampler_tracking_session_id', $sessionIds)
+                        ->select('sampler_tracking_session_id')
+                        ->distinct()
+                        ->pluck('sampler_tracking_session_id')
+                        ->flip()
+                        ->all();
+                }
+
                 foreach ($troubles as $trouble) {
-                    if (!$this->shouldAutoClearOpenTrouble($trouble, $trackingService)) {
+                    if (!$this->shouldAutoClearOpenTrouble($trouble, $trackingService, $sessionsById, $sessionsWithEvents)) {
                         continue;
                     }
                     $this->markTroubleCleared((int) $trouble->id);
@@ -301,7 +377,7 @@ class SamplerTrackingTroubleService
         return $cleared;
     }
 
-    public function shouldAutoClearOpenTrouble($trouble, SamplerTrackingService $trackingService = null): bool
+    public function shouldAutoClearOpenTrouble($trouble, SamplerTrackingService $trackingService = null, $sessionsById = null, $sessionsWithEvents = null): bool
     {
         $trackingService = $trackingService ?: app(SamplerTrackingService::class);
         $sessionId = (int) ($trouble->tracking_session_id ?? 0);
@@ -311,13 +387,19 @@ class SamplerTrackingTroubleService
             return true;
         }
 
-        $session = SamplerTrackingSession::with('activeMembers')->find($sessionId);
+        $session = $sessionsById !== null
+            ? ($sessionsById[$sessionId] ?? null)
+            : SamplerTrackingSession::with('activeMembers')->find($sessionId);
+
         if (!$session || !(bool) $session->is_active) {
             $this->deactivateTrouble((int) $trouble->id);
             return true;
         }
 
-        $hasEvents = SamplerTrackingEvent::where('sampler_tracking_session_id', $sessionId)->exists();
+        $hasEvents = $sessionsWithEvents !== null
+            ? isset($sessionsWithEvents[$sessionId])
+            : SamplerTrackingEvent::where('sampler_tracking_session_id', $sessionId)->exists();
+
         if (!$hasEvents && !$trackingService->sessionHasMeaningfulTrackingData($session)) {
             $this->deactivateTrouble((int) $trouble->id);
             return true;

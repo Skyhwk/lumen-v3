@@ -89,6 +89,41 @@ use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class FixingController extends Controller
 {
+    public function previewTrackingSamplerHistory(Request $request)
+    {
+        return $this->backfillTrackingSamplerHistory($request, true);
+    }
+
+    public function saveTrackingSamplerHistory(Request $request)
+    {
+        return $this->backfillTrackingSamplerHistory($request, false);
+    }
+
+    private function backfillTrackingSamplerHistory(Request $request, bool $preview)
+    {
+        if (!$this->user_id || (int) $this->department !== 7
+            || in_array((int) $this->user_id, [10, 15, 93, 123], true)) {
+            abort(403, 'Backfill history hanya untuk IT Programmer.');
+        }
+        $this->validate($request, ['session_id' => 'required|integer|min:1']);
+        $result = DB::transaction(function () use ($request, $preview) {
+            $result = (new \App\Services\SamplerTrackingJourneyBackfill())->run((int) $request->session_id, $preview);
+            if (!$preview) {
+                \App\Services\SamplerTrackingHistory::append((int) $request->session_id, 'journey_backfill_requested', [
+                    'actor' => $this->karyawan ?: 'Programmer', 'actor_id' => (int) $this->user_id,
+                    'source' => 'fixing', 'entries_added' => $result['entries_added'],
+                    'summary' => 'Backfill detail per session melalui Fixing: ' . $result['entries_added'] . ' catatan ditambahkan.',
+                ]);
+            }
+            return $result;
+        });
+        return response()->json([
+            'success' => true, 'preview' => $preview,
+            'message' => $preview ? 'Preview selesai; belum ada data yang disimpan.' : 'Meta history session berhasil dilengkapi.',
+            'data' => $result,
+        ]);
+    }
+
     public function searchTrackingSamplerRoute(Request $request)
     {
         $this->validate($request, ['q' => 'required|string|min:2|max:100']);

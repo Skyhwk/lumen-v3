@@ -7,10 +7,10 @@
     .identity .label { width: 46mm; }
     .identity .sep { width: 4mm; }
     .rules { width: 100%; border-collapse: collapse; margin: 1.5mm 0 3mm; }
-    .rules td { border: 0.6px solid #111; vertical-align: middle; padding: 1.3mm 1.6mm; }
-    .rules .head { text-align: center; font-weight: bold; }
+    .rules td { border: 0.6px solid #111; vertical-align: middle; padding: 0.45mm 1.4mm; line-height: 1.15; }
+    .rules .head { text-align: center; font-weight: bold; padding-top: 0.7mm; padding-bottom: 0.7mm; }
     .rules .num { width: 12mm; text-align: center; font-weight: bold; }
-    .rules .ttd { width: 46mm; height: 14mm; }
+    .rules .ttd { width: 46mm; height: 7.5mm; }
     .sign { width: 70mm; border-collapse: collapse; margin-top: 5mm; }
     .sign td { text-align: left; border: none; padding: 0; }
     .sign .space { height: 24mm; }

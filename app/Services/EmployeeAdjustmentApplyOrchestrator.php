@@ -191,13 +191,15 @@ class EmployeeAdjustmentApplyOrchestrator
                 $afterSnapshot = $this->buildAfterSnapshot($before, $employee, $locked, $source, $masterSalaryId);
 
                 $appliedAt = Carbon::now();
-                $this->rekapService->upsertFromApply(
+                $rekap = $this->rekapService->upsertFromApply(
                     $locked,
                     $employee,
                     array_merge($before, $afterSnapshot),
                     $masterSalaryId,
                     $appliedAt
                 );
+
+                (new EmployeeCareerContextService())->recordFromAdjustmentApply($locked, $rekap, $appliedAt);
 
                 $locked->apply_status = EmployeeAdjustmentWorkflowResolver::APPLY_STATUS_APPLIED;
                 $locked->applied_by = $appliedBy;

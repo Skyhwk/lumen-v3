@@ -35,11 +35,15 @@ class SyncPersiapanService
                 [$orderedParamId, $orderedParamName] = explode(';', $orderedParam);
 
                 if ($orderedCategoryName == 'air') {
-                    $bottleType = optional(HargaParameter::where([
-                        'id_parameter' => $orderedParamId,
-                        'is_active' => true,
-                        'status'=> false,
-                    ])->first())->regen;
+                    $bottleType = \App\Helpers\ParameterLabelConfigHelper::resolveRegen(
+                        $orderedParamId,
+                        1,
+                        optional(HargaParameter::where([
+                            'id_parameter' => $orderedParamId,
+                            'is_active' => true,
+                            'status'=> false,
+                        ])->first())->regen
+                    );
 
                     if ($bottleType) {
                         $orderedPersiapans = collect(json_decode($orderDetail->persiapan, true));
@@ -149,6 +153,7 @@ class SyncPersiapanService
             foreach ($params as $param) {
                 $param_map[$param->nama_parameter] = $param;
             }
+            \App\Helpers\ParameterLabelConfigHelper::enrichParamMap($param_map, json_decode($orderDetail->parameter) ?? [], $orderedCategoryId);
 
             $botol_volumes = [];
             foreach (json_decode($orderDetail->parameter) ?? [] as $parameter) {

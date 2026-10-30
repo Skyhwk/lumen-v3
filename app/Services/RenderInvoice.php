@@ -1971,6 +1971,7 @@ class RenderInvoice
             $pdf->SetWatermarkImage(public_path() . '/logo-watermark.png', -1, '', array(65, 60));
             $pdf->showWatermarkImage = true;
             $pdf->showWatermarkText = true;
+            $pdf->keep_table_proportions = true;
             $area = '';
 
             $customInvoice = json_decode($dataHead->custom_invoice);
@@ -2125,7 +2126,7 @@ class RenderInvoice
                         </table>
                         ');
 
-            $pdf->writeHTML('
+            $testingTableHeader = '
                         <table style="border-collapse: collapse;">
                         <thead>
                         <tr>
@@ -2138,32 +2139,38 @@ class RenderInvoice
                         </tr>
                         </thead>
                         <tbody>
-                        ');
+                        ';
+            $pdf->writeHTML($testingTableHeader);
 
-            $no = 1;
-
-            foreach ($customInvoice->data as $k => $invoice) {
-                // Debugging the invoice details
-
-                $pdf->writeHTML(
-                    '<tr style="border: 1px solid; font-size: 9px;">
-                                    <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . (count($invoice->invoiceDetails) + 1) . '">' . ($k + 1) . '</td>
-                                    <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . (count($invoice->invoiceDetails) + 1) . '">
+            foreach ($customInvoice->data as $orderIndex => $invoice) {
+                // Match normal invoices: bound the merged order cells to one content chunk.
+                $chunks = self::chunkByContentHeight($invoice->invoiceDetails);
+                foreach ($chunks as $chunkIndex => $details) {
+                    if ($chunkIndex > 0) {
+                        $pdf->writeHTML('</tbody></table>');
+                        $pdf->AddPage();
+                        $pdf->writeHTML($testingTableHeader);
+                    }
+                    $rowspan = count($details) + 1;
+                    $pdf->writeHTML(
+                        '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
+                                    <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . ($orderIndex + 1) . '</td>
+                                    <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '">
                                     <span><b>' . $invoice->no_order . '</b></span><br>
                                     <span><b>' . $invoice->no_document . '</b></span><br>
                                     <span><b>' . $pr . '</b></span>
                                     </td>
                                     </tr>'
-                );
+                    );
 
-                foreach ($invoice->invoiceDetails as $k => $itemInvoice) {
-                    // Handle empty values
-                    $titk = !empty($itemInvoice->titk) ? $itemInvoice->titk : ' ';  // Default to 'N/A' if empty
-                    $keterangan = !empty($itemInvoice->keterangan) ? $itemInvoice->keterangan : 'No Description'; // Default text if empty
-                    $hargaSatuan = !empty($itemInvoice->harga_satuan) ? self::rupiah($itemInvoice->harga_satuan) : ''; // Default to '0' if empty
-                    $totalHarga = !empty($itemInvoice->total_harga) ? self::rupiah($itemInvoice->total_harga) : '0'; // Default to '0' if empty
+                    foreach ($details as $itemInvoice) {
+                        // Handle empty values
+                        $titk = !empty($itemInvoice->titk) ? $itemInvoice->titk : ' ';  // Default to 'N/A' if empty
+                        $keterangan = !empty($itemInvoice->keterangan) ? $itemInvoice->keterangan : 'No Description'; // Default text if empty
+                        $hargaSatuan = !empty($itemInvoice->harga_satuan) ? self::rupiah($itemInvoice->harga_satuan) : ''; // Default to '0' if empty
+                        $totalHarga = !empty($itemInvoice->total_harga) ? self::rupiah($itemInvoice->total_harga) : '0'; // Default to '0' if empty
 
-                    $pdf->writeHTML('
+                        $pdf->writeHTML('
                                 <tr>
                                 <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan . '</span></td>
                                 <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $titk . '</td>
@@ -2171,6 +2178,7 @@ class RenderInvoice
                                 <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $totalHarga . '</td>
                                 </tr>
                                 ');
+                    }
                 }
             }
 
@@ -2482,7 +2490,7 @@ class RenderInvoice
 
         foreach ($data as $key => $row) {
             // Estimasi tinggi berdasarkan panjang teks
-            $textLength = strlen($row->keterangan_pengujian ?? '') +
+            $textLength = strlen($row->keterangan_pengujian ?? $row->keterangan ?? '') +
                 strlen(json_encode($row->regulasi ?? ''));
             $rowHeight = 40 + ceil($textLength / 120) * 20;
 
