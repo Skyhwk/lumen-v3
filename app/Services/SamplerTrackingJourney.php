@@ -26,14 +26,14 @@ class SamplerTrackingJourney
         $asOf = $asOf ? Carbon::parse($asOf, 'Asia/Jakarta') : Carbon::now('Asia/Jakarta');
         $asOf = $asOf->min(Carbon::now('Asia/Jakarta'));
         if (Carbon::parse($checkin->event_at, 'Asia/Jakarta')->gt($asOf)) return null;
-        $departure = $this->eventsForSampler($member->sampler_id)->with('member.session')
+        $departure = $this->eventsQueryForSampler($member->sampler_id)->with('member.session')
             ->where('event_type', 'departure')->where('event_at', '<=', $checkin->event_at)
             ->whereHas('member.session', function ($query) use ($date) {
                 $query->whereDate('tanggal_sampling', '<=', $date);
             })->orderByDesc('event_at')->orderByDesc('id')->first();
         if (!$departure || !$departure->member || !$departure->member->session) return null;
         $departureDate = $departure->member->session->tanggal_sampling;
-        if ($this->eventsForSampler($member->sampler_id)->where('event_type', 'return')
+        if ($this->eventsQueryForSampler($member->sampler_id)->where('event_type', 'return')
             ->where('event_at', '>=', $departure->event_at)->where('event_at', '<', $checkin->event_at)
             ->whereHas('member.session', function ($query) use ($departureDate) {
                 $query->whereDate('tanggal_sampling', '>=', $departureDate);
@@ -46,7 +46,7 @@ class SamplerTrackingJourney
             // Advance in deadline windows, never scan an unbounded year of history.
             $window = Carbon::parse($due, 'Asia/Jakarta')->endOfDay()->min($asOf)->toDateTimeString();
             if ($window < $cursor) break;
-            $events = $this->eventsForSampler($member->sampler_id)->with('member.session')
+            $events = $this->eventsQueryForSampler($member->sampler_id)->with('member.session')
                 ->where('event_at', $inclusive ? '>=' : '>', $cursor)->where('event_at', '<=', $window)
                 ->orderBy('event_at')->orderBy('id')->get();
             $stopped = false;
@@ -178,21 +178,26 @@ class SamplerTrackingJourney
     {
         $key = (string) $samplerId;
         if (!isset(self::$samplerEventsCache[$key])) {
-            self::$samplerEventsCache[$key] = SamplerTrackingEvent::with(['member.session'])
-                ->whereNotNull('event_at')
-                ->whereHas('member', function ($query) use ($samplerId) {
-                    $query->where('sampler_id', $samplerId)->where('is_active', true)
-                        ->whereHas('session', function ($session) {
-                            $session->where('is_active', true)->where(function ($company) {
-                                $company->whereNull('nama_perusahaan')
-                                    ->orWhereRaw('LOWER(TRIM(nama_perusahaan)) != ?', ['cuti']);
-                            });
-                        });
-                })
+            self::$samplerEventsCache[$key] = $this->eventsQueryForSampler($samplerId)->with('member.session')
                 ->orderBy('event_at')->orderBy('id')
                 ->get();
         }
 
         return self::$samplerEventsCache[$key];
+    }
+
+    /** Keep the query separate from the materialized event cache. */
+    protected function eventsQueryForSampler($samplerId): \Illuminate\Database\Eloquent\Builder
+    {
+        return SamplerTrackingEvent::whereNotNull('event_at')
+            ->whereHas('member', function ($query) use ($samplerId) {
+                $query->where('sampler_id', $samplerId)->where('is_active', true)
+                    ->whereHas('session', function ($session) {
+                        $session->where('is_active', true)->where(function ($company) {
+                            $company->whereNull('nama_perusahaan')
+                                ->orWhereRaw('LOWER(TRIM(nama_perusahaan)) != ?', ['cuti']);
+                        });
+                    });
+            });
     }
 }

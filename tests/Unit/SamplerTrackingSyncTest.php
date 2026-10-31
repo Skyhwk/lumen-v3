@@ -28,6 +28,7 @@ class SamplerTrackingSyncTest extends TestCase
 
     protected function setUp(): void
     {
+        \App\Services\SamplerTrackingJourney::clearCache();
         if (!in_array('sqlite', \PDO::getAvailableDrivers(), true)) {
             $this->markTestSkipped('Run PHP with -d extension=pdo_sqlite for isolated tracking tests.');
         }
@@ -105,6 +106,7 @@ class SamplerTrackingSyncTest extends TestCase
 
     protected function tearDown(): void
     {
+        \App\Services\SamplerTrackingJourney::clearCache();
         \Carbon\Carbon::setTestNow();
         if ($this->db) {
             $this->db->getDatabaseManager()->purge('mysql');
@@ -725,6 +727,8 @@ class SamplerTrackingSyncTest extends TestCase
     private function troubleProgress($session): array
     {
         $service = new \App\Services\SamplerTrackingTroubleService();
+        // Each assessment simulates a fresh request after fixture events may have changed.
+        $service->clearCaches();
         $method = new \ReflectionMethod($service, 'progress');
         $method->setAccessible(true);
         return $method->invoke($service, 10, $session->tanggal_sampling, $session->id);
