@@ -7,12 +7,34 @@ use Illuminate\Support\Facades\DB;
 use App\Models\MasterKategori;
 use App\Models\HargaParameter;
 use App\Models\Parameter;
+use App\Models\PerhitunganModalParameter;
+use App\Services\PerhitunganModalParameterService;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
 use Carbon\Carbon;
 
 class HargaParameterController extends Controller
 {
+    private function canViewHargaModal(): bool
+    {
+        $grade = strtoupper(trim(str_replace('_', ' ', (string) ($this->grade ?? ''))));
+
+        return in_array($grade, ['MANAGER', 'SENIOR MANAGER', 'DIRECTOR'], true);
+    }
+
+    private function resolveHargaReferenceDate($tanggalBerlaku, $createdAt = null): string
+    {
+        if ($tanggalBerlaku) {
+            return Carbon::parse($tanggalBerlaku)->format('Y-m-d');
+        }
+
+        if ($createdAt) {
+            return Carbon::parse($createdAt)->format('Y-m-d');
+        }
+
+        return '1970-01-01';
+    }
+
     private function getEffectiveDateExpression($alias = 'mhp')
     {
         return "COALESCE({$alias}.tanggal_berlaku, DATE({$alias}.created_at), '1970-01-01')";
@@ -55,26 +77,16 @@ class HargaParameterController extends Controller
         $data->save();
     }
 
-    private function getEffectiveHargaQuery($today = null)
+    private function getEffectiveHargaQuery($today = null, $includeHargaModal = false)
     {
         $today = $today ?: Carbon::today()->toDateString();
         $effectiveDate = $this->getEffectiveDateExpression('mhp');
         $effectiveDateSub = $this->getEffectiveDateExpression('mhp2');
         $effectiveDatePrev = $this->getEffectiveDateExpression('mhp3');
+        $hargaReferenceDate = $this->getEffectiveDateExpression('mhp');
+        $modalEffectiveDate = PerhitunganModalParameterService::effectiveDateExpression('mpmp_modal');
 
-        return DB::table('master_harga_parameter as mhp')
-            ->leftJoin('parameter as mp', 'mhp.id_parameter', '=', 'mp.id')
-            ->where('mhp.is_active', true)
-            ->whereRaw("{$effectiveDate} <= ?", [$today])
-            ->whereRaw("mhp.id = (
-                SELECT mhp2.id FROM master_harga_parameter mhp2
-                WHERE mhp2.id_parameter = mhp.id_parameter
-                AND mhp2.deleted_at IS NULL
-                AND {$effectiveDateSub} <= ?
-                ORDER BY {$effectiveDateSub} DESC, mhp2.id DESC
-                LIMIT 1
-            )", [$today])
-            ->select(
+        $select = [
                 'mhp.id',
                 'mhp.id_kategori',
                 'mhp.nama_kategori',
@@ -99,15 +111,65 @@ class HargaParameterController extends Controller
                     AND {$effectiveDatePrev} <= '{$today}'
                     ORDER BY {$effectiveDatePrev} DESC, mhp3.id DESC
                     LIMIT 1 OFFSET 1
-                ) as harga_sebelumnya")
-            );
+                ) as harga_sebelumnya"),
+        ];
+
+        if ($includeHargaModal) {
+            $select[] = DB::raw("COALESCE((
+                SELECT mpmp_modal.total_modal FROM master_perhitungan_modal_parameter mpmp_modal
+                WHERE mpmp_modal.id_parameter = mhp.id_parameter
+                AND mpmp_modal.deleted_at IS NULL
+                AND mpmp_modal.is_active = 1
+                AND {$modalEffectiveDate} <= {$hargaReferenceDate}
+                ORDER BY {$modalEffectiveDate} DESC, mpmp_modal.id DESC
+                LIMIT 1
+            ), 0) as harga_modal");
+        }
+
+        return DB::table('master_harga_parameter as mhp')
+            ->leftJoin('parameter as mp', 'mhp.id_parameter', '=', 'mp.id')
+            ->where('mhp.is_active', true)
+            ->whereRaw("{$effectiveDate} <= ?", [$today])
+            ->whereRaw("mhp.id = (
+                SELECT mhp2.id FROM master_harga_parameter mhp2
+                WHERE mhp2.id_parameter = mhp.id_parameter
+                AND mhp2.deleted_at IS NULL
+                AND {$effectiveDateSub} <= ?
+                ORDER BY {$effectiveDateSub} DESC, mhp2.id DESC
+                LIMIT 1
+            )", [$today])
+            ->select($select);
+    }
+
+    public function getModalEfektifDetail(Request $request)
+    {
+        if (!$this->canViewHargaModal()) {
+            return response()->json(['message' => 'Akses ditolak'], 403);
+        }
+
+        if ($request->id_parameter == '') {
+            return response()->json(['message' => 'Parameter wajib dipilih'], 400);
+        }
+
+        $refDate = $this->resolveHargaReferenceDate(
+            $request->tanggal_berlaku,
+            $request->created_at
+        );
+
+        $detail = PerhitunganModalParameterService::getDetailEfektif(
+            (int) $request->id_parameter,
+            $refDate
+        );
+
+        return response()->json(['data' => $detail], 200);
     }
 
     public function index()
     {
-        $data = $this->getEffectiveHargaQuery();
+        $includeHargaModal = $this->canViewHargaModal();
+        $data = $this->getEffectiveHargaQuery(null, $includeHargaModal);
 
-        return Datatables::of($data)
+        $datatable = Datatables::of($data)
             ->filterColumn('nama_kategori', function ($query, $keyword) {
                 $query->where('mhp.nama_kategori', 'like', "%{$keyword}%");
             })
@@ -116,7 +178,39 @@ class HargaParameterController extends Controller
             })
             ->filterColumn('harga', function ($query, $keyword) {
                 $query->where('mhp.harga', 'like', "%{$keyword}%");
+            });
+
+        if ($includeHargaModal) {
+            $modalEffectiveDate = PerhitunganModalParameterService::effectiveDateExpression('mpmp_modal');
+            $hargaReferenceDate = $this->getEffectiveDateExpression('mhp');
+
+            $datatable
+            ->filterColumn('harga_modal', function ($query, $keyword) use ($modalEffectiveDate, $hargaReferenceDate) {
+                $query->whereRaw("COALESCE((
+                    SELECT mpmp_modal.total_modal FROM master_perhitungan_modal_parameter mpmp_modal
+                    WHERE mpmp_modal.id_parameter = mhp.id_parameter
+                    AND mpmp_modal.deleted_at IS NULL
+                    AND mpmp_modal.is_active = 1
+                    AND {$modalEffectiveDate} <= {$hargaReferenceDate}
+                    ORDER BY {$modalEffectiveDate} DESC, mpmp_modal.id DESC
+                    LIMIT 1
+                ), 0) like ?", ["%{$keyword}%"]);
             })
+            ->orderColumn('harga_modal', function ($query, $order) use ($modalEffectiveDate, $hargaReferenceDate) {
+                $direction = strtolower((string) $order) === 'desc' ? 'DESC' : 'ASC';
+                $query->orderByRaw("COALESCE((
+                    SELECT mpmp_modal.total_modal FROM master_perhitungan_modal_parameter mpmp_modal
+                    WHERE mpmp_modal.id_parameter = mhp.id_parameter
+                    AND mpmp_modal.deleted_at IS NULL
+                    AND mpmp_modal.is_active = 1
+                    AND {$modalEffectiveDate} <= {$hargaReferenceDate}
+                    ORDER BY {$modalEffectiveDate} DESC, mpmp_modal.id DESC
+                    LIMIT 1
+                ), 0) {$direction}");
+            });
+        }
+
+        return $datatable
             ->filterColumn('tanggal_berlaku', function ($query, $keyword) {
                 $query->where('mhp.tanggal_berlaku', 'like', "%{$keyword}%");
             })
@@ -337,6 +431,23 @@ class HargaParameterController extends Controller
                 'message' => $e->getMessage()
             ], 500);
         }
+    }
+
+    public function checkPerhitunganModal(Request $request)
+    {
+        if ($request->id_parameter == '') {
+            return response()->json(['message' => 'Parameter wajib dipilih'], 400);
+        }
+
+        $hasModal = PerhitunganModalParameter::query()
+            ->where('id_parameter', $request->id_parameter)
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->exists();
+
+        return response()->json([
+            'has_perhitungan_modal' => $hasModal,
+        ], 200);
     }
 
     public function getParameter(Request $request)
