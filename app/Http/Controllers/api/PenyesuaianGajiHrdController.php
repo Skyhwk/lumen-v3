@@ -570,6 +570,10 @@ class PenyesuaianGajiHrdController extends Controller
         $namaJabatan = KaryawanProfileService::resolveJabatan($employee);
         $resolvedJabatan = $namaJabatan !== '-' ? $namaJabatan : ($record->jabatan ?: '-');
 
+        $record->loadMissing(['assessment.sessions']);
+        $assessmentReport = (new SalaryAdjustmentAssessmentReportService())
+            ->buildAssessmentReport($record->assessment);
+
         return response()->json([
             'success' => true,
             'data' => array_merge([
@@ -611,8 +615,7 @@ class PenyesuaianGajiHrdController extends Controller
                 'workflow_meta' => (new EmployeeAdjustmentWorkflowResolver())->buildWorkflowMeta($record),
                 'kpi' => $record->kpi,
                 'assessment' => $record->assessment,
-                'assessment_report' => (new SalaryAdjustmentAssessmentReportService())
-                    ->buildAssessmentReport($record->assessment),
+                'assessment_report' => $assessmentReport,
                 'attendance' => (new SalaryAdjustmentEvaluationService())
                     ->getAttendanceSummary((int) $record->employee_id),
                 'employee_career' => (new EmployeeCareerContextService())->buildForApprovalApp($employee),
