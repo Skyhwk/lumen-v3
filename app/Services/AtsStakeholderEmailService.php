@@ -150,13 +150,11 @@ class AtsStakeholderEmailService
         $merged = [];
         $seenEmails = [];
 
-        foreach ($this->resolvePersonnelRequestCreator($personnelRequest) as $recipient) {
-            $emailKey = strtolower($recipient['email']);
-            if (isset($seenEmails[$emailKey])) {
-                continue;
-            }
+        $creator = $this->resolvePersonnelRequestCreator($personnelRequest);
+        if ($creator !== null) {
+            $emailKey = strtolower($creator['email']);
             $seenEmails[$emailKey] = true;
-            $merged[] = $recipient;
+            $merged[] = $creator;
         }
 
         foreach ($this->resolveInspectorEmailsFromEnv() as $recipient) {
@@ -172,12 +170,12 @@ class AtsStakeholderEmailService
     }
 
     /**
-     * @return array<int, array{email: string, name: string}>
+     * @return array{email: string, name: string}|null
      */
-    private function resolvePersonnelRequestCreator($personnelRequest): array
+    private function resolvePersonnelRequestCreator($personnelRequest): ?array
     {
         if (!$personnelRequest) {
-            return [];
+            return null;
         }
 
         $name = trim((string) (is_object($personnelRequest)
@@ -185,19 +183,19 @@ class AtsStakeholderEmailService
             : ($personnelRequest['created_by'] ?? '')));
 
         if ($name === '') {
-            return [];
+            return null;
         }
 
         $mk = DB::table('master_karyawan')->where('nama_lengkap', $name)->first();
         $email = trim((string) ($mk->email ?? ''));
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return [];
+            return null;
         }
 
         return [
             'email' => $email,
             'name' => $name,
-        ]];
+        ];
     }
 
     /**
