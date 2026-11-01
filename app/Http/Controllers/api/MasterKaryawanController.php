@@ -27,6 +27,7 @@ use App\Jobs\NonaktifKaryawanJob;
 use App\Services\MasterKaryawanSupplementarySaveService;
 use App\Services\MasterSallaryNikSyncService;
 use App\Services\PayrollRecordSyncService;
+use App\Helpers\MasterKaryawanAgamaHelper;
 use App\Helpers\MasterKaryawanCompanyPhoneHelper;
 use App\Helpers\ShioElemenHelper;
 
@@ -83,7 +84,7 @@ class MasterKaryawanController extends Controller
                 'date_birth' => $row->tanggal_lahir,
                 'elemen' => $shioElemen['elemen'],
                 'nationality' => $row->kebangsaan,
-                'religion' => $row->agama,
+                'religion' => MasterKaryawanAgamaHelper::normalize($row->agama),
                 'salutation' => $row->nama_panggilan,
                 'image' => $row->image,
                 'id' => $row->id
@@ -505,7 +506,7 @@ class MasterKaryawanController extends Controller
                     'tempat_lahir' => $request->personal['birth_place'],
                     'tanggal_lahir' => $request->personal['date_birth'],
                     'jenis_kelamin' => $request->personal['gender'],
-                    'agama' => $request->personal['religion'],
+                    'agama' => MasterKaryawanAgamaHelper::normalize($request->personal['religion'] ?? null),
                     'status_pernikahan' => $request->personal['marital_status'],
                     'tempat_nikah' => $request->personal['marital_place'],
                     'tgl_nikah' => ($request->personal['marital_date'] != '' ? $request->personal['marital_date'] : null),
@@ -638,7 +639,7 @@ class MasterKaryawanController extends Controller
                     'tempat_lahir' => $request->personal['birth_place'],
                     'tanggal_lahir' => $request->personal['date_birth'],
                     'jenis_kelamin' => $request->personal['gender'],
-                    'agama' => $request->personal['religion'],
+                    'agama' => MasterKaryawanAgamaHelper::normalize($request->personal['religion'] ?? null),
                     'status_pernikahan' => $request->personal['marital_status'],
                     'tempat_nikah' => $request->personal['marital_place'],
                     'tgl_nikah' => ($request->personal['marital_date'] != '' ? $request->personal['marital_date'] : null),

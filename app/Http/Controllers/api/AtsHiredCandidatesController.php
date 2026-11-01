@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Helpers\MasterKaryawanAgamaHelper;
 use App\Helpers\ShioElemenHelper;
 use App\Http\Controllers\Controller;
 use App\Models\KeahlianBahasaKaryawan;
@@ -17,6 +18,7 @@ use App\Services\GenerateDokumenKaryawanService;
 use App\Services\KaryawanArsipDokumenService;
 use App\Services\RecruitmentPictureService;
 use App\Services\AtsNotificationService;
+use App\Services\AtsStakeholderEmailService;
 use App\Services\RecruitmentStatusService;
 use Carbon\Carbon;
 use Exception;
@@ -735,10 +737,12 @@ class AtsHiredCandidatesController extends Controller
         $karyawan->tempat_lahir = data_get($request, 'personal.birth_place') ?: $recruitment->tempat_lahir;
         $karyawan->tanggal_lahir = data_get($request, 'personal.date_birth') ?: $recruitment->tanggal_lahir;
         $karyawan->jenis_kelamin = data_get($request, 'personal.gender') ?: $recruitment->jenis_kelamin;
-        $karyawan->agama = $this->resolvePersonalField($request, [
-            'personal.religion',
-            'personal.agama',
-        ], optional($profile)->agama);
+        $karyawan->agama = MasterKaryawanAgamaHelper::normalize(
+            (string) ($this->resolvePersonalField($request, [
+                'personal.religion',
+                'personal.agama',
+            ], optional($profile)->agama) ?? '')
+        );
         $karyawan->status_pernikahan = $this->normalizeMaritalStatus(
             $this->resolvePersonalField($request, [
                 'personal.marital_status',
@@ -1070,14 +1074,35 @@ class AtsHiredCandidatesController extends Controller
 
         $personnelRequestSync = $this->syncPersonnelRequestAfterMigration($recruitment, $timestamp);
 
+        $personnelRequest = DB::table('personnel_requests')
+            ->where('id', $personnelRequestSync['personnel_request_id'] ?? $recruitment->personnel_request_id)
+            ->first();
+
         if (!empty($personnelRequestSync['request_closed'])) {
-            $personnelRequest = DB::table('personnel_requests')
-                ->where('id', $personnelRequestSync['personnel_request_id'] ?? $recruitment->personnel_request_id)
-                ->first();
             app(AtsNotificationService::class)->personnelRequestFulfilled($personnelRequest);
         }
 
-        app(AtsNotificationService::class)->employeeMigrated($recruitment);
+        $emailService = app(AtsStakeholderEmailService::class);
+        $migrationSummary = $emailService->enrichMigrationSummary([
+            'nama_kandidat' => $karyawan->nama_lengkap,
+            'nik_karyawan' => $karyawan->nik_karyawan,
+            'tgl_mulai_kerja' => $karyawan->tgl_mulai_kerja,
+            'status_karyawan' => $karyawan->status_karyawan,
+            'id_jabatan' => $karyawan->id_jabatan,
+            'id_department' => $karyawan->id_department,
+            'id_cabang' => $karyawan->id_cabang,
+            'cabang' => trim((string) data_get($request, 'employee.branch_name', '')),
+            'posisi_jabatan' => trim((string) data_get($request, 'employee.position_name', '')),
+            'migrated_by' => $this->karyawan,
+            'migrated_at' => $timestamp,
+        ]);
+        $emailService->sendEmployeeMigrated($recruitment, $migrationSummary, $this->karyawan);
+
+        app(AtsNotificationService::class)->employeeMigrated(
+            $recruitment,
+            $personnelRequest,
+            $migrationSummary['tgl_mulai_kerja_formatted'] ?? null
+        );
 
         return [
             'karyawan_id' => $karyawan->id,
@@ -1959,6 +1984,18 @@ class AtsHiredCandidatesController extends Controller
             );
 
             DB::commit();
+
+            $personnelRequest = DB::table('personnel_requests')
+                ->where('id', $recruitment->personnel_request_id ?? 0)
+                ->first();
+
+            app(AtsStakeholderEmailService::class)->sendHiredVoid(
+                $recruitment,
+                $reason,
+                $by,
+                $this->karyawan
+            );
+            app(AtsNotificationService::class)->hiredCandidateVoided($recruitment, $personnelRequest, $reason);
 
             return response()->json([
                 'message' => 'Kandidat hired berhasil divoid',
