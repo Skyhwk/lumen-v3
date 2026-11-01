@@ -591,7 +591,7 @@ class PenyesuaianGajiHrdController extends Controller
                     'jabatan' => $resolvedJabatan,
                     'divisi' => optional($employee->divisi)->nama_divisi ?? null,
                     'image' => $employee->image ?? null,
-                ], app(ApprovalAppInboxService::class)->employeePhotoFields($employee)),
+                ], KaryawanProfileService::formatBirthPersonalFields($employee), app(ApprovalAppInboxService::class)->employeePhotoFields($employee)),
                 'current_gaji_pokok' => (float) $record->current_gaji_pokok,
                 'current_tunjangan_kerja' => (float) $record->current_tunjangan_kerja,
                 'adjustment_gaji_pokok' => (float) ($record->adjustment_gaji_pokok ?? 0),

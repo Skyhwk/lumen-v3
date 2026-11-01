@@ -62,7 +62,7 @@ class ApprovalAppPenyesuaianDetailService
                 'nik' => $employee->nik_karyawan ?? null,
                 'jabatan' => $namaJabatan !== '-' ? $namaJabatan : ($record->jabatan ?: '-'),
                 'divisi' => optional($employee->divisi)->nama_divisi ?? null,
-            ], app(ApprovalAppInboxService::class)->employeePhotoFields($employee)),
+            ], KaryawanProfileService::formatBirthPersonalFields($employee), app(ApprovalAppInboxService::class)->employeePhotoFields($employee)),
             'employee_career' => (new EmployeeCareerContextService())->buildForApprovalApp($employee),
             'request' => [
                 'no_document' => $record->no_document,
