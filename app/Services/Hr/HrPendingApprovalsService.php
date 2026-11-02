@@ -46,6 +46,11 @@ class HrPendingApprovalsService
             ->whereIn('id', $requestIds)
             ->where('status', WorkflowStatus::PENDING)
             ->where('is_active', true)
+            ->whereNotIn('request_type', [
+                HrRequest::TYPE_ATTENDANCE_CORRECTION,
+                HrRequest::TYPE_PERMISSION,
+                HrRequest::TYPE_LEAVE,
+            ])
             ->orderByDesc('id')
             ->get();
 
