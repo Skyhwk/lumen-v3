@@ -3,11 +3,8 @@
 namespace App\Services;
 
 use App\Models\{
-    BpjsKesehatan,
-    BpjsTk,
     MasterKaryawan,
     MasterSallary,
-    PPH21,
 };
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +12,8 @@ use Illuminate\Support\Facades\DB;
 class PayrollRecordSyncService
 {
     /**
-     * Nonaktifkan record payroll saat karyawan keluar.
+     * Tutup gaji aktif saat karyawan keluar. BPJS/PPh/kasbon/pencadangan tidak di-nonaktifkan
+     * otomatis agar masih bisa diproses di payroll sampai kewajiban selesai.
      */
     public static function deactivateForKaryawan(MasterKaryawan $karyawan, string $actor): void
     {
@@ -29,7 +27,7 @@ class PayrollRecordSyncService
             'deleted_by' => $actor,
         ];
 
-        foreach ([BpjsKesehatan::class, BpjsTk::class, PPH21::class, MasterSallary::class] as $modelClass) {
+        foreach ([MasterSallary::class] as $modelClass) {
             $modelClass::where(function ($query) use ($karyawan, $nik) {
                 $query->where('id_karyawan', $karyawan->id)
                     ->orWhere(function ($query) use ($nik) {
@@ -40,6 +38,113 @@ class PayrollRecordSyncService
                 ->where('is_active', true)
                 ->update($payload);
         }
+    }
+
+    /** Baris terbaru per karyawan (prioritas is_active = 1) untuk preview payroll. */
+    public static function sqlJoinLatestRow(string $table, string $foreignKey = 'id_karyawan'): string
+    {
+        return "{$table}.id = (SELECT t.id FROM {$table} t WHERE t.{$foreignKey} = master_karyawan.id"
+            . ' ORDER BY t.is_active DESC, t.id DESC LIMIT 1)';
+    }
+
+    /** Satu baris rekap absensi aktif per karyawan + bulan (abaikan rekap is_active = 0). */
+    public static function applyJoinActiveRekapMasukKerja($join, string $bulanYm): void
+    {
+        $join->on('master_karyawan.id', '=', 'rekap_masuk_kerja.karyawan_id')
+            ->whereRaw(
+                'rekap_masuk_kerja.id = (SELECT t.id FROM rekap_masuk_kerja t WHERE t.karyawan_id = master_karyawan.id'
+                . ' AND t.bulan = ? AND t.is_active = 1 ORDER BY t.id DESC LIMIT 1)',
+                [$bulanYm]
+            );
+    }
+
+    /** Join utang/cicilan: aktif, atau non-aktif tapi masih ONGOING (mis. setelah NA manual). */
+    public static function applyJoinPayrollDebtFilter($join, string $table, string $balanceField): void
+    {
+        $join->where(function ($q) use ($table, $balanceField) {
+            $q->where("{$table}.is_active", true)
+                ->orWhere(function ($q) use ($table, $balanceField) {
+                    $q->where("{$table}.is_active", false)
+                        ->whereRaw('master_karyawan.is_active = 0')
+                        ->where(function ($status) use ($table) {
+                            $status->where("{$table}.status", 'ONGOING')
+                                ->orWhereNull("{$table}.status");
+                        })
+                        ->where("{$table}.{$balanceField}", '>', 0)
+                        ->where("{$table}.nominal_potongan", '>', 0);
+                });
+        })
+            ->where(function ($status) use ($table) {
+                $status->where("{$table}.status", 'ONGOING')
+                    ->orWhereNull("{$table}.status");
+            });
+    }
+
+    public static function applyJoinPencadanganFilter($join): void
+    {
+        $join->where(function ($q) {
+            $q->where('pencadangan_upah.is_active', true)
+                ->orWhere(function ($q) {
+                    $q->where('pencadangan_upah.is_active', false)
+                        ->whereRaw('master_karyawan.is_active = 0')
+                        ->where(function ($status) {
+                            $status->where('pencadangan_upah.status', 'ONGOING')
+                                ->orWhereNull('pencadangan_upah.status');
+                        });
+                });
+        })
+            ->where(function ($status) {
+                $status->where('pencadangan_upah.status', 'ONGOING')
+                    ->orWhereNull('pencadangan_upah.status');
+            });
+    }
+
+    public static function applyJoinBonusFilter($join): void
+    {
+        $join->where(function ($q) {
+            $q->where('bonus_karyawan.is_active', true)
+                ->orWhere(function ($q) {
+                    $q->where('bonus_karyawan.is_active', false)
+                        ->whereRaw('master_karyawan.is_active = 0');
+                });
+        });
+    }
+
+    /**
+     * Sumber potongan payroll (submit): aktif atau non-aktif tapi masih ONGOING.
+     */
+    public static function scopePayrollDeductionSource(
+        Builder $query,
+        ?string $balanceField = null,
+        ?string $periodField = null,
+        ?string $periode = null
+    ): Builder {
+        if ($periodField !== null && $periode !== null) {
+            $query->where($periodField, '<=', $periode);
+        }
+
+        $query->where(function ($q) {
+            $q->where('is_active', true)
+                ->orWhere(function ($q) {
+                    $q->where('is_active', false)
+                        ->where(function ($status) {
+                            $status->where('status', 'ONGOING')
+                                ->orWhereNull('status');
+                        });
+                });
+        });
+
+        $query->where(function ($status) {
+            $status->where('status', 'ONGOING')
+                ->orWhereNull('status');
+        });
+
+        if ($balanceField !== null) {
+            $query->where($balanceField, '>', 0)
+                ->where('nominal_potongan', '>', 0);
+        }
+
+        return $query;
     }
 
     /**
