@@ -43,8 +43,16 @@ class PayrollDeductionService
                     ->where(function ($query) {
                         $query->where('status', 'ONGOING')->orWhereNull('status');
                     })
-                    ->when($balanceField, function ($query) use ($balanceField) {
-                        $query->where($balanceField, '>', 0)->where('nominal_potongan', '>', 0);
+                    ->when($balanceField, function ($query) use ($balanceField, $class) {
+                        $query->where($balanceField, '>', 0);
+                        if ($class === Kasbon::class) {
+                            $query->where(function ($sub) {
+                                $sub->where('nominal_potongan', '>', 0)
+                                    ->orWhere('mode_potongan', 'custom');
+                            });
+                        } else {
+                            $query->where('nominal_potongan', '>', 0);
+                        }
                     })
                     ->where($periodField, '<=', $payroll->periode_payroll)
                     ->orderBy('id')->lockForUpdate()->get();
