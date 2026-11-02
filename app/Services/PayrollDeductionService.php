@@ -55,11 +55,27 @@ class PayrollDeductionService
                 if ($balanceField) {
                     PayrollDebtService::deduct($source, $balanceField, $amount);
                 } else {
-                    $expected = PencadanganUpahPayrollService::previewAmount($source, $employee->status_karyawan);
+                    $employeeIsActive = (bool) $employee->is_active;
+                    $expected = PencadanganUpahPayrollService::previewAmount(
+                        $source,
+                        $employee->status_karyawan,
+                        $employeeIsActive
+                    );
                     if ($amount != $expected) {
                         throw new \DomainException('Nominal/fase pencadangan berubah. Muat ulang payroll sebelum submit.');
                     }
-                    PencadanganUpahPayrollService::advanceOnPayrollSubmit($source, $employee->status_karyawan);
+                    if (!PencadanganUpahPayrollService::advanceOnPayrollSubmitForInactiveExit(
+                        $source,
+                        $amount,
+                        $employeeIsActive,
+                        $employee->status_karyawan
+                    )) {
+                        PencadanganUpahPayrollService::advanceOnPayrollSubmit(
+                            $source,
+                            $employee->status_karyawan,
+                            $employeeIsActive
+                        );
+                    }
                 }
                 $entries[$field] = ['id' => $source->id, 'amount' => $amount,
                     'before' => $before, 'after' => $this->state($source, $balanceField)];
