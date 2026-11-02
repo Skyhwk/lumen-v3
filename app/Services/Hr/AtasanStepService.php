@@ -5,7 +5,6 @@ namespace App\Services\Hr;
 use App\Models\Hr\HrApprovalStep;
 use App\Models\Hr\HrRequest;
 use App\Models\MasterKaryawan;
-use App\Services\Greatday\DynamicApprovalChainService;
 use Carbon\Carbon;
 use InvalidArgumentException;
 
@@ -14,14 +13,18 @@ class AtasanStepService
     /**
      * Buat rantai step atasan dari hirarki. Mengembalikan true jika masih ada step pending.
      */
-    public function seedChainForSubmitter(int $requestId, MasterKaryawan $submitter): bool
+    public function seedChainForSubmitter(int $requestId, MasterKaryawan $submitter, ?string $requestType = null): bool
     {
         HrApprovalStep::query()
             ->where('request_id', $requestId)
             ->where('step', HrApprovalStep::STEP_ATASAN)
             ->delete();
 
-        $approverIds = app(DynamicApprovalChainService::class)->orderedApproverIds($submitter);
+        if ($requestType === null || $requestType === '') {
+            $requestType = HrRequest::query()->where('id', $requestId)->value('request_type');
+        }
+
+        $approverIds = app(FormAtasanApprovalChainService::class)->orderedApproverIds($submitter, $requestType);
         $order = 0;
         foreach ($approverIds as $approverId) {
             if ((int) $approverId === (int) $submitter->id) {

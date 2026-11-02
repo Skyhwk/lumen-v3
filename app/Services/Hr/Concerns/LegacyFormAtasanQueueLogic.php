@@ -4,7 +4,7 @@ namespace App\Services\Hr\Concerns;
 
 use App\Models\Hr\HrRequest;
 use App\Models\MasterKaryawan;
-use App\Services\Greatday\DynamicApprovalChainService;
+use App\Services\Hr\FormAtasanApprovalChainService;
 use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\Presenters\HrApprovalChainPresenter;
 use App\Services\Hr\WorkflowStatus;
@@ -12,7 +12,7 @@ use App\Services\Hr\WorkflowStatus;
 /** Rantai atasan legacy + HR — sama dengan portal koreksi absen / izin / cuti. */
 trait LegacyFormAtasanQueueLogic
 {
-    /** @var array<int, list<int>> */
+    /** @var array<string, list<int>> */
     private $legacyFormApproverIdsCache = [];
 
     public function resolveWaitingAtasanName(object $row, string $hrRequestType, int $legacyRowId): string
@@ -35,7 +35,7 @@ trait LegacyFormAtasanQueueLogic
      */
     public function resolveAtasanSteps(object $row, string $hrRequestType, int $legacyRowId): array
     {
-        $legacySteps = $this->legacyAtasanStepsForGenericRow($row);
+        $legacySteps = $this->legacyAtasanStepsForGenericRow($row, $hrRequestType);
 
         $hrRequest = HrRequestResolver::findMappedFromLegacyRow($hrRequestType, $legacyRowId);
         if (!$hrRequest) {
@@ -131,10 +131,10 @@ trait LegacyFormAtasanQueueLogic
     /**
      * @return list<array{key: string, title: string, state: string, actor: ?string, acted_at: ?string, note: ?string}>
      */
-    private function legacyAtasanStepsForGenericRow(object $row): array
+    private function legacyAtasanStepsForGenericRow(object $row, string $hrRequestType): array
     {
         $employee = $this->legacySubmitterEmployee($row);
-        $ids = $employee ? $this->legacyFormApproverIdsFor($employee) : [];
+        $ids = $employee ? $this->legacyFormApproverIdsFor($employee, $hrRequestType) : [];
         if ($ids === []) {
             return [$this->singleAtasanStepForRow($row)];
         }
@@ -207,14 +207,15 @@ trait LegacyFormAtasanQueueLogic
     }
 
     /** @return list<int> */
-    private function legacyFormApproverIdsFor(MasterKaryawan $employee): array
+    private function legacyFormApproverIdsFor(MasterKaryawan $employee, string $hrRequestType): array
     {
-        $id = (int) $employee->id;
-        if (!array_key_exists($id, $this->legacyFormApproverIdsCache)) {
-            $this->legacyFormApproverIdsCache[$id] = app(DynamicApprovalChainService::class)->orderedApproverIds($employee);
+        $cacheKey = (int) $employee->id . '|' . $hrRequestType;
+        if (!array_key_exists($cacheKey, $this->legacyFormApproverIdsCache)) {
+            $this->legacyFormApproverIdsCache[$cacheKey] = app(FormAtasanApprovalChainService::class)
+                ->orderedApproverIds($employee, $hrRequestType);
         }
 
-        return $this->legacyFormApproverIdsCache[$id];
+        return $this->legacyFormApproverIdsCache[$cacheKey];
     }
 
     /**

@@ -5,7 +5,9 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\IntilabInternal\PermissionRequest;
 use App\Models\MasterKaryawan;
+use App\Models\Hr\HrRequest;
 use App\Services\GetAtasan;
+use App\Services\Hr\FormAtasanSubmitNotificationService;
 use App\Services\GetBawahan;
 use App\Services\Hr\HrTableMode;
 use App\Services\Hr\Portal\PortalPermissionDatatableQuery;
@@ -291,18 +293,22 @@ class PermohonanIzinController extends Controller
                 'is_active' => 1,
             ]);
 
+            app(PortalHrSync::class)->syncPermissionFromLegacy((int) $record->id);
+
             if (!$isManager) {
-                $atasanIds = GetAtasan::where('id', $this->user_id)->get()->pluck('id')->toArray();
-                if (!empty($atasanIds)) {
-                    Notification::whereIn('id', $atasanIds)
-                        ->title('Permohonan Izin Baru')
-                        ->message('Permohonan izin dari ' . $this->karyawan . ' menunggu persetujuan Anda')
-                        ->url('/request/permohonan/permohonan-izin')
-                        ->send();
+                $submitter = MasterKaryawan::find($this->user_id);
+                if ($submitter) {
+                    $atasanIds = app(FormAtasanSubmitNotificationService::class)
+                        ->initialApproverIds($submitter, HrRequest::TYPE_PERMISSION);
+                    if ($atasanIds !== []) {
+                        Notification::whereIn('id', $atasanIds)
+                            ->title('Permohonan Izin Baru')
+                            ->message('Permohonan izin dari ' . $this->karyawan . ' menunggu persetujuan Anda')
+                            ->url('/request/permohonan/permohonan-izin')
+                            ->send();
+                    }
                 }
             }
-
-            app(PortalHrSync::class)->syncPermissionFromLegacy((int) $record->id);
 
             DB::commit();
 

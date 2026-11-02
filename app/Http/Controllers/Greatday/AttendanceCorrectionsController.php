@@ -7,7 +7,8 @@ use App\Models\Hr\HrRequest;
 use App\Models\MasterKaryawan;
 use App\Services\Greatday\AtasanApprovalScope;
 use App\Services\Greatday\FirebaseService;
-use App\Services\Greatday\GetAtasan;
+use App\Models\Hr\HrRequest;
+use App\Services\Hr\FormAtasanSubmitNotificationService;
 use App\Services\Hr\Greatday\AttendanceCorrectionHrService;
 use App\Services\Hr\Greatday\FormSubmitterVoidService;
 use App\Services\Hr\HrFormAttachmentStorage;
@@ -101,19 +102,17 @@ class AttendanceCorrectionsController extends Controller
         $service = new FirebaseService();
 
         if ($employee->grade !== 'MANAGER') {
-            $getAtasan = GetAtasan::where('id', $employee->id)->get();
-
-            foreach ($getAtasan as $atasan) {
-                if ($atasan->grade === 'MANAGER') {
-                    $service->sendNotifications(
-                        [$atasan->id],
-                        NotificationCopy::legacyAtasanPending(
-                            'Koreksi kehadiran',
-                            $attendanceCorrection->created_by,
-                            NotificationCopy::pathForms('approval')
-                        )
-                    );
-                }
+            $recipientIds = app(FormAtasanSubmitNotificationService::class)
+                ->initialApproverIds($employee, HrRequest::TYPE_ATTENDANCE_CORRECTION);
+            if ($recipientIds !== []) {
+                $service->sendNotifications(
+                    $recipientIds,
+                    NotificationCopy::legacyAtasanPending(
+                        'Koreksi kehadiran',
+                        $attendanceCorrection->created_by,
+                        NotificationCopy::pathForms('approval')
+                    )
+                );
             }
         }
 
