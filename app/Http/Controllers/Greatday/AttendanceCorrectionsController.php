@@ -7,7 +7,6 @@ use App\Models\Hr\HrRequest;
 use App\Models\MasterKaryawan;
 use App\Services\Greatday\AtasanApprovalScope;
 use App\Services\Greatday\FirebaseService;
-use App\Models\Hr\HrRequest;
 use App\Services\Hr\FormAtasanSubmitNotificationService;
 use App\Services\Hr\Greatday\AttendanceCorrectionHrService;
 use App\Services\Hr\Greatday\FormSubmitterVoidService;
