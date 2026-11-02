@@ -230,6 +230,8 @@ class PermohonanPenyesuaianGajiController extends Controller
                 'sar.employee_id',
                 'sar.jabatan',
                 'sar.status',
+                'sar.tanggal_efektif',
+                'sar.type_metadata',
                 'sar.created_at',
                 'sar.catatan_tambahan',
                 'karyawan.nama_lengkap',
@@ -243,6 +245,9 @@ class PermohonanPenyesuaianGajiController extends Controller
                 Datatables::of($query)
                     ->addColumn('status_label', function ($row) {
                         return SalaryAdjustmentWorkflowService::statusLabel($row->status);
+                    })
+                    ->addColumn('mutasi_effective_date', function ($row) {
+                        return $this->formatMutasiInboxEffectiveDate($row);
                     })
                     ->addColumn('can_respond', fn () => true)
             )
@@ -336,6 +341,150 @@ class PermohonanPenyesuaianGajiController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Mutasi diterima. Permohonan diteruskan ke HRD untuk proses selanjutnya.',
+            ]);
+        } catch (\Throwable $e) {
+            DB::connection('mysql')->rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function proposeMutasiDate(Request $request)
+    {
+        if (!SalaryAdjustmentWorkflowService::isManagerGrade($this->grade)) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak'], 403);
+        }
+
+        $record = SalaryAdjustmentRequest::find((int) $request->id);
+        if (!$record || !$record->is_active) {
+            return response()->json(['success' => false, 'message' => 'Data tidak ditemukan'], 404);
+        }
+
+        $mutasiService = new EmployeeAdjustmentMutasiService();
+        if (!$mutasiService->canProposeMutasiDate($record, (int) $this->user_id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usulan tanggal mutasi tidak dapat dilakukan pada status ini',
+            ], 400);
+        }
+
+        $validation = $mutasiService->validateProposeMutasiDate($request, $record);
+        if ($validation['error']) {
+            return response()->json(['success' => false, 'message' => $validation['error']], 400);
+        }
+
+        $payload = $validation['data'];
+        $from = $record->status;
+
+        DB::connection('mysql')->beginTransaction();
+        try {
+            $mutasiService->applyReceiverProposedDate($record, $payload);
+            $record->updated_by = $this->karyawan;
+            $record->save();
+
+            $noteText = 'Manager penerima mengusulkan tanggal efektif ' . $payload['proposed_date'];
+            if (!empty($payload['notes'])) {
+                $noteText .= ' — ' . $payload['notes'];
+            }
+
+            SalaryAdjustmentLogService::log(
+                $record->id,
+                $from,
+                $record->status,
+                'propose_effective_date',
+                $this->user_id,
+                $this->karyawan,
+                $noteText,
+                ['proposed_date' => $payload['proposed_date'], 'by' => 'receiver']
+            );
+
+            DB::connection('mysql')->commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Usulan tanggal efektif dikirim ke manager pemberi',
+            ]);
+        } catch (\Throwable $e) {
+            DB::connection('mysql')->rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function respondMutasiDate(Request $request)
+    {
+        if (!SalaryAdjustmentWorkflowService::isManagerGrade($this->grade)) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak'], 403);
+        }
+
+        $record = SalaryAdjustmentRequest::find((int) $request->id);
+        if (!$record || !$record->is_active) {
+            return response()->json(['success' => false, 'message' => 'Data tidak ditemukan'], 404);
+        }
+
+        $mutasiService = new EmployeeAdjustmentMutasiService();
+        if (!$mutasiService->canRespondMutasiDate($record, (int) $this->user_id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Respons tanggal mutasi tidak dapat dilakukan pada status ini',
+            ], 400);
+        }
+
+        $validation = $mutasiService->validateRespondMutasiDate($request, $record);
+        if ($validation['error']) {
+            return response()->json(['success' => false, 'message' => $validation['error']], 400);
+        }
+
+        $payload = $validation['data'];
+        $from = $record->status;
+
+        DB::connection('mysql')->beginTransaction();
+        try {
+            if ($payload['action'] === EmployeeAdjustmentMutasiService::GIVER_DATE_ACTION_AGREE) {
+                $mutasiService->applyGiverAgreedDate($record, $payload);
+                $logNotes = 'Manager pemberi setuju tanggal efektif ' . $payload['effective_date'];
+                $logAction = 'agree_effective_date';
+                $message = 'Tanggal efektif disepakati. Manager penerima dapat menerima mutasi di Inbox Mutasi.';
+            } else {
+                $mutasiService->applyGiverProposedDate($record, $payload);
+                $logNotes = 'Manager pemberi mengusulkan tanggal efektif ' . $payload['proposed_date'];
+                $logAction = 'propose_effective_date';
+                $message = 'Usulan tanggal efektif dikirim ke manager penerima';
+            }
+
+            if (!empty($payload['notes'])) {
+                $logNotes .= ' — ' . $payload['notes'];
+            }
+
+            $record->updated_by = $this->karyawan;
+            $record->save();
+
+            SalaryAdjustmentLogService::log(
+                $record->id,
+                $from,
+                $record->status,
+                $logAction,
+                $this->user_id,
+                $this->karyawan,
+                $logNotes,
+                [
+                    'by' => 'giver',
+                    'action' => $payload['action'],
+                    'date' => $payload['effective_date'] ?? $payload['proposed_date'] ?? null,
+                ]
+            );
+
+            DB::connection('mysql')->commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
             ]);
         } catch (\Throwable $e) {
             DB::connection('mysql')->rollBack();
@@ -504,6 +653,8 @@ class PermohonanPenyesuaianGajiController extends Controller
         $detail = $this->formatDetail($record);
         $mutasiService = new EmployeeAdjustmentMutasiService();
         $detail['can_respond_mutasi'] = $mutasiService->canRespond($record, (int) $this->user_id);
+        $detail['can_propose_mutasi_date'] = $mutasiService->canProposeMutasiDate($record, (int) $this->user_id);
+        $detail['can_respond_mutasi_date'] = $mutasiService->canRespondMutasiDate($record, (int) $this->user_id);
 
         return response()->json([
             'success' => true,
@@ -527,6 +678,12 @@ class PermohonanPenyesuaianGajiController extends Controller
                     ->addColumn('can_cancel', function ($row) use ($tab) {
                         return $tab === SalaryAdjustmentWorkflowService::MANAGER_TAB_WAITING
                             && SalaryAdjustmentWorkflowService::canManagerCancel($row->status)
+                            && (int) $row->requested_by_id === (int) $this->user_id;
+                    })
+                    ->addColumn('can_respond_mutasi_date', function ($row) use ($tab) {
+                        return $tab === SalaryAdjustmentWorkflowService::MANAGER_TAB_WAITING
+                            && $row->request_type === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI
+                            && $row->status === SalaryAdjustmentWorkflowService::STATUS_WAITING_GIVER
                             && (int) $row->requested_by_id === (int) $this->user_id;
                     })
                     ->editColumn('adjustment_gaji_pokok', fn ($row) => $this->formatRupiah($row->adjustment_gaji_pokok))
@@ -660,6 +817,10 @@ class PermohonanPenyesuaianGajiController extends Controller
             return $record;
         }
 
+        if ($mutasiService->isGiver($record, (int) $this->user_id)) {
+            return $record;
+        }
+
         $allowedIds = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
         if ((int) $record->requested_by_id !== (int) $this->user_id && !in_array((int) $record->employee_id, $allowedIds, true)) {
             return null;
@@ -723,6 +884,41 @@ class PermohonanPenyesuaianGajiController extends Controller
             $mutasiService->formatReceiverFields($record),
             $rekapService->formatForDetail($record)
         );
+    }
+
+    private function formatMutasiInboxEffectiveDate($row): string
+    {
+        if (!empty($row->tanggal_efektif)) {
+            try {
+                return Carbon::parse($row->tanggal_efektif)->format('d/m/Y');
+            } catch (\Throwable $e) {
+                return (string) $row->tanggal_efektif;
+            }
+        }
+
+        $meta = $row->type_metadata ?? null;
+        if (is_string($meta)) {
+            $meta = json_decode($meta, true);
+        }
+        if (!is_array($meta)) {
+            return '-';
+        }
+
+        $nego = $meta[EmployeeAdjustmentMutasiService::META_DATE_NEGOTIATION] ?? [];
+        if (!is_array($nego)) {
+            return '-';
+        }
+
+        $date = $nego['giver_date'] ?? null;
+        if (!$date) {
+            return '-';
+        }
+
+        try {
+            return Carbon::parse($date)->format('d/m/Y');
+        } catch (\Throwable $e) {
+            return (string) $date;
+        }
     }
 
     private function mutasiInboxCount($periode): int

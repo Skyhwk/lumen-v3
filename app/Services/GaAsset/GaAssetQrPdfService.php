@@ -3,6 +3,7 @@
 namespace App\Services\GaAsset;
 
 use App\Models\GaAsset;
+use App\Services\AssetQrValidationService;
 use Carbon\Carbon;
 use Endroid\QrCode\Color\Color;
 use Endroid\QrCode\Encoding\Encoding;
@@ -17,7 +18,7 @@ class GaAssetQrPdfService
     private const STICKERS_PER_ROW = 6;
     private const ROWS_PER_PAGE = 5;
 
-    public function export(array $ids): array
+    public function export(array $ids, string $actor = 'GA Asset System'): array
     {
         $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
         if ($ids === []) {
@@ -101,9 +102,11 @@ class GaAssetQrPdfService
         foreach ($ordered as $asset) {
             $count++;
             $csCode = trim((string) $asset->cs_code);
-            $pngPath = $qrDir . '/GA-' . $asset->id . '.png';
+            $validation = (new AssetQrValidationService())->registerGaAsset((int) $asset->id, $actor);
+            // A new filename bypasses legacy PNGs that encode plain NO CS.
+            $pngPath = $qrDir . '/GA-' . $asset->id . '-' . $validation->kode_qr . '.png';
             if (!is_file($pngPath)) {
-                $qr = QrCode::create($csCode)
+                $qr = QrCode::create(AssetQrValidationService::url($validation->kode_qr))
                     ->setEncoding(new Encoding('UTF-8'))
                     ->setSize(250)
                     ->setMargin(15)

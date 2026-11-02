@@ -6,6 +6,7 @@ class SalaryAdjustmentWorkflowService
 {
     public const STATUS_SUBMITTED = 'submitted';
     public const STATUS_WAITING_RECEIVER = 'waiting_receiver';
+    public const STATUS_WAITING_GIVER = 'waiting_giver';
     public const STATUS_RECEIVER_RESPONDED = 'receiver_responded';
     public const STATUS_HRD_PROCESSING = 'hrd_processing';
     public const STATUS_WAITING_ASSESSMENT = 'waiting_assessment';
@@ -68,6 +69,7 @@ class SalaryAdjustmentWorkflowService
     public const STATUS_LABELS = [
         self::STATUS_SUBMITTED => 'Menunggu HRD',
         self::STATUS_WAITING_RECEIVER => 'Menunggu Manager Penerima',
+        self::STATUS_WAITING_GIVER => 'Menunggu Manager Pemberi',
         self::STATUS_RECEIVER_RESPONDED => 'Manager Penerima Merespons',
         self::STATUS_HRD_PROCESSING => 'Sedang Diproses HRD',
         self::STATUS_WAITING_ASSESSMENT => 'Menunggu Assessment',
@@ -86,7 +88,11 @@ class SalaryAdjustmentWorkflowService
     ];
 
     public const MANAGER_TAB_STATUS_MAP = [
-        self::MANAGER_TAB_WAITING => [self::STATUS_SUBMITTED, self::STATUS_WAITING_RECEIVER],
+        self::MANAGER_TAB_WAITING => [
+            self::STATUS_SUBMITTED,
+            self::STATUS_WAITING_RECEIVER,
+            self::STATUS_WAITING_GIVER,
+        ],
         self::MANAGER_TAB_IN_PROGRESS => [
             self::STATUS_RECEIVER_RESPONDED,
             self::STATUS_HRD_PROCESSING,
@@ -142,6 +148,8 @@ class SalaryAdjustmentWorkflowService
         'mutasi_notify_receiver' => 'Notifikasi Mutasi ke Manager Penerima',
         'receiver_accept' => 'Manager Penerima Menerima Mutasi',
         'receiver_reject' => 'Manager Penerima Menolak Mutasi',
+        'propose_effective_date' => 'Usulan Tanggal Efektif Mutasi',
+        'agree_effective_date' => 'Setuju Tanggal Efektif Mutasi',
         'cancel' => 'Dibatalkan Manager Pengaju',
         'generate_assessment' => 'Assessment Dibuat',
         'assessment_completed' => 'Assessment Selesai',
@@ -251,7 +259,12 @@ class SalaryAdjustmentWorkflowService
         $allowed = [
             self::STATUS_WAITING_RECEIVER => [
                 self::STATUS_RECEIVER_RESPONDED,
+                self::STATUS_WAITING_GIVER,
                 self::STATUS_REJECTED,
+                self::STATUS_CANCELLED,
+            ],
+            self::STATUS_WAITING_GIVER => [
+                self::STATUS_WAITING_RECEIVER,
                 self::STATUS_CANCELLED,
             ],
             self::STATUS_SUBMITTED => [

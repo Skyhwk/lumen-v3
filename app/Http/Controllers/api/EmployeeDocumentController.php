@@ -203,7 +203,7 @@ class EmployeeDocumentController extends Controller
     {
         $this->validate($request, [
             'karyawan_id' => 'required|integer',
-            'manager_id' => 'required|integer',
+            'penanggung_jawab_id' => 'required|integer',
         ]);
 
         $karyawan = MasterKaryawan::where('id', $request->karyawan_id)
@@ -223,7 +223,7 @@ class EmployeeDocumentController extends Controller
             $documents = app(GenerateDokumenKaryawanService::class)->generate(
                 (int) $karyawan->id,
                 $recruitmentId ? (int) $recruitmentId : null,
-                (int) $request->manager_id,
+                (int) $request->penanggung_jawab_id,
                 false,
                 $this->karyawan
             );

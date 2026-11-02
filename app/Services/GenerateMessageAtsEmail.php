@@ -1058,6 +1058,36 @@ class GenerateMessageAtsEmail
                 </tr>";
     }
 
+    /** Header untuk pemberitahuan otomatis ke user/manajemen (bukan surat HR). */
+    private static function emailStakeholderSystemHeaderHtml()
+    {
+        return "
+                <tr>
+                    <td style='background: linear-gradient(135deg, #0f2942 0%, #1e3a5f 100%); padding: 28px 36px; border-bottom: 3px solid #2563eb; text-align: left;'>
+                        <table border='0' cellpadding='0' cellspacing='0' width='100%'>
+                            <tr>
+                                <td>
+                                    <div style='color: #ffffff; font-size: 19px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif;'>PT INTI SURYA LABORATORIUM</div>
+                                    <div style='color: #94a3b8; font-size: 12px; font-weight: 600; margin-top: 4px; letter-spacing: 0.5px; text-transform: uppercase;'>Pemberitahuan Sistem · Applicant Tracking System</div>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>";
+    }
+
+    private static function emailStakeholderSystemFooterHtml()
+    {
+        return "
+                <tr>
+                    <td style='background-color: #f8fafc; padding: 24px 36px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; text-align: left; line-height: 1.6;'>
+                        Email ini hanya bersifat pemberitahuan informasi dan dikirim secara otomatis oleh <strong style='color: #475569;'>Sistem ATS</strong>.
+                        Mohon tidak membalas email ini. Apabila diperlukan tindak lanjut operasional, silakan berkoordinasi dengan Divisi HRD melalui kanal internal yang berlaku.<br><br>
+                        <span style='color: #94a3b8;'>PT Inti Surya Laboratorium · Ruko Icon Business Park Blok O No. 5-6, BSD City, Tangerang Selatan, Banten 15345</span>
+                    </td>
+                </tr>";
+    }
+
     /**
      * Concise, Neutral & Professional Email Template for Approved Candidate (HRD Interview)
      * 
@@ -2404,6 +2434,149 @@ class GenerateMessageAtsEmail
 
                 <!-- Footer -->
                 " . self::emailFooterHtml() . "
+            </table>
+        </body>
+        </html>
+        ";
+    }
+
+    /**
+     * Email ke stakeholder (user requester / inspector): kandidat dimigrasikan & akan mulai bekerja.
+     *
+     * @param object $data { nama_user, nama_kandidat, no_request, posisi_jabatan, nik_karyawan, tgl_mulai_kerja, status_karyawan, cabang, departemen, processed_by, processed_at }
+     */
+    public static function bodyEmailEmployeeMigratedNotifStakeholder($data)
+    {
+        $namaKandidat = htmlspecialchars($data->nama_kandidat ?? 'Kandidat');
+        $noRequest = htmlspecialchars($data->no_request ?? '-');
+        $posisi = htmlspecialchars($data->posisi_jabatan ?? '-');
+        $nik = htmlspecialchars($data->nik_karyawan ?? '-');
+        $tglMulai = htmlspecialchars($data->tgl_mulai_kerja ?? '-');
+        $status = htmlspecialchars($data->status_karyawan ?? '-');
+        $cabang = htmlspecialchars($data->cabang ?? '-');
+        $departemen = htmlspecialchars($data->departemen ?? '-');
+        $processedAt = htmlspecialchars($data->processed_at ?? '-');
+        $greeting = self::internalGreetingHtml($data->nama_user ?? 'User');
+
+        return "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='utf-8'>
+            <title>Pemberitahuan Sistem — Kandidat Akan Bergabung - PT Inti Surya Laboratorium</title>
+        </head>
+        <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
+            <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
+                " . self::emailStakeholderSystemHeaderHtml() . "
+                <tr>
+                    <td style='padding: 0;'>
+                        <div style='background-color: #dcfce7; border-left: 4px solid #16a34a; padding: 14px 32px;'>
+                            <span style='font-size: 13px; font-weight: 700; color: #15803d; text-transform: uppercase; letter-spacing: 0.5px;'>&#10003; Pemberitahuan — Kandidat Akan Bergabung</span>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td style='padding: 32px;'>
+                        {$greeting}
+                        <p style='font-size: 14px; line-height: 1.75; color: #334155; margin-top: 0;'>
+                            Dengan hormat, melalui pemberitahuan sistem ini kami informasikan bahwa proses rekrutmen untuk personnel request
+                            <strong>{$noRequest}</strong> telah mencapai tahap penempatan karyawan.
+                        </p>
+                        <p style='font-size: 14px; line-height: 1.75; color: #334155;'>
+                            <strong>{$namaKandidat}</strong> telah terdaftar sebagai bagian dari <strong>PT Inti Surya Laboratorium</strong>
+                            dan dijadwalkan <strong>mulai bekerja pada {$tglMulai}</strong>, dengan rincian penempatan sebagai berikut.
+                        </p>
+                        <div style='background-color: #f1f5f9; border-left: 4px solid #2563eb; border-radius: 4px; padding: 18px; margin: 20px 0;'>
+                            <div style='font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;'>
+                                Ringkasan Penempatan
+                            </div>
+                            <table border='0' cellpadding='0' cellspacing='0' width='100%' style='font-size: 14px;'>
+                                <tr><td style='padding: 5px 0; color: #475569; font-weight: 600; width: 180px;'>Nama</td><td style='padding: 5px 0; color: #0f172a; font-weight: 700;'>{$namaKandidat}</td></tr>
+                                <tr><td style='padding: 5px 0; color: #475569; font-weight: 600;'>No. Personnel Request</td><td style='padding: 5px 0; color: #2563eb; font-weight: 700;'>{$noRequest}</td></tr>
+                                <tr><td style='padding: 5px 0; color: #475569; font-weight: 600;'>Jabatan / Posisi</td><td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$posisi}</td></tr>
+                                <tr><td style='padding: 5px 0; color: #475569; font-weight: 600;'>NIK Karyawan</td><td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$nik}</td></tr>
+                                <tr><td style='padding: 5px 0; color: #475569; font-weight: 600;'>Tanggal Mulai Bekerja</td><td style='padding: 5px 0; color: #15803d; font-weight: 700;'>{$tglMulai}</td></tr>
+                                <tr><td style='padding: 5px 0; color: #475569; font-weight: 600;'>Status Awal</td><td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$status}</td></tr>
+                                <tr><td style='padding: 5px 0; color: #475569; font-weight: 600;'>Cabang Penempatan</td><td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$cabang}</td></tr>
+                                <tr><td style='padding: 5px 0; color: #475569; font-weight: 600;'>Departemen</td><td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$departemen}</td></tr>
+                                <tr><td style='padding: 5px 0; color: #475569; font-weight: 600;'>Waktu Pencatatan Sistem</td><td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$processedAt}</td></tr>
+                            </table>
+                        </div>
+                        <p style='font-size: 14px; line-height: 1.75; color: #64748b; margin-bottom: 0;'>
+                            Informasi ini disampaikan untuk keperluan koordinasi internal terkait personnel request yang Bapak/Ibu ajukan.
+                            Demikian pemberitahuan ini kami sampaikan. Atas perhatian dan kerja samanya, kami ucapkan terima kasih.
+                        </p>
+                    </td>
+                </tr>
+                " . self::emailStakeholderSystemFooterHtml() . "
+            </table>
+        </body>
+        </html>
+        ";
+    }
+
+    /**
+     * Email ke stakeholder: kandidat hired divoid (batal masuk).
+     *
+     * @param object $data { nama_user, nama_kandidat, no_request, posisi, void_reason, void_by, void_at }
+     */
+    public static function bodyEmailHiredVoidNotifStakeholder($data)
+    {
+        $namaKandidat = htmlspecialchars($data->nama_kandidat ?? 'Kandidat');
+        $noRequest = htmlspecialchars($data->no_request ?? '-');
+        $posisi = htmlspecialchars($data->posisi ?? '-');
+        $reason = htmlspecialchars($data->void_reason ?? '-');
+        $voidAt = htmlspecialchars($data->void_at ?? '-');
+        $greeting = self::internalGreetingHtml($data->nama_user ?? 'User');
+
+        return "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='utf-8'>
+            <title>Pemberitahuan Sistem — Pembatalan Proses Bergabung - PT Inti Surya Laboratorium</title>
+        </head>
+        <body style='font-family: \"Helvetica Neue\", Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 0; color: #334155;'>
+            <table align='center' border='0' cellpadding='0' cellspacing='0' width='600' style='background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>
+                " . self::emailStakeholderSystemHeaderHtml() . "
+                <tr>
+                    <td style='padding: 0;'>
+                        <div style='background-color: #fee2e2; border-left: 4px solid #dc2626; padding: 14px 32px;'>
+                            <span style='font-size: 13px; font-weight: 700; color: #b91c1c; text-transform: uppercase; letter-spacing: 0.5px;'>&#9888; Pemberitahuan — Pembatalan Proses Bergabung</span>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td style='padding: 32px;'>
+                        {$greeting}
+                        <p style='font-size: 14px; line-height: 1.75; color: #334155; margin-top: 0;'>
+                            Dengan hormat, melalui pemberitahuan sistem ini kami informasikan bahwa kandidat berikut
+                            <strong>tidak melanjutkan proses untuk bergabung</strong> ke PT Inti Surya Laboratorium
+                            terkait personnel request <strong>{$noRequest}</strong>.
+                        </p>
+                        <p style='font-size: 14px; line-height: 1.75; color: #334155;'>
+                            Status proses bergabung kandidat dicatat sebagai <strong>pembatalan (void)</strong> pada sistem rekrutmen.
+                            Kandidat tidak akan dijadwalkan mulai bekerja dan tidak terdaftar sebagai karyawan.
+                        </p>
+                        <div style='background-color: #f1f5f9; border-left: 4px solid #dc2626; border-radius: 4px; padding: 18px; margin: 20px 0;'>
+                            <div style='font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;'>
+                                Ringkasan
+                            </div>
+                            <table border='0' cellpadding='0' cellspacing='0' width='100%' style='font-size: 14px;'>
+                                <tr><td style='padding: 5px 0; color: #475569; font-weight: 600; width: 160px;'>Nama</td><td style='padding: 5px 0; color: #0f172a; font-weight: 700;'>{$namaKandidat}</td></tr>
+                                <tr><td style='padding: 5px 0; color: #475569; font-weight: 600;'>No. Personnel Request</td><td style='padding: 5px 0; color: #2563eb; font-weight: 700;'>{$noRequest}</td></tr>
+                                <tr><td style='padding: 5px 0; color: #475569; font-weight: 600;'>Posisi Lamaran</td><td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$posisi}</td></tr>
+                                <tr><td style='padding: 5px 0; color: #475569; font-weight: 600;'>Keterangan</td><td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$reason}</td></tr>
+                                <tr><td style='padding: 5px 0; color: #475569; font-weight: 600;'>Waktu Pencatatan Sistem</td><td style='padding: 5px 0; color: #0f172a; font-weight: 600;'>{$voidAt}</td></tr>
+                            </table>
+                        </div>
+                        <p style='font-size: 14px; line-height: 1.75; color: #64748b; margin-bottom: 0;'>
+                            Informasi ini disampaikan untuk penyesuaian perencanaan kebutuhan personel terkait request yang Bapak/Ibu ajukan.
+                            Demikian pemberitahuan ini kami sampaikan. Atas perhatian dan kerja samanya, kami ucapkan terima kasih.
+                        </p>
+                    </td>
+                </tr>
+                " . self::emailStakeholderSystemFooterHtml() . "
             </table>
         </body>
         </html>

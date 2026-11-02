@@ -401,13 +401,35 @@ class AtsNotificationService
         );
     }
 
-    public function employeeMigrated($recruitment): void
+    public function employeeMigrated($recruitment, $personnelRequest = null, ?string $startDateLabel = null): void
     {
         $candidate = $this->candidateName($recruitment);
+        $startSuffix = trim((string) $startDateLabel) !== ''
+            ? ' dan dijadwalkan mulai bekerja pada ' . trim($startDateLabel)
+            : '';
+
+        $this->notifyPersonnelRequestCreator(
+            $personnelRequest,
+            'Kandidat Akan Bergabung',
+            "Kandidat {$candidate} terdaftar sebagai karyawan PT Inti Surya Laboratorium{$startSuffix}.",
+            self::URL_PERSONNEL_REQUEST
+        );
         $this->notifyHrdTeam(
-            'Migrasi Karyawan Selesai',
-            "Data kandidat {$candidate} berhasil dimigrasikan ke master karyawan.",
+            'Penempatan Karyawan Baru',
+            "Kandidat {$candidate} terdaftar sebagai karyawan{$startSuffix}.",
             self::URL_HIRED_CANDIDATES
+        );
+    }
+
+    public function hiredCandidateVoided($recruitment, $personnelRequest = null, ?string $reason = null): void
+    {
+        $candidate = $this->candidateName($recruitment);
+        $reasonSuffix = trim((string) $reason) !== '' ? ' Alasan: ' . trim($reason) : '';
+        $this->notifyPersonnelRequestCreator(
+            $personnelRequest,
+            'Pembatalan Bergabung Kandidat',
+            "Kandidat {$candidate} tidak melanjutkan proses bergabung (void).{$reasonSuffix}",
+            self::URL_PERSONNEL_REQUEST
         );
     }
 

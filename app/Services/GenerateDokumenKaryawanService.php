@@ -10,6 +10,7 @@ use App\Models\MasterKaryawan;
 use App\Models\MasterSallary;
 use App\Models\NewRecruitment;
 use App\Models\PencadanganUpah;
+use App\Models\PenanggungJawabDokumenKaryawan;
 use App\Models\PPH21;
 use App\Models\RekeningKaryawan;
 use Carbon\Carbon;
@@ -22,6 +23,12 @@ class GenerateDokumenKaryawanService
 {
     private const DOCUMENT_BASE_DIR = 'dokumen/dokumen-karyawan';
     private const PAGE_BACKGROUND = 'images/dokumen-karyawan-page-background.png';
+    private const SPRJ_NUMBER_PREFIX = 'ISL-11-SPRJ-';
+    private const SPNY_NUMBER_PREFIX = 'ISL-11-SPNY-';
+    private const SINGKATAN_TETAP = [
+        'DKI', 'SPV', 'HRD', 'HR', 'IT', 'QA', 'QC', 'GA', 'PPIC',
+        'CEO', 'CFO', 'COO', 'GM', 'BOD', 'HSE', 'EHS', 'K3', 'ISO', 'PIC', 'ADM',
+    ];
 
     private $temporaryBackgroundPath;
 
@@ -56,7 +63,7 @@ class GenerateDokumenKaryawanService
         $karyawan = $data['karyawan'];
         $this->retireActiveDocuments($karyawan->id, 'SPRJ');
 
-        $sequence = $this->nextDocumentNumber('SPRJ', 'ISL-09-SPRJ-', (int) date('Y'), 4);
+        $sequence = $this->nextDocumentNumber('SPRJ', self::SPRJ_NUMBER_PREFIX, (int) date('Y'), 4, 'SPRJ');
         $noDokumen = $sequence['document_number'];
         $noPengesahan = $this->nextPengesahanNumber()['document_number'];
         $filename = $noDokumen . '.pdf';
@@ -117,7 +124,7 @@ class GenerateDokumenKaryawanService
         $karyawan = $data['karyawan'];
         $this->retireActiveDocuments($karyawan->id, 'COC');
 
-        $sequence = $this->nextDocumentNumber('COC', 'COC-', (int) date('Y'), 4);
+        $sequence = $this->nextCocHexNumber();
         $noDokumen = $sequence['document_number'];
         $filename = $noDokumen . '.pdf';
         $relativePath = $this->documentRelativePath($karyawan->id, $filename);
@@ -177,9 +184,9 @@ class GenerateDokumenKaryawanService
         $karyawan = $data['karyawan'];
         $this->retireActiveDocuments($karyawan->id, 'PKKP');
 
-        $sequence = $this->nextPkkpNumber();
+        $sequence = $this->nextDocumentNumber('SPNY', self::SPNY_NUMBER_PREFIX, (int) date('Y'), 4, 'PKKP');
         $noDokumen = $sequence['document_number'];
-        $filename = str_replace(['/', '\\'], '-', $noDokumen) . '.pdf';
+        $filename = $noDokumen . '.pdf';
         $relativePath = $this->documentRelativePath($karyawan->id, $filename);
 
         $document = EmployeeDocument::create([
@@ -237,9 +244,9 @@ class GenerateDokumenKaryawanService
         $karyawan = $data['karyawan'];
         $this->retireActiveDocuments($karyawan->id, 'SPKB');
 
-        $sequence = $this->nextPkkpNumber();
+        $sequence = $this->nextDocumentNumber('SPNY', self::SPNY_NUMBER_PREFIX, (int) date('Y'), 4, 'SPKB');
         $noDokumen = $sequence['document_number'];
-        $filename = str_replace(['/', '\\'], '-', $noDokumen) . '.pdf';
+        $filename = $noDokumen . '.pdf';
         $relativePath = $this->documentRelativePath($karyawan->id, $filename);
 
         $document = EmployeeDocument::create([
@@ -301,7 +308,7 @@ class GenerateDokumenKaryawanService
         $karyawan = $data['karyawan'];
         $this->retireActiveDocuments($karyawan->id, $documentType);
 
-        $sequence = $this->nextDocumentNumber('SPNY', 'ISL-09-SPNY-', (int) date('Y'), 4);
+        $sequence = $this->nextDocumentNumber('SPNY', self::SPNY_NUMBER_PREFIX, (int) date('Y'), 4, $documentType);
         $noDokumen = $sequence['document_number'];
         $filename = $noDokumen . '.pdf';
         $relativePath = $this->documentRelativePath($karyawan->id, $filename);
@@ -365,7 +372,7 @@ class GenerateDokumenKaryawanService
         $karyawan = $data['karyawan'];
         $this->retireActiveDocuments($karyawan->id, $documentType);
 
-        $sequence = $this->nextDocumentNumber('NDA', 'ISL-11-SPRJ-', (int) date('Y'), 4);
+        $sequence = $this->nextDocumentNumber('SPRJ', self::SPRJ_NUMBER_PREFIX, (int) date('Y'), 4, $documentType);
         $noDokumen = $sequence['document_number'];
         $filename = $noDokumen . '.pdf';
         $relativePath = $this->documentRelativePath($karyawan->id, $filename);
@@ -483,7 +490,7 @@ class GenerateDokumenKaryawanService
     {
         $karyawan = $data['karyawan'];
         $html = view('DokumenKaryawan.coc', [
-            'namaKaryawan' => $karyawan->nama_lengkap ?: '-',
+            'namaKaryawan' => $this->camelCaseTeks($karyawan->nama_lengkap) ?: '-',
             'tanggalPengesahan' => $this->formatTanggalIndonesia(Carbon::now()),
         ])->render();
 
@@ -554,7 +561,7 @@ class GenerateDokumenKaryawanService
             'margin_left' => 16,
             'margin_right' => 16,
             'margin_top' => 8,
-            'margin_bottom' => 28,
+            'margin_bottom' => 25,
             'margin_header' => 6,
             'margin_footer' => 8,
             'fontDir' => array_merge($fontDirs, [resource_path('fonts/Calibri')]),
@@ -702,7 +709,7 @@ class GenerateDokumenKaryawanService
             'margin_left' => 16,
             'margin_right' => 16,
             'margin_top' => 5,
-            'margin_bottom' => 28,
+            'margin_bottom' => 25,
             'margin_header' => 7,
             'margin_footer' => 8,
             'setAutoTopMargin' => 'stretch',
@@ -1005,16 +1012,21 @@ class GenerateDokumenKaryawanService
     }
 
     private function nextDocumentNumber(
-        string $documentType,
+        string $poolType,
         string $prefix,
         int $year,
-        int $padding = 4
+        int $padding = 4,
+        ?string $ownerDocumentType = null
     ): array {
-        return DB::transaction(function () use ($documentType, $prefix, $year, $padding) {
+        $ownerDocumentType = $ownerDocumentType ?: $poolType;
+        $yearSuffix = substr((string) $year, -2);
+        $maxNumber = (10 ** $padding) - 1;
+
+        return DB::transaction(function () use ($poolType, $prefix, $year, $padding, $ownerDocumentType, $yearSuffix, $maxNumber) {
             $now = date('Y-m-d H:i:s');
 
             DB::table('employee_document_sequences')->insertOrIgnore([
-                'document_type' => $documentType,
+                'document_type' => $poolType,
                 'prefix' => $prefix,
                 'year' => $year,
                 'last_number' => 0,
@@ -1023,7 +1035,7 @@ class GenerateDokumenKaryawanService
                 'updated_at' => $now,
             ]);
 
-            $sequence = EmployeeDocumentSequence::where('document_type', $documentType)
+            $sequence = EmployeeDocumentSequence::where('document_type', $poolType)
                 ->where('year', $year)
                 ->lockForUpdate()
                 ->first();
@@ -1032,20 +1044,95 @@ class GenerateDokumenKaryawanService
                 throw new RuntimeException('Sequence nomor dokumen gagal dibuat.');
             }
 
+            $issued = (int) DB::table('employee_documents')
+                ->where('document_number', 'like', $prefix . $yearSuffix . '%')
+                ->max(DB::raw('CAST(RIGHT(document_number, ' . (int) $padding . ') AS UNSIGNED)'));
+
+            if ((int) $sequence->last_number < $issued) {
+                $sequence->last_number = $issued;
+            }
+
+            $documentNumber = null;
+            do {
+                $sequence->last_number = ((int) $sequence->last_number) + 1;
+                if ((int) $sequence->last_number > $maxNumber) {
+                    throw new RuntimeException('Sequence nomor dokumen tahun berjalan sudah penuh.');
+                }
+
+                $documentNumber = $prefix
+                    . $yearSuffix
+                    . str_pad((string) $sequence->last_number, $padding, '0', STR_PAD_LEFT);
+
+                $taken = EmployeeDocument::query()
+                    ->where('document_number', $documentNumber)
+                    ->exists()
+                    || EmployeeDocument::query()
+                        ->where('document_type', $ownerDocumentType)
+                        ->where('sequence_year', $year)
+                        ->where('sequence_number', (int) $sequence->last_number)
+                        ->exists();
+            } while ($taken);
+
             $sequence->prefix = $prefix;
             $sequence->padding = $padding;
-            $sequence->last_number = ((int) $sequence->last_number) + 1;
             $sequence->save();
-
-            $documentNumber = $prefix
-                . substr((string) $year, -2)
-                . str_pad((string) $sequence->last_number, $padding, '0', STR_PAD_LEFT);
 
             return [
                 'document_number' => $documentNumber,
                 'year' => $year,
                 'number' => (int) $sequence->last_number,
             ];
+        });
+    }
+
+    private function nextCocHexNumber(): array
+    {
+        $year = (int) date('Y');
+
+        return DB::transaction(function () use ($year) {
+            $now = date('Y-m-d H:i:s');
+
+            DB::table('employee_document_sequences')->insertOrIgnore([
+                'document_type' => 'COC',
+                'prefix' => '',
+                'year' => $year,
+                'last_number' => 0,
+                'padding' => 6,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            $sequence = EmployeeDocumentSequence::where('document_type', 'COC')
+                ->where('year', $year)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$sequence) {
+                throw new RuntimeException('Sequence nomor COC gagal dibuat.');
+            }
+
+            for ($attempt = 0; $attempt < 10; $attempt++) {
+                $hex = strtoupper(bin2hex(random_bytes(3)));
+                $number = hexdec($hex);
+                $taken = EmployeeDocument::query()
+                    ->where('document_number', $hex)
+                    ->exists()
+                    || EmployeeDocument::query()
+                        ->where('document_type', 'COC')
+                        ->where('sequence_year', $year)
+                        ->where('sequence_number', $number)
+                        ->exists();
+
+                if (!$taken) {
+                    return [
+                        'document_number' => $hex,
+                        'year' => $year,
+                        'number' => $number,
+                    ];
+                }
+            }
+
+            throw new RuntimeException('Nomor dokumen COC gagal dibuat.');
         });
     }
 
@@ -1101,65 +1188,6 @@ class GenerateDokumenKaryawanService
         ];
 
         return 'ISL/LPD.INT/'
-            . substr((string) $year, -2)
-            . '-'
-            . $roman[$month]
-            . '/'
-            . str_pad((string) $number, 3, '0', STR_PAD_LEFT);
-    }
-
-    private function nextPkkpNumber(): array
-    {
-        $now = Carbon::now();
-
-        return DB::transaction(function () use ($now) {
-            $year = (int) $now->year;
-            $month = (int) $now->month;
-            $documentType = 'PKKP';
-            $prefix = 'ISL/09-S.Pny/';
-            $padding = 3;
-            $timestamp = $now->format('Y-m-d H:i:s');
-
-            DB::table('employee_document_sequences')->insertOrIgnore([
-                'document_type' => $documentType,
-                'prefix' => $prefix,
-                'year' => $year,
-                'last_number' => 0,
-                'padding' => $padding,
-                'created_at' => $timestamp,
-                'updated_at' => $timestamp,
-            ]);
-
-            $sequence = EmployeeDocumentSequence::where('document_type', $documentType)
-                ->where('year', $year)
-                ->lockForUpdate()
-                ->first();
-
-            if (!$sequence) {
-                throw new RuntimeException('Sequence nomor PKKP gagal dibuat.');
-            }
-
-            $sequence->prefix = $prefix;
-            $sequence->padding = $padding;
-            $sequence->last_number = ((int) $sequence->last_number) + 1;
-            $sequence->save();
-
-            return [
-                'document_number' => $this->formatNomorPkkp($year, $month, (int) $sequence->last_number),
-                'year' => $year,
-                'number' => (int) $sequence->last_number,
-            ];
-        });
-    }
-
-    private function formatNomorPkkp(int $year, int $month, int $number): string
-    {
-        $roman = [
-            1 => 'I', 2 => 'II', 3 => 'III', 4 => 'IV', 5 => 'V', 6 => 'VI',
-            7 => 'VII', 8 => 'VIII', 9 => 'IX', 10 => 'X', 11 => 'XI', 12 => 'XII',
-        ];
-
-        return 'ISL/09-S.Pny/'
             . substr((string) $year, -2)
             . '-'
             . $roman[$month]
@@ -1241,20 +1269,32 @@ class GenerateDokumenKaryawanService
         }
 
         $penanggungJawab = null;
+        $namaPenanggungJawab = null;
+        $jabatanPenanggungJawab = null;
         if ($penanggungJawabId) {
-            $penanggungJawab = MasterKaryawan::with('jabatan')
-                ->where('is_active', true)
-                ->find($penanggungJawabId);
-            if (!$penanggungJawab) {
+            $penanggungJawabRecord = PenanggungJawabDokumenKaryawan::query()
+                ->where('id', $penanggungJawabId)
+                ->where('is_active', 1)
+                ->first();
+            if (!$penanggungJawabRecord) {
                 throw new RuntimeException('Penanggung jawab tidak ditemukan.');
             }
+            $namaPenanggungJawab = $this->camelCaseTeks($penanggungJawabRecord->nama_karyawan);
+            $jabatanPenanggungJawab = $this->camelCaseTeks($penanggungJawabRecord->jabatan);
         } elseif ($penanggungJawabFromPersonnelRequest && $recruitment) {
-            $namaPenanggungJawab = trim((string) optional($recruitment->personnelRequest)->created_by);
-            if ($namaPenanggungJawab !== '') {
+            $namaDariPermintaan = trim((string) optional($recruitment->personnelRequest)->created_by);
+            if ($namaDariPermintaan !== '') {
                 $penanggungJawab = MasterKaryawan::with('jabatan')
-                    ->where('nama_lengkap', $namaPenanggungJawab)
+                    ->where('nama_lengkap', $namaDariPermintaan)
                     ->where('is_active', true)
                     ->first();
+            }
+            if ($penanggungJawab) {
+                $namaPenanggungJawab = $this->camelCaseTeks($penanggungJawab->nama_lengkap);
+                $jabatanRelasi = $penanggungJawab->jabatan;
+                $jabatanPenanggungJawab = $this->camelCaseTeks(is_object($jabatanRelasi)
+                    ? ($jabatanRelasi->nama_jabatan ?? null)
+                    : $jabatanRelasi);
             }
         }
 
@@ -1287,8 +1327,8 @@ class GenerateDokumenKaryawanService
                 ->first(),
             'penanggung_jawab' => [
                 'karyawan' => $penanggungJawab,
-                'nama' => $penanggungJawab ? $penanggungJawab->nama_lengkap : null,
-                'jabatan' => $penanggungJawab ? $penanggungJawab->jabatan : null,
+                'nama' => $namaPenanggungJawab,
+                'jabatan' => $jabatanPenanggungJawab,
             ],
             'generated_by' => $this->generatedByName($generatedBy),
             'tanggal' => [
@@ -1307,13 +1347,13 @@ class GenerateDokumenKaryawanService
             $recruitment->loadMissing('candidateProfile');
             $profile = $recruitment->candidateProfile;
         }
-        $posisi = ($karyawan->getAttributes()['jabatan'] ?? null)
-            ?: (optional($karyawan->getRelation('jabatan'))->nama_jabatan ?: null);
+        $posisi = $this->jabatanDokumen($karyawan);
         $divisi = ($karyawan->getAttributes()['department'] ?? null)
             ?: (optional($karyawan->getRelation('department'))->nama_divisi ?: null);
         $penempatan = optional($karyawan->cabang)->nama_cabang ?: null;
+        $nama = $this->camelCaseTeks($karyawan->nama_lengkap ?: optional($recruitment)->nama_lengkap);
 
-        $tempatLahir = trim((string) ($karyawan->tempat_lahir ?: optional($recruitment)->tempat_lahir));
+        $tempatLahir = $this->camelCaseTeks($karyawan->tempat_lahir ?: optional($recruitment)->tempat_lahir);
         $tanggalLahir = $karyawan->tanggal_lahir ?: optional($recruitment)->tanggal_lahir;
         $tanggalLahirText = $tanggalLahir ? $this->formatTanggalIndonesia(Carbon::parse($tanggalLahir)) : '';
         $tempatTanggalLahir = trim($tempatLahir . ($tempatLahir && $tanggalLahirText ? ', ' : '') . $tanggalLahirText);
@@ -1326,15 +1366,14 @@ class GenerateDokumenKaryawanService
         return [
             'logo' => public_path('isl_logo.png'),
             'noDokumen' => $noDokumen,
-            'namaLengkap' => $karyawan->nama_lengkap ?: (optional($recruitment)->nama_lengkap ?: '-'),
+            'namaLengkap' => $nama ?: '-',
             'noKtp' => $karyawan->nik_ktp ?: (optional($profile)->nik_ktp ?: '-'),
             'tempatTanggalLahir' => $tempatTanggalLahir !== '' ? $tempatTanggalLahir : '-',
-            'alamatLengkap' => $karyawan->alamat
-                ?: (optional($profile)->alamat_domisili ?: (optional($profile)->alamat_ktp ?: '-')),
+            'alamatLengkap' => $this->alamatDokumen($karyawan, $profile),
             'noHp' => $karyawan->no_telpon ?: (optional($recruitment)->no_telepon ?: '-'),
             'divisiSubdivisi' => $divisi ?: '-',
             'posisiPenempatan' => $posisiPenempatan ?: '-',
-            'namaKaryawan' => $karyawan->nama_lengkap ?: (optional($recruitment)->nama_lengkap ?: '-'),
+            'namaKaryawan' => $nama ?: '-',
             'posisiKaryawan' => $posisi ?: '-',
             'tanggalPengesahan' => $this->formatTanggalIndonesia(Carbon::now()),
         ];
@@ -1379,8 +1418,7 @@ class GenerateDokumenKaryawanService
         $view = $this->buildPkkpViewData($data, $noDokumen);
         $karyawan = $data['karyawan'];
         $nik = trim((string) ($karyawan->nik_karyawan ?: ''));
-        $posisi = ($karyawan->getAttributes()['jabatan'] ?? null)
-            ?: (optional($karyawan->getRelation('jabatan'))->nama_jabatan ?: null);
+        $posisi = $this->jabatanDokumen($karyawan);
         $divisi = ($karyawan->getAttributes()['department'] ?? null)
             ?: (optional($karyawan->getRelation('department'))->nama_divisi ?: null);
         $posisiDivisi = $posisi && $divisi ? $posisi . ' / ' . $divisi : ($posisi ?: $divisi);
@@ -1409,8 +1447,8 @@ class GenerateDokumenKaryawanService
         if (is_object($jabatanPj)) {
             $jabatanPj = $jabatanPj->nama_jabatan ?? null;
         }
-        $posisi = ($karyawan->getAttributes()['jabatan'] ?? null)
-            ?: (optional($karyawan->getRelation('jabatan'))->nama_jabatan ?: null);
+        $jabatanPj = $this->camelCaseTeks($jabatanPj);
+        $posisi = $this->jabatanDokumen($karyawan);
         $mulaiKontrak = $karyawan->tgl_mulai_kerja ? Carbon::parse($karyawan->tgl_mulai_kerja)->startOfDay() : null;
         $akhirKontrak = $karyawan->tgl_berakhir_kontrak ? Carbon::parse($karyawan->tgl_berakhir_kontrak)->startOfDay() : null;
         $jangkaWaktuNonKompetisi = '-';
@@ -1423,7 +1461,7 @@ class GenerateDokumenKaryawanService
             'noDokumen' => $noDokumen,
             'hariPerjanjian' => $this->namaHariIndonesia(Carbon::now()),
             'tanggalPerjanjian' => $view['tanggalPengesahan'],
-            'namaPenanggungJawab' => $penanggungJawab['nama'] ?: '-',
+            'namaPenanggungJawab' => $this->camelCaseTeks($penanggungJawab['nama'] ?? null) ?: '-',
             'jabatanPenanggungJawab' => $jabatanPj ?: '-',
             'namaNik' => $view['namaNik'],
             'noKtp' => $view['noKtp'],
@@ -1448,9 +1486,10 @@ class GenerateDokumenKaryawanService
         if (is_object($jabatanPenanggungJawab)) {
             $jabatanPenanggungJawab = $jabatanPenanggungJawab->nama_jabatan ?? null;
         }
-        $startDate = $karyawan->tgl_mulai_kerja ? Carbon::parse($karyawan->tgl_mulai_kerja) : null;
-        $endDate = $karyawan->tgl_berakhir_kontrak ? Carbon::parse($karyawan->tgl_berakhir_kontrak) : null;
-        $duration = $startDate && $endDate ? max(1, $startDate->diffInMonths($endDate)) : null;
+        $jabatanPenanggungJawab = $this->camelCaseTeks($jabatanPenanggungJawab);
+        $period = $this->sprjAgreementPeriod($karyawan, $salary);
+        $startDate = $period['start'];
+        $endDate = $period['end'];
         $gajiPokok = (float) optional($salary)->gaji_pokok;
         $tunjangan = (float) optional($salary)->tunjangan_kerja;
         $bpjsKes = (float) optional($data['bpjs_kesehatan'])->nominal_potongan_karyawan;
@@ -1467,8 +1506,10 @@ class GenerateDokumenKaryawanService
             'karyawan' => $karyawan,
             'recruitment' => $recruitment,
             'penanggungJawab' => $penanggungJawab,
-            'namaPenanggungJawab' => $penanggungJawab['nama'] ?: '-',
+            'namaPenanggungJawab' => $this->camelCaseTeks($penanggungJawab['nama'] ?? null) ?: '-',
             'jabatanPenanggungJawab' => $jabatanPenanggungJawab ?: '-',
+            'namaKaryawan' => $identity['namaKaryawan'],
+            'jabatanKaryawan' => $this->jabatanDokumen($karyawan) ?: '-',
             'namaNik' => $identity['namaNik'],
             'noKtp' => $identity['noKtp'],
             'tempatTanggalLahir' => $identity['tempatTanggalLahir'],
@@ -1483,8 +1524,9 @@ class GenerateDokumenKaryawanService
             'hariPerjanjian' => $this->namaHariIndonesia(Carbon::now()),
             'tanggalMulai' => $startDate ? $this->formatTanggalIndonesia($startDate) : '-',
             'tanggalSelesai' => $endDate ? $this->formatTanggalIndonesia($endDate) : '-',
-            'durasiBulan' => $duration,
-            'durasiBulanTerbilang' => $duration ? $this->terbilang($duration) : '-',
+            'jumlahJangkaWaktu' => $period['jumlah'],
+            'jumlahJangkaWaktuTerbilang' => $period['jumlah'] ? $this->terbilang((int) $period['jumlah']) : '-',
+            'satuanJangkaWaktu' => $period['satuan'] === 'tahun' ? 'tahun' : 'bulan',
             'gajiPokok' => $gajiPokok,
             'tunjangan' => $tunjangan,
             'bpjsKes' => $bpjsKes,
@@ -1528,7 +1570,7 @@ class GenerateDokumenKaryawanService
             return 'transfer';
         }
 
-        return 'tunai (cash) / transfer';
+        return 'transfer';
     }
 
     private function barisRekeningGaji($rekening): array
@@ -1674,6 +1716,90 @@ class GenerateDokumenKaryawanService
         ];
     }
 
+    private function jabatanDokumen($karyawan): string
+    {
+        return $this->camelCaseTeks(
+            ($karyawan->getAttributes()['jabatan'] ?? null)
+            ?: optional($karyawan->getRelation('jabatan'))->nama_jabatan
+        );
+    }
+
+    private function alamatDokumen($karyawan, $profile): string
+    {
+        $alamat = trim((string) (
+            ($karyawan->alamat ?? null)
+            ?: (optional($profile)->alamat_domisili ?: optional($profile)->alamat_ktp)
+        ));
+        $kota = $this->camelCaseTeks(
+            ($karyawan->kota ?? null)
+            ?: (optional($profile)->kota_domisili ?: optional($profile)->kota_ktp)
+        );
+        $provinsi = $this->camelCaseTeks(
+            ($karyawan->provinsi ?? null)
+            ?: (optional($profile)->provinsi_domisili ?: optional($profile)->provinsi_ktp)
+        );
+
+        if ($kota !== '') {
+            $alamat = $this->sisipkanBagianAlamat($alamat, $kota);
+        }
+        if ($provinsi !== '') {
+            $alamat = $this->sisipkanBagianAlamat($alamat, $provinsi);
+        }
+
+        return $alamat !== '' ? $alamat : '-';
+    }
+
+    private function sisipkanBagianAlamat(string $alamat, string $bagian): string
+    {
+        if ($alamat === '') {
+            return $bagian;
+        }
+
+        $pattern = '/(^|[^\p{L}\p{N}])' . preg_quote($bagian, '/') . '(?![\p{L}\p{N}])/iu';
+        if (!preg_match($pattern, $alamat)) {
+            return $alamat . ', ' . $bagian;
+        }
+
+        $replaced = preg_replace_callback(
+            $pattern,
+            function (array $match) use ($bagian): string {
+                return $match[1] . $bagian;
+            },
+            $alamat,
+            1
+        );
+
+        return $replaced === null ? $alamat : $replaced;
+    }
+
+    private function camelCaseTeks($value): string
+    {
+        $text = trim((string) $value);
+        if ($text === '' || $text === '-') {
+            return $text;
+        }
+
+        $text = preg_replace('/\s+/u', ' ', $text);
+        $lower = mb_strtolower($text, 'UTF-8');
+        $titled = preg_replace_callback(
+            '/\p{L}+/u',
+            function (array $match): string {
+                $word = $match[0];
+                $upper = mb_strtoupper($word, 'UTF-8');
+                if (in_array($upper, self::SINGKATAN_TETAP, true)) {
+                    return $upper;
+                }
+
+                return mb_strtoupper(mb_substr($word, 0, 1, 'UTF-8'), 'UTF-8')
+                    . mb_substr($word, 1, null, 'UTF-8');
+            },
+            $lower
+        );
+        $titled = preg_replace('/\bDi Yogyakarta\b/u', 'DI Yogyakarta', (string) $titled);
+
+        return $titled === null || $titled === '' ? $text : $titled;
+    }
+
     private function formatTanggalIndonesia(Carbon $date): string
     {
         $months = [
@@ -1697,6 +1823,36 @@ class GenerateDokumenKaryawanService
         ];
 
         return $days[$date->format('l')] ?? $date->format('l');
+    }
+
+    private function sprjAgreementPeriod($karyawan, $salary): array
+    {
+        $startDate = !empty($karyawan->tgl_mulai_kerja) ? Carbon::parse($karyawan->tgl_mulai_kerja) : null;
+        $unit = optional($salary)->satuan_jangka_waktu;
+        $amount = (int) optional($salary)->jumlah_jangka_waktu;
+
+        if ($startDate && in_array($unit, ['bulan', 'tahun'], true) && $amount > 0) {
+            $endDate = $unit === 'tahun'
+                ? $startDate->copy()->addYears($amount)
+                : $startDate->copy()->addMonths($amount);
+
+            return [
+                'start' => $startDate,
+                'end' => $endDate,
+                'jumlah' => $amount,
+                'satuan' => $unit,
+            ];
+        }
+
+        $endDate = !empty($karyawan->tgl_berakhir_kontrak) ? Carbon::parse($karyawan->tgl_berakhir_kontrak) : null;
+        $months = $startDate && $endDate ? max(1, (int) $startDate->diffInMonths($endDate)) : null;
+
+        return [
+            'start' => $startDate,
+            'end' => $endDate,
+            'jumlah' => $months,
+            'satuan' => 'bulan',
+        ];
     }
 
     private function terbilang(int $number): string

@@ -134,15 +134,21 @@ class EmployeeAdjustmentValidationService
         }
 
         $typeMetadata = null;
+        $storedTanggalEfektif = $tanggalEfektif;
         if ($requestType === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI) {
             $typeMetadata = [
                 EmployeeAdjustmentMutasiService::META_UNDER_SAME_MANAGER => $mutasiUnderSameManager,
             ];
+            if (!$mutasiUnderSameManager && $tanggalEfektif) {
+                $typeMetadata[EmployeeAdjustmentMutasiService::META_DATE_NEGOTIATION] =
+                    EmployeeAdjustmentMutasiService::initialDateNegotiation($tanggalEfektif);
+                $storedTanggalEfektif = null;
+            }
         }
 
         $payloadForSchedule = [
             'request_type' => $requestType,
-            'tanggal_efektif' => $tanggalEfektif,
+            'tanggal_efektif' => $storedTanggalEfektif,
             'tanggal_mulai' => $tanggalMulai,
             'tanggal_berakhir_kerja' => $tanggalBerakhirKerja,
             'bulan_efektif' => $bulanEfektif,
@@ -160,7 +166,8 @@ class EmployeeAdjustmentValidationService
                 'adjustment_tunjangan' => $hasSalaryAdjustment && $adjustmentTunj !== 0.0 ? $adjustmentTunj : null,
                 'has_salary_adjustment' => $hasSalaryAdjustment,
                 'bulan_efektif' => $hasSalaryAdjustment ? $bulanEfektif : ($bulanEfektif ?: date('Y-m')),
-                'tanggal_efektif' => $tanggalEfektif,
+                'tanggal_efektif' => $storedTanggalEfektif,
+                'giver_proposed_tanggal_efektif' => $tanggalEfektif,
                 'tanggal_mulai' => $tanggalMulai,
                 'tanggal_selesai' => $tanggalSelesai,
                 'tanggal_berakhir_kerja' => $tanggalBerakhirKerja,
@@ -259,6 +266,9 @@ class EmployeeAdjustmentValidationService
                 }
                 if (!$this->jabatanExists((int) $request->input('new_jabatan_id'))) {
                     return 'Posisi baru tidak ditemukan';
+                }
+                if (!$this->normalizeDate($request->input('tanggal_efektif'))) {
+                    return 'Tanggal efektif mutasi wajib diisi';
                 }
                 $underSameManager = filter_var($request->input('mutasi_under_same_manager'), FILTER_VALIDATE_BOOLEAN);
                 $receiverId = (int) $request->input('receiver_manager_id');

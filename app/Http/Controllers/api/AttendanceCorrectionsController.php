@@ -23,7 +23,7 @@ class AttendanceCorrectionsController extends Controller
 
     public function index(Request $request)
     {
-        $data = AttendanceCorrections::with('karyawan');
+        $data = AttendanceCorrections::with(['karyawan.jabatan']);
 
         if ($request->has('status')) {
             $data->where('status', $request->status);
@@ -33,27 +33,22 @@ class AttendanceCorrectionsController extends Controller
             ->addColumn('atasan_steps', function ($row) {
                 return $this->atasanStepsForRow($row);
             })
-            ->editColumn('karyawan', function ($row) {
-                $k = $row->karyawan;
-                if (!$k) {
-                    return null;
-                }
-
-                return [
-                    'nama_lengkap' => $k->nama_lengkap,
-                    'nik_karyawan' => $k->nik_karyawan,
-                    'image' => $k->image,
-                    'jabatan' => KaryawanPresentation::jabatanLabel($k),
-                    'department' => KaryawanPresentation::divisiLabel($k),
-                ];
-            })
             ->addColumn('jabatan_karyawan', function ($row) {
-                $k = $row->karyawan;
-                if (!$k) {
-                    return '-';
+                $jabatan = optional($row->karyawan)->jabatan;
+                if (is_object($jabatan)) {
+                    return $jabatan->nama_jabatan ?: '-';
                 }
 
-                return KaryawanPresentation::jabatanLabel($k) ?: '-';
+                return $jabatan ?: '-';
+            })
+            ->filterColumn('jabatan_karyawan', function ($query, $keyword) {
+                $ids = MasterKaryawan::query()
+                    ->whereHas('jabatan', function ($jabatanQuery) use ($keyword) {
+                        $jabatanQuery->where('nama_jabatan', 'like', "%{$keyword}%");
+                    })
+                    ->pluck('id');
+
+                $query->whereIn('employee_id', $ids->isEmpty() ? [0] : $ids);
             })
             ->filterColumn('karyawan', function ($query, $keyword) {
                 $ids = MasterKaryawan::query()

@@ -7,6 +7,8 @@ use App\Http\Controllers\Controller;
 use App\Models\MasterKaryawan;
 use App\Models\SalaryAdjustmentCounseling;
 use App\Models\SalaryAdjustmentRequest;
+use App\Services\ApprovalAppInboxService;
+use App\Services\EmployeeCareerContextService;
 use App\Services\EmployeeAdjustmentMutasiService;
 use App\Services\EmployeeAdjustmentRekapService;
 use App\Services\EmployeeAdjustmentTypeRegistry;
@@ -563,9 +565,14 @@ class PenyesuaianGajiHrdController extends Controller
             return response()->json(['success' => false, 'message' => 'Data tidak ditemukan'], 404);
         }
 
-        $employee = MasterKaryawan::with('jabatan')->find($record->employee_id);
+        $employee = MasterKaryawan::with(['jabatan', 'divisi'])->find($record->employee_id);
         $manager = MasterKaryawan::find($record->requested_by_id);
         $namaJabatan = KaryawanProfileService::resolveJabatan($employee);
+        $resolvedJabatan = $namaJabatan !== '-' ? $namaJabatan : ($record->jabatan ?: '-');
+
+        $record->loadMissing(['assessment.sessions']);
+        $assessmentReport = (new SalaryAdjustmentAssessmentReportService())
+            ->buildAssessmentReport($record->assessment);
 
         return response()->json([
             'success' => true,
@@ -577,7 +584,14 @@ class PenyesuaianGajiHrdController extends Controller
                 'workflow_profile' => $record->workflow_profile,
                 'nama_lengkap' => $employee->nama_lengkap ?? '-',
                 'manager_nama' => $manager->nama_lengkap ?? $record->created_by,
-                'jabatan' => $namaJabatan !== '-' ? $namaJabatan : ($record->jabatan ?: '-'),
+                'jabatan' => $resolvedJabatan,
+                'employee' => array_merge([
+                    'nama_lengkap' => $employee->nama_lengkap ?? '-',
+                    'nik' => $employee->nik_karyawan ?? null,
+                    'jabatan' => $resolvedJabatan,
+                    'divisi' => optional($employee->divisi)->nama_divisi ?? null,
+                    'image' => $employee->image ?? null,
+                ], KaryawanProfileService::formatBirthPersonalFields($employee), app(ApprovalAppInboxService::class)->employeePhotoFields($employee)),
                 'current_gaji_pokok' => (float) $record->current_gaji_pokok,
                 'current_tunjangan_kerja' => (float) $record->current_tunjangan_kerja,
                 'adjustment_gaji_pokok' => (float) ($record->adjustment_gaji_pokok ?? 0),
@@ -601,10 +615,10 @@ class PenyesuaianGajiHrdController extends Controller
                 'workflow_meta' => (new EmployeeAdjustmentWorkflowResolver())->buildWorkflowMeta($record),
                 'kpi' => $record->kpi,
                 'assessment' => $record->assessment,
-                'assessment_report' => (new SalaryAdjustmentAssessmentReportService())
-                    ->buildAssessmentReport($record->assessment),
+                'assessment_report' => $assessmentReport,
                 'attendance' => (new SalaryAdjustmentEvaluationService())
                     ->getAttendanceSummary((int) $record->employee_id),
+                'employee_career' => (new EmployeeCareerContextService())->buildForApprovalApp($employee),
                 'counseling' => $record->counseling,
                 'logs' => SalaryAdjustmentWorkflowService::formatLogs($record->statusLogs),
             ],

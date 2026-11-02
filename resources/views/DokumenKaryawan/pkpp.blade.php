@@ -15,7 +15,7 @@
     .rules tr.compact .ttd { height: 7mm; }
     .sign { width: 70mm; border-collapse: collapse; margin-top: 5mm; }
     .sign td { text-align: left; border: none; padding: 0; }
-    .sign .space { height: 18mm; }
+    .sign .space { height: 22mm; }
     .name-line { border-collapse: collapse; }
     .name-line td { font-weight: bold; border: none; border-bottom: 0.6px solid #111; padding: 0 0 0.3mm; text-align: left; }
     .sign .role { font-style: italic; font-size: 10.5pt; padding-top: 0.6mm; }
@@ -52,15 +52,15 @@
         <td>c. Bagian III – Upah Kerja</td>
         <td class="ttd">&nbsp;</td>
     </tr>
-    <tr>
+    <tr class="compact">
         <td>d. Bagian IV – Fasilitas Kerja dan Aset Perusahaan</td>
         <td class="ttd">&nbsp;</td>
     </tr>
-    <tr>
+    <tr class="compact">
         <td>e. Bagian V – Surat Peringatan</td>
         <td class="ttd">&nbsp;</td>
     </tr>
-    <tr>
+    <tr class="compact">
         <td>f. Bagian VI – Berakhirnya Hubungan Kerja</td>
         <td class="ttd">&nbsp;</td>
     </tr>

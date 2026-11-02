@@ -92,7 +92,11 @@ class GaAssetOpnameController extends Controller
         }
 
         $roomId = (int) $request->input('room_id');
-        $code = strtoupper(trim((string) $request->input('cs_code')));
+        try {
+            $code = (new \App\Services\AssetQrValidationService())->opnameCode((string) $request->input('cs_code'));
+        } catch (\InvalidArgumentException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
         if ($roomId < 1 || $code === '') {
             return response()->json(['message' => 'Ruang dan No CS wajib diisi.'], 422);
         }

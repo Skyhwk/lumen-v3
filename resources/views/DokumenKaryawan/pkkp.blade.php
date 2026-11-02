@@ -40,7 +40,7 @@
     .clause .letter { width: 8mm; }
     .sign { width: 100%; border-collapse: collapse; margin-top: 3mm; }
     .sign td { text-align: left; border: none; padding: 0; }
-    .sign .space { height: 20mm; }
+    .sign .space { height: 18mm; }
     .sign .name { font-weight: bold; }
     .sign .position { font-style: italic; font-size: 9.6pt; }
 </style>

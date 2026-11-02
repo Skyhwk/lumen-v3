@@ -128,6 +128,13 @@ class ValidatorHandler extends BaseController
 			$cek = DB::table('qr_documents')->where('kode_qr', $request->qr)->first();
 			// dd($request->qr);
 			if ($cek) {
+				if ($cek->type_document === 'asset') {
+					$data = (new \App\Services\AssetQrValidationService())->publicData($cek);
+					return response()->json([
+						'message' => $data ? 'Document Valid.' : 'QR Code Invalid.',
+						'data' => $data ?: [],
+					], 200);
+				}
 				if ($cek->type_document != 'signature') {
 					$data = json_decode($cek->data);
 					// dd($data);

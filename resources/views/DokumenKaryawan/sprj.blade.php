@@ -124,7 +124,7 @@
     </tr>
 </table>
 <table class="identity" style="margin-left:6mm; width:94%;">
-    <tr><td class="label">a. Posisi</td><td class="separator">:</td><td>{{ ($karyawan->getAttributes()['jabatan'] ?? null) ?: (optional($karyawan->getRelation('jabatan'))->nama_jabatan ?: '-') }}</td></tr>
+    <tr><td class="label">a. Posisi</td><td class="separator">:</td><td>{{ $jabatanKaryawan }}</td></tr>
     <tr><td class="label">b. Divisi</td><td class="separator">:</td><td>{{ ($karyawan->getAttributes()['department'] ?? null) ?: (optional($karyawan->getRelation('department'))->nama_divisi ?: '-') }}</td></tr>
     <tr><td class="label">c. Status</td><td class="separator">:</td><td>Karyawan Pelatihan</td></tr>
     <tr><td class="label">d. Lokasi Penempatan</td><td class="separator">:</td><td>{{ optional($karyawan->cabang)->nama_cabang ?: '-' }}</td></tr>
@@ -157,7 +157,7 @@
         <td class="number">1.</td>
         <td>
             Jangka waktu Perjanjian ini adalah selama
-            <strong>{{ $durasiBulan ?: '-' }} ({{ $durasiBulanTerbilang }}) bulan</strong>,
+            <strong>{{ $jumlahJangkaWaktu ?: '-' }} ({{ $jumlahJangkaWaktuTerbilang }}) {{ $satuanJangkaWaktu }}</strong>,
             terhitung dari tanggal <strong>{{ $tanggalMulai }}</strong> sampai dengan
             tanggal <strong>{{ $tanggalSelesai }}</strong>.
         </td>
@@ -301,7 +301,7 @@
     <tr><td>Tunjangan Kerja (Tidak Tetap)</td><td class="separator">:</td><td class="amount">Rp {{ number_format($tunjangan, 0, ',', '.') }}</td></tr>
     <tr><td colspan="3" class="section">Pengurangan (Per Bulan)</td></tr>
     {{-- <tr><td>BPJS Kesehatan</td><td class="separator">:</td><td class="amount">Rp {{ number_format($bpjsKes, 0, ',', '.') }}</td></tr> --}}
-    <tr><td>BPJS Ketenagakerjaan</td><td class="separator">:</td><td class="basis"><table class="basis-line"><tr><td class="basis-gap">Rp {{ number_format($bpjsTk, 0, ',', '.') }}</td><td class="basis-source">dari {{ $sumberPotonganBpjsTk }}</td></tr></table></td></tr>
+    <tr><td>BPJS Ketenagakerjaan</td><td class="separator">:</td><td class="basis"><table class="basis-line"><tr><td class="basis-gap">Rp {{ number_format($bpjsTk, 0, ',', '.') }}</td></tr></table></td></tr>
     {{-- <tr><td>PPh 21</td><td class="separator">:</td><td class="amount">Rp {{ number_format($pph21, 0, ',', '.') }}</td></tr> --}}
     {{-- @if($pencadangan && (float) $pencadangan->nominal > 0)
         <tr><td>Pencadangan Upah</td><td class="separator">:</td><td class="amount">Rp {{ number_format((float) $pencadangan->nominal, 0, ',', '.') }}</td></tr>
@@ -470,7 +470,7 @@
     </tr>
     <tr>
         <td><strong><u>{{ $namaPenanggungJawab }}</u></strong></td>
-        <td><strong><u>{{ $karyawan->nama_lengkap }}</u></strong></td>
+        <td><strong><u>{{ $namaKaryawan }}</u></strong></td>
     </tr>
     <tr>
         <td>{{ $jabatanPenanggungJawab }}</td>

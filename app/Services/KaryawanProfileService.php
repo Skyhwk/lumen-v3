@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Helpers\ShioElemenHelper;
 use App\Models\MasterDivisi;
+use Carbon\Carbon;
 use App\Models\MasterJabatan;
 use App\Models\MasterKaryawan;
 use Illuminate\Support\Facades\DB;
@@ -113,6 +115,47 @@ class KaryawanProfileService
             'jabatan' => self::resolveJabatan($employee),
             'divisi' => self::resolveDivisi($employee),
             'nik_karyawan' => $employee->nik_karyawan ?? '-',
+        ];
+    }
+
+    /**
+     * @return array{tempat_lahir: ?string, tanggal_lahir: ?string, usia: ?int, shio: ?string, elemen: ?string}
+     */
+    public static function formatBirthPersonalFields(?MasterKaryawan $employee): array
+    {
+        if (!$employee) {
+            return [
+                'tempat_lahir' => null,
+                'tanggal_lahir' => null,
+                'usia' => null,
+                'shio' => null,
+                'elemen' => null,
+            ];
+        }
+
+        $shioElemen = ShioElemenHelper::resolve(
+            $employee->tanggal_lahir,
+            $employee->shio ?? null,
+            $employee->elemen ?? null
+        );
+
+        $usia = null;
+        if (!empty($employee->tanggal_lahir)) {
+            try {
+                $usia = Carbon::parse($employee->tanggal_lahir)->age;
+            } catch (\Throwable $e) {
+                $usia = null;
+            }
+        }
+
+        $tempat = trim((string) ($employee->tempat_lahir ?? ''));
+
+        return [
+            'tempat_lahir' => $tempat !== '' && !in_array(strtolower($tempat), ['-', 'null'], true) ? $tempat : null,
+            'tanggal_lahir' => $employee->tanggal_lahir ?: null,
+            'usia' => $usia,
+            'shio' => $shioElemen['shio'] ?? null,
+            'elemen' => $shioElemen['elemen'] ?? null,
         ];
     }
 }
