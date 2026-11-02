@@ -15,7 +15,7 @@ class DeactivateTrialCustomersCommand extends Command
 
     public function handle()
     {
-        $connection = 'portal_pelanggan';
+        $connection = 'portal_customer';
 
         if (!Schema::connection($connection)->hasColumn('users', 'is_trial')) {
             $this->warn('Kolom is_trial belum ada di portal pelanggan.');

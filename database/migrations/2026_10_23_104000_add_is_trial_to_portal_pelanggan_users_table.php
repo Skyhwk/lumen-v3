@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 class AddIsTrialToPortalPelangganUsersTable extends Migration
 {
-    protected $connection = 'portal_pelanggan';
+    protected $connection = 'portal_customer';
 
     public function up()
     {
