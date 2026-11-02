@@ -21,6 +21,7 @@ class DendaKaryawan extends Sector{
         'keterangan',
         'sisa_tenor',
         'sisa_denda',
+        'riwayat_perubahan_sisa',
         'status',
         'created_at',
         'created_by',
