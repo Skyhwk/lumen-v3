@@ -14,6 +14,7 @@ use App\Services\PencadanganUpahPayrollService;
 use App\Services\PayrollDebtService;
 use App\Services\PayrollDeductionService;
 use App\Services\PayrollRecordSyncService;
+use App\Services\Payroll\PayrollTrainingSpecialLeaveService;
 use App\Services\Payroll\PayrollWorkingDaysService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -253,6 +254,22 @@ class KalkulasiPayrollController extends Controller
             $response = Datatables::of($query)
                 ->make(true)
                 ->getData();
+
+            $trainingKaryawanIds = [];
+            foreach ($response->data ?? [] as $row) {
+                if (($row->status_karyawan ?? '') === 'Training' && empty($row->payroll_id)) {
+                    $trainingKaryawanIds[] = (int) ($row->karyawan_id ?? $row->id_karyawan ?? 0);
+                }
+            }
+            $specialLeaveDaysMap = PayrollTrainingSpecialLeaveService::mapApprovedSpecialLeaveDayCounts(
+                $trainingKaryawanIds,
+                $periodePayroll
+            );
+            foreach ($response->data ?? [] as $row) {
+                $kid = (int) ($row->karyawan_id ?? $row->id_karyawan ?? 0);
+                $excused = $specialLeaveDaysMap[$kid] ?? 0;
+                PayrollTrainingSpecialLeaveService::applyToPreviewRow($row, $excused);
+            }
 
             $totalFieldMap = [
                 'gaji_pokok' => 'gaji_pokok',
