@@ -12,7 +12,8 @@ class GenerateMonthlyAbsensiCommand extends Command
     protected $signature = 'absensi:generate-monthly
                             {--bulan= : Periode YYYY-MM (default: bulan sebelumnya menurut WIB)}
                             {--as-of= : Tanggal acuan YYYY-MM-DD untuk hitung bulan target (default: hari ini WIB)}
-                            {--force : Generate ulang meski rekap aktif sudah ada}';
+                            {--force : Generate ulang meski rekap aktif sudah ada}
+                            {--dry-run : Simulasi — hitung rekap tanpa menulis database}';
 
     protected $description = 'Generate rekap absensi bulanan otomatis untuk karyawan STAFF & SUPERVISOR (cron: tgl 1 jam 10:00 WIB, periode = bulan sebelumnya)';
 
@@ -37,19 +38,24 @@ class GenerateMonthlyAbsensiCommand extends Command
         }
 
         $skipExisting = !(bool) $this->option('force');
+        $dryRun = (bool) $this->option('dry-run');
 
         $this->info('Generate absensi bulanan — periode: ' . $bulanTarget . ' (WIB)');
+        if ($dryRun) {
+            $this->warn('Mode DRY-RUN: tidak ada insert/update ke rekap_masuk_kerja atau absensi.');
+        }
 
         $startedAt = microtime(true);
 
         Log::info('absensi:generate-monthly mulai', [
             'bulan' => $bulanTarget,
             'skip_existing' => $skipExisting,
+            'dry_run' => $dryRun,
             'started_at' => Carbon::now($timezone)->toDateTimeString(),
         ]);
 
         try {
-            $summary = $orchestrator->generateForStaffSupervisor($bulanTarget, $skipExisting);
+            $summary = $orchestrator->generateForStaffSupervisor($bulanTarget, $skipExisting, $dryRun);
         } catch (\Throwable $e) {
             $durationSeconds = round(microtime(true) - $startedAt, 2);
             $this->error($e->getMessage());
@@ -65,26 +71,54 @@ class GenerateMonthlyAbsensiCommand extends Command
 
         $durationSeconds = round(microtime(true) - $startedAt, 2);
 
-        $this->table(
-            ['Metrik', 'Nilai'],
-            [
-                ['Diproses', $summary['processed']],
-                ['Berhasil generate', $summary['generated']],
-                ['Dilewati (sudah ada)', $summary['skipped']],
-                ['Gagal', $summary['failed']],
-                ['Durasi', $this->formatDurationHuman($durationSeconds)],
-            ]
-        );
+        $metricRows = [
+            ['Diproses', $summary['processed']],
+        ];
+        if ($dryRun) {
+            $metricRows[] = ['Akan di-generate (simulasi)', $summary['would_generate'] ?? 0];
+        } else {
+            $metricRows[] = ['Berhasil generate', $summary['generated']];
+        }
+        $metricRows[] = ['Dilewati (sudah ada)', $summary['skipped']];
+        $metricRows[] = ['Gagal', $summary['failed']];
+        $metricRows[] = ['Durasi', $this->formatDurationHuman($durationSeconds)];
+
+        $this->table(['Metrik', 'Nilai'], $metricRows);
+
+        if ($dryRun) {
+            $previewRows = array_values(array_filter(
+                $summary['details'],
+                static fn (array $detail): bool => ($detail['status'] ?? '') === 'would_generate'
+            ));
+            if ($previewRows !== []) {
+                $this->newLine();
+                $this->info('Preview rekap (hari kerja vs masuk):');
+                $this->table(
+                    ['ID', 'NIK', 'Nama', 'Hari kerja', 'Masuk', 'Tidak hadir'],
+                    array_map(static function (array $detail): array {
+                        return [
+                            $detail['karyawan_id'],
+                            $detail['nik'] ?? '-',
+                            $detail['nama'] ?? '-',
+                            $detail['hari_kerja'] ?? '-',
+                            $detail['masuk_kerja'] ?? '-',
+                            $detail['tidak_hadir'] ?? '-',
+                        ];
+                    }, $previewRows)
+                );
+            }
+        }
 
         foreach ($summary['details'] as $detail) {
-            if (($detail['status'] ?? '') === 'generated') {
+            $status = $detail['status'] ?? '';
+            if ($status === 'generated' || $status === 'would_generate') {
                 continue;
             }
             $this->line(sprintf(
                 '#%d %s — [%s] %s',
                 $detail['karyawan_id'],
                 $detail['nik'] ?? '-',
-                $detail['status'] ?? '-',
+                $status,
                 $detail['message'] ?? ''
             ));
         }

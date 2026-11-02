@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\{Payroll, PayrollHeader, MasterKaryawan, Kasbon, DendaKaryawan, PencadanganUpah};
+use App\Services\PayrollRecordSyncService;
 use Illuminate\Support\Facades\DB;
 
 class PayrollDeductionService
@@ -39,14 +40,12 @@ class PayrollDeductionService
                     continue;
                 }
                 $periodField = $balanceField ? 'bulan_mulai_pemotongan' : 'bulan_efektif';
-                $sources = $class::where('id_karyawan', $employee->id)->where('is_active', true)
-                    ->where(function ($query) {
-                        $query->where('status', 'ONGOING')->orWhereNull('status');
-                    })
-                    ->when($balanceField, function ($query) use ($balanceField) {
-                        $query->where($balanceField, '>', 0)->where('nominal_potongan', '>', 0);
-                    })
-                    ->where($periodField, '<=', $payroll->periode_payroll)
+                $sources = PayrollRecordSyncService::scopePayrollDeductionSource(
+                    $class::where('id_karyawan', $employee->id),
+                    $balanceField,
+                    $periodField,
+                    $payroll->periode_payroll
+                )
                     ->orderBy('id')->lockForUpdate()->get();
                 if ($sources->count() !== 1) {
                     throw new \DomainException("Sumber $field tidak ditemukan atau ambigu. Muat ulang dan periksa data master.");
@@ -105,7 +104,7 @@ class PayrollDeductionService
                 // Never pick the latest master record: restore only the recorded source.
                 $source = $class::where('id', $entry['id'])->where('id_karyawan', $payroll->id_karyawan)
                     ->lockForUpdate()->first();
-                if (!$source || !$source->is_active || $this->state($source, $balanceField) != $entry['after']) {
+                if (!$source || $this->state($source, $balanceField) != $entry['after']) {
                     throw new \DomainException("Sumber $field sudah berubah sejak submit. Rekonsiliasi terlebih dahulu.");
                 }
                 if ($balanceField) {
