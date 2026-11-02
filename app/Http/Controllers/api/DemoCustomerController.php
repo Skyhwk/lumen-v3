@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Schema;
 class DemoCustomerController extends Controller
 {
     const TRIAL_PELANGGAN_ID = 'ESTX01';
-    const CONNECTION = 'portal_pelanggan';
+    const CONNECTION = 'portal_customer';
 
     public function index()
     {
