@@ -58,6 +58,7 @@ class PayrollDeductionServiceTest extends TestCase
                 $t->increments('id'); $t->integer('id_karyawan');
                 $t->decimal($balance, 15, 2); $t->decimal('nominal_potongan', 15, 2);
                 $t->integer('sisa_tenor'); $t->string('status')->nullable()->default('ONGOING');
+                $t->unsignedTinyInteger('interval_pemotongan_bulan')->default(1);
                 $t->string('bulan_mulai_pemotongan'); $t->boolean('is_active')->default(true);
                 $t->string('updated_by')->nullable(); $t->timestamp('updated_at')->nullable();
             });
@@ -276,6 +277,43 @@ class PayrollDeductionServiceTest extends TestCase
         $this->assertEquals(0, $this->db->getConnection()->selectOne($query)->amount);
     }
 
+    public function testKasbonPreviewRespectsDeductionInterval(): void
+    {
+        $this->debt(Kasbon::class, [
+            'sisa_kasbon' => 3000000,
+            'nominal_potongan' => 500000,
+            'bulan_mulai_pemotongan' => '2026-05',
+            'interval_pemotongan_bulan' => 2,
+        ]);
+        $pdo = $this->db->getConnection()->getPdo();
+        $pdo->sqliteCreateFunction('LEAST', function ($a, $b) {
+            return min($a, $b);
+        }, 2);
+        $pdo->sqliteCreateFunction('PERIOD_DIFF', function ($a, $b) {
+            $a = preg_replace('/\D/', '', (string) $a);
+            $b = preg_replace('/\D/', '', (string) $b);
+
+            return ((int) substr($a, 0, 4) - (int) substr($b, 0, 4)) * 12
+                + ((int) substr($a, 4, 2) - (int) substr($b, 4, 2));
+        }, 2);
+        $pdo->sqliteCreateFunction('MOD', function ($a, $b) {
+            return $a % $b;
+        }, 2);
+
+        $preview = function (string $period) {
+            $sql = 'SELECT ' . PayrollDebtService::sqlPreviewAmount('kasbon', $period) . ' AS amount FROM kasbon';
+
+            return (float) $this->db->getConnection()->selectOne($sql)->amount;
+        };
+
+        $this->assertEquals(500000, $preview('2026-05'));
+        $this->assertEquals(0, $preview('2026-06'));
+        $this->assertEquals(500000, $preview('2026-07'));
+        $this->assertEquals(0, $preview('2026-08'));
+        $this->assertEquals(500000, $preview('2026-11'));
+        $this->assertEquals(500000, $preview('2027-03'));
+    }
+
     public static function moneyFormats(): array
     {
         return [[100000, 100000.0], ['100000.00', 100000.0], ['100,000', 100000.0],
@@ -463,7 +501,7 @@ class PayrollDeductionServiceTest extends TestCase
         });
         $request = new \Illuminate\Http\Request(array_merge([
             'id_karyawan' => 1, 'total_kasbon' => '1.000.000', 'nominal_potongan' => '500.000',
-            'tenor' => 2, 'bulan_mulai_pemotongan' => '2026-05',
+            'tenor' => 2, 'interval_pemotongan_bulan' => 2, 'bulan_mulai_pemotongan' => '2026-05',
         ], $statusInput));
         $controller = new \App\Http\Controllers\api\KasbonController($request);
         $response = $controller->store($request);

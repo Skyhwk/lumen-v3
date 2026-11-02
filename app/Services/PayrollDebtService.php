@@ -61,15 +61,34 @@ class PayrollDebtService
     }
 
     /** Whitelisted SQL shared by the displayed deduction and THP. */
-    public static function sqlPreviewAmount(string $table): string
+    public static function sqlPreviewAmount(string $table, ?string $periode = null): string
     {
         $fields = ['kasbon' => 'sisa_kasbon', 'denda_karyawan' => 'sisa_denda'];
         if (!isset($fields[$table])) {
             throw new \InvalidArgumentException('Unknown payroll debt table.');
         }
         $balance = $fields[$table];
+        $scheduleSql = $periode !== null
+            ? self::sqlDebtOnSchedule($table, $periode)
+            : '1=1';
+
         return 'IFNULL(MAX(CASE WHEN (' . $table . '.status = "ONGOING" OR ' . $table . '.status IS NULL) AND ' . $table . '.' . $balance . ' > 0'
-            . ' AND ' . $table . '.nominal_potongan > 0 THEN LEAST(ROUND(' . $table . '.' . $balance . ', 0),'
+            . ' AND ' . $table . '.nominal_potongan > 0 AND ' . $scheduleSql . ' THEN LEAST(ROUND(' . $table . '.' . $balance . ', 0),'
             . ' ROUND(' . $table . '.nominal_potongan, 0)) ELSE 0 END), 0)';
+    }
+
+    private static function sqlDebtOnSchedule(string $table, string $periode): string
+    {
+        $periodeYm = str_replace('-', '', $periode);
+        if (!preg_match('/^\d{6}$/', $periodeYm)) {
+            throw new \InvalidArgumentException('Invalid payroll period.');
+        }
+        $startExpr = 'REPLACE(' . $table . '.bulan_mulai_pemotongan, "-", "")';
+        $diff = 'PERIOD_DIFF(' . $periodeYm . ', ' . $startExpr . ')';
+        $interval = $table === 'kasbon'
+            ? 'IFNULL(' . $table . '.interval_pemotongan_bulan, 1)'
+            : '1';
+
+        return '(' . $diff . ' >= 0 AND MOD(' . $diff . ', ' . $interval . ') = 0)';
     }
 }

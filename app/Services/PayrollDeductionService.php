@@ -129,6 +129,9 @@ class PayrollDeductionService
         $fields = $balanceField
             ? [$balanceField, 'sisa_tenor', 'status', 'nominal_potongan']
             : ['tenor', 'tenor_berjalan', 'nominal', 'nominal_berjalan', 'status', 'tipe_pengembalian'];
+        if ($balanceField && $source instanceof Kasbon) {
+            $fields[] = 'interval_pemotongan_bulan';
+        }
         $state = [];
         foreach ($fields as $field) {
             $state[$field] = $source->$field;

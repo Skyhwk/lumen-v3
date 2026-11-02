@@ -93,6 +93,14 @@ class KasbonController extends Controller
             $kasbon->total_kasbon = str_replace(['Rp', '.', ','], '', $request->total_kasbon);
             $kasbon->nominal_potongan = str_replace(['Rp', '.', ','], '', $request->nominal_potongan);
             $kasbon->tenor = $request->tenor;
+            $interval = (int) ($request->interval_pemotongan_bulan ?? 1);
+            if ($interval < 1 || $interval > 24) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Interval potong harus antara 1 dan 24 bulan.',
+                ], 401);
+            }
+            $kasbon->interval_pemotongan_bulan = $interval;
             $kasbon->bulan_mulai_pemotongan = preg_match('/^(\d{4}-\d{2})/', (string) $request->bulan_mulai_pemotongan, $m)
                 ? $m[1]
                 : $request->bulan_mulai_pemotongan;

@@ -135,8 +135,8 @@ class KalkulasiPayrollController extends Controller
             $pcThpRefundAdd = PencadanganUpahPayrollService::sqlShowDataThpRefundAdd();
             $pcThpDeductionSub = PencadanganUpahPayrollService::sqlShowDataThpDeductionSub();
 
-            $loanSql = PayrollDebtService::sqlPreviewAmount('kasbon');
-            $fineSql = PayrollDebtService::sqlPreviewAmount('denda_karyawan');
+            $loanSql = PayrollDebtService::sqlPreviewAmount('kasbon', $request->periode);
+            $fineSql = PayrollDebtService::sqlPreviewAmount('denda_karyawan', $request->periode);
 
             $query = DB::table('master_karyawan')
             ->select(

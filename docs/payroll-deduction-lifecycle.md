@@ -12,6 +12,10 @@ atau riwayat payroll lama secara otomatis.
 - Kasbon/denda: saldo dikurangi nominal payroll aktual. Tenor tersisa dihitung
   `ceil(saldo / cicilan normal)`; saldo nol menjadi `END`. Preview cicilan terakhir
   dibatasi sisa saldo. Submit dengan potongan melebihi saldo ditolak, bukan diubah diam-diam.
+- Kasbon: field `interval_pemotongan_bulan` (default 1 = tiap bulan payroll). Preview **loan**
+  hanya terisi di bulan jadwal: `PERIOD_DIFF(periode, bulan_mulai) % interval = 0`.
+  Contoh: 6 kali potong, interval 2, mulai Mei → potong Mei, Jul, Sep, Nov, Jan, Mar;
+  bulan di antaranya preview loan = 0 dan submit dengan loan 0 tidak mengubah saldo kasbon.
 - Potongan nol tidak mengubah saldo maupun fase. THP saat submit disimpan dari nilai
   akhir yang dikirim frontend (format angka dinormalisasi), tanpa dihitung ulang dari
   komponen payroll. Kalkulasi preview tetap dilakukan oleh showData.

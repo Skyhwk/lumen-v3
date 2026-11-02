@@ -15,6 +15,7 @@ class Kasbon extends Sector{
         'id_karyawan',
         'total_kasbon',
         'tenor',
+        'interval_pemotongan_bulan',
         'bulan_mulai_pemotongan',
         'nominal_potongan',
         'tanggal_permintaan',
