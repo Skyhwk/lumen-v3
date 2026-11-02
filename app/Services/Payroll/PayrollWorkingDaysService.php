@@ -8,8 +8,23 @@ use Carbon\Carbon;
 
 class PayrollWorkingDaysService
 {
-    /** Jabatan dengan hari kerja Senin–Sabtu (kalender + Sabtu yang bukan libur nasional di JSON). */
-    public const JABATAN_INCLUDE_SATURDAY = [35, 36, 94];
+    /** @return list<int> id_jabatan Senin–Sabtu — dari config/payroll.php (env PAYROLL_JABATAN_INCLUDE_SATURDAY). */
+    public static function jabatanIncludeSaturday(): array
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+        $ids = config('payroll.jabatan_include_saturday', [35, 36, 94]);
+        if (!is_array($ids)) {
+            $cached = [35, 36, 94];
+
+            return $cached;
+        }
+        $cached = array_values(array_map('intval', $ids));
+
+        return $cached;
+    }
 
     /** Shift security/24 jam — hari kerja expected = jumlah jadwal shift di bulan. */
     public const PER_SHIFT_CODES = [
@@ -152,7 +167,7 @@ class PayrollWorkingDaysService
         }
 
         $counts = self::calendarCountsForMonth($periodeYm);
-        if ($idJabatan !== null && in_array($idJabatan, self::JABATAN_INCLUDE_SATURDAY, true)) {
+        if ($idJabatan !== null && in_array($idJabatan, self::jabatanIncludeSaturday(), true)) {
             return $counts['mon_sat'];
         }
 
@@ -167,7 +182,7 @@ class PayrollWorkingDaysService
     public static function eligibleWorkDateIndex(string $periodeYm, ?int $idJabatan): array
     {
         $includeSaturday = $idJabatan !== null
-            && in_array($idJabatan, self::JABATAN_INCLUDE_SATURDAY, true);
+            && in_array($idJabatan, self::jabatanIncludeSaturday(), true);
 
         $counts = self::calendarCountsForMonth($periodeYm);
         $index = [];
@@ -273,9 +288,12 @@ class PayrollWorkingDaysService
     /** Fallback ringan di payroll bila rekap lama belum punya kolom hari_kerja. */
     public static function sqlFallbackHariKerjaFromJabatan(int $monFri, int $monSat): string
     {
-        $satIds = implode(',', self::JABATAN_INCLUDE_SATURDAY);
+        $satIds = self::jabatanIncludeSaturday();
+        if ($satIds === []) {
+            return (string) (int) $monFri;
+        }
 
-        return 'CASE WHEN master_karyawan.id_jabatan IN (' . $satIds . ') THEN '
+        return 'CASE WHEN master_karyawan.id_jabatan IN (' . implode(',', $satIds) . ') THEN '
             . (int) $monSat . ' ELSE ' . (int) $monFri . ' END';
     }
 
