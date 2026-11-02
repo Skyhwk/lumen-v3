@@ -7,7 +7,10 @@ use App\Models\Sector;
 class Kasbon extends Sector{
     protected $table = 'kasbon';
     protected $guard = [];
-
+    protected $casts = [
+        'custom_potongan' => 'array',
+        'history_perubahan' => 'array',
+    ];
     
     protected $fillable = [
         'karyawan',
@@ -16,13 +19,16 @@ class Kasbon extends Sector{
         'total_kasbon',
         'tenor',
         'bulan_mulai_pemotongan',
+        'mode_potongan',
         'nominal_potongan',
+        'custom_potongan',
         'tanggal_permintaan',
         'tanggal_pencairan',
         'keterangan',
         'sisa_tenor',
         'sisa_kasbon',
         'status',
+        'history_perubahan',
         'created_at',
         'created_by',
         'updated_at',
