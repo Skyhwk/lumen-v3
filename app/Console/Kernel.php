@@ -69,6 +69,7 @@ class Kernel extends ConsoleKernel
         Commands\CustomerServiceAutoCloseCommand::class,
         Commands\CustomerServiceAutoArchiveCommand::class,
         Commands\DeactivateTrialCustomersCommand::class,
+        Commands\CompletePayrollDisbursementCommand::class,
         Commands\MigrateHrRequestsFromAppsCommand::class,
         Commands\VerifyHrMigrationCommand::class,
         Commands\VerifyHrStatusParityCommand::class,

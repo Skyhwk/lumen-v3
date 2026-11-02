@@ -128,6 +128,50 @@ class PayrollTransferCompletionService
         ];
     }
 
+    /**
+     * Kirim ulang email slip untuk header (payroll sudah PAID, notif tidak diulang).
+     */
+    public function resendPayslipEmails(int $payrollHeaderId): array
+    {
+        $header = PayrollHeader::query()
+            ->where('id', $payrollHeaderId)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$header) {
+            throw new \InvalidArgumentException('Payroll header tidak ditemukan.');
+        }
+
+        $payrolls = Payroll::query()
+            ->where('payroll_header_id', $header->id)
+            ->where('is_active', true)
+            ->get();
+
+        $periodeLabel = self::formatPeriodeLabel($header->periode_payroll);
+        $emailed = 0;
+        $errors = [];
+
+        foreach ($payrolls as $payroll) {
+            try {
+                if ($this->sendPayslipEmail($payroll, $header, $periodeLabel)) {
+                    $emailed++;
+                }
+            } catch (\Throwable $mailError) {
+                $errors[] = [
+                    'payroll_id' => $payroll->id,
+                    'step' => 'email',
+                    'message' => $mailError->getMessage(),
+                ];
+            }
+        }
+
+        return [
+            'payroll_header_id' => $payrollHeaderId,
+            'emailed' => $emailed,
+            'errors' => $errors,
+        ];
+    }
+
     protected function sendPayslipEmail(Payroll $payroll, PayrollHeader $header, string $periodeLabel): bool
     {
         $karyawan = MasterKaryawan::query()
@@ -150,8 +194,10 @@ class PayrollTransferCompletionService
             'tglTransferLabel' => self::formatTransferDateLabel($header->tgl_transfer),
         ])->render();
 
+        $subject = 'Payroll Inti Surya Laboratorium - Periode ' . $periodeLabel;
+
         SendEmail::where('to', $email)
-            ->where('subject', 'Payroll ' . $periodeLabel)
+            ->where('subject', $subject)
             ->where('body', $body)
             ->where('attachment', [
                 [
@@ -183,7 +229,7 @@ class PayrollTransferCompletionService
             RenderSlipGajiService::deleteCachedSlipFiles($payroll);
         }
 
-        $generated = RenderSlipGajiService::fromPayrollId($payrollId)->generate();
+        $generated = RenderSlipGajiService::fromPayrollIdForSystemEmail($payrollId)->generate();
         $path = $generated['path'] ?? $pdfPath;
 
         if (!is_file($path)) {

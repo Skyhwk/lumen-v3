@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payroll {{ $periodeLabel }}</title>
+    <title>Payroll Inti Surya Laboratorium - Periode {{ $periodeLabel }}</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f6f9;font-family:Arial,Helvetica,sans-serif;color:#344256;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f6f9;">
@@ -34,7 +34,13 @@
                         </table>
 
                         <p style="margin:0 0 16px;font-size:13px;line-height:21px;">
-                            Slip gaji terlampir pada email ini (PDF terproteksi). Anda juga dapat melihat slip gaji melalui aplikasi <strong>Attendance</strong>.
+                            Slip gaji terlampir pada email ini (PDF terproteksi). Password untuk membuka file PDF adalah
+                            <strong>tanggal lahir Anda dalam format tanggal-bulan-tahun</strong> (8 digit, tanpa pemisah),
+                            contoh: lahir 13 September 2000 → <strong>13092000</strong>.
+                        </p>
+
+                        <p style="margin:0 0 16px;font-size:13px;line-height:21px;">
+                            Anda juga dapat melihat slip gaji melalui aplikasi <strong>Attendance</strong>.
                         </p>
 
                         <p style="margin:0;font-size:13px;line-height:21px;">Terima kasih atas kontribusi dan dedikasi Anda.</p>
