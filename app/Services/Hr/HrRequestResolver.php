@@ -37,6 +37,12 @@ class HrRequestResolver
             ->first();
     }
 
+    /** HR request hanya lewat migration map — aman untuk baris tabel legacy (hindari bentrok id numerik). */
+    public static function findMappedFromLegacyRow(string $requestType, int $legacyId): ?HrRequest
+    {
+        return self::findHrByLegacyApiId($requestType, $legacyId);
+    }
+
     private static function findHrByLegacyApiId(string $requestType, int $legacyId): ?HrRequest
     {
         $legacyTable = self::legacyTableForType($requestType);

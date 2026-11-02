@@ -10,6 +10,7 @@ use App\Services\Greatday\DynamicApprovalChainService;
 use App\Services\Hr\ApprovalService;
 use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\HrTableMode;
+use App\Services\Hr\Presenters\HrApprovalChainPresenter;
 use App\Services\Hr\LegacyHrMirror;
 use App\Services\Hr\WorkflowStatus;
 use App\Support\Greatday\KaryawanPresentation;
@@ -32,6 +33,9 @@ class AttendanceCorrectionsController extends Controller
         return datatables()->of($data)
             ->addColumn('atasan_steps', function ($row) {
                 return $this->atasanStepsForRow($row);
+            })
+            ->addColumn('menunggu_atasan', function ($row) {
+                return $this->waitingAtasanNameForRow($row);
             })
             ->addColumn('jabatan_karyawan', function ($row) {
                 $jabatan = optional($row->karyawan)->jabatan;
@@ -81,6 +85,17 @@ class AttendanceCorrectionsController extends Controller
                 }
 
                 $query->whereIn('employee_id', $ids);
+            })
+            ->filterColumn('menunggu_atasan', function ($query, $keyword) {
+                $employeeIds = $this->employeeIdsWaitingOnAtasanNamed($keyword);
+                $query->whereIn('employee_id', $employeeIds);
+            })
+            ->filterColumn('atasan_steps', function ($query, $keyword) {
+                $keyword = trim((string) $keyword);
+                if ($keyword === '') {
+                    return;
+                }
+                $query->where('approved_atasan_at', 'like', "%{$keyword}%");
             })
             ->filterColumn('approved_atasan_by', function ($query, $keyword) {
                 $query->where('approved_atasan_by', 'like', "%{$keyword}%");
@@ -316,7 +331,85 @@ class AttendanceCorrectionsController extends Controller
         return $time;
     }
 
+    /**
+     * @return list<int>
+     */
+    private function employeeIdsWaitingOnAtasanNamed(string $keyword): array
+    {
+        $needle = mb_strtolower(trim($keyword));
+        if ($needle === '') {
+            return [0];
+        }
+
+        $rows = AttendanceCorrections::query()
+            ->where('status', WorkflowStatus::PENDING)
+            ->whereNotNull('employee_id')
+            ->with(['karyawan.jabatan'])
+            ->get();
+
+        $employeeIds = [];
+        foreach ($rows as $row) {
+            $name = mb_strtolower($this->waitingAtasanNameForRow($row));
+            if ($name !== '' && $name !== '-' && mb_strpos($name, $needle) !== false) {
+                $employeeIds[] = (int) $row->employee_id;
+            }
+        }
+
+        return $employeeIds !== [] ? array_values(array_unique($employeeIds)) : [0];
+    }
+
+    private function waitingAtasanNameForRow($row): string
+    {
+        foreach ($this->atasanStepsForRow($row) as $step) {
+            if (($step['state'] ?? '') !== 'active') {
+                continue;
+            }
+            $name = trim((string) ($step['actor'] ?? ''));
+            if ($name !== '') {
+                return $name;
+            }
+        }
+
+        return '-';
+    }
+
     private function atasanStepsForRow($row): array
+    {
+        $legacySteps = $this->legacyAtasanStepsForRow($row);
+
+        $hrRequest = HrRequestResolver::findMappedFromLegacyRow(
+            HrRequest::TYPE_ATTENDANCE_CORRECTION,
+            (int) $row->id
+        );
+        if (!$hrRequest) {
+            return $legacySteps;
+        }
+
+        $fromHr = HrApprovalChainPresenter::atasanStepsForPortal($hrRequest);
+        if ($fromHr === []) {
+            return $legacySteps;
+        }
+
+        $status = (string) ($row->status ?? '');
+        if ($status === WorkflowStatus::PENDING && !$this->hasActiveAtasanWithActor($fromHr)) {
+            return $legacySteps;
+        }
+
+        return $fromHr;
+    }
+
+    private function hasActiveAtasanWithActor(array $steps): bool
+    {
+        foreach ($steps as $step) {
+            if (($step['state'] ?? '') === 'active') {
+                return trim((string) ($step['actor'] ?? '')) !== '';
+            }
+        }
+
+        return false;
+    }
+
+    private function legacyAtasanStepsForRow($row): array
     {
         $employee = $row->relationLoaded('karyawan') ? $row->karyawan : null;
         if (!$employee && $row->employee_id) {
