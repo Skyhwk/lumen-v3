@@ -52,10 +52,24 @@ class PencadanganUpahPayrollService
         )';
     }
 
+    /**
+     * Sisa pengembalian (karyawan keluar, fase balik): cicilan belum dibayar × nominal.
+     * tenor_berjalan = indeks cicilan balik saat ini (1..tenor).
+     */
+    public static function sqlRemainingRefundNominal(): string
+    {
+        return 'CASE
+            WHEN pencadangan_upah.tenor_berjalan > 0 THEN GREATEST(0, (pencadangan_upah.tenor - pencadangan_upah.tenor_berjalan + 1)) * pencadangan_upah.nominal
+            WHEN pencadangan_upah.tenor_berjalan = 0 THEN pencadangan_upah.tenor * pencadangan_upah.nominal
+            ELSE 0
+        END';
+    }
+
     /** Nominal kolom preview showData: negatif = potong, positif = balik, 0 = tidak ada efek bulan ini. */
     public static function sqlPreviewAmount(): string
     {
         return 'CASE
+            WHEN master_karyawan.is_active = 0 AND ' . self::sqlRefundPhase() . ' THEN ' . self::sqlRemainingRefundNominal() . '
             WHEN ' . self::sqlDeductionPhase() . ' THEN -pencadangan_upah.nominal
             WHEN ' . self::sqlRefundPhase() . ' THEN pencadangan_upah.nominal
             ELSE 0
@@ -72,7 +86,9 @@ class PencadanganUpahPayrollService
 
     public static function sqlShowDataThpRefundAdd(): string
     {
-        return 'IFNULL(MAX(CASE WHEN ' . self::sqlRefundPhase() . ' THEN pencadangan_upah.nominal ELSE 0 END), 0)';
+        return 'IFNULL(MAX(CASE WHEN master_karyawan.is_active = 0 AND ' . self::sqlRefundPhase() . ' THEN '
+            . self::sqlRemainingRefundNominal()
+            . ' WHEN ' . self::sqlRefundPhase() . ' THEN pencadangan_upah.nominal ELSE 0 END), 0)';
     }
 
     public static function sqlShowDataThpDeductionSub(): string
@@ -98,9 +114,12 @@ class PencadanganUpahPayrollService
     /**
      * Setelah payroll disubmit: maju fase potong / tunggu kontrak / pengembalian.
      */
-    public static function advanceOnPayrollSubmit(PencadanganUpah $deposit, ?string $employeeStatus): bool
-    {
-        if (self::previewAmount($deposit, $employeeStatus) == 0) {
+    public static function advanceOnPayrollSubmit(
+        PencadanganUpah $deposit,
+        ?string $employeeStatus,
+        bool $employeeIsActive = true
+    ): bool {
+        if (self::previewAmount($deposit, $employeeStatus, $employeeIsActive) == 0) {
             return false;
         }
         $tenor = (int) $deposit->tenor;
@@ -144,8 +163,11 @@ class PencadanganUpahPayrollService
         return $changed;
     }
 
-    public static function previewAmount(PencadanganUpah $deposit, ?string $employeeStatus): float
-    {
+    public static function previewAmount(
+        PencadanganUpah $deposit,
+        ?string $employeeStatus,
+        bool $employeeIsActive = true
+    ): float {
         $tenor = (int) $deposit->tenor;
         $current = (int) $deposit->tenor_berjalan;
         if ($deposit->status !== null && $deposit->status !== 'ONGOING') {
@@ -153,6 +175,9 @@ class PencadanganUpahPayrollService
         }
         if ($tenor < 1 || $current < -$tenor || $current > $tenor || (float) $deposit->nominal <= 0) {
             throw new \DomainException('Data tenor/nominal pencadangan upah tidak valid. Rekonsiliasi terlebih dahulu.');
+        }
+        if (!$employeeIsActive && self::isRefundPhaseState($deposit, $employeeStatus)) {
+            return round(self::remainingRefundNominal($tenor, $current, (float) $deposit->nominal), 0);
         }
         if ($current < 0) {
             return -round((float) $deposit->nominal, 0);
@@ -162,5 +187,56 @@ class PencadanganUpahPayrollService
             return round((float) $deposit->nominal, 0);
         }
         return 0;
+    }
+
+    public static function remainingRefundNominal(int $tenor, int $tenorBerjalan, float $nominalPerMonth): float
+    {
+        if ($tenorBerjalan > 0) {
+            return max(0, $tenor - $tenorBerjalan + 1) * $nominalPerMonth;
+        }
+        if ($tenorBerjalan === 0) {
+            return $tenor * $nominalPerMonth;
+        }
+
+        return 0;
+    }
+
+    public static function isRefundPhaseState(PencadanganUpah $deposit, ?string $employeeStatus): bool
+    {
+        $current = (int) $deposit->tenor_berjalan;
+        $tenor = (int) $deposit->tenor;
+        if ($current > 0 && $current <= $tenor) {
+            return true;
+        }
+        if ($current === 0 && self::normalizeTipe($deposit->tipe_pengembalian) === self::TIPE_SETELAH_KONTRAK
+            && self::isContractStatus($employeeStatus)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    public static function advanceOnPayrollSubmitForInactiveExit(
+        PencadanganUpah $deposit,
+        float $amount,
+        bool $employeeIsActive,
+        ?string $employeeStatus
+    ): bool {
+        if ($employeeIsActive || $amount <= 0) {
+            return false;
+        }
+        if (!self::isRefundPhaseState($deposit, $employeeStatus)) {
+            return false;
+        }
+        $tenor = (int) $deposit->tenor;
+        $current = (int) $deposit->tenor_berjalan;
+        $expected = round(self::remainingRefundNominal($tenor, $current, (float) $deposit->nominal), 0);
+        if ($amount != $expected) {
+            return false;
+        }
+        $deposit->tenor_berjalan = $tenor;
+        $deposit->status = 'END';
+
+        return true;
     }
 }

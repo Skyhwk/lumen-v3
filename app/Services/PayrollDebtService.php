@@ -100,11 +100,15 @@ class PayrollDebtService
             $effectiveInstallmentSql = 'CASE WHEN kasbon.mode_potongan = "custom" AND kasbon.custom_potongan IS NOT NULL THEN (CASE WHEN ' . $customMatchPathSql . ' IS NOT NULL THEN ' . $customNominalSql . ' ELSE 0 END) ELSE kasbon.nominal_potongan END';
 
             return 'IFNULL(MAX(CASE WHEN (kasbon.status = "ONGOING" OR kasbon.status IS NULL) AND kasbon.' . $balance . ' > 0'
+                . ' AND master_karyawan.is_active = 0 THEN ROUND(kasbon.' . $balance . ', 0)'
+                . ' WHEN (kasbon.status = "ONGOING" OR kasbon.status IS NULL) AND kasbon.' . $balance . ' > 0'
                 . ' AND (' . $effectiveInstallmentSql . ') > 0 THEN LEAST(ROUND(kasbon.' . $balance . ', 0),'
                 . ' ROUND(' . $effectiveInstallmentSql . ', 0)) ELSE 0 END), 0)';
         }
 
         return 'IFNULL(MAX(CASE WHEN (' . $table . '.status = "ONGOING" OR ' . $table . '.status IS NULL) AND ' . $table . '.' . $balance . ' > 0'
+            . ' AND master_karyawan.is_active = 0 THEN ROUND(' . $table . '.' . $balance . ', 0)'
+            . ' WHEN (' . $table . '.status = "ONGOING" OR ' . $table . '.status IS NULL) AND ' . $table . '.' . $balance . ' > 0'
             . ' AND ' . $table . '.nominal_potongan > 0 THEN LEAST(ROUND(' . $table . '.' . $balance . ', 0),'
             . ' ROUND(' . $table . '.nominal_potongan, 0)) ELSE 0 END), 0)';
     }
