@@ -45,6 +45,41 @@ class SoundMeterController extends Controller
     //     return DataTables::of($result)->make(true);
     // }
 
+    public function detailDevice(Request $request)
+    {
+        $kode = $request->kode; // Changed from $request->id to match your frontend
+
+        // First, get all the records for this device
+        $records = DetailSoundMeter::where('id_device', $kode)
+            ->select('id', 'id_device', 'no_sampel', 'shift', 'LAeq', 'data_pendukung','db')
+            ->orderBy('timestamp', 'desc')
+            ->get();
+            // ->map(function ($record) {
+            //     $record->data_pendukung = json_decode($record->data_pendukung);
+            //     return $record;
+            // });
+        // Group the records by no_sampel
+        $groupedData = $records->groupBy('no_sampel');
+        
+        // Transform the grouped data into the desired format
+        $result = $groupedData->map(function ($group, $no_sampel) {
+            // Take the first record for the main data
+            $mainRecord = $group->first();
+            
+            // Create a new object with the main fields
+            $item = [
+                'id' => $mainRecord->id,
+                'id_device' => $mainRecord->id_device,
+                'no_sampel' => $mainRecord->no_sampel,
+                'sampel_detail' => $group->toArray() // Add all records with this no_sampel as sampel_detail
+            ];
+            
+            return $item;
+        });
+        // Convert to a collection and return as DataTables response
+        return DataTables::of($result)->make(true);
+    }
+
     public function index(Request $request)
     {  
         $data = DeviceIntilab::where('category', 'Sound Meter');
