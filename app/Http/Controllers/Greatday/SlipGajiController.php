@@ -23,6 +23,7 @@ class SlipGajiController extends Controller
                 ->where('is_active', 1)
                 ->whereHas('payrollHeader', function ($query) {
                     $query->where('is_active', 1);
+                    $query->where('status', 'TRANSFER');
                 })
                 ->orderByDesc('periode_payroll')
                 ->get()
