@@ -18,6 +18,7 @@ class UserToken extends Model
     protected $casts = [
         'is_expired' => 'boolean',
         'is_logged_in' => 'boolean',
+        'is_impersonate' => 'boolean',
         'expired' => 'datetime',
         'create_date' => 'datetime',
     ];
@@ -30,6 +31,8 @@ class UserToken extends Model
         'is_logged_in',
         'is_expired',
         'type',
+        'is_impersonate',
+        'impersonator_karyawan_id',
     ];
 
     public function user()

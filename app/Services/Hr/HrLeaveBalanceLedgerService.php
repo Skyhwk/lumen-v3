@@ -30,6 +30,28 @@ class HrLeaveBalanceLedgerService
             ->sum('days_delta');
     }
 
+    public function alpaDaysForEmployeeBetween(MasterKaryawan $employee, string $fromYmd, string $toYmd): int
+    {
+        if (LeaveAlpaAttendanceScope::isExemptFromAlpaLedger($employee)) {
+            return 0;
+        }
+
+        $alpaDays = (int) HrLeaveBalanceLedger::query()
+            ->where('karyawan_id', $employee->id)
+            ->where('entry_type', HrLeaveBalanceLedger::TYPE_ALPA)
+            ->where('is_void', false)
+            ->where(function ($q) use ($fromYmd, $toYmd) {
+                $q->whereBetween('reference_date', [$fromYmd, $toYmd])
+                    ->orWhere(function ($q2) use ($fromYmd, $toYmd) {
+                        $q2->whereNull('reference_date')
+                            ->whereBetween('created_at', [$fromYmd . ' 00:00:00', $toYmd . ' 23:59:59']);
+                    });
+            })
+            ->sum('days_delta');
+
+        return max(0, $alpaDays);
+    }
+
     public function adjustmentNetDaysForPeriod(HrLeaveBalancePeriod $period): int
     {
         return (int) HrLeaveBalanceLedger::query()

@@ -78,6 +78,14 @@ return [
     /** Super Apps: true = list cuti/izin/lembur + antrian HRD izin (permission saja) baca hr_* */
     'portal_read_hr_tables' => filter_var(env('HR_PORTAL_READ_HR_TABLES', false), FILTER_VALIDATE_BOOLEAN),
 
+    /**
+     * Sampler cabang: pengajuan baru cuti/izin/koreksi absen — chain tanpa SPV operasional cabang.
+     * Pengajuan lama tidak di-reseed.
+     */
+    'sampler_branch_approval_filter' => filter_var(env('HR_SAMPLER_BRANCH_APPROVAL_FILTER', false), FILTER_VALIDATE_BOOLEAN),
+    'sampler_branch_ho_cabang_id' => (int) env('HR_SAMPLER_BRANCH_HO_CABANG_ID', 1),
+    'sampler_jabatan_ids' => array_values(array_filter(array_map('intval', explode(',', env('HR_SAMPLER_JABATAN_IDS', '94'))))),
+
     /** Pengajuan cuti approved sebelum tanggal ini sudah termasuk opening_used_days (import Excel). */
     'leave_balance_cutover_at' => env('GREATDAY_LEAVE_BALANCE_CUTOVER_AT', '2026-04-01 00:00:00'),
 

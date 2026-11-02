@@ -18,6 +18,9 @@ $router->group(['prefix' => 'api/greatday', 'namespace' => 'Greatday'], function
     $router->group(['middleware' => 'greatday.auth'], function () use ($router) {
         $router->get('profile/me', 'AuthController@me');
         $router->post('cektoken', 'AuthController@checkToken');
+        $router->get('impersonate/search', 'ImpersonateController@search');
+        $router->post('impersonate', 'ImpersonateController@start');
+        $router->post('stop-impersonate', 'ImpersonateController@stop');
     });
 
     $router->get('foto-karyawan/{image}', 'HomePageController@getFoto');

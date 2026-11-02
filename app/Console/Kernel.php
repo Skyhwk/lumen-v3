@@ -73,6 +73,7 @@ class Kernel extends ConsoleKernel
         Commands\VerifyHrMigrationCommand::class,
         Commands\VerifyHrStatusParityCommand::class,
         Commands\SmokeHrWorkflowCommand::class,
+        Commands\HrSamplerBranchApprovalDiscoverCommand::class,
         Commands\SendGreatdayTestNotificationCommand::class,
         // Commands\DetectGreatdayAttendanceRemindersCommand::class,
         Commands\SendGreatdayAttendanceRemindersCommand::class,
