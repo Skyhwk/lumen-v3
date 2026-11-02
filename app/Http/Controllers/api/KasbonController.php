@@ -142,11 +142,25 @@ class KasbonController extends Controller
                     ];
                 }
 
-                if ($sumCustom !== (int) $totalKasbonClean) {
+                $totalKasbonInt = (int) $totalKasbonClean;
+                $customTotalDiff = $sumCustom - $totalKasbonInt;
+                if (abs($customTotalDiff) > 2) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Total potongan custom harus sama dengan Total Kasbon',
+                        'message' => 'Total potongan custom harus sama dengan Total Kasbon (toleransi selisih maks Rp 2)',
                     ], 422);
+                }
+                if ($customTotalDiff !== 0 && count($normalizedRows) > 0) {
+                    $lastIdx = count($normalizedRows) - 1;
+                    $adjustedNom = $normalizedRows[$lastIdx]['nominal'] - $customTotalDiff;
+                    if ($adjustedNom <= 0) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Total potongan custom tidak valid setelah penyesuaian toleransi',
+                        ], 422);
+                    }
+                    $normalizedRows[$lastIdx]['nominal'] = $adjustedNom;
+                    $normalizedRows[$lastIdx]['nominal_formatted'] = 'Rp ' . number_format($adjustedNom, 0, ',', '.');
                 }
 
                 $customPotonganList = $normalizedRows;
@@ -167,8 +181,9 @@ class KasbonController extends Controller
                 : $request->bulan_mulai_pemotongan;
             $now = DATE('Y-m-d H:i:s');
 
-            if ($request->filled('id')) {
-                $kasbon = Kasbon::findOrFail($request->id);
+            $kasbonId = (int) $request->input('id', 0);
+            if ($kasbonId > 0) {
+                $kasbon = Kasbon::where('id', $kasbonId)->where('is_active', true)->firstOrFail();
                 $history = is_array($kasbon->history_perubahan) ? $kasbon->history_perubahan : [];
 
                 $trackedLabels = [
@@ -246,7 +261,7 @@ class KasbonController extends Controller
                 ], 201);
             }
 
-            // CREATE NEW KASBON — Validasi karyawan tidak boleh punya kasbon ONGOING
+            // CREATE — karyawan tidak boleh punya kasbon ONGOING lain (update lewat id di atas)
             $ongoingKasbon = Kasbon::where('id_karyawan', $request->id_karyawan)
                 ->where('is_active', true)
                 ->where(function ($query) {
