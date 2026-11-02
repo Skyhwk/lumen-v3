@@ -19,14 +19,48 @@ use Yajra\Datatables\Datatables;
 
 class DendaKaryawanController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $data = PayrollRecordSyncService::scopeActiveKaryawanById(
             DendaKaryawan::query()->where('denda_karyawan.is_active', true),
             'denda_karyawan.id_karyawan'
         );
 
+        $statusTab = strtolower(trim((string) $request->input('status_tab', 'ongoing')));
+        if ($statusTab === 'end') {
+            $data->where('denda_karyawan.status', 'END');
+        } else {
+            $data->where(function ($query) {
+                $query->where('denda_karyawan.status', 'ONGOING')
+                    ->orWhereNull('denda_karyawan.status');
+            });
+        }
+
         return Datatables::of($data)->make(true);
+    }
+
+    public function tabCounts(Request $request)
+    {
+        $ongoing = PayrollRecordSyncService::scopeActiveKaryawanById(
+            DendaKaryawan::query()->where('denda_karyawan.is_active', true),
+            'denda_karyawan.id_karyawan'
+        )->where(function ($query) {
+            $query->where('denda_karyawan.status', 'ONGOING')
+                ->orWhereNull('denda_karyawan.status');
+        })->count();
+
+        $end = PayrollRecordSyncService::scopeActiveKaryawanById(
+            DendaKaryawan::query()->where('denda_karyawan.is_active', true),
+            'denda_karyawan.id_karyawan'
+        )->where('denda_karyawan.status', 'END')->count();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'ongoing' => $ongoing,
+                'end' => $end,
+            ],
+        ], 200);
     }
 
     public function getKaryawan()
@@ -178,6 +212,80 @@ class DendaKaryawanController extends Controller
                 'message' => $message,
             ], 201);
         } catch (\Throwable $th){
+            return response()->json(['message' => $th->getMessage()], 500);
+        }
+    }
+
+    public function updateSisa(Request $request)
+    {
+        try {
+            if (empty($request->id)) {
+                return response()->json(['message' => 'ID wajib diisi'], 422);
+            }
+
+            $field = $request->field;
+            if (!in_array($field, ['sisa_tenor', 'sisa_denda'], true)) {
+                return response()->json(['message' => 'Field tidak valid'], 422);
+            }
+
+            $denda = DendaKaryawan::where('is_active', true)->findOrFail($request->id);
+
+            if ($field === 'sisa_tenor') {
+                if (!$request->filled('value') && $request->value !== '0' && $request->value !== 0) {
+                    return response()->json(['message' => 'Sisa tenor wajib diisi'], 422);
+                }
+                $newValue = (int) $request->value;
+                if ($newValue < 0) {
+                    return response()->json(['message' => 'Sisa tenor tidak boleh negatif'], 422);
+                }
+            } else {
+                $newValue = str_replace(['Rp', '.', ','], '', (string) $request->value);
+                if ($newValue === '' || !is_numeric($newValue)) {
+                    return response()->json(['message' => 'Sisa denda tidak valid'], 422);
+                }
+                $newValue = (float) $newValue;
+                if ($newValue < 0) {
+                    return response()->json(['message' => 'Sisa denda tidak boleh negatif'], 422);
+                }
+            }
+
+            $oldValue = $denda->{$field};
+            if ((string) $oldValue === (string) $newValue) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Tidak ada perubahan data',
+                    'data' => $denda,
+                ], 200);
+            }
+
+            $history = json_decode($denda->riwayat_perubahan_sisa ?: '[]', true);
+            if (!is_array($history)) {
+                $history = [];
+            }
+
+            $history[] = [
+                'field' => $field,
+                'old_value' => $oldValue,
+                'new_value' => $newValue,
+                'edited_by' => $this->karyawan,
+                'edited_at' => DATE('Y-m-d H:i:s'),
+            ];
+
+            $denda->{$field} = $newValue;
+            if ($field === 'sisa_denda' && $newValue <= 0) {
+                $denda->status = 'END';
+            }
+            $denda->riwayat_perubahan_sisa = json_encode(array_values($history), JSON_UNESCAPED_UNICODE);
+            $denda->updated_at = DATE('Y-m-d H:i:s');
+            $denda->updated_by = $this->karyawan;
+            $denda->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data berhasil diperbarui',
+                'data' => $denda,
+            ], 200);
+        } catch (\Throwable $th) {
             return response()->json(['message' => $th->getMessage()], 500);
         }
     }

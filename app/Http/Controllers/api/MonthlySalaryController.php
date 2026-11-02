@@ -205,13 +205,20 @@ class MonthlySalaryController extends Controller
                 ->when($bawahanIds !== null, function ($query) use ($bawahanIds) {
                     $query->whereIn('payroll.id_karyawan', $bawahanIds);
                 })
-                ->with(['karyawan' => function ($query) {
-                    $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan', 'is_active', 'tgl_mulai_kerja');
-                }, 'department' => function ($query) {
-                    $query->select('master_divisi.id', 'nama_divisi');
-                }])
-                ->join('master_karyawan', 'payroll.id_karyawan', '=', 'master_karyawan.id')
-                ->select('payroll.*')
+                ->leftJoin('payroll_header', 'payroll.payroll_header_id', '=', 'payroll_header.id')
+                ->leftJoin('master_jabatan', 'payroll.id_jabatan', '=', 'master_jabatan.id')
+                ->leftJoin('master_divisi as jabatan_divisi', 'master_jabatan.id_divisi', '=', 'jabatan_divisi.id')
+                ->leftJoin('master_karyawan', 'payroll.id_karyawan', '=', 'master_karyawan.id')
+                ->leftJoin('master_divisi as karyawan_divisi', 'master_karyawan.id_department', '=', 'karyawan_divisi.id')
+                ->select(
+                    'payroll.*',
+                    'payroll_header.status_karyawan as header_status_karyawan',
+                    'payroll_header.tgl_transfer as header_tgl_transfer',
+                    'payroll_header.transfer_at as header_transfer_at',
+                    DB::raw('COALESCE(jabatan_divisi.nama_divisi, karyawan_divisi.nama_divisi) as nama_divisi'),
+                    'master_karyawan.tgl_mulai_kerja as tgl_mulai_kerja',
+                    'master_karyawan.is_active as karyawan_is_active'
+                )
                 ->orderByRaw('master_karyawan.tgl_mulai_kerja IS NULL, master_karyawan.tgl_mulai_kerja ASC');
 
             // Calculate totals
@@ -240,6 +247,36 @@ class MonthlySalaryController extends Controller
             $response = Datatables::of($data)
                 ->addColumn('total_gaji_tunjangan', function ($row) {
                     return (float) $row->gaji_pokok + (float) $row->tunjangan;
+                })
+                ->addColumn('status_karyawan_periode', function ($row) {
+                    $detailStatus = trim((string) ($row->status_karyawan ?? ''));
+                    $headerStatus = trim((string) ($row->header_status_karyawan ?? ''));
+
+                    if ($detailStatus !== '' && $detailStatus !== '-') {
+                        if ($headerStatus !== '' && strcasecmp($headerStatus, 'Supervisor') !== 0 && strcasecmp($detailStatus, $headerStatus) !== 0) {
+                            return $headerStatus;
+                        }
+                        return $detailStatus;
+                    }
+
+                    if ($headerStatus !== '' && $headerStatus !== '-') {
+                        return $headerStatus;
+                    }
+
+                    return '-';
+                })
+                ->addColumn('tgl_transfer', function ($row) {
+                    $tglTransfer = trim((string) ($row->header_tgl_transfer ?? ''));
+                    if ($tglTransfer !== '' && $tglTransfer !== '-') {
+                        return $tglTransfer;
+                    }
+
+                    $transferAt = trim((string) ($row->header_transfer_at ?? ''));
+                    if ($transferAt !== '' && $transferAt !== '-') {
+                        return substr($transferAt, 0, 10);
+                    }
+
+                    return null;
                 })
                 ->make(true)
                 ->getData();

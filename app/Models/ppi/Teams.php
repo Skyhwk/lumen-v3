@@ -6,7 +6,7 @@ use App\Models\Sector;
 
 class Teams extends Sector
 {
-    protected $connection = 'portal_pelanggan';
+    protected $connection = 'portal_customer';
     protected $table = 'teams';
     protected $guarded = ['id'];
 

@@ -24,6 +24,7 @@ use App\Models\{
 };
 
 use App\Jobs\NonaktifKaryawanJob;
+use App\Services\HistoryPerubahanKaryawanService;
 use App\Services\MasterKaryawanSupplementarySaveService;
 use App\Services\MasterSallaryNikSyncService;
 use App\Services\PayrollRecordSyncService;
@@ -492,6 +493,8 @@ class MasterKaryawanController extends Controller
                     return response()->json(['message' => 'Karyawan tidak ditemukan'], 404);
                 }
 
+                $beforeSpecialSnapshot = HistoryPerubahanKaryawanService::captureSnapshot($karyawan);
+
                 $shioElemen = ShioElemenHelper::resolve(
                     $request->personal['date_birth'] ?? null,
                     $request->personal['shio'] ?? null,
@@ -590,7 +593,16 @@ class MasterKaryawanController extends Controller
                 $dataKaryawan['updated_by'] = $this->karyawan;
                 $dataKaryawan['updated_at'] = $timestamp;
 
+                HistoryPerubahanKaryawanService::enrichMasterKaryawanLabels($dataKaryawan);
+
                 $karyawan->update($dataKaryawan);
+
+                HistoryPerubahanKaryawanService::recordIfChanged(
+                    $karyawan->fresh(),
+                    $beforeSpecialSnapshot,
+                    $this->karyawan,
+                    $timestamp
+                );
 
                 if ($request->has('access') && isset($request->access['username']) && $request->access['username'] != '') {
                     $dataUser = [
@@ -696,6 +708,8 @@ class MasterKaryawanController extends Controller
 
                 $dataKaryawan['created_by'] = $this->karyawan;
                 $dataKaryawan['created_at'] = DATE('Y-m-d H:i:s');
+
+                HistoryPerubahanKaryawanService::enrichMasterKaryawanLabels($dataKaryawan);
 
                 $karyawan = MasterKaryawan::create($dataKaryawan);
 
