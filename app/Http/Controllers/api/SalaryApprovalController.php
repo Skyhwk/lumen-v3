@@ -48,12 +48,15 @@ class SalaryApprovalController extends Controller
         }
 
         return DB::transaction(function () use ($request, $decision, $rejectReason) {
-            $recruitment = DB::table('new_recruitment')
-                ->where('token_approval', $request->input('token_approval'))
-                ->lockForUpdate()
-                ->first();
+            $recruitmentQuery = DB::table('new_recruitment');
+            if ($request->filled('id')) {
+                $recruitmentQuery->where('id', $request->input('id'));
+            } else {
+                $recruitmentQuery->where('token_approval', $request->input('token_approval'));
+            }
+            $recruitment = $recruitmentQuery->lockForUpdate()->first();
             if (!$recruitment) {
-                return response()->json(['message' => 'Link persetujuan penawaran tidak valid.'], 404);
+                return response()->json(['message' => 'Data kandidat atau link persetujuan penawaran tidak valid.'], 404);
             }
 
             $state = $this->state($recruitment);
@@ -116,7 +119,7 @@ class SalaryApprovalController extends Controller
                 $nextStatus = 'hired';
             }
 
-            $historyStatus = $recruitment->status . '_' . $historyAction;
+            $historyStatus = 'internal_sallary_offer_' . $historyAction;
             $extraData = $decision === 'negotiate'
                 ? ['negotiated_amount' => $amount]
                 : ($decision === 'reject' ? ['reject_reason' => $rejectReason] : []);
@@ -254,7 +257,7 @@ class SalaryApprovalController extends Controller
         if ($result) {
             return ['result' => $result, 'already_processed' => true, 'decided_at' => $last['at'] ?? null, 'candidate' => $this->candidate($recruitment)];
         }
-        if ($recruitment->status !== 'internal_sallary_offer') {
+        if (!in_array($recruitment->status, ['internal_sallary_offer', 'salary_offer'], true)) {
             return [
                 'result' => 'unavailable',
                 'message' => 'Link persetujuan penawaran sudah kedaluwarsa atau kandidat tidak berada pada tahap persetujuan penawaran.',

@@ -4,6 +4,7 @@ namespace App\Services\Hr\Portal;
 
 use App\Models\Hr\HrRequest;
 use App\Services\Hr\WorkflowStatus;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -11,15 +12,27 @@ class PortalHrdIzinDatatableQuery
 {
     public function unprocessed(int $periode): Collection
     {
-        return $this->permissionRows($periode, false);
+        return $this->byStatus($periode, WorkflowStatus::APPROVED_ATASAN);
     }
 
     public function processed(int $periode): Collection
     {
-        return $this->permissionRows($periode, true);
+        return $this->byStatus($periode, WorkflowStatus::APPROVED_HRD);
     }
 
-    private function permissionRows(int $periode, bool $processed): Collection
+    public function byStatus(int $periode, string $status): Collection
+    {
+        $query = $this->basePermissionQuery($periode, $status);
+
+        return collect($query->select($this->permissionSelect())->get());
+    }
+
+    public function countByStatus(int $periode, string $status): int
+    {
+        return (int) $this->basePermissionQuery($periode, $status)->count();
+    }
+
+    private function basePermissionQuery(int $periode, string $status): Builder
     {
         $query = DB::table('hr_request as pr')
             ->join('hr_permission_detail as pd', 'pd.request_id', '=', 'pr.id')
@@ -33,25 +46,27 @@ class PortalHrdIzinDatatableQuery
             ->leftJoin('master_divisi as d', 'u.id_department', '=', 'd.id')
             ->where('pr.request_type', HrRequest::TYPE_PERMISSION)
             ->where('pr.is_active', true)
-            ->whereYear('pr.created_at', $periode ?: date('Y'))
-            ->where(function ($q) {
+            ->whereYear('pr.created_at', $periode ?: (int) date('Y'))
+            ->where('pr.status', $status);
+
+        if ($status === WorkflowStatus::APPROVED_ATASAN) {
+            $query->where(function ($q) {
                 $q->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
                     ->orWhereNull('u.atasan_langsung');
-            })
-            ->whereRaw(PortalHrApprovalStepSql::noPendingAtasanSteps('pr'));
-
-        if ($processed) {
-            $query->where('pr.status', WorkflowStatus::APPROVED_HRD);
-        } else {
-            $query->where('pr.status', WorkflowStatus::APPROVED_ATASAN);
+            })->whereRaw(PortalHrApprovalStepSql::noPendingAtasanSteps('pr'));
+        } elseif ($status === WorkflowStatus::REJECTED_HRD || $status === WorkflowStatus::PENDING) {
+            $query->where(function ($q) {
+                $q->where('u.atasan_langsung', 'NOT LIKE', '%"1"%')
+                    ->orWhereNull('u.atasan_langsung');
+            });
         }
 
-        return collect($query->select($this->permissionSelect($processed))->get());
+        return $query;
     }
 
-    private function permissionSelect(bool $processed): array
+    private function permissionSelect(): array
     {
-        $statusCase = $this->hrdStatusCase('pr', $processed);
+        $statusCase = $this->hrdStatusCase('pr');
 
         return [
             DB::raw("CONCAT('PR-', COALESCE(legacy_map.old_id, pr.id)) as id"),
@@ -85,19 +100,10 @@ class PortalHrdIzinDatatableQuery
         ];
     }
 
-    private function hrdStatusCase(string $alias, bool $processedTab): string
+    private function hrdStatusCase(string $alias): string
     {
-        if ($processedTab) {
-            return 'CASE
-                WHEN ' . $alias . '.status = "Approved Atasan" THEN "APPROVED"
-                WHEN ' . $alias . '.status = "Approved HRD" THEN "APPROVED HRD"
-                WHEN ' . $alias . '.status = "Rejected Atasan" THEN "REJECTED"
-                WHEN ' . $alias . '.status = "Rejected HRD" THEN "REJECTED HRD"
-                ELSE "WAITING"
-            END';
-        }
-
         return 'CASE
+            WHEN ' . $alias . '.status = "Pending" THEN "WAITING"
             WHEN ' . $alias . '.status = "Approved Atasan" THEN "APPROVED ATASAN"
             WHEN ' . $alias . '.status = "Approved HRD" THEN "APPROVED HRD"
             WHEN ' . $alias . '.status = "Rejected Atasan" THEN "REJECTED ATASAN"

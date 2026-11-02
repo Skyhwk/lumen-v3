@@ -73,6 +73,10 @@ class AtsFinalDecisionCandidateScope
                     $sub->where('rejected_decision', false)->orWhereNull('rejected_decision');
                 })->where(function ($sub) {
                     $sub->where('rejected_salary', false)->orWhereNull('rejected_salary');
+                })->where(function ($sub) {
+                    if (Schema::hasColumn('new_recruitment', 'rejected_candidate_offering')) {
+                        $sub->where('rejected_candidate_offering', false)->orWhereNull('rejected_candidate_offering');
+                    }
                 });
             });
         }
@@ -94,6 +98,9 @@ class AtsFinalDecisionCandidateScope
             if (Schema::hasColumn('new_recruitment', 'rejected_decision')) {
                 $q->where(function ($sub) {
                     $sub->where('rejected_decision', true)->orWhere('rejected_salary', true);
+                    if (Schema::hasColumn('new_recruitment', 'rejected_candidate_offering')) {
+                        $sub->orWhere('rejected_candidate_offering', true);
+                    }
                 });
                 $hasFilter = true;
             }

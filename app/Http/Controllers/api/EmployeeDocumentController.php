@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Models\EmployeeDocument;
 use App\Models\MasterKaryawan;
 use App\Services\EmployeeDocumentService;
+use App\Services\GenerateDokumenKaryawanService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Yajra\Datatables\Datatables;
@@ -22,12 +24,39 @@ class EmployeeDocumentController extends Controller
     public function index(Request $request)
     {
         $data = MasterKaryawan::query()
-            ->where('is_active', true)
+            ->select([
+                'master_karyawan.*',
+                'master_jabatan.nama_jabatan',
+                'master_cabang.nama_cabang',
+            ])
+            ->leftJoin('master_jabatan', function ($join) {
+                $join->on('master_karyawan.id_jabatan', '=', 'master_jabatan.id')
+                    ->where('master_jabatan.is_active', true);
+            })
+            ->leftJoin('master_cabang', function ($join) {
+                $join->on('master_karyawan.id_cabang', '=', 'master_cabang.id')
+                    ->where('master_cabang.is_active', true);
+            })
+            ->where('master_karyawan.is_active', true)
+            ->where('master_karyawan.grade', '!=', 'DIRECTOR')
             ->withCount(['employeeDocuments as dokumen_count' => function ($query) {
                 $query->where('is_active', 1);
             }]);
 
-        return Datatables::of($data)->make(true);
+        return Datatables::of($data)
+            ->filterColumn('nama_jabatan', function ($query, $keyword) {
+                $query->where('master_jabatan.nama_jabatan', 'like', "%{$keyword}%");
+            })
+            ->orderColumn('nama_jabatan', function ($query, $order) {
+                $query->orderBy('master_jabatan.nama_jabatan', $order);
+            })
+            ->filterColumn('nama_cabang', function ($query, $keyword) {
+                $query->where('master_cabang.nama_cabang', 'like', "%{$keyword}%");
+            })
+            ->orderColumn('nama_cabang', function ($query, $order) {
+                $query->orderBy('master_cabang.nama_cabang', $order);
+            })
+            ->make(true);
     }
 
     public function documentTypes()
@@ -147,5 +176,64 @@ class EmployeeDocumentController extends Controller
         }
 
         return response()->json(['message' => 'Dokumen karyawan berhasil dihapus.'], 200);
+    }
+
+    public function getAllManagers()
+    {
+        $managers = MasterKaryawan::query()
+            ->with('jabatan')
+            ->where('is_active', true)
+            ->whereIn('grade', ['MANAGER', 'SENIOR MANAGER'])
+            ->orderBy('nama_lengkap')
+            ->get(['id', 'nama_lengkap', 'grade', 'id_jabatan'])
+            ->map(function ($row) {
+                return [
+                    'id' => $row->id,
+                    'nama_lengkap' => $row->nama_lengkap,
+                    'grade' => $row->grade,
+                    'jabatan' => optional($row->getRelation('jabatan'))->nama_jabatan,
+                ];
+            })
+            ->values();
+
+        return response()->json(['message' => 'Managers berhasil dimuat.', 'data' => $managers], 200);
+    }
+
+    public function generateDocument(Request $request)
+    {
+        $this->validate($request, [
+            'karyawan_id' => 'required|integer',
+            'penanggung_jawab_id' => 'required|integer',
+        ]);
+
+        $karyawan = MasterKaryawan::where('id', $request->karyawan_id)
+            ->where('is_active', true)
+            ->first();
+        if (!$karyawan) {
+            return response()->json(['message' => 'Karyawan tidak ditemukan.'], 404);
+        }
+
+        $recruitmentId = EmployeeDocument::query()
+            ->where('karyawan_id', $karyawan->id)
+            ->whereNotNull('new_recruitment_id')
+            ->orderByDesc('id')
+            ->value('new_recruitment_id');
+
+        try {
+            $documents = app(GenerateDokumenKaryawanService::class)->generate(
+                (int) $karyawan->id,
+                $recruitmentId ? (int) $recruitmentId : null,
+                (int) $request->penanggung_jawab_id,
+                false,
+                $this->karyawan
+            );
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'Dokumen karyawan berhasil dibuat.',
+            'data' => $documents,
+        ], 200);
     }
 }

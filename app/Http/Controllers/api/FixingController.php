@@ -58,12 +58,16 @@ use App\Services\SalaryAdjustmentWorkflowService;
 use App\Services\SalaryAdjustmentLogService;
 use App\Services\EmployeeAdjustmentTypeRegistry;
 use App\Services\GenerateAssessmentDocumentService;
+use App\Services\CandidateDocumentAttachmentService;
 use App\Services\GenerateMessageAtsEmail;
+use App\Services\GenerateToken;
+use App\Services\SallaryOfferService;
 use App\Services\SendEmail;
 // end model LHP
 
 
 use App\Services\GenerateFeeSampling;
+use App\Services\DisiplinerPdfFixingService;
 use App\Services\FdlBasTimingExportService;
 use App\Services\RenderInvoice;
 use App\Services\RenderInvoiceTitik;
@@ -86,6 +90,41 @@ use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class FixingController extends Controller
 {
+    public function previewTrackingSamplerHistory(Request $request)
+    {
+        return $this->backfillTrackingSamplerHistory($request, true);
+    }
+
+    public function saveTrackingSamplerHistory(Request $request)
+    {
+        return $this->backfillTrackingSamplerHistory($request, false);
+    }
+
+    private function backfillTrackingSamplerHistory(Request $request, bool $preview)
+    {
+        if (!$this->user_id || (int) $this->department !== 7
+            || in_array((int) $this->user_id, [10, 15, 93, 123], true)) {
+            abort(403, 'Backfill history hanya untuk IT Programmer.');
+        }
+        $this->validate($request, ['session_id' => 'required|integer|min:1']);
+        $result = DB::transaction(function () use ($request, $preview) {
+            $result = (new \App\Services\SamplerTrackingJourneyBackfill())->run((int) $request->session_id, $preview);
+            if (!$preview) {
+                \App\Services\SamplerTrackingHistory::append((int) $request->session_id, 'journey_backfill_requested', [
+                    'actor' => $this->karyawan ?: 'Programmer', 'actor_id' => (int) $this->user_id,
+                    'source' => 'fixing', 'entries_added' => $result['entries_added'],
+                    'summary' => 'Backfill detail per session melalui Fixing: ' . $result['entries_added'] . ' catatan ditambahkan.',
+                ]);
+            }
+            return $result;
+        });
+        return response()->json([
+            'success' => true, 'preview' => $preview,
+            'message' => $preview ? 'Preview selesai; belum ada data yang disimpan.' : 'Meta history session berhasil dilengkapi.',
+            'data' => $result,
+        ]);
+    }
+
     public function searchTrackingSamplerRoute(Request $request)
     {
         $this->validate($request, ['q' => 'required|string|min:2|max:100']);
@@ -3458,5 +3497,381 @@ class FixingController extends Controller
             'status' => 'success',
             'data' => $records,
         ], 200);
+    }
+
+    /**
+     * Mengambil daftar kandidat untuk tools Re-Email Persetujuan Offering Salary.
+     */
+    public function getOfferingSalaryCandidatesForFixing(Request $request)
+    {
+        $q = trim((string) $request->input('q', ''));
+
+        $query = NewRecruitment::with([
+            'sallaryOffer',
+            'candidateDataOffer',
+            'personalRequest.masterJabatan',
+            'personnelRequest.masterJabatan',
+        ])->where('is_active', 1);
+
+        if ($q !== '') {
+            $query->where(function ($w) use ($q) {
+                $w->where('nama_lengkap', 'LIKE', "%{$q}%")
+                    ->orWhere('email', 'LIKE', "%{$q}%")
+                    ->orWhere('posisi_dilamar', 'LIKE', "%{$q}%")
+                    ->orWhere('id', $q)
+                    ->orWhereHas('personalRequest.masterJabatan', function ($mj) use ($q) {
+                        $mj->where('nama_jabatan', 'LIKE', "%{$q}%");
+                    })
+                    ->orWhereHas('personnelRequest.masterJabatan', function ($mj) use ($q) {
+                        $mj->where('nama_jabatan', 'LIKE', "%{$q}%");
+                    })
+                    ->orWhereHas('personalRequest', function ($pr) use ($q) {
+                        $pr->where('no_request', 'LIKE', "%{$q}%");
+                    })
+                    ->orWhereHas('personnelRequest', function ($pr) use ($q) {
+                        $pr->where('no_request', 'LIKE', "%{$q}%");
+                    });
+            });
+        } else {
+            $query->where(function ($w) {
+                $w->whereHas('sallaryOffer')
+                    ->orWhereHas('candidateDataOffer')
+                    ->orWhereIn('status', [
+                        'internal_sallary_offer',
+                        'salary_offer',
+                        'candidate_offering',
+                        'offering_salary',
+                        'management_decision',
+                        'waiting_approval_salary',
+                        'approval_salary',
+                    ]);
+            });
+        }
+
+        $records = $query->orderBy('id', 'desc')
+            ->limit(40)
+            ->get();
+
+        $defaultDirectorEmail = trim((string) env('EMAIL_DIREKTUR_BAPAK', ''));
+
+        $data = $records->map(function ($row) use ($defaultDirectorEmail) {
+            $activeOffer = $row->sallaryOffer;
+            $cdo = $row->candidateDataOffer;
+
+            $gp = null;
+            if ($activeOffer && !empty($activeOffer->sallary_offer_hrd)) {
+                $gp = $activeOffer->sallary_offer_hrd;
+            } elseif ($cdo && !empty($cdo->gaji_pokok)) {
+                $gp = $cdo->gaji_pokok;
+            }
+
+            $tunjangan = $cdo ? ($cdo->tunjangan_kerja ?? 0) : 0;
+
+            $posisi = $row->posisi_dilamar;
+            if (empty($posisi) || is_numeric($posisi)) {
+                $posisi = optional(optional($row->personalRequest)->masterJabatan)->nama_jabatan
+                    ?? optional(optional($row->personnelRequest)->masterJabatan)->nama_jabatan
+                    ?? '-';
+            }
+
+            $noRequest = optional($row->personalRequest)->no_request
+                ?? optional($row->personnelRequest)->no_request
+                ?? '-';
+
+            return [
+                'id' => $row->id,
+                'nama_lengkap' => $row->nama_lengkap ?? '-',
+                'email' => $row->email ?? '-',
+                'posisi_dilamar' => $posisi,
+                'no_request' => $noRequest,
+                'status' => $row->status ?? '-',
+                'has_token' => !empty($row->token_approval),
+                'gaji_pokok_hrd' => $gp,
+                'tunjangan_hrd' => $tunjangan,
+                'total_offering' => ($gp !== null ? (float) $gp : 0) + (float) $tunjangan,
+                'default_target_email' => $defaultDirectorEmail,
+                'email_sent_at' => optional($activeOffer)->email_sent_at
+                    ? Carbon::parse($activeOffer->email_sent_at)->format('d-m-Y H:i')
+                    : null,
+                'created_at' => optional($row->created_at)->format('d-m-Y H:i') ?: '-',
+            ];
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $data,
+        ], 200);
+    }
+
+    /**
+     * Preview HTML email Permohonan Persetujuan Offering Salary beserta daftar attachment.
+     */
+    public function previewOfferingSalaryEmailForFixing(Request $request)
+    {
+        $recruitmentId = (int) ($request->input('id') ?? $request->input('new_recruitment_id') ?? 0);
+        if ($recruitmentId <= 0) {
+            return response()->json(['message' => 'ID kandidat wajib diisi.'], 422);
+        }
+
+        $applicant = NewRecruitment::with([
+            'personalRequest.masterJabatan',
+            'personnelRequest.masterJabatan',
+            'sallaryOffer',
+            'candidateDataOffer',
+            'candidateProfile',
+            'candidateEducations',
+            'candidateWorkExperiences',
+            'candidateMedicalInformation',
+            'hrdInterview',
+            'userInterview',
+        ])->find($recruitmentId);
+
+        if (!$applicant) {
+            return response()->json(['message' => 'Data kandidat tidak ditemukan.'], 404);
+        }
+
+        $token = $applicant->token_approval;
+        if (empty($token)) {
+            $tokenService = new GenerateToken();
+            $tokenKey = $applicant->id . ($applicant->nama_lengkap ?? '') . 'salary_approval' . str_replace('.', '', microtime(true));
+            $token = $tokenService->encrypt(md5($tokenKey) . '|' . date('Y-m-d'));
+        }
+
+        $buttons = GenerateMessageAtsEmail::buildSalaryDecisionButtons($applicant, $token);
+        $emailContent = GenerateMessageAtsEmail::bodyEmailSallaryOffer($applicant, $buttons);
+        $subject = 'Permohonan Persetujuan Offering Salary - ' . ($applicant->nama_lengkap ?? 'Kandidat');
+        $targetEmail = trim((string) ($request->input('target_email') ?: env('EMAIL_DIREKTUR_BAPAK', '')));
+
+        // Ambil daftar sesi assessment jika ada
+        $assessmentLabels = [];
+        $attempt = DB::table('assessment_attempts')
+            ->where('recruitment_id', $recruitmentId)
+            ->orderByDesc('id')
+            ->first();
+        if ($attempt) {
+            $sessions = DB::table('assessment_sessions')
+                ->where('assessment_attempt_id', $attempt->id)
+                ->whereNotNull('result_json')
+                ->where('result_json', '!=', '')
+                ->orderBy('session_order')
+                ->get();
+            foreach ($sessions as $s) {
+                $assessmentLabels[] = 'Hasil Assessment: ' . trim((string) ($s->category_name ?? 'Assessment'));
+            }
+        }
+
+        // Ambil berkas dokumen kandidat
+        $docService = app(CandidateDocumentAttachmentService::class);
+        $candidateDocLabels = $docService->listAttachmentLabels($recruitmentId);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'id' => $applicant->id,
+                'nama_lengkap' => $applicant->nama_lengkap,
+                'subject' => $subject,
+                'target_email' => $targetEmail,
+                'has_token' => !empty($applicant->token_approval),
+                'assessment_labels' => $assessmentLabels,
+                'candidate_document_labels' => $candidateDocLabels,
+                'total_attachment_count' => count($assessmentLabels) + count($candidateDocLabels),
+                'html' => $emailContent,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Kirim ulang email Permohonan Persetujuan Offering Salary ke Direktur lengkap dengan seluruh attachment.
+     */
+    public function reEmailOfferingSalaryApproval(Request $request)
+    {
+        $recruitmentId = (int) ($request->input('id') ?? $request->input('new_recruitment_id') ?? 0);
+        if ($recruitmentId <= 0) {
+            return response()->json(['message' => 'ID kandidat wajib diisi.'], 422);
+        }
+
+        $applicant = NewRecruitment::with([
+            'personalRequest.masterJabatan',
+            'personnelRequest.masterJabatan',
+            'sallaryOffer',
+            'candidateDataOffer',
+            'candidateProfile',
+            'candidateEducations',
+            'candidateWorkExperiences',
+            'candidateMedicalInformation',
+            'hrdInterview',
+            'userInterview',
+        ])->find($recruitmentId);
+
+        if (!$applicant) {
+            return response()->json(['message' => 'Data kandidat tidak ditemukan.'], 404);
+        }
+
+        $targetEmail = trim((string) ($request->input('target_email') ?: env('EMAIL_DIREKTUR_BAPAK', '')));
+        if ($targetEmail === '') {
+            return response()->json([
+                'message' => 'Alamat email tujuan Direktur belum diatur di .env (EMAIL_DIREKTUR_BAPAK) dan belum diisi di form.',
+            ], 422);
+        }
+
+        $ensureNewToken = filter_var($request->input('ensure_new_token', false), FILTER_VALIDATE_BOOLEAN);
+        if (empty($applicant->token_approval) || $ensureNewToken) {
+            $tokenService = new GenerateToken();
+            $tokenKey = $applicant->id . ($applicant->nama_lengkap ?? '') . 'salary_approval' . str_replace('.', '', microtime(true));
+            $applicant->token_approval = $tokenService->encrypt(md5($tokenKey) . '|' . date('Y-m-d'));
+            $applicant->save();
+        }
+
+        $sender = trim((string) ($request->input('sender') ?: ($this->karyawan ?? 'Programmer Tool')));
+
+        $buttons = GenerateMessageAtsEmail::buildSalaryDecisionButtons($applicant, $applicant->token_approval);
+        $emailContent = GenerateMessageAtsEmail::bodyEmailSallaryOffer($applicant, $buttons);
+        $subject = 'Permohonan Persetujuan Offering Salary - ' . ($applicant->nama_lengkap ?? 'Kandidat');
+
+        $assessmentService = app(GenerateAssessmentDocumentService::class);
+        $documents = [];
+
+        try {
+            $attachmentBundle = $assessmentService->prepareDirectorEmailAttachments((int) $applicant->id);
+            $documents = $attachmentBundle['documents'] ?? [];
+            $attachments = $attachmentBundle['attachments'] ?? [];
+
+            $emailQuery = SendEmail::where('to', $targetEmail)
+                ->where('subject', $subject)
+                ->where('body', $emailContent)
+                ->where('karyawan', $sender)
+                ->noReply();
+
+            if (!empty($attachments)) {
+                $emailQuery->where('attachment', $attachments);
+            }
+
+            $sent = $emailQuery->send();
+
+            if (!$sent) {
+                return response()->json([
+                    'message' => 'Gagal mengirim email melalui SMTP server.',
+                ], 500);
+            }
+
+            SallaryOfferService::upsertActive(
+                (int) $applicant->id,
+                ['email_sent_at' => Carbon::now()],
+                $sender
+            );
+
+            return response()->json([
+                'status' => 'success',
+                'message' => "Email Permohonan Persetujuan Offering Salary beserta " . count($attachments) . " berkas lampiran berhasil dikirim ulang ke {$targetEmail}.",
+                'data' => [
+                    'id' => $applicant->id,
+                    'nama_lengkap' => $applicant->nama_lengkap,
+                    'target_email' => $targetEmail,
+                    'attachment_count' => count($attachments),
+                    'assessment_attachment_count' => count($attachmentBundle['assessment_labels'] ?? []),
+                    'candidate_document_attachment_count' => count($attachmentBundle['candidate_document_labels'] ?? []),
+                    'assessment_labels' => $attachmentBundle['assessment_labels'] ?? [],
+                    'candidate_document_labels' => $attachmentBundle['candidate_document_labels'] ?? [],
+                    'sent_at' => Carbon::now()->toIso8601String(),
+                ],
+            ], 200);
+        } catch (\Throwable $e) {
+            Log::error('reEmailOfferingSalaryApproval failed', [
+                'recruitment_id' => $applicant->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'message' => 'Gagal memproses pengiriman email: ' . $e->getMessage(),
+            ], 500);
+        } finally {
+            $assessmentService->cleanupDocuments($documents);
+        }
+    }
+
+    public function searchDisiplinerDocument(Request $request, DisiplinerPdfFixingService $service)
+    {
+        $this->validate($request, [
+            'q' => 'required|string|min:1|max:120',
+            'jenis' => 'nullable|in:sp,bak,st',
+        ]);
+
+        try {
+            $items = $service->search(
+                (string) $request->input('q'),
+                $request->filled('jenis') ? (string) $request->jenis : null
+            );
+
+            return response()->json([
+                'success' => true,
+                'data' => $items,
+            ], 200);
+        } catch (\Throwable $ex) {
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function rerenderPdfDisipliner(Request $request, DisiplinerPdfFixingService $service)
+    {
+        $this->validate($request, [
+            'jenis' => 'required|in:sp,bak,st',
+            'id' => 'required|integer|min:1',
+        ]);
+
+        try {
+            $data = $service->regenerate((string) $request->jenis, (int) $request->id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'PDF dokumen disipliner berhasil di-render ulang.',
+                'data' => $data,
+            ], 200);
+        } catch (\Throwable $ex) {
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function updateDisiplinerDocumentStatus(Request $request, DisiplinerPdfFixingService $service)
+    {
+        $this->validate($request, [
+            'jenis' => 'required|in:sp,bak,st',
+            'id' => 'required|integer|min:1',
+            'status' => 'required|in:draft,issued,cancelled',
+        ]);
+
+        try {
+            $data = $service->updateStatus(
+                (string) $request->jenis,
+                (int) $request->id,
+                (string) $request->status,
+                (string) ($this->karyawan ?: 'Fixing Tools')
+            );
+
+            Log::info('Fixing: update status dokumen disipliner', [
+                'jenis' => $request->jenis,
+                'id' => (int) $request->id,
+                'status' => $request->status,
+                'actor' => $this->karyawan,
+                'actor_id' => (int) $this->user_id,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Status dokumen disipliner berhasil diperbarui.',
+                'data' => $data,
+            ], 200);
+        } catch (\Throwable $ex) {
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
+        }
     }
 }

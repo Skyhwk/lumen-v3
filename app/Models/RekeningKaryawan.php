@@ -15,6 +15,8 @@ class RekeningKaryawan extends Sector{
         'id_karyawan',
         'no_rekening',
         'nama_bank',
+        'cabang_bank',
+        'nama_pemilik_rekening',
         'created_at',
         'created_by',
         'updated_at',

@@ -5,6 +5,8 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Services\SamplerTrackingService;
 use App\Services\SamplerTrackingTroubleService;
+use App\Services\SamplerTrackingHistory;
+use App\Models\MasterKaryawan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +20,56 @@ class SamplerTrackingController extends Controller
     {
         parent::__construct($request);
         $this->service = $service;
+    }
+
+    private function canViewActivityHistory(): bool
+    {
+        if (!$this->user_id || in_array((int) $this->user_id, [10, 15, 93, 123], true)) {
+            return false;
+        }
+
+        return (int) MasterKaryawan::where('id', $this->user_id)->value('id_department') === 7;
+    }
+
+    public function activityHistoryAccess()
+    {
+        return response()->json(['can_view' => $this->canViewActivityHistory()]);
+    }
+
+    public function activityHistory(Request $request)
+    {
+        if (!$this->canViewActivityHistory()) {
+            abort(403, 'Log activity hanya untuk IT Programmer.');
+        }
+        $this->validate($request, [
+            'session_ids' => 'required|array|min:1|max:30',
+            'session_ids.*' => 'required|integer|min:1',
+        ]);
+        if (!SamplerTrackingHistory::available()) {
+            return response()->json(['success' => true, 'data' => []]);
+        }
+
+        $pending = array_values(array_unique(array_map('intval', $request->session_ids)));
+        $visited = [];
+        $result = [];
+        while ($pending && count($visited) < 100) {
+            $sessionId = array_shift($pending);
+            if (isset($visited[$sessionId])) continue;
+            $visited[$sessionId] = true;
+            $session = DB::table('sampler_tracking_sessions')->where('id', $sessionId)
+                ->first(['id', 'meta_history']);
+            if (!$session) continue;
+            $history = json_decode($session->meta_history ?: '[]', true);
+            if (!is_array($history)) $history = [];
+            $result[] = ['session_id' => (int) $session->id, 'history' => $history];
+            foreach ($history as $entry) {
+                foreach (['from_session_id', 'to_session_id'] as $key) {
+                    $linkedId = (int) ($entry[$key] ?? 0);
+                    if ($linkedId > 0 && !isset($visited[$linkedId])) $pending[] = $linkedId;
+                }
+            }
+        }
+        return response()->json(['success' => true, 'data' => $result]);
     }
 
     public function index(Request $request)

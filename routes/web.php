@@ -164,5 +164,7 @@ $router->group(['prefix' => 'api/approval-app', 'middleware' => ['cors']], funct
 
 require __DIR__ . '/greatday.php';
 
+$router->get('/qr_documents/{filename}', 'QrDocumentAssetController@show');
+
 $router->post('/{any:.*}', ['uses' => 'R404Controller@r404']);
 $router->get('/{any:.*}', ['uses' => 'R404Controller@r404']);

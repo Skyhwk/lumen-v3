@@ -6,7 +6,6 @@ use App\Models\ForecastSP;
 use App\Models\MasterKaryawan;
 use App\Services\ForecastSpAggregate;
 use App\Services\GetBawahan;
-use Datatables;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
@@ -66,20 +65,20 @@ class DataForecastController extends Controller
 
     public function indexData(Request $request)
     {
-        $data = ForecastSP::with('pelanggan')
+        $rows = ForecastSP::with('pelanggan')
             ->whereYear('tanggal_sampling_min', $request->year)
-            ->whereNotIn('pelanggan_ID', ForecastSpAggregate::EXCLUDE_CUSTOMERS);
+            ->whereNotIn('pelanggan_ID', ForecastSpAggregate::EXCLUDE_CUSTOMERS)
+            ->orderByDesc('periode')
+            ->get()
+            ->map(function ($row) {
+                $item = $row->toArray();
+                $item['nama_perusahaan'] = $row->pelanggan->nama_pelanggan ?? '-';
+                unset($item['pelanggan']);
+                return $item;
+            })
+            ->values();
 
-        return Datatables::of($data)
-            ->addColumn('nama_perusahaan', function ($row) {
-                return $row->pelanggan ? $row->pelanggan->nama_pelanggan : '-';
-            })
-            ->filterColumn('nama_perusahaan', function ($query, $keyword) {
-                $query->whereHas('pelanggan', function ($q) use ($keyword) {
-                    $q->where('nama_pelanggan', 'like', "%{$keyword}%");
-                });
-            })
-            ->make(true);
+        return response()->json(['data' => $rows]);
     }
 
     private function getForecastPerSales(int $tahun): array

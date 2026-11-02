@@ -677,7 +677,7 @@ class GenerateQrPsikologiController extends Controller
                 'quotation' =>$quotation,
                 'sales' => $sales->nama_lengkap,
                 'email_sales' => $sales->email,
-                'no_sales' => $sales->no_telpon,
+                'no_sales' => $sales ? (!empty($sales->no_telpon_perusahaan) ? $sales->no_telpon_perusahaan : $sales->no_telpon) : null,
                 'nama_apling' => $this->karyawan,
                 'token' => $getToken,
                 'jabatan_apling' => $getKaryawan->karyawan->jabatan

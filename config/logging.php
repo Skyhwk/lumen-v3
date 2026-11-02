@@ -145,6 +145,20 @@ return [
             'days' => 7,
         ],
 
+        'release_tc_sample' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/release_tc_sample/log.log'),
+            'level' => 'info',
+            'days' => 7,
+        ],
+
+        'release_verifikasi_lab' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/release_verifikasi_lab/log.log'),
+            'level' => 'info',
+            'days' => 7,
+        ],
+
         'release_frontend' => [
             'driver' => 'daily',
             'path' => storage_path('logs/release_frontend/log.log'),

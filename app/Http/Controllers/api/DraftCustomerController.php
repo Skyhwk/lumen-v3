@@ -24,13 +24,40 @@ date_default_timezone_set('Asia/Jakarta');
 
 class DraftCustomerController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $grade = strtoupper(trim(str_replace('_', ' ', (string) $this->grade)));
+        $isManager = in_array($grade, ['MANAGER', 'SENIOR MANAGER'], true);
+        $createdDate = trim((string) $request->input('created_date', ''));
+
+        if (!$isManager && $createdDate !== '') {
+            return response()->json(['message' => 'Filter tanggal hanya dapat digunakan oleh Manager atau Senior Manager.'], 403);
+        }
+
+        if ($createdDate !== '') {
+            $date = \DateTime::createFromFormat('!Y-m-d', $createdDate);
+            if (!$date || $date->format('Y-m-d') !== $createdDate) {
+                return response()->json(['message' => 'Format tanggal tidak valid.'], 422);
+            }
+        }
+
         $data = MasterPelanggan::with(['kontak_pelanggan', 'alamat_pelanggan', 'pic_pelanggan'])
-            ->where([
-                'created_by' => $this->karyawan,
-                'is_active' => true
-            ])->orderByDesc('id')->limit(5)->get();
+            ->where('is_active', true)
+            ->when($isManager, function ($query) {
+                $internNames = MasterKaryawan::where('status_karyawan', 'Magang/Intern')
+                    ->pluck('nama_lengkap');
+
+                $query->where(function ($query) use ($internNames) {
+                    $query->where('created_by', $this->karyawan)
+                        ->orWhereIn('created_by', $internNames);
+                });
+            }, function ($query) {
+                $query->where('created_by', $this->karyawan);
+            })
+            ->when($isManager && $createdDate !== '', function ($query) use ($createdDate) {
+                $query->whereDate('created_at', $createdDate);
+            })
+            ->orderByDesc('id');
 
         return Datatables::of($data)->make(true);
     }
@@ -274,39 +301,42 @@ class DraftCustomerController extends Controller
 
 
                 // RANDOMIZE SALES
-                $sales = MasterKaryawan::where([
-                    'id_jabatan' => 24,
-                    'is_active' => true
-                ])->get();
+                // $sales = MasterKaryawan::where([
+                //     'id_jabatan' => 24,
+                //     'is_active' => true
+                // ])->get();
 
-                $salesWithTodayCount = $sales->map(function ($salesman) {
-                    $salesman->today_customer_count = MasterPelanggan::whereDate('created_at', date('Y-m-d'))
-                        ->where('sales_id', $salesman->id)
-                        ->count();
+                // $salesWithTodayCount = $sales->map(function ($salesman) {
+                //     $salesman->today_customer_count = MasterPelanggan::whereDate('created_at', date('Y-m-d'))
+                //         ->where('sales_id', $salesman->id)
+                //         ->count();
 
-                    return $salesman;
-                });
+                //     return $salesman;
+                // });
 
-                $minToday = $salesWithTodayCount->min('today_customer_count');
+                // $minToday = $salesWithTodayCount->min('today_customer_count');
 
-                $availableSales = $salesWithTodayCount->filter(function ($salesman) use ($minToday) {
-                    return $salesman->today_customer_count == $minToday;
-                });
+                // $availableSales = $salesWithTodayCount->filter(function ($salesman) use ($minToday) {
+                //     return $salesman->today_customer_count == $minToday;
+                // });
 
                 // Random dari yang available
-                $selectedSales = $availableSales->random();
+                // $selectedSales = $availableSales->random();
 
                 // BUAT KE BANK DATA DULU (CEK APAKAH SUDAH FULL BANK DATA, KALAU YA SET NULL)
-                $currentBankData = MasterPelanggan::whereNull('sales_penanggung_jawab')->whereNull('sales_id')->where('is_active', true)->count();
+                // $currentBankData = MasterPelanggan::whereNull('sales_penanggung_jawab')->whereNull('sales_id')->where('is_active', true)->count();
 
-                if($currentBankData > 5000) {
-                    $dataPelanggan['sales_id'] = $selectedSales->id;
-                    $dataPelanggan['sales_penanggung_jawab'] = $selectedSales->nama_lengkap;
-                } else {
-                    $dataPelanggan['sales_id'] = null;
-                    $dataPelanggan['sales_penanggung_jawab'] = null;
-                }
+                // if($currentBankData > 5000) {
+                //     $dataPelanggan['sales_id'] = $selectedSales->id;
+                //     $dataPelanggan['sales_penanggung_jawab'] = $selectedSales->nama_lengkap;
+                // } else {
+                //     $dataPelanggan['sales_id'] = null;
+                //     $dataPelanggan['sales_penanggung_jawab'] = null;
+                // }
                 // END RANDOMIZE SALES
+
+                $dataPelanggan['sales_id'] = null;
+                $dataPelanggan['sales_penanggung_jawab'] = null;
 
                 $existingPelanggan = MasterPelanggan::where('nama_pelanggan', 'like', '%' . $clearNamaPelanggan . '%')->where('is_active', true)->first();
 

@@ -8,6 +8,7 @@ class SamplerTrackingSession extends Sector
 {
     protected $table = 'sampler_tracking_sessions';
     protected $guarded = [];
+    protected $hidden = ['meta_history'];
 
     public function members()
     {

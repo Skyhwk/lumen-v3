@@ -7,6 +7,8 @@ use App\Http\Controllers\Controller;
 use App\Models\MasterKaryawan;
 use App\Models\SalaryAdjustmentCounseling;
 use App\Models\SalaryAdjustmentRequest;
+use App\Services\ApprovalAppInboxService;
+use App\Services\EmployeeCareerContextService;
 use App\Services\EmployeeAdjustmentMutasiService;
 use App\Services\EmployeeAdjustmentRekapService;
 use App\Services\EmployeeAdjustmentTypeRegistry;
@@ -430,18 +432,12 @@ class PenyesuaianGajiHrdController extends Controller
             return response()->json(['success' => false, 'message' => 'Keterangan banding wajib diisi'], 422);
         }
 
-        $adjustmentGaji = $this->parseAmount(
-            $request->adjustment_gaji_pokok ?? $record->hrd_final_adjustment_gaji_pokok ?? $record->adjustment_gaji_pokok
-        );
-        $adjustmentTunjangan = $this->parseAmount(
-            $request->adjustment_tunjangan ?? $record->hrd_final_adjustment_tunjangan ?? $record->adjustment_tunjangan
-        );
-        if ($adjustmentGaji <= 0 && $adjustmentTunjangan <= 0) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Minimal salah satu penyesuaian gaji pokok atau tunjangan harus diisi',
-            ], 400);
-        }
+        $adjustmentGaji = $request->has('adjustment_gaji_pokok')
+            ? $this->parseAmount($request->adjustment_gaji_pokok)
+            : $this->parseAmount($record->hrd_final_adjustment_gaji_pokok ?? $record->adjustment_gaji_pokok);
+        $adjustmentTunjangan = $request->has('adjustment_tunjangan')
+            ? $this->parseAmount($request->adjustment_tunjangan)
+            : $this->parseAmount($record->hrd_final_adjustment_tunjangan ?? $record->adjustment_tunjangan);
 
         DB::connection('mysql')->beginTransaction();
         try {
@@ -449,14 +445,19 @@ class PenyesuaianGajiHrdController extends Controller
             $currentGaji = (float) $record->current_gaji_pokok;
             $currentTunjangan = (float) $record->current_tunjangan_kerja;
 
+            SalaryAdjustmentEvaluationService::ensureHrdFinalSnapshot($record);
+
+            $financeSnapshotBeforeAppeal = [
+                'adjustment_gaji_pokok' => (float) ($record->adjustment_gaji_pokok ?? 0),
+                'adjustment_tunjangan' => (float) ($record->adjustment_tunjangan ?? 0),
+                'requested_gaji_pokok' => (float) $record->requested_gaji_pokok,
+                'requested_tunjangan_kerja' => (float) $record->requested_tunjangan_kerja,
+            ];
+
             $record->adjustment_gaji_pokok = $adjustmentGaji > 0 ? $adjustmentGaji : null;
             $record->adjustment_tunjangan = $adjustmentTunjangan > 0 ? $adjustmentTunjangan : null;
             $record->requested_gaji_pokok = $currentGaji + max(0, $adjustmentGaji);
             $record->requested_tunjangan_kerja = $currentTunjangan + max(0, $adjustmentTunjangan);
-            $record->hrd_final_adjustment_gaji_pokok = $adjustmentGaji;
-            $record->hrd_final_adjustment_tunjangan = $adjustmentTunjangan;
-            $record->hrd_final_requested_gaji_pokok = $record->requested_gaji_pokok;
-            $record->hrd_final_requested_tunjangan_kerja = $record->requested_tunjangan_kerja;
             $record->hrd_appeal_notes = $appealNotes;
             $record->finance_return_reason = null;
             $record->finance_rejected_by = null;
@@ -479,6 +480,13 @@ class PenyesuaianGajiHrdController extends Controller
                         'adjustment_tunjangan' => (float) ($record->hrd_final_adjustment_tunjangan ?? 0),
                         'requested_gaji_pokok' => (float) $record->hrd_final_requested_gaji_pokok,
                         'requested_tunjangan_kerja' => (float) $record->hrd_final_requested_tunjangan_kerja,
+                    ],
+                    'finance_before_appeal' => $financeSnapshotBeforeAppeal,
+                    'hrd_appeal_proposal' => [
+                        'adjustment_gaji_pokok' => (float) ($record->adjustment_gaji_pokok ?? 0),
+                        'adjustment_tunjangan' => (float) ($record->adjustment_tunjangan ?? 0),
+                        'requested_gaji_pokok' => (float) $record->requested_gaji_pokok,
+                        'requested_tunjangan_kerja' => (float) $record->requested_tunjangan_kerja,
                     ],
                 ]
             );
@@ -557,9 +565,14 @@ class PenyesuaianGajiHrdController extends Controller
             return response()->json(['success' => false, 'message' => 'Data tidak ditemukan'], 404);
         }
 
-        $employee = MasterKaryawan::with('jabatan')->find($record->employee_id);
+        $employee = MasterKaryawan::with(['jabatan', 'divisi'])->find($record->employee_id);
         $manager = MasterKaryawan::find($record->requested_by_id);
         $namaJabatan = KaryawanProfileService::resolveJabatan($employee);
+        $resolvedJabatan = $namaJabatan !== '-' ? $namaJabatan : ($record->jabatan ?: '-');
+
+        $record->loadMissing(['assessment.sessions']);
+        $assessmentReport = (new SalaryAdjustmentAssessmentReportService())
+            ->buildAssessmentReport($record->assessment);
 
         return response()->json([
             'success' => true,
@@ -571,7 +584,14 @@ class PenyesuaianGajiHrdController extends Controller
                 'workflow_profile' => $record->workflow_profile,
                 'nama_lengkap' => $employee->nama_lengkap ?? '-',
                 'manager_nama' => $manager->nama_lengkap ?? $record->created_by,
-                'jabatan' => $namaJabatan !== '-' ? $namaJabatan : ($record->jabatan ?: '-'),
+                'jabatan' => $resolvedJabatan,
+                'employee' => array_merge([
+                    'nama_lengkap' => $employee->nama_lengkap ?? '-',
+                    'nik' => $employee->nik_karyawan ?? null,
+                    'jabatan' => $resolvedJabatan,
+                    'divisi' => optional($employee->divisi)->nama_divisi ?? null,
+                    'image' => $employee->image ?? null,
+                ], KaryawanProfileService::formatBirthPersonalFields($employee), app(ApprovalAppInboxService::class)->employeePhotoFields($employee)),
                 'current_gaji_pokok' => (float) $record->current_gaji_pokok,
                 'current_tunjangan_kerja' => (float) $record->current_tunjangan_kerja,
                 'adjustment_gaji_pokok' => (float) ($record->adjustment_gaji_pokok ?? 0),
@@ -595,10 +615,10 @@ class PenyesuaianGajiHrdController extends Controller
                 'workflow_meta' => (new EmployeeAdjustmentWorkflowResolver())->buildWorkflowMeta($record),
                 'kpi' => $record->kpi,
                 'assessment' => $record->assessment,
-                'assessment_report' => (new SalaryAdjustmentAssessmentReportService())
-                    ->buildAssessmentReport($record->assessment),
+                'assessment_report' => $assessmentReport,
                 'attendance' => (new SalaryAdjustmentEvaluationService())
                     ->getAttendanceSummary((int) $record->employee_id),
+                'employee_career' => (new EmployeeCareerContextService())->buildForApprovalApp($employee),
                 'counseling' => $record->counseling,
                 'logs' => SalaryAdjustmentWorkflowService::formatLogs($record->statusLogs),
             ],

@@ -2,6 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\RecruitmentInterview;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+
 class HrdEmailViewData
 {
     public static function contactLine($data): string
@@ -446,11 +450,100 @@ class HrdEmailViewData
         }
 
         try {
-            $date = \Carbon\Carbon::parse($tglLahir)->locale('id');
+            $date = Carbon::parse($tglLahir)->locale('id');
             return $date->translatedFormat('d F Y');
         } catch (\Exception $e) {
             return (string) $tglLahir;
         }
+    }
+
+    public static function formatTanggalJoin($value): string
+    {
+        $normalized = RecruitmentInterview::normalizeTanggalJoin($value);
+        if (!$normalized) {
+            return '-';
+        }
+
+        try {
+            return Carbon::parse($normalized)->locale('id')->translatedFormat('d F Y');
+        } catch (\Exception $e) {
+            return $normalized;
+        }
+    }
+
+    /**
+     * Tanggal join untuk email persetujuan kandidat:
+     * interview user → interview HRD → new_recruitment.tanggal_join_tercepat.
+     */
+    public static function resolveTanggalJoin($recruitment, $userInterview = null, $hrdInterview = null): string
+    {
+        $userJoin = self::interviewTanggalJoin($userInterview);
+        $hrdJoin = self::interviewTanggalJoin($hrdInterview);
+        $recruitmentId = is_object($recruitment) ? ($recruitment->id ?? $recruitment->new_recruitment_id ?? null) : null;
+
+        if (($userJoin === null || $hrdJoin === null) && $recruitmentId && RecruitmentInterview::hasTanggalJoinColumn()) {
+            $rows = DB::table('recruitment_interviews')
+                ->where('new_recruitment_id', $recruitmentId)
+                ->whereIn('stage', ['hrd', 'user'])
+                ->where('is_active', 1)
+                ->orderByDesc('id')
+                ->get(['stage', 'tanggal_join']);
+
+            foreach ($rows as $row) {
+                $normalized = RecruitmentInterview::normalizeTanggalJoin($row->tanggal_join ?? null);
+                if ($normalized === null) {
+                    continue;
+                }
+
+                $stage = strtolower((string) ($row->stage ?? ''));
+                if ($stage === 'user' && $userJoin === null) {
+                    $userJoin = $normalized;
+                }
+                if ($stage === 'hrd' && $hrdJoin === null) {
+                    $hrdJoin = $normalized;
+                }
+            }
+        }
+
+        $raw = $userJoin
+            ?: $hrdJoin
+            ?: self::recruitmentTanggalJoinTercepat($recruitment);
+
+        return self::formatTanggalJoin($raw);
+    }
+
+    private static function interviewTanggalJoin($interview): ?string
+    {
+        if (empty($interview)) {
+            return null;
+        }
+
+        $raw = null;
+        if (is_object($interview) && method_exists($interview, 'getRawOriginal')) {
+            $raw = $interview->getRawOriginal('tanggal_join');
+        }
+        if ($raw === null || $raw === '') {
+            $raw = is_object($interview) ? ($interview->tanggal_join ?? null) : null;
+        }
+
+        return RecruitmentInterview::normalizeTanggalJoin($raw);
+    }
+
+    private static function recruitmentTanggalJoinTercepat($recruitment): ?string
+    {
+        if (!is_object($recruitment)) {
+            return null;
+        }
+
+        $raw = null;
+        if (method_exists($recruitment, 'getRawOriginal')) {
+            $raw = $recruitment->getRawOriginal('tanggal_join_tercepat');
+        }
+        if ($raw === null || $raw === '') {
+            $raw = $recruitment->tanggal_join_tercepat ?? null;
+        }
+
+        return RecruitmentInterview::normalizeTanggalJoin($raw);
     }
 
     public static function prepareCvData($data): array
@@ -513,6 +606,7 @@ class HrdEmailViewData
             'namaJabatanFormatted' => self::getNamaJabatan($data),
             'usiaFormatted'        => self::getUsia($data),
             'tanggalLahirFormatted' => self::formatTanggalLahir($data),
+            'tanggalJoinFormatted' => self::resolveTanggalJoin($data),
             'noTelepon'            => $data->no_telepon ?? $data->no_hp ?? '-',
         ];
     }

@@ -73,10 +73,17 @@ class LogTransactionQsdController extends Controller
         $bulan = substr($periode, 5, 2); // Menghasilkan "06"
         
         // Query Utama untuk Datatables (Menampilkan SEMUA jejak log)
-        $data = QsdRevenueTransactionLog::query()
-            ->whereYear('tanggal_kelompok', $tahun)
-            ->whereMonth('tanggal_kelompok', $bulan)
-            ->orderByDesc('created_at');
+        $data = DB::table('qsd_revenue_transaction_log as log')
+            ->leftJoin('order_header as oh', 'oh.no_order', '=', 'log.no_order')
+            ->leftJoin('master_pelanggan as mp', 'mp.id_pelanggan', '=', 'oh.id_pelanggan')
+            ->select(
+                'log.*',
+                DB::raw('mp.nama_pelanggan as nama_perusahaan'),
+                'mp.sales_penanggung_jawab'
+            )
+            ->whereYear('log.tanggal_kelompok', $tahun)
+            ->whereMonth('log.tanggal_kelompok', $bulan)
+            ->orderByDesc('log.created_at');
 
         // Perhitungan Grand Total yang Benar (Penambahan - Pengurangan)
         $grandTotal = QsdRevenueTransactionLog::query()
@@ -86,14 +93,18 @@ class LogTransactionQsdController extends Controller
             ->value('total_bersih') ?? 0; // Kasih default 0 jika null
 
         return Datatables::of($data)
-            ->orderColumn('created_at', fn ($query, $order) => $query->orderBy('id', $order))
-            ->filterColumn('created_at', fn ($query, $keyword) => $this->filterDateColumn($query, 'created_at', $keyword))
-            ->filterColumn('no_order', fn ($query, $keyword) => $this->filterLike($query, 'no_order', $keyword))
-            ->filterColumn('periode', fn ($query, $keyword) => $this->filterPeriodeColumn($query, $keyword))
-            ->filterColumn('revenue', fn ($query, $keyword) => $this->filterNumericColumn($query, 'revenue', $keyword))
-            ->filterColumn('total', fn ($query, $keyword) => $this->filterNumericColumn($query, 'total', $keyword))
-            ->filterColumn('status', fn ($query, $keyword) => $this->filterStatusColumn($query, $keyword))
+            ->orderColumn('created_at', fn ($query, $order) => $query->orderBy('log.id', $order))
+            ->filterColumn('created_at', fn ($query, $keyword) => $this->filterDateColumn($query, 'log.created_at', $keyword))
+            ->filterColumn('no_order', fn ($query, $keyword) => $this->filterLike($query, 'log.no_order', $keyword))
+            ->filterColumn('nama_perusahaan', fn ($query, $keyword) => $this->filterLike($query, 'mp.nama_pelanggan', $keyword))
+            ->filterColumn('sales_penanggung_jawab', fn ($query, $keyword) => $this->filterLike($query, 'mp.sales_penanggung_jawab', $keyword))
+            ->filterColumn('periode', fn ($query, $keyword) => $this->filterPeriodeColumn($query, $keyword, 'log.periode'))
+            ->filterColumn('revenue', fn ($query, $keyword) => $this->filterNumericColumn($query, 'log.revenue', $keyword))
+            ->filterColumn('total', fn ($query, $keyword) => $this->filterNumericColumn($query, 'log.total', $keyword))
+            ->filterColumn('status', fn ($query, $keyword) => $this->filterStatusColumn($query, $keyword, 'log.status'))
             ->editColumn('periode', fn ($row) => $this->formatPeriodeLabel($row->periode))
+            ->editColumn('nama_perusahaan', fn ($row) => $row->nama_perusahaan ?: '-')
+            ->editColumn('sales_penanggung_jawab', fn ($row) => $row->sales_penanggung_jawab ?: '-')
             ->editColumn('revenue', fn ($row) => (float) $row->revenue)
             ->editColumn('total', fn ($row) => (float) $row->total)
             // Opsional: Bikin UI lebih jelas, pengurangan dikasih tanda minus di view
@@ -117,8 +128,25 @@ class LogTransactionQsdController extends Controller
                 ->whereYear('tanggal_sampling_min', $tahun)
                 ->whereMonth('tanggal_sampling_min', $bulan);
 
+            $forecastPelanggan = DB::table('forecast_sp')
+                ->select('no_quotation', DB::raw('MAX(pelanggan_ID) as pelanggan_ID'))
+                ->groupBy('no_quotation');
+
             // 3. Clone query untuk Datatables (Menampilkan semua riwayat)
-            $data = (clone $baseQuery)->orderByDesc('created_at');
+            $data = DB::table('qsd_forecast_transaction_log as log')
+                ->leftJoin('order_header as oh', 'oh.no_document', '=', 'log.no_penawaran')
+                ->leftJoinSub($forecastPelanggan, 'fs', 'fs.no_quotation', '=', 'log.no_penawaran')
+                ->leftJoin('master_pelanggan as mp_oh', 'mp_oh.id_pelanggan', '=', 'oh.id_pelanggan')
+                ->leftJoin('master_pelanggan as mp_fs', 'mp_fs.id_pelanggan', '=', 'fs.pelanggan_ID')
+                ->select(
+                    'log.*',
+                    DB::raw('COALESCE(mp_oh.nama_pelanggan, mp_fs.nama_pelanggan) as nama_perusahaan'),
+                    DB::raw('COALESCE(mp_oh.sales_penanggung_jawab, mp_fs.sales_penanggung_jawab) as sales_penanggung_jawab')
+                )
+                ->whereNotNull('log.tanggal_sampling_min')
+                ->whereYear('log.tanggal_sampling_min', $tahun)
+                ->whereMonth('log.tanggal_sampling_min', $bulan)
+                ->orderByDesc('log.created_at');
 
             // 4. Clone query untuk Grand Total dengan Logika Ledger (Penambahan - Pengurangan)
             $grandTotal = (clone $baseQuery)
@@ -126,14 +154,38 @@ class LogTransactionQsdController extends Controller
                 ->value('total_bersih') ?? 0;
 
             return Datatables::of($data)
-                ->orderColumn('created_at', fn ($query, $order) => $query->orderBy('id', $order))
-                ->filterColumn('created_at', fn ($query, $keyword) => $this->filterDateColumn($query, 'created_at', $keyword))
-                ->filterColumn('no_penawaran', fn ($query, $keyword) => $this->filterLike($query, 'no_penawaran', $keyword))
-                ->filterColumn('periode', fn ($query, $keyword) => $this->filterPeriodeColumn($query, $keyword))
-                ->filterColumn('revenue_forecast', fn ($query, $keyword) => $this->filterNumericColumn($query, 'revenue_forecast', $keyword))
-                ->filterColumn('total', fn ($query, $keyword) => $this->filterNumericColumn($query, 'total', $keyword))
-                ->filterColumn('status', fn ($query, $keyword) => $this->filterStatusColumn($query, $keyword))
+                ->orderColumn('created_at', fn ($query, $order) => $query->orderBy('log.id', $order))
+                ->filterColumn('created_at', fn ($query, $keyword) => $this->filterDateColumn($query, 'log.created_at', $keyword))
+                ->filterColumn('no_penawaran', fn ($query, $keyword) => $this->filterLike($query, 'log.no_penawaran', $keyword))
+                ->filterColumn('nama_perusahaan', function ($query, $keyword) {
+                    $keyword = trim((string) $keyword);
+                    if ($keyword === '') {
+                        return;
+                    }
+                    $like = '%' . $keyword . '%';
+                    $query->where(function ($sub) use ($like) {
+                        $sub->where('mp_oh.nama_pelanggan', 'like', $like)
+                            ->orWhere('mp_fs.nama_pelanggan', 'like', $like);
+                    });
+                })
+                ->filterColumn('sales_penanggung_jawab', function ($query, $keyword) {
+                    $keyword = trim((string) $keyword);
+                    if ($keyword === '') {
+                        return;
+                    }
+                    $like = '%' . $keyword . '%';
+                    $query->where(function ($sub) use ($like) {
+                        $sub->where('mp_oh.sales_penanggung_jawab', 'like', $like)
+                            ->orWhere('mp_fs.sales_penanggung_jawab', 'like', $like);
+                    });
+                })
+                ->filterColumn('periode', fn ($query, $keyword) => $this->filterPeriodeColumn($query, $keyword, 'log.periode'))
+                ->filterColumn('revenue_forecast', fn ($query, $keyword) => $this->filterNumericColumn($query, 'log.revenue_forecast', $keyword))
+                ->filterColumn('total', fn ($query, $keyword) => $this->filterNumericColumn($query, 'log.total', $keyword))
+                ->filterColumn('status', fn ($query, $keyword) => $this->filterStatusColumn($query, $keyword, 'log.status'))
                 ->editColumn('periode', fn ($row) => $this->formatPeriodeLabel($row->periode))
+                ->editColumn('nama_perusahaan', fn ($row) => $row->nama_perusahaan ?: '-')
+                ->editColumn('sales_penanggung_jawab', fn ($row) => $row->sales_penanggung_jawab ?: '-')
                 ->editColumn('revenue_forecast', fn ($row) => (float) $row->revenue_forecast)
                 ->editColumn('total', fn ($row) => (float) $row->total)
                 ->editColumn('status', fn ($row) => ucfirst($row->status))
@@ -210,7 +262,7 @@ class LogTransactionQsdController extends Controller
         $query->where($column, 'like', '%' . $keyword . '%');
     }
 
-    private function filterStatusColumn($query, ?string $keyword): void
+    private function filterStatusColumn($query, ?string $keyword, string $column = 'status'): void
     {
         $keyword = strtolower(trim((string) $keyword));
         if ($keyword === '') {
@@ -220,31 +272,31 @@ class LogTransactionQsdController extends Controller
         $normalized = str_replace(['+', '-'], '', $keyword);
 
         if (str_contains($normalized, 'tambah') || str_contains($normalized, 'plus')) {
-            $query->where('status', 'penambahan');
+            $query->where($column, 'penambahan');
             return;
         }
 
         if (str_contains($normalized, 'kurang') || str_contains($normalized, 'minus')) {
-            $query->where('status', 'pengurangan');
+            $query->where($column, 'pengurangan');
             return;
         }
 
-        $query->where('status', 'like', '%' . $normalized . '%');
+        $query->where($column, 'like', '%' . $normalized . '%');
     }
 
-    private function filterPeriodeColumn($query, ?string $keyword): void
+    private function filterPeriodeColumn($query, ?string $keyword, string $column = 'periode'): void
     {
         $keyword = trim((string) $keyword);
         if ($keyword === '') {
             return;
         }
 
-        $query->where(function ($sub) use ($keyword) {
-            $sub->where('periode', 'like', '%' . $keyword . '%');
+        $query->where(function ($sub) use ($keyword, $column) {
+            $sub->where($column, 'like', '%' . $keyword . '%');
 
             foreach (self::BULAN_LABEL as $monthNum => $label) {
                 if (stripos($label, $keyword) !== false) {
-                    $sub->orWhere('periode', 'like', '%-' . $monthNum);
+                    $sub->orWhere($column, 'like', '%-' . $monthNum);
                 }
             }
         });

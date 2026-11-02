@@ -20,6 +20,9 @@ class NewRecruitment extends Model
         'tanggal_join_tercepat' => 'date',
         'is_reject_finance' => 'boolean',
         'is_rejected_kandidat' => 'boolean',
+        'rejected_decision' => 'boolean',
+        'rejected_salary' => 'boolean',
+        'rejected_candidate_offering' => 'boolean',
     ];
 
     public function personnelRequest()

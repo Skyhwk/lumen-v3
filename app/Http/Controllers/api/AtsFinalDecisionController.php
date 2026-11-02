@@ -621,7 +621,7 @@ class AtsFinalDecisionController extends Controller
                 if ($status === 'finance_review') {
                     return [
                         'code' => 'finance_review',
-                        'label' => 'Disetujui Kandidat (Dalam Review Finance)',
+                        'label' => 'Awaiting Finance',
                         'email_sent_at' => $emailSentAt,
                     ];
                 }
@@ -742,6 +742,20 @@ class AtsFinalDecisionController extends Controller
             ->editColumn('rejected_salary', function ($row) {
                 return (int) ((bool) ($row->rejected_salary ?? false));
             })
+            ->editColumn('rejected_candidate_offering', function ($row) {
+                return (int) ((bool) ($row->rejected_candidate_offering ?? false));
+            })
+            ->editColumn('rejected_candidate_offering_reason', function ($row) {
+                if (!empty($row->rejected_candidate_offering_reason)) {
+                    return $row->rejected_candidate_offering_reason;
+                }
+
+                if (RecruitmentStatusService::isAwaitingCandidateOfferingResubmit($row)) {
+                    return RecruitmentStatusService::getCandidateOfferingRejectReason($row);
+                }
+
+                return null;
+            })
             ->editColumn('rejected_decision_reason', function ($row) {
                 if (!empty($row->rejected_decision_reason)) {
                     return $row->rejected_decision_reason;
@@ -758,14 +772,16 @@ class AtsFinalDecisionController extends Controller
                     return RecruitmentStatusService::getFinanceRejectReason($row);
                 }
 
-                if (RecruitmentStatusService::isAwaitingCandidateOfferingResubmit($row)) {
-                    return RecruitmentStatusService::getCandidateOfferingRejectReason($row);
-                }
-
                 return null;
             })
             ->addColumn('rejected_section_type', function ($row) {
                 $status = strtolower(trim((string) ($row->status ?? '')));
+
+                if ((bool) ($row->rejected_candidate_offering ?? false)
+                    || (in_array($status, ['salary_offer', 'internal_sallary_offer'], true)
+                        && RecruitmentStatusService::isAwaitingCandidateOfferingResubmit($row))) {
+                    return 'candidate_offering';
+                }
 
                 if ($status === 'management_decision' && (bool) ($row->rejected_decision ?? false)) {
                     return 'decision';

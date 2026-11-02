@@ -329,28 +329,15 @@ class CodingSampleController extends Controller
                     $cleanedSamples = array_values(array_filter($cleanedSamples));
                     sort($cleanedSamples);
                     $matchedDocument = null;
-                    foreach ($bsDocument as $index => $doc) {
-                        // Pastikan $doc->no_sampel adalah array
+                    foreach ($bsDocument as $doc) {
                         if (!isset($doc->no_sampel) || !is_array($doc->no_sampel)) {
                             continue;
                         }
 
-                        // Sort no_sampel dokumen juga
-                        $docSamples = $doc->no_sampel;
-                        sort($docSamples);
-                        
-
                         $intersection = array_intersect($cleanedSamples, $doc->no_sampel);
                         if (!empty($intersection)) {
-                            $matchedDocument = $doc; // simpan dokumen yang cocok
-                            break; // stop di match pertama
-                        }
-
-                        // Bandingkan apakah sama persis (jumlah dan isi, setelah diurutkan)
-                        /* if ($cleanedSamples === $docSamples) {
                             $matchedDocument = $doc;
-                            break;
-                        } */
+                        }
                     }
                    
                     $bsDocument = $matchedDocument;

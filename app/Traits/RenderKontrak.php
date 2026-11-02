@@ -649,7 +649,8 @@ trait RenderKontrak
             $no_telp = "";
 
             $add = ($data->nama_add != null) ? $data->nama_add : "-";
-            $no_telp = ($data->no_telpon != null) ? " (" . $data->no_telpon . ")" : "";
+            $salesPhone = !empty($data->no_telpon_perusahaan) ? $data->no_telpon_perusahaan : $data->no_telpon;
+            $no_telp = !empty($salesPhone) ? " (" . $salesPhone . ")" : "";
             $updd = ($data->nama_update != null) ? $data->nama_update : "-";
             $st = ($data->approve == 0) ? "NOT APPROVED" : "APPROVED";
 

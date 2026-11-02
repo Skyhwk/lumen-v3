@@ -26,7 +26,7 @@ use App\Services\Notification;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Yajra\Datatables\Datatables;
+use Yajra\DataTables\DataTables as Datatables;
 
 class PermohonanCutiController extends Controller
 {

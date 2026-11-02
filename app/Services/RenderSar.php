@@ -422,6 +422,7 @@ class RenderSar
                     </tr>'
                 );
                 $hargaTransportasiPerdiem += $data->harga_transportasi * $data->transportasi;
+                $i++;
             }
             $perdiem_24 = "";
             $total_perdiem = 0;
@@ -435,9 +436,6 @@ class RenderSar
                 $total_perdiem += $data->{'harga_24jam_personil_total'};
             }
             if ($data->perdiem_jumlah_orang > 0 && $data->harga_perdiem_personil_total != null) {
-                if ($data->transportasi > 0 && $data->harga_transportasi_total != null) {
-                    $i = $i + 1;
-                }
                 $pdf->WriteHTML(
                     '<tr>
                         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
@@ -448,25 +446,13 @@ class RenderSar
                     </tr>'
                 );
                 $hargaTransportasiPerdiem += ($data->harga_perdiem_personil_total + $total_perdiem);
+                $i++;
             }
             
 
             $biaya_lain = json_decode($data->biaya_lain);
             if ($biaya_lain != null) {
-                $u = '';
                 foreach ($biaya_lain as $k => $v) {
-                    if ($data->perdiem_jumlah_orang > 0 && $data->harga_perdiem_personil_total != null) {
-                        $i = $i + 1;
-                    } else {
-                        if ($u == $i) {
-                            $i = $i + 1;
-                        } else {
-                            if (count(json_decode($data->data_pendukung_sampling)) == 0) {
-                                $i = $i + 1;
-                            }
-                        }
-                    }
-
                     if ($lang != 'id') {
                         $v->deskripsi = str_replace('Perdiem', 'Manpower', $v->deskripsi);
                         $tranlator = new Translator();
@@ -482,7 +468,7 @@ class RenderSar
                             <td style="font-size: 13px; text-align:right;padding: 5px;">' . self::rupiah($v->total_biaya) . '</td>
                         </tr>'
                     );
-                    $u = $i;
+                    $i++;
                 }
             }
             $biaya_preparasi = json_decode($data->biaya_preparasi_padatan);
@@ -614,6 +600,15 @@ class RenderSar
                             </td>
                             <td style="text-align:right;padding:5px;">' . self::rupiah($data->grand_total) . '</td>
                         </tr>');
+            $disc_promo = json_decode($data->discount_promo);
+            if ($disc_promo != null) {
+                $pdf->WriteHTML(
+                    ' <tr>
+                        <td style="text-align:center;padding:5px;">' . $disc_promo->deskripsi_promo_discount .' '. $disc_promo->jumlah_promo_discount .'</td>
+                        <td style="text-align:right;padding:5px;">' . self::rupiah($data->total_discount_promo) . '</td>
+                    </tr> '
+                );
+            }
             if ($data->total_discount_air > 0) {
                 $pdf->WriteHTML(
                     ' <tr>
@@ -754,15 +749,6 @@ class RenderSar
                         </tr> '
                     );
                 }
-            }
-            $disc_promo = json_decode($data->discount_promo);
-            if ($disc_promo != null) {
-                $pdf->WriteHTML(
-                    ' <tr>
-                        <td style="text-align:center;padding:5px;">' . $disc_promo->deskripsi_promo_discount .' '. $disc_promo->jumlah_promo_discount .'</td>
-                        <td style="text-align:right;padding:5px;">' . self::rupiah($data->total_discount_promo) . '</td>
-                    </tr> '
-                );
             }
             if ($data->total_dpp != $data->grand_total && $data->total_ppn != null && $data->total_ppn != '0.00') {
                 $pdf->WriteHTML(
@@ -1009,7 +995,8 @@ class RenderSar
             $no_telp = "";
             $app = "-";
             $add = $data->sales->nama_lengkap;
-            $no_telp = " (" . $data->sales->no_telpon . ")";
+            $salesPhone = $data->sales ? (!empty($data->sales->no_telpon_perusahaan) ? $data->sales->no_telpon_perusahaan : $data->sales->no_telpon) : null;
+            $no_telp = !empty($salesPhone) ? " (" . $salesPhone . ")" : "";
             $upd = $data->updated_by;
             if ($data->is_approved == 0) {
                 $st = "NOT APPROVED";

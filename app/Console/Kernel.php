@@ -15,6 +15,7 @@ class Kernel extends ConsoleKernel
     protected $commands = [
         Commands\SyncSamplerTracking::class,
         Commands\CollectSamplerTrackingTroubles::class,
+        Commands\BackfillSamplerTrackingHistory::class,
         Commands\CleanOldRequestLogs::class,
         Commands\ScheduleEverySecond::class,
         Commands\CacheCommand::class,
@@ -40,12 +41,14 @@ class Kernel extends ConsoleKernel
         Commands\SyncQsdForecast::class,
         Commands\MonitorQsdRevenue::class,
         Commands\MonitorQsdForecast::class,
+        Commands\RecalculateQsdLogs::class,
         Commands\UpdateJatuhTempo::class,
         Commands\UpdateOrderDetailKonsultan::class,
         Commands\SyncLimsData::class,
         Commands\SyncSpecificLimsData::class,
         Commands\TruncateLimsTesting::class,
         Commands\SyncShioElemen::class,
+        Commands\SyncNoTelponPerusahaanSalesCommand::class,
         Commands\BackfillPersiapanSampel::class,
         Commands\GenerateWsFinalApproval::class,
         Commands\SyncOrderDetaolFromJadwal::class,
@@ -60,6 +63,8 @@ class Kernel extends ConsoleKernel
         Commands\SendInternalAssessmentNalarLogikaPdfCommand::class,
         Commands\RejectOverdueAssessment::class,
         Commands\RollbackOverdueAssessment::class,
+        Commands\RollbackDirectorManagementDecision::class,
+        Commands\RollbackDirectorSalaryDecision::class,
         Commands\ApplyScheduledEmployeeAdjustments::class,
         Commands\CustomerServiceAutoCloseCommand::class,
         Commands\CustomerServiceAutoArchiveCommand::class,
@@ -91,6 +96,7 @@ class Kernel extends ConsoleKernel
         Commands\UpdateQuotationStatusFromExcelCommand::class,
         Commands\GenerateMonthlyAbsensiCommand::class,
         Commands\ImportNearHo::class,
+        Commands\BackupMasterPelangganDediWibowoCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,
@@ -127,6 +133,14 @@ class Kernel extends ConsoleKernel
             ->dailyAt('23:30')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping(15);
+        // $schedule->command('qsd:monitor-revenue')
+        //     ->everyFiveMinutes()
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping(10);
+        // $schedule->command('qsd:monitor-forecast')
+        //     ->everyFiveMinutes()
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping(10);
         // $schedule->command('absensi:generate-monthly')
         //     ->monthlyOn(1, '10:00')
         //     ->timezone('Asia/Jakarta')

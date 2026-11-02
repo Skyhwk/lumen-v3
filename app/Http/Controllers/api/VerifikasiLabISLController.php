@@ -143,10 +143,20 @@ class VerifikasiLabISLController extends Controller
 
             $data_botol = array_values($data_scanned);
         } else {
-            $scan = ScanSampelTc::whereRaw(
-                "JSON_CONTAINS(data_detail, ?)",
-                ['{"koding": "' . $request->no_sampel . '"}']
-            )->first();
+            // Prioritas cari nomor sampel pemilik botol dari OrderDetail
+            $order = OrderDetail::whereNotNull('persiapan')
+                ->whereJsonContains('persiapan', ['koding' => $request->no_sampel])
+                ->where('is_active', true)
+                ->first();
+
+            if ($order) {
+                $scan = ScanSampelTc::where('no_sampel', $order->no_sampel)->first();
+            } else {
+                $scan = ScanSampelTc::whereRaw(
+                    "JSON_CONTAINS(data_detail, ?)",
+                    ['{"koding": "' . $request->no_sampel . '"}']
+                )->first();
+            }
 
             if (!$scan) {
                 return response()->json([
@@ -167,12 +177,18 @@ class VerifikasiLabISLController extends Controller
                 return $item;
             }, json_decode($scan->data_detail, false) ?: []);
 
-            $data_scan_analis = ScanSampelAnalis::whereRaw(
-                "JSON_CONTAINS(data, ?)",
-                ['{"koding": "' . $request->no_sampel . '"}']
-            )
+            $data_scan_analis = ScanSampelAnalis::where('no_sampel', $scan->no_sampel)
                 ->where('is_active', 1)
                 ->first();
+
+            if (!$data_scan_analis) {
+                $data_scan_analis = ScanSampelAnalis::whereRaw(
+                    "JSON_CONTAINS(data, ?)",
+                    ['{"koding": "' . $request->no_sampel . '"}']
+                )
+                    ->where('is_active', 1)
+                    ->first();
+            }
 
             $data_scanned_analis = $data_scan_analis ? json_decode($data_scan_analis->data, false) : [];
 

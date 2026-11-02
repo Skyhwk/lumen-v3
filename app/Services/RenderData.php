@@ -570,8 +570,9 @@ class RenderData
             );
             $upd = "-";
             $user = MasterKaryawan::where('id', $data->sales_id)->first();
-            $add = $user->nama_lengkap;
-            $no_telp = " (" . $user->no_telpon . ")";
+            $add = $user ? $user->nama_lengkap : "-";
+            $salesPhone = $user ? (!empty($user->no_telpon_perusahaan) ? $user->no_telpon_perusahaan : $user->no_telpon) : null;
+            $no_telp = !empty($salesPhone) ? " (" . $salesPhone . ")" : "";
             if ($data->updateby != null) {
                 $upd = $data->updateby->nama_lengkap;
             }
@@ -1173,8 +1174,9 @@ class RenderData
             $add = "-";
             $updd = "-";
             $user = MasterKaryawan::where('id', $data->sales_id)->first();
-            $add = $user->nama_lengkap;
-            $no_telp = " (" . $user->no_telpon . ")";
+            $add = $user ? $user->nama_lengkap : "-";
+            $salesPhone = $user ? (!empty($user->no_telpon_perusahaan) ? $user->no_telpon_perusahaan : $user->no_telpon) : null;
+            $no_telp = !empty($salesPhone) ? " (" . $salesPhone . ")" : "";
             if ($data->updateby != null) {
                 $updd = $data->updateby->nama_lengkap;
             }
@@ -3161,8 +3163,9 @@ class RenderData
             $no_telp = "";
             $app = "-";
             $user = MasterKaryawan::where('id', $data->sales_id)->first();
-            $add = $user->nama_lengkap;
-            $no_telp = " (" . $user->no_telpon . ")";
+            $add = $user ? $user->nama_lengkap : "-";
+            $salesPhone = $user ? (!empty($user->no_telpon_perusahaan) ? $user->no_telpon_perusahaan : $user->no_telpon) : null;
+            $no_telp = !empty($salesPhone) ? " (" . $salesPhone . ")" : "";
             // if ($data->updateby != null) {
             $upd = $data->nama_update;
             // }
@@ -3694,7 +3697,8 @@ class RenderData
             $no_telp = "";
 
             $add = ($data->nama_add != null) ? $data->nama_add : "-";
-            $no_telp = ($data->no_telpon != null) ? " (" . $data->no_telpon . ")" : "";
+            $salesPhone = !empty($data->no_telpon_perusahaan) ? $data->no_telpon_perusahaan : $data->no_telpon;
+            $no_telp = !empty($salesPhone) ? " (" . $salesPhone . ")" : "";
             $updd = ($data->nama_update != null) ? $data->nama_update : "-";
             $st = ($data->approve == 0) ? "NOT APPROVED" : "APPROVED";
 

@@ -10,6 +10,7 @@ use App\Models\ScaleType;
 use App\Services\BankSoalImageService;
 use App\Services\GetBawahan;
 use App\Services\HrdAssessmentReadinessService;
+use App\Services\RecruitmentManagerAccess;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -69,12 +70,20 @@ class BankSoalController extends Controller
     public function managerCategories(Request $request)
     {
         $managerHierarchyNames = $this->managerHierarchyNames();
+        $scopeNames = $managerHierarchyNames;
+        $isDivisiScope = false;
+
+        if (RecruitmentManagerAccess::forKaryawanId((int) $this->getEffectiveUserId()) && $request->filled('divisi_id')) {
+            $scopeNames = RecruitmentManagerAccess::namesInDivisi((int) $request->input('divisi_id'));
+            $isDivisiScope = true;
+        }
+
         $categories = QuestionCategory::withCount(['questions as current_question_count' => fn ($q) => $q->where('question_scope', 'manager')->where('is_active', 1)->where('status', '!=', 'retired')])
             ->where('category_scope', 'manager')
             ->where('is_active', true)
-            ->where(function ($query) use ($managerHierarchyNames) {
-                $query->whereIn('owner_karyawan', $managerHierarchyNames)
-                    ->orWhere('assigned_manager', $this->getEffectiveKaryawanName());
+            ->where(function ($query) use ($scopeNames) {
+                $query->whereIn('owner_karyawan', $scopeNames)
+                    ->orWhereIn('assigned_manager', $scopeNames);
             })
             ->orderBy('name')
             ->get()
@@ -84,7 +93,11 @@ class BankSoalController extends Controller
                 return $category;
             });
 
-        return response()->json(['success' => true, 'data' => $categories]);
+        return response()->json([
+            'success' => true,
+            'data' => $categories,
+            'scope' => $isDivisiScope ? 'divisi' : 'hierarchy',
+        ]);
     }
 
     public function managerAvailableQuestionCount()

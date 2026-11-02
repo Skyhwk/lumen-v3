@@ -26,7 +26,22 @@ class BpjsTkController extends Controller
             'bpjs_tk.id_karyawan'
         );
 
-        return Datatables::of($data)->make(true);
+        return Datatables::of($data)
+            ->editColumn('sumber_potongan', function ($row) {
+                $sumber = strtolower(trim((string) $row->sumber_potongan));
+                if ($sumber === 'umr_kota') {
+                    return 'UMR Kota';
+                }
+                if ($sumber === 'gaji_pokok') {
+                    return 'Gaji Pokok';
+                }
+                if ($sumber === 'lainnya') {
+                    return 'Lainnya';
+                }
+
+                return $row->sumber_potongan ?: '-';
+            })
+            ->make(true);
     }
 
     public function getKaryawan()
@@ -100,6 +115,15 @@ class BpjsTkController extends Controller
             $bpjsTk->nominal_potongan_karyawan = $bpjsTk->potongan_karyawan * $bpjsTk->gaji_pokok;
             $bpjsTk->potongan_kantor = $request->potongan_kantor / 100;
             $bpjsTk->nominal_potongan_kantor = $bpjsTk->potongan_kantor * $bpjsTk->gaji_pokok;
+
+            $sumberPotongan = strtolower(trim((string) $request->sumber_potongan));
+            if (!in_array($sumberPotongan, ['gaji_pokok', 'umr_kota', 'lainnya'], true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Sumber potongan harus Gaji Pokok, UMR Kota, atau Lainnya.',
+                ], 422);
+            }
+            $bpjsTk->sumber_potongan = $sumberPotongan;
             $bpjsTk->created_at = DATE('Y-m-d H:i:s');
 
             if ($request->id && in_array((int) $request->id_karyawan, array_map('intval', $existingKaryawan), true)) {

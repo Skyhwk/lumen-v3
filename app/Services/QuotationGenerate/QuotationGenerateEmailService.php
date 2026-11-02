@@ -116,7 +116,7 @@ class QuotationGenerateEmailService
             'kategoriHtml' => $this->kategoriHtml($quotation->data_pendukung_sampling),
             'portalLink' => $portalLink,
             'salesName' => $sales ? $sales->nama_lengkap : '',
-            'salesPhone' => $sales && !empty($sales->no_telpon) ? $sales->no_telpon : '',
+            'salesPhone' => $sales ? (!empty($sales->no_telpon_perusahaan) ? $sales->no_telpon_perusahaan : ($sales->no_telpon ?: '')) : '',
             'officialEmail' => $officialEmail,
             'signatureHtml' => $signatureHtml,
         ])->render());

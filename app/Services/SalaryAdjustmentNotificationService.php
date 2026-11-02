@@ -102,6 +102,40 @@ class SalaryAdjustmentNotificationService
                     );
                     break;
 
+                case 'propose_effective_date':
+                    if ($record->request_type === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI) {
+                        if ($record->status === SalaryAdjustmentWorkflowService::STATUS_WAITING_GIVER) {
+                            self::notifyKaryawanIdsWithMenuAccess(
+                                [(int) $record->requested_by_id],
+                                self::URL_MANAGER,
+                                'Usulan Tanggal Mutasi',
+                                "Manager penerima mengusulkan tanggal efektif mutasi {$label}. Mohon respons di tab Menunggu Di Proses.",
+                                $exclude
+                            );
+                        } elseif ($record->status === SalaryAdjustmentWorkflowService::STATUS_WAITING_RECEIVER) {
+                            self::notifyKaryawanIdsWithMenuAccess(
+                                [(int) $record->receiver_manager_id],
+                                self::URL_MANAGER,
+                                'Usulan Tanggal Mutasi',
+                                "Manager pemberi mengusulkan tanggal efektif mutasi {$label}. Mohon tinjau di tab Inbox Mutasi.",
+                                $exclude
+                            );
+                        }
+                    }
+                    break;
+
+                case 'agree_effective_date':
+                    if ($record->request_type === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI) {
+                        self::notifyKaryawanIdsWithMenuAccess(
+                            [(int) $record->receiver_manager_id],
+                            self::URL_MANAGER,
+                            'Tanggal Mutasi Disepakati',
+                            "Tanggal efektif mutasi {$label} disepakati manager pemberi. Silakan terima mutasi di tab Inbox Mutasi.",
+                            $exclude
+                        );
+                    }
+                    break;
+
                 case 'process':
                     self::notifyKaryawanIdsWithMenuAccess(
                         [(int) $record->requested_by_id],

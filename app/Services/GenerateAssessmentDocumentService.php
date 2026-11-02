@@ -85,6 +85,89 @@ class GenerateAssessmentDocumentService
         ];
     }
 
+    /**
+     * Generate PDF per sesi dari data yang sudah disiapkan (bukan hanya recruitment).
+     * Sesi tanpa hasil dilewati; kegagalan satu sesi tidak menggagalkan batch.
+     *
+     * @param  iterable<int, object>  $sessions
+     */
+    public function generateFromSessions(string $personName, $sessions, bool $persist = false): array
+    {
+        $batchId = str_replace('.', '', uniqid('send_', true));
+        $relativeDir = $persist ? self::OUTPUT_DIR : self::TEMP_DIR . '/' . $batchId;
+        $outputDir = base_path('public/' . $relativeDir);
+
+        if (!is_dir($outputDir) && !@mkdir($outputDir, 0775, true) && !is_dir($outputDir)) {
+            throw new \RuntimeException('Gagal membuat folder lampiran assessment.');
+        }
+
+        $documents = [];
+        $failedSessions = [];
+        $batchDir = $persist ? null : $outputDir;
+
+        foreach ($sessions as $session) {
+            if (!$session || $this->isHiddenAssessmentSession($session)) {
+                continue;
+            }
+
+            $result = $this->decodeSessionResult($session);
+            if (empty($result)) {
+                continue;
+            }
+
+            $engine = strtolower((string) ($result['engine'] ?? ''));
+
+            try {
+                $document = $this->renderSessionPdf(
+                    $session,
+                    $result,
+                    $engine,
+                    $personName,
+                    $outputDir,
+                    $relativeDir,
+                    $batchDir
+                );
+
+                if ($document) {
+                    $documents[] = $document;
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Assessment PDF generation failed for prepared session', [
+                    'session_id' => $session->id ?? null,
+                    'category' => $session->category_name ?? null,
+                    'message' => $e->getMessage(),
+                ]);
+
+                $failedSessions[] = [
+                    'session_id' => (int) ($session->id ?? 0),
+                    'category_name' => trim((string) ($session->category_name ?? 'Assessment')),
+                    'message' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return [
+            'candidate_name' => $personName,
+            'persisted' => $persist,
+            'batch_dir' => $batchDir,
+            'documents' => $documents,
+            'failed_sessions' => $failedSessions,
+        ];
+    }
+
+    private function decodeSessionResult($session): array
+    {
+        $raw = $session->result_json ?? null;
+        if (is_array($raw)) {
+            return $raw;
+        }
+        if (is_string($raw) && $raw !== '') {
+            return json_decode($raw, true) ?: [];
+        }
+
+        return [];
+    }
+
     public function tryGenerateTempAttachments(int $recruitmentId): array
     {
         try {

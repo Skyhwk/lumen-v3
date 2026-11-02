@@ -1361,6 +1361,7 @@ class ReadyOrderController extends Controller
                         foreach ($params as $param) {
                             $param_map[$param->nama_parameter] = $param;
                         }
+                        \App\Helpers\ParameterLabelConfigHelper::enrichParamMap($param_map, $idParameter, $id_kategori);
 
                         $botol_volumes = [];
                         foreach ($value->parameter as $parameter) {
@@ -1877,6 +1878,7 @@ class ReadyOrderController extends Controller
                         foreach ($params as $param) {
                             $param_map[$param->nama_parameter] = $param;
                         }
+                        \App\Helpers\ParameterLabelConfigHelper::enrichParamMap($param_map, $idParameter, $id_kategori);
 
                         $invalid = collect($param_map)->filter(function ($p) {
                             return in_array($p->regen, ['-', '', null], true);
@@ -2455,6 +2457,7 @@ class ReadyOrderController extends Controller
                                     foreach ($params as $param) {
                                         $param_map[$param->nama_parameter] = $param;
                                     }
+                                    \App\Helpers\ParameterLabelConfigHelper::enrichParamMap($param_map, $idParameter, $id_kategori);
 
                                     $botol_volumes = [];
                                     foreach ($value->parameter as $parameter) {
@@ -3219,6 +3222,7 @@ class ReadyOrderController extends Controller
                         foreach ($params as $param) {
                             $param_map[$param->nama_parameter] = $param;
                         }
+                        \App\Helpers\ParameterLabelConfigHelper::enrichParamMap($param_map, $idParameter, $id_kategori);
 
                         $botol_volumes = [];
                         foreach ($value->parameter as $parameter) {
