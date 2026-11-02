@@ -48,7 +48,7 @@ class KalkulasiPayrollController extends Controller
         // try {
             $data = Payroll::where('payroll_header_id', $request->id_header)->where('is_active', true)->newQuery();
             $data = $data->with(['karyawan' => function ($query) {
-                $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan');
+                $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan', 'is_active', 'effective_date');
             }, 'department' => function ($query) {
                 $query->select('master_divisi.id', 'nama_divisi');
             }])
@@ -125,13 +125,13 @@ class KalkulasiPayrollController extends Controller
             $periode = $request->input('periode') ?? $periodePayroll;
 
             $masukKerjaJsonLengthSql = PayrollWorkingDaysService::sqlShowDataMasukKerja();
-            $hariKerjaExpectedSql = PayrollWorkingDaysService::sqlShowDataHariKerja();
-            $tidakHadirSql = PayrollWorkingDaysService::sqlShowDataTidakHadir();
+            $hariKerjaExpectedSql = PayrollWorkingDaysService::sqlShowDataHariKerja($periodePayroll);
+            $tidakHadirSql = PayrollWorkingDaysService::sqlShowDataTidakHadir($periodePayroll);
             $potonganAbsenEligibleSql = '(master_karyawan.status_karyawan NOT IN ("Permanent", "Contract", "Special") OR master_karyawan.is_active = 0)';
-            $potonganAbsenAmountSql = 'FLOOR(GREATEST(1000, ROUND((IFNULL(master_sallary.gaji_pokok, 0) + IFNULL(master_sallary.tunjangan_kerja, 0)) / GREATEST(IFNULL(rekap_masuk_kerja.hari_kerja, 0), 1) * ' . $tidakHadirSql . ', 0)) / 1000) * 1000';
+            $potonganAbsenAmountSql = 'FLOOR(GREATEST(1000, ROUND((IFNULL(master_sallary.gaji_pokok, 0) + IFNULL(master_sallary.tunjangan_kerja, 0)) / GREATEST(' . $hariKerjaExpectedSql . ', 1) * ' . $tidakHadirSql . ', 0)) / 1000) * 1000';
             $potonganAbsenCaseSql = 'CASE WHEN ' . $potonganAbsenEligibleSql
                 . ' AND rekap_masuk_kerja.tanggal IS NOT NULL AND rekap_masuk_kerja.is_active = 1'
-                . ' AND IFNULL(rekap_masuk_kerja.hari_kerja, 0) > 0 AND ' . $tidakHadirSql . ' > 0 THEN '
+                . ' AND ' . $hariKerjaExpectedSql . ' > 0 AND ' . $tidakHadirSql . ' > 0 THEN '
                 . $potonganAbsenAmountSql . ' ELSE 0 END';
 
             $pcPencadanganColumn = PencadanganUpahPayrollService::sqlShowDataPencadanganColumn();
@@ -143,7 +143,7 @@ class KalkulasiPayrollController extends Controller
 
             $query = DB::table('master_karyawan')
             ->select(
-                DB::raw('master_karyawan.id as karyawan_id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, CASE WHEN payroll.id IS NULL THEN master_karyawan.id ELSE payroll.id_karyawan END as id_karyawan, CASE WHEN payroll.id IS NULL THEN master_karyawan.id_jabatan ELSE payroll.id_jabatan END as id_jabatan, CASE WHEN payroll.id IS NULL THEN master_jabatan.nama_jabatan ELSE payroll.nama_jabatan END as nama_jabatan, CASE WHEN payroll.id IS NULL THEN rekening_karyawan.no_rekening ELSE payroll.no_rekening END as no_rekening , CASE WHEN payroll.id IS NULL THEN rekening_karyawan.nama_bank ELSE payroll.nama_bank END as nama_bank,payroll.keterangan,
+                DB::raw('master_karyawan.id as karyawan_id, master_karyawan.is_active as karyawan_is_active, master_karyawan.effective_date as karyawan_effective_date, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, CASE WHEN payroll.id IS NULL THEN master_karyawan.id ELSE payroll.id_karyawan END as id_karyawan, CASE WHEN payroll.id IS NULL THEN master_karyawan.id_jabatan ELSE payroll.id_jabatan END as id_jabatan, CASE WHEN payroll.id IS NULL THEN master_jabatan.nama_jabatan ELSE payroll.nama_jabatan END as nama_jabatan, CASE WHEN payroll.id IS NULL THEN rekening_karyawan.no_rekening ELSE payroll.no_rekening END as no_rekening , CASE WHEN payroll.id IS NULL THEN rekening_karyawan.nama_bank ELSE payroll.nama_bank END as nama_bank,payroll.keterangan,
                 ROUND(IFNULL(CASE WHEN payroll.id IS NULL THEN pph_21.pajak_bulanan ELSE payroll.pajak_pph END, 0), 0) as pajak,
                 ROUND(IFNULL(CASE WHEN payroll.id IS NULL THEN master_sallary.gaji_pokok ELSE payroll.gaji_pokok END, 0), 0) as gaji_pokok, 
                 ROUND(IFNULL(CASE WHEN payroll.id IS NULL THEN master_sallary.tunjangan_kerja ELSE payroll.tunjangan END, 0), 0) as tunjangan_kerja, 
@@ -239,7 +239,7 @@ class KalkulasiPayrollController extends Controller
             ->leftJoin('master_jabatan', function($join){
                 $join->on('master_karyawan.id_jabatan', '=', 'master_jabatan.id');
             })
-            ->groupBy(DB::raw('master_karyawan.id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_karyawan.is_active, master_divisi.nama_divisi, master_karyawan.id_jabatan, master_jabatan.nama_jabatan, payroll.id_jabatan, payroll.nama_jabatan, payroll.id_karyawan, pph_21.pajak_bulanan, rekening_karyawan.no_rekening, rekening_karyawan.nama_bank, payroll.keterangan, master_sallary.gaji_pokok, master_sallary.tunjangan_kerja, bpjs_tk.nominal_potongan_karyawan, bpjs_tk.nominal_potongan_kantor, bpjs_kesehatan.nominal_potongan_karyawan, bpjs_kesehatan.nominal_potongan_kantor, payroll.id, payroll.status, payroll.payroll_header_id, payroll.hari_kerja, payroll.gaji_pokok, payroll.tunjangan, payroll.pajak_pph, payroll.jamsostek, payroll.bpjs_kesehatan, payroll.bonus, payroll.incentive, payroll.potongan_lainnya, payroll.take_home_pay, payroll.no_rekening, payroll.nama_bank, rekap_masuk_kerja.is_active, rekap_masuk_kerja.tanggal, rekap_masuk_kerja.hari_kerja'))
+            ->groupBy(DB::raw('master_karyawan.id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_karyawan.is_active, master_karyawan.effective_date, master_divisi.nama_divisi, master_karyawan.id_jabatan, master_jabatan.nama_jabatan, payroll.id_jabatan, payroll.nama_jabatan, payroll.id_karyawan, pph_21.pajak_bulanan, rekening_karyawan.no_rekening, rekening_karyawan.nama_bank, payroll.keterangan, master_sallary.gaji_pokok, master_sallary.tunjangan_kerja, bpjs_tk.nominal_potongan_karyawan, bpjs_tk.nominal_potongan_kantor, bpjs_kesehatan.nominal_potongan_karyawan, bpjs_kesehatan.nominal_potongan_kantor, payroll.id, payroll.status, payroll.payroll_header_id, payroll.hari_kerja, payroll.gaji_pokok, payroll.tunjangan, payroll.pajak_pph, payroll.jamsostek, payroll.bpjs_kesehatan, payroll.bonus, payroll.incentive, payroll.potongan_lainnya, payroll.take_home_pay, payroll.no_rekening, payroll.nama_bank, rekap_masuk_kerja.is_active, rekap_masuk_kerja.tanggal, rekap_masuk_kerja.hari_kerja'))
             ->orderBy('master_karyawan.nik_karyawan', 'ASC');
             $this->constrainPayrollKaryawanVisibility($query, $periodePayroll);
             // ->where('master_karyawan.nik_karyawan', 'ISP232')
@@ -580,7 +580,9 @@ class KalkulasiPayrollController extends Controller
 
     /**
      * Aktif: wajib rekap absensi aktif periode.
-     * Non-aktif: hanya master_karyawan — effective_date + 1 bulan masih >= periode payroll.
+     * Non-aktif: hanya bulan keluar (periode = bulan effective_date).
+     * Gaji bulan keluar bisa diproses/bayar di bulan kalender berikutnya (+1 bulan),
+     * tapi periode payroll-nya tetap bulan keluar — tidak ikut periode gaji bulan berikutnya.
      */
     private function constrainPayrollKaryawanVisibility($query, string $periode): void
     {
@@ -592,10 +594,7 @@ class KalkulasiPayrollController extends Controller
             })->orWhere(function ($inactive) use ($periode) {
                 $inactive->where('master_karyawan.is_active', 0)
                     ->whereNotNull('master_karyawan.effective_date')
-                    ->whereRaw(
-                        'DATE_FORMAT(DATE_ADD(master_karyawan.effective_date, INTERVAL 1 MONTH), "%Y-%m") >= ?',
-                        [$periode]
-                    );
+                    ->whereRaw('DATE_FORMAT(master_karyawan.effective_date, "%Y-%m") = ?', [$periode]);
             });
         });
     }
