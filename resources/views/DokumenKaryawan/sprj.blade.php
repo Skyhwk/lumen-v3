@@ -358,7 +358,10 @@
     <tr>
         <td class="letter">d.</td>
         <td>
-            @if($jumlahHariKerja !== null && $jadwalPenggajian !== null)
+            @if($tanggalPenggajian !== null)
+                Pembayaran akan diberikan pada tanggal {{ $tanggalPenggajian }} bulan berikutnya,
+                atau jika tanggal tersebut jatuh bertepatan dengan hari libur, maka pembayaran akan diberikan pada hari kerja {{ $penyesuaianHariLibur === 'sebelum' ? 'sebelumnya' : 'berikutnya' }}.
+            @elseif($jumlahHariKerja !== null && $jadwalPenggajian !== null)
                 Pembayaran akan diberikan {{ $jumlahHariKerja }} hari kerja setelah hari kerja pertama bulan
                 berikutnya (H+{{ $jadwalPenggajian }}), atau jika tanggal tersebut
                 jatuh bertepatan dengan hari libur, maka pembayaran akan diberikan pada hari kerja
