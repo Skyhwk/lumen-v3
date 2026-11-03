@@ -10,12 +10,14 @@ use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
 use App\Services\EmailJadwal;
 use App\Services\GenerateQrDocument;
+use App\Services\JadwalMobilisasiService;
 use App\Services\JadwalServices;
 use App\Services\Notification;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Yajra\Datatables\Datatables;
 
 class ValidatorSPController extends Controller
@@ -78,41 +80,135 @@ class ValidatorSPController extends Controller
                         ->orWhere('created_at', 'like', "%{$keyword}%");
                 });
             })
+            ->rawColumns(['riwayat_reject_validator'])
             ->make(true);
     }
 
     public function getJadwalSingle(Request $request)
     {
-        $data = Jadwal::select('id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan', 'tanggal', 'jam_mulai', 'jam_selesai', 'kategori', 'durasi', 'status', DB::raw('group_concat(sampler) as sampler'))
+        $data = Jadwal::select(
+                'id_sampling',
+                'parsial',
+                'no_quotation',
+                'nama_perusahaan',
+                'tanggal',
+                'jam_mulai',
+                'jam_selesai',
+                'kategori',
+                'durasi',
+                'status',
+                'kendaraan',
+                'driver',
+                DB::raw('group_concat(sampler) as sampler'),
+                DB::raw('group_concat(id) as batch_id')
+            )
             ->where('is_active', true)
             ->where('id_sampling', $request->id_sampling)
-            ->groupBy('id_sampling', 'parsial', 'no_quotation', 'tanggal', 'nama_perusahaan', 'durasi', 'kategori', 'status', 'jam_mulai', 'jam_selesai');
+            ->groupBy(
+                'id_sampling',
+                'parsial',
+                'no_quotation',
+                'tanggal',
+                'nama_perusahaan',
+                'durasi',
+                'kategori',
+                'status',
+                'jam_mulai',
+                'jam_selesai',
+                'kendaraan',
+                'driver'
+            );
 
-        return Datatables::of($data)->make(true);
+        return Datatables::of($data)
+            ->addColumn('mobilisasi', function ($row) {
+                if (empty($row->batch_id)) {
+                    return null;
+                }
+                return JadwalMobilisasiService::findActiveByBatchIds($row->batch_id);
+            })
+            ->rawColumns(['mobilisasi'])
+            ->make(true);
     }
 
     public function rejectJadwal(Request $request)
     {
+        $keteranganReject = trim((string) ($request->input('keterangan_reject') ?? $request->input('reason') ?? ''));
+        if ($keteranganReject === '') {
+            return response()->json([
+                'message' => 'Keterangan alasan reject wajib diisi!',
+                'status'  => '422',
+            ], 422);
+        }
+
         DB::beginTransaction();
         try {
             $cek = SamplingPlan::where('id', $request->sampling_id)->first();
+            $timestamp = Carbon::now()->format('Y-m-d H:i:s');
 
             if (! is_null($cek)) {
+                $petugasSp = $cek->petugas_jadwal
+                    ?: Jadwal::where('id_sampling', $cek->id)->where('is_active', true)->value('created_by')
+                    ?: '-';
+
                 $cek->status        = 0;
                 $cek->status_jadwal = 'cancel'; /* ['booking','fixed','jadwal','cancel',null] */
+
+                if (Schema::hasColumn('sampling_plan', 'reject_validator_by')) {
+                    $cek->reject_validator_by = $this->karyawan;
+                }
+                if (Schema::hasColumn('sampling_plan', 'reject_validator_at')) {
+                    $cek->reject_validator_at = $timestamp;
+                }
+                if (Schema::hasColumn('sampling_plan', 'keterangan_reject_validator')) {
+                    $cek->keterangan_reject_validator = $keteranganReject;
+                }
+                if (Schema::hasColumn('sampling_plan', 'riwayat_reject_validator')) {
+                    $riwayat = $cek->riwayat_reject_validator;
+                    if (is_string($riwayat)) {
+                        $decoded = json_decode($riwayat, true);
+                        $riwayat = is_array($decoded) ? $decoded : [];
+                    } elseif (!is_array($riwayat)) {
+                        $riwayat = [];
+                    }
+
+                    $riwayat[] = [
+                        'no_document' => $cek->no_document,
+                        'no_quotation' => $cek->no_quotation,
+                        'petugas_jadwal' => $petugasSp,
+                        'validator_by' => $this->karyawan,
+                        'rejected_at' => $timestamp,
+                        'keterangan' => $keteranganReject,
+                    ];
+
+                    $cek->riwayat_reject_validator = $riwayat;
+                }
+
                 $cek->save();
-                // step cancel jadwal
+
+                // step cancel jadwal & nonaktifkan jadwal_mobilisasi
+                $activeBatchIds = Jadwal::where('id_sampling', $cek->id)
+                    ->where('is_active', true)
+                    ->pluck('id')
+                    ->toArray();
+
                 Jadwal::where('id_sampling', $cek->id)->update(['is_active' => false]);
+
+                if (!empty($activeBatchIds)) {
+                    JadwalMobilisasiService::deactivateByBatchIds($activeBatchIds, $this->karyawan);
+                }
+                JadwalMobilisasiService::deactivateBySamplingId((int) $cek->id, $this->karyawan);
             }
 
             $sales = JadwalServices::on('no_quotation', $cek->no_quotation)->getQuotation();
 
-            $message = "No Sampling $cek->no_document/$cek->no_quotation Telah direject dari jadwal";
-            Notification::where('id', $sales->sales_id)->title('Jadwal Rejected')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
+            $message = "No Sampling $cek->no_document/$cek->no_quotation Telah direject oleh Validator ($this->karyawan). Keterangan: $keteranganReject";
+            if ($sales && isset($sales->sales_id)) {
+                Notification::where('id', $sales->sales_id)->title('Jadwal Rejected')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
+            }
 
             DB::commit();
             return response()->json([
-                'message' => 'Jadwal has been rejected!',
+                'message' => 'Jadwal berhasil direject dan dikembalikan untuk perbaikan!',
                 'status'  => '200',
             ], 200);
         } catch (\Exception $e) {
