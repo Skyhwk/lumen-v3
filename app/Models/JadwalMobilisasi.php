@@ -17,4 +17,13 @@ class JadwalMobilisasi extends Sector
     ];
 
     public $timestamps = false;
+        'tanggal' => 'date',
+        'released_io_at' => 'datetime',
+    ];
+
+    public function aset()
+    {
+        return $this->hasMany(JadwalMobilisasiAset::class, 'id_mobilisasi')
+            ->where('is_active', true);
+    }
 }
