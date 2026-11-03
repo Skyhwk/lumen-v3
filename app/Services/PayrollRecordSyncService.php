@@ -180,7 +180,7 @@ class PayrollRecordSyncService
 
     /**
      * Satu baris sumber potongan untuk submit payroll (lockForUpdate pada query pemanggil).
-     * Pencadangan: jika beberapa baris ONGOING, ambil is_active DESC, id DESC (selaras preview).
+     * Pencadangan: jika beberapa baris cocok, ambil id terbesar (rekaman terbaru).
      * Kasbon/denda: tetap wajib unik — lebih dari satu baris = null (ambigu).
      */
     public static function resolvePayrollDeductionSource(
@@ -197,17 +197,13 @@ class PayrollRecordSyncService
             $periode,
             $employeeIsActive
         )
-            ->orderByDesc('is_active')
             ->orderByDesc('id')
             ->get();
 
         if ($scoped->isEmpty()) {
             return null;
         }
-        if ($scoped->count() === 1) {
-            return $scoped->first();
-        }
-        if ($balanceField !== null) {
+        if ($balanceField !== null && $scoped->count() !== 1) {
             return null;
         }
 
