@@ -111,28 +111,35 @@ class PayrollRecordSyncService
     }
 
     /**
-     * Sumber potongan payroll (submit): aktif atau non-aktif tapi masih ONGOING.
+     * Sumber potongan payroll (submit).
+     *
+     * @param  bool|null  $employeeIsActive  Wajib untuk pencadangan: karyawan aktif → hanya baris master is_active=1.
      */
     public static function scopePayrollDeductionSource(
         Builder $query,
         ?string $balanceField = null,
         ?string $periodField = null,
-        ?string $periode = null
+        ?string $periode = null,
+        ?bool $employeeIsActive = null
     ): Builder {
         if ($periodField !== null && $periode !== null) {
             $query->where($periodField, '<=', $periode);
         }
 
-        $query->where(function ($q) {
-            $q->where('is_active', true)
-                ->orWhere(function ($q) {
-                    $q->where('is_active', false)
-                        ->where(function ($status) {
-                            $status->where('status', 'ONGOING')
-                                ->orWhereNull('status');
-                        });
-                });
-        });
+        if ($balanceField === null) {
+            self::applyPencadanganMasterActiveFilter($query, $employeeIsActive);
+        } else {
+            $query->where(function ($q) {
+                $q->where('is_active', true)
+                    ->orWhere(function ($q) {
+                        $q->where('is_active', false)
+                            ->where(function ($status) {
+                                $status->where('status', 'ONGOING')
+                                    ->orWhereNull('status');
+                            });
+                    });
+            });
+        }
 
         $query->where(function ($status) {
             $status->where('status', 'ONGOING')
@@ -145,6 +152,66 @@ class PayrollRecordSyncService
         }
 
         return $query;
+    }
+
+    /**
+     * Pencadangan upah: karyawan aktif → hanya baris master is_active=1.
+     * Karyawan nonaktif → baris aktif atau nonaktif ONGOING (penyelesaian saat exit).
+     */
+    private static function applyPencadanganMasterActiveFilter(Builder $query, ?bool $employeeIsActive): void
+    {
+        if ($employeeIsActive === true) {
+            $query->where('is_active', true);
+
+            return;
+        }
+
+        $query->where(function ($q) {
+            $q->where('is_active', true)
+                ->orWhere(function ($q) {
+                    $q->where('is_active', false)
+                        ->where(function ($status) {
+                            $status->where('status', 'ONGOING')
+                                ->orWhereNull('status');
+                        });
+                });
+        });
+    }
+
+    /**
+     * Satu baris sumber potongan untuk submit payroll (lockForUpdate pada query pemanggil).
+     * Pencadangan: jika beberapa baris ONGOING, ambil is_active DESC, id DESC (selaras preview).
+     * Kasbon/denda: tetap wajib unik — lebih dari satu baris = null (ambigu).
+     */
+    public static function resolvePayrollDeductionSource(
+        Builder $query,
+        ?string $balanceField,
+        ?string $periodField,
+        string $periode,
+        ?bool $employeeIsActive = null
+    ) {
+        $scoped = self::scopePayrollDeductionSource(
+            $query,
+            $balanceField,
+            $periodField,
+            $periode,
+            $employeeIsActive
+        )
+            ->orderByDesc('is_active')
+            ->orderByDesc('id')
+            ->get();
+
+        if ($scoped->isEmpty()) {
+            return null;
+        }
+        if ($scoped->count() === 1) {
+            return $scoped->first();
+        }
+        if ($balanceField !== null) {
+            return null;
+        }
+
+        return $scoped->first();
     }
 
     /**

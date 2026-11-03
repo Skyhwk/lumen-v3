@@ -40,17 +40,20 @@ class PayrollDeductionService
                     continue;
                 }
                 $periodField = $balanceField ? 'bulan_mulai_pemotongan' : 'bulan_efektif';
-                $sources = PayrollRecordSyncService::scopePayrollDeductionSource(
-                    $class::where('id_karyawan', $employee->id),
+                $source = PayrollRecordSyncService::resolvePayrollDeductionSource(
+                    $class::where('id_karyawan', $employee->id)->lockForUpdate(),
                     $balanceField,
                     $periodField,
-                    $payroll->periode_payroll
-                )
-                    ->orderBy('id')->lockForUpdate()->get();
-                if ($sources->count() !== 1) {
-                    throw new \DomainException("Sumber $field tidak ditemukan atau ambigu. Muat ulang dan periksa data master.");
+                    $payroll->periode_payroll,
+                    $balanceField === null ? (bool) $employee->is_active : null
+                );
+                if ($source === null) {
+                    throw new \DomainException($this->deductionSourceErrorMessage(
+                        $field,
+                        $payroll->periode_payroll,
+                        $balanceField !== null
+                    ));
                 }
-                $source = $sources->first();
                 $before = $this->state($source, $balanceField);
                 if ($balanceField) {
                     PayrollDebtService::deduct($source, $balanceField, $amount);
@@ -169,6 +172,22 @@ class PayrollDeductionService
             ->where(function ($query) {
                 $query->where('loan', '<>', 0)->orWhere('sanksi', '<>', 0)->orWhere('pencadangan_upah', '<>', 0);
             });
+    }
+
+    private function deductionSourceErrorMessage(string $field, string $periode, bool $strictUnique): string
+    {
+        $labels = [
+            'loan' => 'kasbon',
+            'sanksi' => 'denda karyawan',
+            'pencadangan_upah' => 'pencadangan upah',
+        ];
+        $label = $labels[$field] ?? $field;
+        if ($strictUnique) {
+            return "Sumber {$label} tidak ditemukan atau ambigu untuk periode {$periode}. Muat ulang dan periksa data master.";
+        }
+
+        return "Data master {$label} tidak ditemukan untuk periode {$periode}. "
+            . 'Lengkapi master HR (menu pencadangan upah) atau set nominal pencadangan = 0 sebelum submit.';
     }
 
 }
