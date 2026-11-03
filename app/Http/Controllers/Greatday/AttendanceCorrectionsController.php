@@ -13,6 +13,7 @@ use App\Services\Hr\Greatday\FormSubmitterVoidService;
 use App\Services\Hr\HrFormAttachmentStorage;
 use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\LegacyFormGreatdayApprovalSteps;
+use App\Services\Hr\WorkflowStatus;
 use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
 use App\Support\Greatday\NotificationCopy;
@@ -129,7 +130,7 @@ class AttendanceCorrectionsController extends Controller
             $apiId = (int) $request->id;
             $resolved = HrRequestResolver::findByApiId(HrRequest::TYPE_ATTENDANCE_CORRECTION, $apiId);
             if (!$resolved) {
-                if (!AttendanceCorrection::where('id', $apiId)->where('is_active', true)->exists()) {
+                if (!$this->legacyAttendanceCorrectionForAtasanAction($apiId)) {
                     return response()->json(['message' => 'Attendance correction not found'], 404);
                 }
             } else {
@@ -180,7 +181,7 @@ class AttendanceCorrectionsController extends Controller
             $apiId = (int) $request->id;
             $resolved = HrRequestResolver::findByApiId(HrRequest::TYPE_ATTENDANCE_CORRECTION, $apiId);
             if (!$resolved) {
-                if (!AttendanceCorrection::where('id', $apiId)->where('is_active', true)->exists()) {
+                if (!$this->legacyAttendanceCorrectionForAtasanAction($apiId)) {
                     return response()->json(['message' => 'Attendance correction not found'], 404);
                 }
             } else {
@@ -244,5 +245,18 @@ class AttendanceCorrectionsController extends Controller
         } catch (\InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+    }
+
+    /**
+     * Legacy intilab_apps (tanpa map HR) — antrian persetujuan bisa tampil meski is_active=0.
+     */
+    private function legacyAttendanceCorrectionForAtasanAction(int $apiId): ?AttendanceCorrection
+    {
+        $row = AttendanceCorrection::find($apiId);
+        if (!$row || $row->status !== WorkflowStatus::PENDING) {
+            return null;
+        }
+
+        return $row;
     }
 }
