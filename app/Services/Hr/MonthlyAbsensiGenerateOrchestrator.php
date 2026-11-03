@@ -270,8 +270,7 @@ class MonthlyAbsensiGenerateOrchestrator
                     $this->persistGenerate(
                         $karyawanId,
                         $bulanYm,
-                        // Rekap otomatis hanya membaca punch asli; koreksi punch
-                        // tetap melalui jalur generate manual.
+                        // Generate (cron & portal) hanya rekap; ubah punch via Update / koreksi HRD.
                         null,
                         $payload['data'],
                         null
