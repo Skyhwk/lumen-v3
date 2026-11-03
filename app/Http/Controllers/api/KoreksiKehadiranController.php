@@ -4,7 +4,10 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\IntilabInternal\AttendanceCorrections;
+use App\Models\Hr\HrRequest;
+use App\Models\MasterKaryawan;
 use App\Services\GetAtasan;
+use App\Services\Hr\FormAtasanSubmitNotificationService;
 use App\Services\GetBawahan;
 use App\Services\Notification;
 use Carbon\Carbon;
@@ -192,13 +195,17 @@ class KoreksiKehadiranController extends Controller
 
             if (!$isManager) {
                 try {
-                    $atasanIds = GetAtasan::where('id', $this->user_id)->get()->pluck('id')->toArray();
-                    if (!empty($atasanIds)) {
-                        Notification::whereIn('id', $atasanIds)
-                            ->title('Koreksi Kehadiran Baru')
-                            ->message('Permintaan koreksi kehadiran dari ' . $this->karyawan . ' menunggu persetujuan Anda')
-                            ->url($this->menuUrl())
-                            ->send();
+                    $submitter = MasterKaryawan::find($this->user_id);
+                    if ($submitter) {
+                        $atasanIds = app(FormAtasanSubmitNotificationService::class)
+                            ->initialApproverIds($submitter, HrRequest::TYPE_ATTENDANCE_CORRECTION);
+                        if ($atasanIds !== []) {
+                            Notification::whereIn('id', $atasanIds)
+                                ->title('Koreksi Kehadiran Baru')
+                                ->message('Permintaan koreksi kehadiran dari ' . $this->karyawan . ' menunggu persetujuan Anda')
+                                ->url($this->menuUrl())
+                                ->send();
+                        }
                     }
                 } catch (\Exception $notifyEx) {
                     // Pengajuan tetap disimpan meski notifikasi gagal.

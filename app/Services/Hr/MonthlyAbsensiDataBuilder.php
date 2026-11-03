@@ -57,7 +57,7 @@ class MonthlyAbsensiDataBuilder
         $rangeEnd = date('Y-m-d', strtotime($endDate . ' +1 day'));
 
         $shiftByDate = ShiftKaryawan::query()
-            ->select('tanggal', 'shift')
+            ->select('tanggal', 'shift', 'time_in', 'time_out')
             ->where('karyawan_id', $karyawanId)
             ->whereBetween('tanggal', [$startDate, $endDate])
             ->get()
@@ -109,9 +109,17 @@ class MonthlyAbsensiDataBuilder
                     $excuseLabels,
                     $tanggal
                 );
+            } elseif ($shift === 'SHOB2') {
+                [$masukRow, $keluarRow] = $this->resolveShob2Punches($rowsToday, $rowsNext);
+                $data[] = $this->mergeExcuseLabel(
+                    $this->composeDayRow($namaLabel, $karyawanId, $tanggal, $masukRow, $keluarRow, 'SHOB2'),
+                    $excuseLabels,
+                    $tanggal
+                );
             } else {
                 $shiftLabel = $shift ?: 'SHREGULAR';
-                [$masukRow, $keluarRow] = $this->resolveRegularPunches($rowsToday);
+                $checkin = $this->shiftCheckinTime($shiftRow);
+                [$masukRow, $keluarRow] = $this->resolveThresholdPunches($rowsToday, $checkin);
                 $data[] = $this->mergeExcuseLabel(
                     $this->composeDayRow($namaLabel, $karyawanId, $tanggal, $masukRow, $keluarRow, $shiftLabel),
                     $excuseLabels,
@@ -154,19 +162,60 @@ class MonthlyAbsensiDataBuilder
     }
 
     /**
+     * Sama dengan AbsensiController::compareshift / extractMasukKeluarByThreshold:
+     * masuk = MIN(jam) jika <= time_in + 4 jam; keluar = MAX(jam) jika > threshold.
+     *
      * @param \Illuminate\Support\Collection $rowsToday
      * @return array{0: object|null, 1: object|null}
      */
-    private function resolveRegularPunches($rowsToday): array
+    private function resolveThresholdPunches($rowsToday, string $checkin): array
     {
-        $masuk = $rowsToday
-            ->filter(fn ($row) => (string) $row->jam <= '14:00:00')
-            ->sortBy('jam')
-            ->first();
-        $keluar = $rowsToday
-            ->filter(fn ($row) => (string) $row->jam > '14:00:00')
-            ->sortByDesc('jam')
-            ->first();
+        if ($rowsToday->isEmpty()) {
+            return [null, null];
+        }
+
+        $threshold = date('H:i:s', strtotime($checkin . ' +4 hours'));
+        $minJam = (string) $rowsToday->min('jam');
+        $maxJam = (string) $rowsToday->max('jam');
+
+        $masuk = null;
+        if ($minJam !== '' && $minJam <= $threshold) {
+            $masuk = $rowsToday->first(fn ($row) => (string) $row->jam === $minJam);
+        }
+
+        $keluar = null;
+        if ($maxJam !== '' && $maxJam > $threshold) {
+            $keluar = $rowsToday->first(fn ($row) => (string) $row->jam === $maxJam);
+        }
+
+        return [$masuk, $keluar];
+    }
+
+    private function shiftCheckinTime($shiftRow): string
+    {
+        if ($shiftRow && !empty($shiftRow->time_in)) {
+            $time = trim((string) $shiftRow->time_in);
+            if (preg_match('/^\d{1,2}:\d{2}(:\d{2})?$/', $time)) {
+                return strlen($time) === 5 ? $time . ':00' : $time;
+            }
+        }
+
+        return '08:00:00';
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection $rowsToday
+     * @param \Illuminate\Support\Collection $rowsNext
+     * @return array{0: object|null, 1: object|null}
+     */
+    private function resolveShob2Punches($rowsToday, $rowsNext): array
+    {
+        $masuk = $rowsToday->sortBy('jam')->first();
+        $keluar = null;
+        $minNext = $rowsNext->min('jam');
+        if ($minNext !== null && (string) $minNext < '14:00:00') {
+            $keluar = $rowsNext->first(fn ($row) => (string) $row->jam === (string) $minNext);
+        }
 
         return [$masuk, $keluar];
     }

@@ -6,6 +6,7 @@ use App\Models\Absensi;
 use App\Models\MasterKaryawan;
 use App\Models\RekapLiburKalender;
 use App\Models\RekapMasukKerja;
+use App\Services\Payroll\PayrollWorkingDaysService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -127,36 +128,66 @@ class MonthlyAbsensiGenerateOrchestrator
             throw new \RuntimeException('Kalender hari kerja belum di set untuk tahun ' . $tahun . '.');
         }
 
-        $masukKerja = [];
-        foreach ($rekapRows as $data) {
-            $row = is_array($data) ? $data : (array) $data;
-            $masuk = $row['masuk'] ?? '';
-            $keluar = $row['keluar'] ?? '';
-            $shift = $row['shift'] ?? '';
-            $tanggal = $row['tanggal'] ?? '';
-            if ($keluar !== '' && $masuk !== '') {
-                if (in_array($shift, ['SHOB', 'SHOB2', 'SHSECURITY', 'SHSECURITY2', '24jam'], true)) {
-                    $masukKerja[] = $tanggal;
-                } elseif ($shift != 'off') {
-                    $masukKerja[] = $tanggal;
-                }
-            }
-        }
+        $karyawanMeta = MasterKaryawan::select('id_jabatan')->find($karyawanId);
+        $idJabatan = $karyawanMeta ? (int) $karyawanMeta->id_jabatan : null;
+
+        $masukKerja = PayrollWorkingDaysService::collectMasukKerjaDates($rekapRows, $idJabatan, $bulanYm);
+
+        $hariKerjaExpected = PayrollWorkingDaysService::expectedHariKerjaForKaryawan(
+            $karyawanId,
+            $idJabatan,
+            $bulanYm
+        );
 
         RekapMasukKerja::insert([
             'karyawan_id' => $karyawanId,
             'tahun' => $tahun,
             'bulan' => $bulanYm,
             'tanggal' => json_encode($masukKerja),
+            'hari_kerja' => $hariKerjaExpected,
             'added_by' => $actorKaryawanId,
             'added_at' => date('Y-m-d H:i:s'),
         ]);
     }
 
     /**
-     * @return array{processed: int, generated: int, skipped: int, failed: int, details: list<array<string, mixed>>}
+     * Preview hari kerja vs masuk tanpa menulis database.
+     *
+     * @param  array<int, mixed>  $rekapRows
+     * @return array{hari_kerja: int, masuk_kerja: int, tidak_hadir: int}
      */
-    public function generateForStaffSupervisor(string $bulanYm, bool $skipExisting = true): array
+    public function previewRekapMetrics(int $karyawanId, string $bulanYm, array $rekapRows): array
+    {
+        $karyawanMeta = MasterKaryawan::select('id_jabatan')->find($karyawanId);
+        $idJabatan = $karyawanMeta ? (int) $karyawanMeta->id_jabatan : null;
+
+        $masukKerja = PayrollWorkingDaysService::collectMasukKerjaDates($rekapRows, $idJabatan, $bulanYm);
+        $hariKerjaExpected = PayrollWorkingDaysService::expectedHariKerjaForKaryawan(
+            $karyawanId,
+            $idJabatan,
+            $bulanYm
+        );
+        $masukCount = count($masukKerja);
+
+        return [
+            'hari_kerja' => $hariKerjaExpected,
+            'masuk_kerja' => $masukCount,
+            'tidak_hadir' => max(0, $hariKerjaExpected - $masukCount),
+        ];
+    }
+
+    /**
+     * @return array{
+     *     dry_run: bool,
+     *     processed: int,
+     *     generated: int,
+     *     would_generate: int,
+     *     skipped: int,
+     *     failed: int,
+     *     details: list<array<string, mixed>>
+     * }
+     */
+    public function generateForStaffSupervisor(string $bulanYm, bool $skipExisting = true, bool $dryRun = false): array
     {
         $employees = MasterKaryawan::query()
             ->select('id', 'nik_karyawan', 'nama_lengkap', 'grade')
@@ -166,8 +197,10 @@ class MonthlyAbsensiGenerateOrchestrator
             ->get();
 
         $summary = [
+            'dry_run' => $dryRun,
             'processed' => 0,
             'generated' => 0,
+            'would_generate' => 0,
             'skipped' => 0,
             'failed' => 0,
             'details' => [],
@@ -206,6 +239,24 @@ class MonthlyAbsensiGenerateOrchestrator
                 }
 
                 $payload = $this->buildPayloadFromRows($rows);
+
+                if ($dryRun) {
+                    $metrics = $this->previewRekapMetrics($karyawanId, $bulanYm, $payload['data']);
+                    $summary['would_generate']++;
+                    $summary['details'][] = [
+                        'karyawan_id' => $karyawanId,
+                        'nik' => $employee->nik_karyawan,
+                        'nama' => $employee->nama_lengkap,
+                        'status' => 'would_generate',
+                        'message' => 'Simulasi — tidak disimpan.',
+                        'hari_kerja' => $metrics['hari_kerja'],
+                        'masuk_kerja' => $metrics['masuk_kerja'],
+                        'tidak_hadir' => $metrics['tidak_hadir'],
+                    ];
+
+                    continue;
+                }
+
                 $generated = DB::transaction(function () use ($karyawanId, $bulanYm, $payload, $skipExisting) {
                     // Lock a row that exists even before the first monthly rekap.
                     // Concurrent automatic commands wait here, then recheck.

@@ -20,6 +20,7 @@ class GdUserToken extends Model
     protected $casts = [
         'is_expired' => 'boolean',
         'is_logged_in' => 'boolean',
+        'is_impersonate' => 'boolean',
         'expired' => 'datetime',
         'create_date' => 'datetime',
     ];

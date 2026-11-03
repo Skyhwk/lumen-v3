@@ -14,7 +14,7 @@ trait BootstrapsHrAtasanChain
 {
     protected function bootstrapAtasanChain(HrRequest $header, MasterKaryawan $employee): HrRequest
     {
-        $hasChain = app(AtasanStepService::class)->seedChainForSubmitter($header->id, $employee);
+        $hasChain = app(AtasanStepService::class)->seedChainForSubmitter($header->id, $employee, $header->request_type);
         $header = $header->fresh();
 
         if (!$hasChain) {

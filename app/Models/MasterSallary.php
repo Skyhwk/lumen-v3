@@ -19,6 +19,8 @@ class MasterSallary extends Sector{
         'metode_pembayaran_gaji',
         'jumlah_hari_kerja',
         'jadwal_penggajian',
+        'tanggal_penggajian',
+        'penyesuaian_hari_libur',
         'satuan_jangka_waktu',
         'jumlah_jangka_waktu',
         'bulan_efektif',

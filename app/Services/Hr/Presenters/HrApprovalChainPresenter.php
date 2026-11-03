@@ -92,4 +92,64 @@ final class HrApprovalChainPresenter
 
         return $fields;
     }
+
+    /**
+     * Progres atasan untuk Super Apps (state: done | active | waiting | rejected).
+     *
+     * @return list<array{key: string, title: string, state: string, actor: ?string, acted_at: ?string, note: ?string}>
+     */
+    public static function atasanStepsForPortal(HrRequest $request): array
+    {
+        $request->loadMissing('approvalSteps');
+
+        $steps = $request->approvalSteps
+            ->where('step', HrApprovalStep::STEP_ATASAN)
+            ->sortBy('sort_order')
+            ->values();
+
+        if ($steps->isEmpty()) {
+            return [];
+        }
+
+        $total = $steps->count();
+        $foundActive = false;
+        $out = [];
+
+        foreach ($steps as $index => $step) {
+            $name = $step->actor_name;
+            if (($name === null || $name === '') && $step->expected_karyawan_id) {
+                $name = MasterKaryawan::query()
+                    ->where('id', $step->expected_karyawan_id)
+                    ->value('nama_lengkap');
+            }
+
+            $state = 'waiting';
+            $actedAt = $step->acted_at ? (string) $step->acted_at : null;
+            $note = null;
+
+            if ($step->state === HrApprovalStep::STATE_APPROVED) {
+                $state = 'done';
+            } elseif ($step->state === HrApprovalStep::STATE_REJECTED) {
+                $state = 'rejected';
+                $note = $step->reason;
+            } elseif ($step->state === HrApprovalStep::STATE_PENDING && !$foundActive) {
+                $state = 'active';
+                $foundActive = true;
+                $actedAt = null;
+            } elseif ($step->state === HrApprovalStep::STATE_SKIPPED) {
+                $state = 'done';
+            }
+
+            $out[] = [
+                'key' => 'atasan-' . ($index + 1),
+                'title' => $total > 1 ? 'Persetujuan atasan ' . ($index + 1) : 'Persetujuan Atasan',
+                'state' => $state,
+                'actor' => $name,
+                'acted_at' => $actedAt,
+                'note' => $note,
+            ];
+        }
+
+        return $out;
+    }
 }

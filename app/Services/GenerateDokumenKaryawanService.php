@@ -1546,6 +1546,10 @@ class GenerateDokumenKaryawanService
             'rekeningGaji' => $this->barisRekeningGaji($data['rekening'] ?? null),
             'jumlahHariKerja' => $this->angkaPayroll(optional($salary)->jumlah_hari_kerja, 1),
             'jadwalPenggajian' => $this->angkaPayroll(optional($salary)->jadwal_penggajian, 0),
+            'tanggalPenggajian' => $this->angkaPayroll(optional($salary)->tanggal_penggajian, 1),
+            'penyesuaianHariLibur' => strtolower(trim((string) optional($salary)->penyesuaian_hari_libur)) === 'sebelum'
+                ? 'sebelum'
+                : 'setelah',
         ];
     }
 

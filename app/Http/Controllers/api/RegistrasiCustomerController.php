@@ -14,6 +14,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 
 use App\Models\customer\Users;
@@ -122,12 +123,14 @@ class RegistrasiCustomerController extends Controller
 
     public function store(Request $request)
     {
-        DB::beginTransaction();
+        $portal = DB::connection('portal_customer');
+        $portal->beginTransaction();
         try {
             if (!$request->id) {
                 $data = Users::where('email', $request->email)->first();
 
                 if ($data) {
+                    $portal->rollBack();
                     return response()->json([
                         'message' => 'Email sudah terdaftar',
                         'status' => 400,
@@ -135,58 +138,27 @@ class RegistrasiCustomerController extends Controller
                     ], 400);
                 }
 
+                $emailName = explode('@', (string) $request->email)[0];
+
                 $user = new Users();
                 $user->nama_lengkap = $request->nama_lengkap;
+                $user->username = $emailName;
                 $user->email = $request->email;
                 $user->password = Hash::make('password');
                 $user->id_pelanggan = json_encode($request->id_pelanggan ?? []);
                 $user->created_by = $this->karyawan;
                 $user->created_at = Carbon::now();
                 $user->role_id = 2; // Super Admin
+                $user->is_active = 1;
                 $user->save();
 
-                $menus = Menus::get();
-                $permissions = [];
-                foreach ($menus as $item) {
-                    $parent = explode('-', $item->name);
-
-                    // if (count($parent) == 1) {
-                    //     return response()->json(['message' => 'Menu ' . $item->name . ' tidak memiliki parent.'], 400);
-                    // }
-
-                    $permissions[] = [
-                        'name' => $item->name,
-                        'access' => true,
-                        'parent' => $parent[0],
-                    ];
-                }
-                $permission = new UserPermissions();
-                $permission->user_id = $user->id;
-                $permission->permissions = json_encode($permissions);
-                $permission->copy_access = true;
-                $permission->paste_access = true;
-                $permission->upload_access = true;
-                $permission->download_access = true;
-                $permission->created_at = Carbon::now();
-                $permission->save();
-
-                $team = new Teams();
-                $team->team_name = explode("@", $request->email)[0];
-                $team->created_by = $this->karyawan;
-                $team->created_at = Carbon::now();
-                $team->save();
-
-                $teamMember = new TeamMembers();
-                $teamMember->team_id = $team->id;
-                $teamMember->user_id = $user->id;
-                $teamMember->is_owner = true;
-                $teamMember->created_by = $this->karyawan;
-                $teamMember->created_at = Carbon::now();
-                $teamMember->save();
+                $this->seedUserPermissions($user);
+                $this->seedUserTeam($user, $emailName);
             } else {
                 $data = Users::where('email', $request->email)->where('id', '!=', $request->id)->first();
 
                 if ($data) {
+                    $portal->rollBack();
                     return response()->json([
                         'message' => 'Email sudah terdaftar',
                         'status' => 400,
@@ -203,7 +175,7 @@ class RegistrasiCustomerController extends Controller
                 $user->save();
             }
 
-            DB::commit();
+            $portal->commit();
 
             return response()->json([
                 'message' => 'Data customer berhasil disimpan',
@@ -211,7 +183,7 @@ class RegistrasiCustomerController extends Controller
                 'success' => true
             ], 200);
         } catch (\Exception $ex) {
-            DB::rollBack();
+            $portal->rollBack();
             return response()->json([
                 'message' => $ex->getMessage(),
                 'line' => $ex->getLine(),
@@ -351,6 +323,64 @@ class RegistrasiCustomerController extends Controller
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
         }
+    }
+
+    private function seedUserPermissions(Users $user)
+    {
+        if (!Schema::connection('portal_customer')->hasTable('user_permissions')) {
+            return;
+        }
+
+        $permissions = [];
+        if (Schema::connection('portal_customer')->hasTable('menus')) {
+            foreach (Menus::get() as $item) {
+                $parent = explode('-', $item->name);
+                $permissions[] = [
+                    'name' => $item->name,
+                    'access' => true,
+                    'parent' => $parent[0] ?? $item->name,
+                ];
+            }
+        }
+
+        $permission = new UserPermissions();
+        $permission->user_id = $user->id;
+        $permission->permissions = json_encode($permissions);
+        $permission->copy_access = true;
+        $permission->paste_access = true;
+        $permission->upload_access = true;
+        $permission->download_access = true;
+        $permission->created_at = Carbon::now();
+        $permission->save();
+    }
+
+    private function seedUserTeam(Users $user, $teamName)
+    {
+        if (!Schema::connection('portal_customer')->hasTable('teams')) {
+            return;
+        }
+
+        $team = new Teams();
+        if (Schema::connection('portal_customer')->hasColumn('teams', 'nama_tim')) {
+            $team->nama_tim = $teamName;
+        } else {
+            $team->team_name = $teamName;
+        }
+        $team->created_by = $this->karyawan;
+        $team->created_at = Carbon::now();
+        $team->save();
+
+        if (!Schema::connection('portal_customer')->hasTable('team_members')) {
+            return;
+        }
+
+        $teamMember = new TeamMembers();
+        $teamMember->team_id = $team->id;
+        $teamMember->user_id = $user->id;
+        $teamMember->is_owner = true;
+        $teamMember->created_by = $this->karyawan;
+        $teamMember->created_at = Carbon::now();
+        $teamMember->save();
     }
 
     public function encrypt($data)

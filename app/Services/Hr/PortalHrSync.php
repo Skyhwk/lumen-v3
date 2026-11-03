@@ -56,6 +56,9 @@ class PortalHrSync
         );
 
         $this->rebuildApprovalStepsFromLegacy($hr->id, $row, false);
+        if ($karyawan) {
+            $this->seedFilteredAtasanChainIfPending($hr, $karyawan, $row, HrRequest::TYPE_LEAVE);
+        }
     }
 
     public function syncPermissionFromLegacy(int $legacyId): void
@@ -101,6 +104,9 @@ class PortalHrSync
         );
 
         $this->rebuildApprovalStepsFromLegacy($hr->id, $row, false);
+        if ($karyawan) {
+            $this->seedFilteredAtasanChainIfPending($hr, $karyawan, $row, HrRequest::TYPE_PERMISSION);
+        }
     }
 
     public function syncOvertimeFromLegacy(int $legacyId): void
@@ -224,6 +230,31 @@ class PortalHrSync
         ]);
 
         return $header;
+    }
+
+    private function seedFilteredAtasanChainIfPending(
+        HrRequest $hr,
+        MasterKaryawan $karyawan,
+        $row,
+        string $requestType
+    ): void {
+        if (!in_array($requestType, [
+            HrRequest::TYPE_LEAVE,
+            HrRequest::TYPE_PERMISSION,
+            HrRequest::TYPE_ATTENDANCE_CORRECTION,
+        ], true)) {
+            return;
+        }
+
+        if (($row->status ?? '') !== WorkflowStatus::PENDING) {
+            return;
+        }
+
+        if (!empty($row->approved_atasan_by)) {
+            return;
+        }
+
+        app(AtasanStepService::class)->seedChainForSubmitter($hr->id, $karyawan, $requestType);
     }
 
     private function rebuildApprovalStepsFromLegacy(int $requestId, $row, bool $withFinance): void

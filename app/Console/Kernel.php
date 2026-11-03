@@ -68,10 +68,12 @@ class Kernel extends ConsoleKernel
         Commands\ApplyScheduledEmployeeAdjustments::class,
         Commands\CustomerServiceAutoCloseCommand::class,
         Commands\CustomerServiceAutoArchiveCommand::class,
+        Commands\DeactivateTrialCustomersCommand::class,
         Commands\MigrateHrRequestsFromAppsCommand::class,
         Commands\VerifyHrMigrationCommand::class,
         Commands\VerifyHrStatusParityCommand::class,
         Commands\SmokeHrWorkflowCommand::class,
+        Commands\HrSamplerBranchApprovalDiscoverCommand::class,
         Commands\SendGreatdayTestNotificationCommand::class,
         // Commands\DetectGreatdayAttendanceRemindersCommand::class,
         Commands\SendGreatdayAttendanceRemindersCommand::class,
@@ -94,6 +96,7 @@ class Kernel extends ConsoleKernel
         Commands\QuotationGenerateCommand::class,
         Commands\UpdateQuotationStatusFromExcelCommand::class,
         Commands\GenerateMonthlyAbsensiCommand::class,
+        Commands\BackfillRekapHariKerjaCommand::class,
         Commands\ImportNearHo::class,
         Commands\BackupMasterPelangganDediWibowoCommand::class,
         // Commands\LhpBackfillCommand::class,
@@ -128,6 +131,10 @@ class Kernel extends ConsoleKernel
             ->dailyAt('23:30')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping(30);
+        $schedule->command('customers:deactivate-trial')
+            ->dailyAt('23:30')
+            ->timezone('Asia/Jakarta')
+            ->withoutOverlapping(15);
         // $schedule->command('qsd:monitor-revenue')
         //     ->everyFiveMinutes()
         //     ->timezone('Asia/Jakarta')
