@@ -4,21 +4,31 @@ namespace App\Services\Hr;
 
 use App\Models\Hr\HrMigrationMap;
 use App\Models\Hr\HrRequest;
+use Illuminate\Support\Facades\DB;
 
 class HrRequestResolver
 {
     public static function findByApiId(string $requestType, int $id): ?HrRequest
     {
-        $found = HrRequest::where('request_type', $requestType)
+        $fromLegacy = self::findHrByLegacyApiId($requestType, $id);
+        if ($fromLegacy) {
+            return $fromLegacy;
+        }
+
+        $direct = HrRequest::where('request_type', $requestType)
             ->where('id', $id)
             ->where('is_active', true)
             ->first();
 
-        if ($found) {
-            return $found;
+        if (!$direct) {
+            return null;
         }
 
-        return self::findHrByLegacyApiId($requestType, $id);
+        if (self::legacyRowCollidesWithHrRequest($requestType, $id, $direct)) {
+            return null;
+        }
+
+        return $direct;
     }
 
     /**
@@ -113,5 +123,31 @@ class HrRequestResolver
         $status = HrRequest::where('id', $map->new_id)->where('is_active', true)->value('status');
 
         return is_string($status) && $status !== '' ? $status : null;
+    }
+
+    /**
+     * Baris legacy (attendance_corrections dll.) masih pakai id numerik yang sama dengan hr_request.id
+     * tapi pengaju berbeda — antrian Greatday kirim legacy id, jangan resolve ke hr_request bentrok.
+     */
+    private static function legacyRowCollidesWithHrRequest(string $requestType, int $legacyApiId, HrRequest $hrRequest): bool
+    {
+        $legacyTable = self::legacyTableForType($requestType);
+        if (!$legacyTable) {
+            return false;
+        }
+
+        $legacyRow = DB::connection(config('greatday.legacy_apps_connection', 'intilab_apps'))
+            ->table($legacyTable)
+            ->where('id', $legacyApiId)
+            ->first();
+
+        if (!$legacyRow) {
+            return false;
+        }
+
+        $legacyEmployeeId = (int) ($legacyRow->employee_id ?? $legacyRow->karyawan_id ?? 0);
+        $hrEmployeeId = (int) $hrRequest->karyawan_id;
+
+        return $legacyEmployeeId > 0 && $hrEmployeeId > 0 && $legacyEmployeeId !== $hrEmployeeId;
     }
 }

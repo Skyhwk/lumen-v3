@@ -108,7 +108,13 @@ class AttendanceCorrectionAtasanQueueService
                 'status' => $legacyRow->status,
                 'employee_name' => $karyawan->nama_lengkap ?? '',
                 'employee_position' => $karyawan->jabatan ?? '',
+                'approved_atasan_by' => $legacyRow->approved_atasan_by ?? null,
+                'approved_atasan_at' => $legacyRow->approved_atasan_at ?? null,
+                'rejected_atasan_by' => $legacyRow->rejected_atasan_by ?? null,
+                'rejected_atasan_at' => $legacyRow->rejected_atasan_at ?? null,
+                'reject_atasan_reason' => $legacyRow->reject_atasan_reason ?? null,
             ];
+            app(LegacyFormGreatdayApprovalSteps::class)->applyToObject($raw, HrRequest::TYPE_ATTENDANCE_CORRECTION);
         }
 
         return [

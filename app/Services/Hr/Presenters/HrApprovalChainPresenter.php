@@ -12,6 +12,37 @@ final class HrApprovalChainPresenter
     /**
      * @return list<array{sort_order: int, approver_name: ?string, state: string, acted_at: ?string}>
      */
+    /**
+     * @param list<array{state?: string, actor?: ?string, acted_at?: ?string, note?: ?string}> $portalSteps
+     * @return list<array{sort_order: int, approver_name: ?string, state: string, acted_at: ?string, reject_reason: ?string}>
+     */
+    public static function fromPortalLegacyAtasanSteps(array $portalSteps): array
+    {
+        $out = [];
+        foreach ($portalSteps as $index => $step) {
+            $portalState = (string) ($step['state'] ?? 'waiting');
+            $state = HrApprovalStep::STATE_PENDING;
+            if ($portalState === 'done') {
+                $state = HrApprovalStep::STATE_APPROVED;
+            } elseif ($portalState === 'rejected') {
+                $state = HrApprovalStep::STATE_REJECTED;
+            }
+
+            $actor = $step['actor'] ?? null;
+            $name = is_string($actor) && trim($actor) !== '' ? trim($actor) : null;
+
+            $out[] = [
+                'sort_order' => $index + 1,
+                'approver_name' => $name,
+                'state' => $state,
+                'acted_at' => isset($step['acted_at']) && $step['acted_at'] !== '' ? (string) $step['acted_at'] : null,
+                'reject_reason' => isset($step['note']) && $step['note'] !== '' ? (string) $step['note'] : null,
+            ];
+        }
+
+        return $out;
+    }
+
     public static function atasanStepsForGreatday(HrRequest $request): array
     {
         $request->loadMissing('approvalSteps');

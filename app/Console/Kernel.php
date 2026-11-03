@@ -86,6 +86,7 @@ class Kernel extends ConsoleKernel
         Commands\SyncLeaveAlpaLedgerCommand::class,
         Commands\SyncGreatdayFormAttachmentFilesCommand::class,
         Commands\SyncGreatdayMobileAbsensiCommand::class,
+        Commands\ReapplyApprovedAttendanceCorrectionsCommand::class,
         Commands\ImportGreatdayAssetsFromInternalCommand::class,
         Commands\GaAssetImportFinancialCommand::class,
         Commands\GaAssetReconcileExcelCommand::class,
