@@ -148,6 +148,8 @@ class MasterSallaryController extends Controller
                 $masterSallary->karyawan = $oldMasterSallary->karyawan;
                 $masterSallary->nik_karyawan = $oldMasterSallary->nik_karyawan;
                 $masterSallary->id_karyawan = $oldMasterSallary->id_karyawan;
+                $masterSallary->tanggal_penggajian = $oldMasterSallary->tanggal_penggajian;
+                $masterSallary->penyesuaian_hari_libur = $oldMasterSallary->penyesuaian_hari_libur ?: 'setelah';
 
                 $message = 'Master Sallary data updated successfully';
             } else {
@@ -365,7 +367,12 @@ class MasterSallaryController extends Controller
             $sheet->setCellValue("H{$rowIdx}", $jadwalThr !== '' ? $jadwalThr : '-');
             $sheet->setCellValue("I{$rowIdx}", $this->labelMetodePembayaran($row->metode_pembayaran_gaji));
             $sheet->setCellValue("J{$rowIdx}", ($jumlahHariKerja === null || $jumlahHariKerja === '') ? '-' : (int) $jumlahHariKerja);
-            $sheet->setCellValue("K{$rowIdx}", ($jadwalPenggajian === null || $jadwalPenggajian === '') ? '-' : 'H+' . (int) $jadwalPenggajian);
+            $tanggalPenggajian = $row->tanggal_penggajian;
+            $penyesuaianHariLibur = strtolower(trim((string) ($row->penyesuaian_hari_libur ?? 'setelah')));
+            $jadwalLabel = ($tanggalPenggajian === null || $tanggalPenggajian === '')
+                ? (($jadwalPenggajian === null || $jadwalPenggajian === '') ? '-' : 'H+' . (int) $jadwalPenggajian)
+                : 'Tgl ' . (int) $tanggalPenggajian . ' (' . ($penyesuaianHariLibur === 'sebelum' ? 'sebelum libur' : 'setelah libur') . ')';
+            $sheet->setCellValue("K{$rowIdx}", $jadwalLabel);
             $sheet->setCellValue("L{$rowIdx}", $bulanEfektif);
             $sheet->setCellValue("M{$rowIdx}", $row->created_by ?? '-');
             $sheet->setCellValue("N{$rowIdx}", $createdAt);
