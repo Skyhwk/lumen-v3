@@ -239,7 +239,7 @@ class KalkulasiPayrollController extends Controller
                         . '(master_karyawan.is_active = 1 AND t.is_active = 1)'
                         . ' OR (master_karyawan.is_active = 0 AND (t.is_active = 1 OR t.is_active = 0))'
                         . ')'
-                        . ' ORDER BY t.is_active DESC, t.id DESC LIMIT 1)',
+                        . ' ORDER BY t.id DESC LIMIT 1)',
                         [$periodePayroll]
                     );
             })
