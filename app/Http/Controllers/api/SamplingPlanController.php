@@ -22,6 +22,7 @@ use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
 use App\Services\GetAtasan;
 use App\Services\JadwalServices;
+use App\Services\JadwalMobilisasiService;
 use App\Services\JadwalVoidTrackingSync;
 use App\Services\Notification;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
@@ -199,6 +200,13 @@ class SamplingPlanController extends Controller
             ->with([
                 'cabang_options' => $this->getBranchOptionsForUser() 
             ])
+            ->addColumn('mobilisasi', function ($row) {
+                if (empty($row->batch_id)) {
+                    return null;
+                }
+                return JadwalMobilisasiService::findActiveByBatchIds($row->batch_id);
+            })
+            ->rawColumns(['mobilisasi'])
             ->make(true);
     }
 
@@ -709,6 +717,13 @@ class SamplingPlanController extends Controller
                 'pendampingan_k3' => (int) $request->pendampingan_k3,
                 'id_cabang'       => $request->id_cabang[0],
                 'durasi_personal' => $request->durasi_personal,
+                'tujuan_sampling' => $request->tujuan_sampling,
+                'estimasi_perjalanan' => $request->estimasi_perjalanan,
+                'waktu_berangkat_estimasi' => $request->waktu_berangkat_estimasi,
+                'keterangan_akomodasi' => $request->keterangan_akomodasi,
+                'rute_perjalanan' => $request->rute_perjalanan,
+                'keterangan_operasional' => $request->keterangan_operasional,
+                'peralatan_sampling' => $request->peralatan_sampling,
                 // 'fee_sampler_id' => $request->fee_sampler_id,
             ];
 
@@ -824,6 +839,13 @@ class SamplingPlanController extends Controller
                 'isokinetic'      => $request->isokinetic,
                 'id_cabang'       => $request->id_cabang[0],
                 'durasi_personal' => $request->durasi_personal,
+                'tujuan_sampling' => $request->tujuan_sampling,
+                'estimasi_perjalanan' => $request->estimasi_perjalanan,
+                'waktu_berangkat_estimasi' => $request->waktu_berangkat_estimasi,
+                'keterangan_akomodasi' => $request->keterangan_akomodasi,
+                'rute_perjalanan' => $request->rute_perjalanan,
+                'keterangan_operasional' => $request->keterangan_operasional,
+                'peralatan_sampling' => $request->peralatan_sampling,
                 // 'fee_sampler_id' => $request->fee_sampler_id,
             ];
 
@@ -951,6 +973,8 @@ class SamplingPlanController extends Controller
 
             $atasan = GetAtasan::where('id', $this->user_id)->get();
             Notification::whereIn('id', $atasan)->title('Cancel QT')->message($message)->url('/sampling/jadwal/sampling-plan')->send();
+
+            JadwalMobilisasiService::deactivateByBatchIds($batchId, $this->karyawan);
 
             $voidTracking->apply($trackingSnapshots, $voidedRowsBeforeVoid);
             DB::commit();
@@ -1334,5 +1358,19 @@ class SamplingPlanController extends Controller
             // Kirim detail konflik sebagai referensi Frontend
             'conflicts' => $detailKonflik 
         ]);
+    }
+
+    public function getPeralatanAvailable(Request $request)
+    {
+        $data = JadwalMobilisasiService::getPeralatanAvailable(
+            $request->input('tanggal'),
+            $request->input('branch_id') ?? $request->input('id_cabang'),
+            $request->input('batch_id')
+        );
+
+        return response()->json([
+            'status' => true,
+            'data' => $data,
+        ], 200);
     }
 }
