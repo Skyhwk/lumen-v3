@@ -165,7 +165,9 @@ trait LegacyFormAtasanQueueLogic
 
         $steps = [];
         $total = count($ids);
-        $last = $total - 1;
+        $approvedBy = trim((string) ($row->approved_atasan_by ?? ''));
+        $approvedAt = $row->approved_atasan_at ?? null;
+        $approvedStepIndex = $this->legacyAtasanStepIndexMatchingName($ids, $names, $approvedBy);
 
         foreach ($ids as $index => $id) {
             $name = $names[$id] ?? null;
@@ -176,9 +178,9 @@ trait LegacyFormAtasanQueueLogic
 
             if ($done) {
                 $state = 'done';
-                if ($index === $last && !empty($row->approved_atasan_by)) {
-                    $actor = $row->approved_atasan_by;
-                    $actedAt = $row->approved_atasan_at ?? null;
+                if ($approvedBy !== '' && $index === $approvedStepIndex) {
+                    $actor = $approvedBy;
+                    $actedAt = $approvedAt;
                 }
             } elseif ($rejected) {
                 if ($index < $rejectIndex) {
@@ -204,6 +206,26 @@ trait LegacyFormAtasanQueueLogic
         }
 
         return $steps;
+    }
+
+    /**
+     * @param array<int, int> $ids
+     * @param \Illuminate\Support\Collection<int, string>|array<int, string> $names
+     */
+    private function legacyAtasanStepIndexMatchingName(array $ids, $names, string $approverName): int
+    {
+        if ($approverName === '') {
+            return max(0, count($ids) - 1);
+        }
+
+        foreach ($ids as $index => $id) {
+            $name = trim((string) ($names[$id] ?? ''));
+            if ($name !== '' && strcasecmp($name, $approverName) === 0) {
+                return (int) $index;
+            }
+        }
+
+        return max(0, count($ids) - 1);
     }
 
     /** @return list<int> */
