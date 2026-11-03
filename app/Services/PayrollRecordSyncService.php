@@ -58,6 +58,43 @@ class PayrollRecordSyncService
             );
     }
 
+    /**
+     * Gaji aktif; bila tidak ada baris is_active=1, pakai riwayat id terbesar (mis. setelah NA gaji).
+     */
+    public static function applyJoinMasterSalary($join): void
+    {
+        $join->on('master_karyawan.id', '=', 'master_sallary.id_karyawan')
+            ->where(function ($salary) {
+                $salary->where('master_sallary.is_active', true)
+                    ->orWhere(function ($fallback) {
+                        $fallback->whereRaw(
+                            'NOT EXISTS (SELECT 1 FROM master_sallary AS active_salary'
+                            . ' WHERE active_salary.id_karyawan = master_karyawan.id AND active_salary.is_active = 1)'
+                        )->whereRaw(
+                            'master_sallary.id = (SELECT MAX(latest_salary.id) FROM master_sallary AS latest_salary'
+                            . ' WHERE latest_salary.id_karyawan = master_karyawan.id)'
+                        );
+                    });
+            });
+    }
+
+    /**
+     * Preview payroll: rekap bulan periode; karyawan sudah keluar di bulan sebelumnya → rekap bulan keluar.
+     */
+    public static function applyJoinRekapMasukKerjaPayrollPreview($join, string $periodePayroll): void
+    {
+        $join->on('rekap_masuk_kerja.karyawan_id', '=', 'master_karyawan.id')
+            ->where('rekap_masuk_kerja.is_active', 1)
+            ->whereRaw(
+                'rekap_masuk_kerja.bulan = CASE '
+                . 'WHEN master_karyawan.is_active = 0 AND master_karyawan.effective_date IS NOT NULL '
+                . 'AND DATE_FORMAT(master_karyawan.effective_date, "%Y-%m") < ? '
+                . 'THEN DATE_FORMAT(master_karyawan.effective_date, "%Y-%m") '
+                . 'ELSE ? END',
+                [$periodePayroll, $periodePayroll]
+            );
+    }
+
     /** Join utang/cicilan: aktif, atau non-aktif tapi masih ONGOING (mis. setelah NA manual). */
     public static function applyJoinPayrollDebtFilter($join, string $table, string $balanceField): void
     {
