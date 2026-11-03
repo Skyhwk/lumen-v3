@@ -231,8 +231,17 @@ class KalkulasiPayrollController extends Controller
             })
             ->leftJoin('pencadangan_upah', function ($join) use ($periodePayroll) {
                 $join->on('master_karyawan.id', '=', 'pencadangan_upah.id_karyawan')
-                    ->where('pencadangan_upah.bulan_efektif', '<=', $periodePayroll);
-                PayrollRecordSyncService::applyJoinPencadanganFilter($join);
+                    ->whereRaw(
+                        'pencadangan_upah.id = (SELECT t.id FROM pencadangan_upah t WHERE t.id_karyawan = master_karyawan.id'
+                        . ' AND t.bulan_efektif <= ?'
+                        . ' AND (t.status = "ONGOING" OR t.status IS NULL)'
+                        . ' AND ('
+                        . '(master_karyawan.is_active = 1 AND t.is_active = 1)'
+                        . ' OR (master_karyawan.is_active = 0 AND (t.is_active = 1 OR t.is_active = 0))'
+                        . ')'
+                        . ' ORDER BY t.is_active DESC, t.id DESC LIMIT 1)',
+                        [$periodePayroll]
+                    );
             })
             ->leftJoin('master_divisi', function($join){
                 $join->on('master_karyawan.id_department', '=', 'master_divisi.id');
