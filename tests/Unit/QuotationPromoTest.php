@@ -280,4 +280,29 @@ class QuotationPromoTest extends TestCase
         $this->assertNull(QuotationPromoPresentation::sukaSukaInvoiceLine($other));
         $this->assertEquals(0, QuotationPromoPresentation::addSukaSukaAmount($other));
     }
+
+    public function testSukaSukaSubTotalIncludesNominalAndSkipsAfterDiscountRow()
+    {
+        $source = (object) [
+            'grand_total' => 275000,
+            'total_dpp' => 8775000,
+            'discount_promo' => json_encode([
+                'deskripsi_promo_discount' => 'PAKET ENAK',
+                'jumlah_promo_discount' => 8500000,
+                'tipe' => 'suka_suka',
+            ]),
+        ];
+        $this->assertEquals(8775000, QuotationPromoPresentation::displayedSubTotal($source));
+        $this->assertFalse(QuotationPromoPresentation::showAfterDiscount($source));
+
+        $alreadyIncluded = clone $source;
+        $alreadyIncluded->grand_total = 8775000;
+        $this->assertEquals(8775000, QuotationPromoPresentation::displayedSubTotal($alreadyIncluded));
+        $this->assertFalse(QuotationPromoPresentation::showAfterDiscount($alreadyIncluded));
+
+        $withCashDiscount = clone $source;
+        $withCashDiscount->total_dpp = 8675000;
+        $this->assertEquals(8775000, QuotationPromoPresentation::displayedSubTotal($withCashDiscount));
+        $this->assertTrue(QuotationPromoPresentation::showAfterDiscount($withCashDiscount));
+    }
 }

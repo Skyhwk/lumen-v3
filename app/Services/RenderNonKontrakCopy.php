@@ -696,7 +696,7 @@ class RenderNonKontrakCopy
                             <td style="text-align:center;padding:5px;">
                                 <b>' . strtoupper(__('QT.total.sub')) . '</b>
                             </td>
-                            <td style="text-align:right;padding:5px;">' . self::rupiah($data->grand_total) . '</td>
+                            <td style="text-align:right;padding:5px;">' . self::rupiah(QuotationPromoPresentation::displayedSubTotal($data)) . '</td>
                         </tr>'
             );
             $disc_promo = json_decode($data->discount_promo);
@@ -849,7 +849,7 @@ class RenderNonKontrakCopy
                     );
                 }
             }
-            if ($data->total_dpp != $data->grand_total && $data->total_ppn != null && $data->total_ppn != '0.00') {
+            if (QuotationPromoPresentation::showAfterDiscount($data) && $data->total_ppn != null && $data->total_ppn != '0.00') {
                 $pdf->WriteHTML(
                     ' <tr>
                         <td style="text-align:center;padding:5px;">

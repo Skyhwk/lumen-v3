@@ -165,6 +165,28 @@ class QuotationPromoPresentation
         return [$header, collect($views)];
     }
 
+    public static function displayedSubTotal($source, $grandTotal = null, $invoice = false)
+    {
+        $grand = (float) ($grandTotal ?? $source->grand_total ?? $source->sub_total ?? 0);
+        $suka = $invoice
+            ? self::addSukaSukaAmount($source)
+            : (float) (self::sukaSukaLine($source)['nominal'] ?? 0);
+        if ($suka <= 0) {
+            return $grand;
+        }
+        $dpp = (float) ($source->total_dpp ?? $grand);
+        $withSuka = $grand + $suka;
+
+        return abs($withSuka - $dpp) <= abs($grand - $dpp) ? $withSuka : $grand;
+    }
+
+    public static function showAfterDiscount($source, $subTotal = null)
+    {
+        $subTotal = $subTotal ?? self::displayedSubTotal($source);
+
+        return abs((float) ($source->total_dpp ?? $subTotal) - (float) $subTotal) > 0.5;
+    }
+
     public static function isSukaSukaDiscount($discountPromo)
     {
         $discount = is_string($discountPromo) || $discountPromo === null

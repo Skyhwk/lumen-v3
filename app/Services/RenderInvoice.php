@@ -1610,9 +1610,13 @@ class RenderInvoice
             $sisa_tagihan = 0;
             $pajak = 0;
 
-            foreach ($harga1 as $detailHargaInvo) {
+            foreach ($harga1 as $idx => $detailHargaInvo) {
 
                 $el = json_decode(json_encode($detailHargaInvo));
+                $quoted = $data1[$idx] ?? null;
+                $rowSub = $quoted
+                    ? (int) round(QuotationPromoPresentation::displayedSubTotal($quoted, $el->sub_total, true))
+                    : (int) round($el->sub_total);
 
                 //cek apakah ada biaya diluar pajak
                 if (isset($el->biaya_di_luar_pajak)) {
@@ -1627,7 +1631,7 @@ class RenderInvoice
                         $pajak = 1;
                     }
 
-                    $sub_total += (int) round($el->sub_total);
+                    $sub_total += $rowSub;
                     $diskon += $totDisk;
                     $ppn += $el->ppn == null ? 0 : round($el->ppn);
                     $pph += $el->pph == null ? 0 : round($el->pph);
@@ -1637,7 +1641,7 @@ class RenderInvoice
                     $sisa_tagihan += (int) round($el->sisa_tagihan);
                 } else {
 
-                    $sub_total += (int) round($el->sub_total);
+                    $sub_total += $rowSub;
                     $diskon += $el->diskon == null ? 0 : round($el->diskon);
                     $ppn += $el->ppn == null ? 0 : round($el->ppn);
                     $pph += $el->pph == null ? 0 : round($el->pph);

@@ -622,7 +622,7 @@ class RenderKontrak
                             <td style="text-align:center;padding:5px;">
                                 <b>' . strtoupper(__('QTC.total.sub')) . '</b>
                             </td>
-                            <td style="text-align:right;padding:5px;">' . self::rupiah($data->grand_total) . '</td>
+                            <td style="text-align:right;padding:5px;">' . self::rupiah(QuotationPromoPresentation::displayedSubTotal($data)) . '</td>
                         </tr> '
             );
             if ($data->total_discount_promo > 0) {
@@ -767,7 +767,7 @@ class RenderKontrak
                 );
             }
 
-            if ($data->total_dpp != $data->grand_total) {
+            if (QuotationPromoPresentation::showAfterDiscount($data)) {
                 $pdf->WriteHTML(
                     ' <tr>
                         <td style="text-align:center;padding:5px;">
@@ -1403,7 +1403,7 @@ class RenderKontrak
                                 <td style="text-align:center;padding:5px;">
                                     <b>' . strtoupper(__('QTC.total.sub')) . '</b>
                                 </td>
-                                <td style="text-align:right;padding:5px;" width="39%">' . self::rupiah($v->grand_total) . '</td>
+                                <td style="text-align:right;padding:5px;" width="39%">' . self::rupiah(QuotationPromoPresentation::displayedSubTotal($v)) . '</td>
                             </tr> '
                 );
                 if ($v->total_discount_promo > 0) {
@@ -1573,7 +1573,7 @@ class RenderKontrak
                     }
                 }
 
-                if ($v->total_dpp != $v->grand_total) {
+                if (QuotationPromoPresentation::showAfterDiscount($v)) {
                     $pdf->WriteHTML(
                         ' <tr>
                             <td style="text-align:center;padding:5px;">
@@ -2087,10 +2087,10 @@ class RenderKontrak
             $total_harga_pengujian = 0;
             foreach ($detail as $key => $value) {
                 $pdf->WriteHTML(
-                    '<td style="font-size: 8px; text-align:right; padding: 5px;"><b>' . self::rupiah($value->grand_total) . "</b></td>"
+                    '<td style="font-size: 8px; text-align:right; padding: 5px;"><b>' . self::rupiah(QuotationPromoPresentation::displayedSubTotal($value)) . "</b></td>"
                 );
                 $total_harga_pengujian =
-                    $total_harga_pengujian + $value->grand_total;
+                    $total_harga_pengujian + QuotationPromoPresentation::displayedSubTotal($value);
             }
             $pdf->WriteHTML(
                 '<td style="font-size: 8px; text-align:right; padding: 5px;"><b>' . self::rupiah($total_harga_pengujian) . "</b></td></tr>"
@@ -2415,7 +2415,7 @@ class RenderKontrak
             }
 
             // TOTAL HARGA SETELAH DISCOUNT
-            if ($data->total_dpp != $data->grand_total) {
+            if (QuotationPromoPresentation::showAfterDiscount($data)) {
                 $pdf->WriteHTML(
                     '<tr><td style="text-align:center;font-size: 8px;"><b>' . strtoupper(__('QTC.total.price_after_discount')) . '</b></td>'
                 );
