@@ -61,33 +61,33 @@ class PayrollTransferCompletionService
         $firebase = null;
 
         foreach ($payrolls as $payroll) {
-            if (strtoupper((string) $payroll->status) === 'PAID') {
-                continue;
-            }
+            $alreadyPaid = strtoupper((string) $payroll->status) === 'PAID';
 
             try {
-                DB::transaction(function () use ($payroll, &$updated) {
-                    Payroll::where('id', $payroll->id)->update([
-                        'status' => 'PAID',
-                        'updated_at' => Carbon::now()->toDateTimeString(),
-                    ]);
-                    $updated++;
-                });
+                if (!$alreadyPaid) {
+                    DB::transaction(function () use ($payroll, &$updated) {
+                        Payroll::where('id', $payroll->id)->update([
+                            'status' => 'PAID',
+                            'updated_at' => Carbon::now()->toDateTimeString(),
+                        ]);
+                        $updated++;
+                    });
 
-                $attendanceUserId = (int) ($payroll->id_karyawan ?: 0);
-                if ($attendanceUserId > 0) {
-                    try {
-                        if ($firebase === null) {
-                            $firebase = app(FirebaseService::class);
+                    $attendanceUserId = (int) ($payroll->id_karyawan ?: 0);
+                    if ($attendanceUserId > 0) {
+                        try {
+                            if ($firebase === null) {
+                                $firebase = app(FirebaseService::class);
+                            }
+                            $firebase->sendNotifications([$attendanceUserId], $notificationPayload);
+                            $notified++;
+                        } catch (\Throwable $notificationError) {
+                            $errors[] = [
+                                'payroll_id' => $payroll->id,
+                                'step' => 'notification',
+                                'message' => $notificationError->getMessage(),
+                            ];
                         }
-                        $firebase->sendNotifications([$attendanceUserId], $notificationPayload);
-                        $notified++;
-                    } catch (\Throwable $notificationError) {
-                        $errors[] = [
-                            'payroll_id' => $payroll->id,
-                            'step' => 'notification',
-                            'message' => $notificationError->getMessage(),
-                        ];
                     }
                 }
 
@@ -194,7 +194,7 @@ class PayrollTransferCompletionService
             'tglTransferLabel' => self::formatTransferDateLabel($header->tgl_transfer),
         ])->render();
 
-        $subject = 'Payroll Inti Surya Laboratorium - Periode ' . $periodeLabel;
+        $subject = 'Pemberitahuan Pembayaran Gaji Periode ' . $periodeLabel;
 
         SendEmail::where('to', $email)
             ->where('subject', $subject)
