@@ -1451,7 +1451,7 @@ class DashboardSmsController extends Controller
 
         $noOrders = $rows->pluck('no_order')->filter()->unique()->values();
         $samplingCategoryByOrder = $this->mapOrderSamplingCategories($noOrders, $rows);
-        $sSamplingMap = $this->mapOrderTypeSSamplingStatus($noOrders);
+        $sSamplingMap = $this->mapOrderTypeSSamplingStatus($rows);
         $sdSamplingMap = $this->mapOrderTypeSdSamplingStatus($rows);
 
         $belum = 0.0;
@@ -1469,8 +1469,8 @@ class DashboardSmsController extends Controller
             if ($category === 'sd') {
                 $isSampled = (bool) ($sdSamplingMap[$this->sdSamplingKey($row)] ?? false);
             } else {
-                // S / S24 / Non Pengujian / unknown → aturan tanggal_terima (tipe S)
-                $isSampled = (bool) ($sSamplingMap[$row->no_order] ?? false);
+                // S / S24 / Non Pengujian / unknown → 1 tanggal_terima cukup; kontrak dicek per periode
+                $isSampled = (bool) ($sSamplingMap[$this->sSamplingKey($row)] ?? false);
             }
 
             if ($isSampled) {
@@ -1565,8 +1565,9 @@ class DashboardSmsController extends Controller
         return 's';
     }
 
-    private function mapOrderTypeSSamplingStatus($noOrders): array
+    private function mapOrderTypeSSamplingStatus($dailyQsdRows): array
     {
+        $noOrders = $dailyQsdRows->pluck('no_order')->filter()->unique()->values();
         if ($noOrders->isEmpty()) {
             return [];
         }
@@ -1576,21 +1577,35 @@ class DashboardSmsController extends Controller
             ->where('is_active', 1)
             ->selectRaw("
                 no_order,
-                COUNT(*) as detail_count,
+                periode,
                 SUM(CASE
                     WHEN tanggal_terima IS NOT NULL
                         AND TRIM(CAST(tanggal_terima AS CHAR)) NOT IN ('', '0000-00-00')
                     THEN 1 ELSE 0
                 END) as filled_count
             ")
-            ->groupBy('no_order')
+            ->groupBy('no_order', 'periode')
             ->get();
 
         $map = [];
         foreach ($stats as $stat) {
-            $detailCount = (int) ($stat->detail_count ?? 0);
-            $filledCount = (int) ($stat->filled_count ?? 0);
-            $map[$stat->no_order] = $detailCount > 0 && $filledCount === $detailCount;
+            $filled = (int) ($stat->filled_count ?? 0) > 0;
+            $noOrder = trim((string) ($stat->no_order ?? ''));
+            $periode = trim((string) ($stat->periode ?? ''));
+
+            if ($noOrder === '') {
+                continue;
+            }
+
+            if ($periode !== '') {
+                $map[$noOrder . '|' . $periode] = $filled;
+            }
+
+            if ($filled) {
+                $map[$noOrder] = true;
+            } elseif (!isset($map[$noOrder])) {
+                $map[$noOrder] = false;
+            }
         }
 
         return $map;
@@ -1629,11 +1644,15 @@ class DashboardSmsController extends Controller
 
             if ($order !== '') {
                 $map[$order . '|' . $periode] = true;
-                $map[$order . '|'] = true;
+                if ($periode === '') {
+                    $map[$order . '|'] = true;
+                }
             }
             if ($qt !== '') {
                 $map['qt:' . $qt . '|' . $periode] = true;
-                $map['qt:' . $qt . '|'] = true;
+                if ($periode === '') {
+                    $map['qt:' . $qt . '|'] = true;
+                }
             }
         }
 
@@ -1643,15 +1662,31 @@ class DashboardSmsController extends Controller
             $order = trim((string) ($row->no_order ?? ''));
             $qt = trim((string) ($row->no_quotation ?? ''));
             $periode = trim((string) ($row->periode ?? ''));
+            $hasPeriode = $periode !== '';
 
-            $result[$key] = ($order !== '' && (
-                isset($map[$order . '|' . $periode]) || isset($map[$order . '|'])
-            )) || ($qt !== '' && (
-                isset($map['qt:' . $qt . '|' . $periode]) || isset($map['qt:' . $qt . '|'])
-            ));
+            $matchedOrder = $order !== '' && (
+                $hasPeriode
+                    ? isset($map[$order . '|' . $periode])
+                    : isset($map[$order . '|'])
+            );
+            $matchedQt = $qt !== '' && (
+                $hasPeriode
+                    ? isset($map['qt:' . $qt . '|' . $periode])
+                    : isset($map['qt:' . $qt . '|'])
+            );
+
+            $result[$key] = $matchedOrder || $matchedQt;
         }
 
         return $result;
+    }
+
+    private function sSamplingKey($row): string
+    {
+        $noOrder = trim((string) ($row->no_order ?? ''));
+        $periode = trim((string) ($row->periode ?? ''));
+
+        return $periode !== '' ? $noOrder . '|' . $periode : $noOrder;
     }
 
     private function sdSamplingKey($row): string
