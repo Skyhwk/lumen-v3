@@ -1022,7 +1022,12 @@ class AtsHiredCandidatesController extends Controller
             $payrollCounts['bpjs_tk'] = 1;
         }
 
-        if ($pph21 > 0) {
+        $adaPph21 = data_get($request, 'payroll.ada_pph21', null);
+        $pph21Enabled = $adaPph21 === null
+            ? ($pph21 > 0)
+            : !in_array($adaPph21, [0, '0', false, 'false'], true);
+
+        if ($pph21Enabled && $pph21 > 0) {
             $this->upsertPayroll('pph_21', $karyawan->id, $nikKaryawan, $namaKaryawan, [
                 'pajak_bulanan' => $pph21,
                 'pajak_tahunan' => $pph21 * 12,
