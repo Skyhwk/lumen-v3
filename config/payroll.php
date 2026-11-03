@@ -2,8 +2,8 @@
 
 return [
     /*
-    | Jabatan dengan hari kerja Senin–Sabtu (id master_jabatan, comma-separated).
-    | Dipakai saat generate absensi / hari_kerja di rekap_masuk_kerja.
+    | Jabatan Senin–Sabtu (sampler / OB / OG — id master_jabatan, comma-separated).
+    | Shift off/libur di jadwal tidak dihitung wajib masuk (tidak alpa).
     */
     'jabatan_include_saturday' => array_values(array_filter(array_map(
         'intval',
