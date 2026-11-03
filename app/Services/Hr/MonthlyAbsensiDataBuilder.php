@@ -9,6 +9,13 @@ use App\Services\Hr\HrAttendanceDayExcuseLabels;
 
 class MonthlyAbsensiDataBuilder
 {
+    public static function isRestDayShift(?string $shift): bool
+    {
+        $normalized = strtolower(trim((string) $shift));
+
+        return in_array($normalized, ['off', 'libur'], true);
+    }
+
     public static function hariIndonesia(string $tanggal): string
     {
         $hari = date('D', strtotime($tanggal));
@@ -64,7 +71,7 @@ class MonthlyAbsensiDataBuilder
             ->keyBy(fn ($row) => (string) $row->tanggal);
 
         $absensiByDate = Absensi::query()
-            ->select('id', 'karyawan_id', 'tanggal', 'jam', 'kode_kartu')
+            ->select('id', 'karyawan_id', 'tanggal', 'jam', 'kode_kartu', 'kode_mesin')
             ->where('karyawan_id', $karyawanId)
             ->whereBetween('tanggal', [$startDate, $rangeEnd])
             ->orderBy('tanggal')
@@ -82,9 +89,9 @@ class MonthlyAbsensiDataBuilder
             $shiftRow = $shiftByDate->get($tanggal);
             $shift = $shiftRow ? (string) $shiftRow->shift : null;
 
-            if ($shift === 'off') {
+            if (self::isRestDayShift($shift)) {
                 $data[] = $this->mergeExcuseLabel(
-                    $this->composeOffDayRow($namaLabel, $karyawanId, $tanggal),
+                    $this->composeOffDayRow($namaLabel, $karyawanId, $tanggal, $shift),
                     $excuseLabels,
                     $tanggal
                 );
@@ -140,8 +147,12 @@ class MonthlyAbsensiDataBuilder
         return $row;
     }
 
-    private function composeOffDayRow(string $namaLabel, int $karyawanId, string $tanggal): array
+    private function composeOffDayRow(string $namaLabel, int $karyawanId, string $tanggal, ?string $shift = null): array
     {
+        $shiftLabel = self::isRestDayShift($shift)
+            ? strtoupper(trim((string) $shift))
+            : 'OFF';
+
         return [
             'nama' => $namaLabel,
             'karyawan_id' => $karyawanId,
@@ -157,7 +168,8 @@ class MonthlyAbsensiDataBuilder
             'id_keluar' => '',
             'selisih' => '',
             'jam_kerja' => '',
-            'shift' => 'OFF',
+            'shift' => $shiftLabel,
+            'is_rest_day' => true,
         ];
     }
 
@@ -227,23 +239,13 @@ class MonthlyAbsensiDataBuilder
      */
     private function resolve24JamPunches($rowsToday, $rowsNext): array
     {
-        $minIdToday = $rowsToday->min('id');
+        $minJamToday = $rowsToday->min('jam');
         $masuk = null;
-        if ($minIdToday !== null) {
-            $candidate = $rowsToday->firstWhere('id', $minIdToday);
-            if ($candidate && (string) $candidate->jam > '00:00:00') {
-                $masuk = $candidate;
-            }
+        if ($minJamToday !== null && (string) $minJamToday > '00:00:00') {
+            $masuk = $rowsToday->first(fn ($row) => (string) $row->jam === (string) $minJamToday);
         }
 
-        $maxIdNext = $rowsNext->max('id');
-        $keluar = null;
-        if ($maxIdNext !== null) {
-            $candidate = $rowsNext->firstWhere('id', $maxIdNext);
-            if ($candidate && (string) $candidate->jam < '14:00:00') {
-                $keluar = $candidate;
-            }
-        }
+        $keluar = ShiftAbsensiPunchRules::pickOvernightKeluarRow($rowsNext);
 
         return [$masuk, $keluar];
     }
@@ -255,19 +257,8 @@ class MonthlyAbsensiDataBuilder
      */
     private function resolveSecurity2Punches($rowsToday, $rowsNext): array
     {
-        $maxJam = $rowsToday->max('jam');
-        $masuk = $maxJam !== null
-            ? $rowsToday->first(fn ($row) => (string) $row->jam === (string) $maxJam)
-            : null;
-
-        $minIdNext = $rowsNext->min('id');
-        $keluar = null;
-        if ($minIdNext !== null) {
-            $candidate = $rowsNext->firstWhere('id', $minIdNext);
-            if ($candidate && (string) $candidate->jam < '14:00:00') {
-                $keluar = $candidate;
-            }
-        }
+        $masuk = ShiftAbsensiPunchRules::pickSecurity2MasukRow($rowsToday);
+        $keluar = ShiftAbsensiPunchRules::pickOvernightKeluarRow($rowsNext);
 
         return [$masuk, $keluar];
     }
