@@ -26,7 +26,20 @@ class PencadanganUpahController extends Controller
             'pencadangan_upah.id_karyawan'
         );
 
-        return Datatables::of($data)->make(true);
+        return Datatables::of($data)
+            ->addColumn('nominal_terpotong', function ($row) {
+                if ($row->tenor_berjalan < 0) {
+                    return $row->nominal_berjalan * -1;
+                }
+                return 0;
+            })
+            ->addColumn('nominal_dikembalikan', function ($row) {
+                if ($row->tenor_berjalan >= 0) {
+                    return $row->nominal_berjalan;
+                }
+                return 0;
+            })
+            ->make(true);
     }
 
     public function getKaryawan()
@@ -84,6 +97,45 @@ class PencadanganUpahController extends Controller
             ], 422);
         }
         try{
+            if ($request->column && $request->value) {
+                if (!in_array($request->column, ['tenor_berjalan', 'nominal_terpotong', 'nominal_dikembalikan'], true)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Kolom tidak valid.',
+                    ], 422);
+                }
+
+                $pencadanganUpah = DB::transaction(function () use ($request) {
+                    $row = PencadanganUpah::where('id', $request->id)->lockForUpdate()->firstOrFail();
+                    $before = [
+                        'tenor_berjalan' => $row->tenor_berjalan,
+                        'nominal_berjalan' => $row->nominal_berjalan,
+                    ];
+                    switch ($request->column) {
+                        case 'tenor_berjalan':
+                            $row->tenor_berjalan = $request->value;
+                            break;
+                        case 'nominal_terpotong':
+                            $row->nominal_berjalan = $request->value * -1;
+                            break;
+                        case 'nominal_dikembalikan':
+                            $row->nominal_berjalan = $request->value;
+                            break;
+                    }
+                    $row->appendPerubahanLog($this->karyawan, 'manual', null, $before);
+                    $row->updated_at = DATE('Y-m-d H:i:s');
+                    $row->updated_by = $this->karyawan;
+                    $row->save();
+
+                    return $row;
+                });
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $pencadanganUpah,
+                    'message' => 'Pencadangan Upah data updated successfully',
+                ], 200);
+            }
             if (strlen(str_replace(['Rp', '.', ','], '', $request->nominal)) > 10 ) {
                 return response()->json([
                     'success' => false,

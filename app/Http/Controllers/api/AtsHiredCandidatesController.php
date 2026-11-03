@@ -1434,14 +1434,31 @@ class AtsHiredCandidatesController extends Controller
             return 'Tanggal masuk kerja wajib diisi untuk menghitung akhir jangka waktu perjanjian.';
         }
 
-        $jadwalError = $this->validatePayrollInteger(
-            data_get($request, 'payroll.jadwal_penggajian'),
-            'Jadwal penggajian',
-            0,
-            99
-        );
-        if ($jadwalError !== null) {
-            return $jadwalError;
+        if ($this->payrollUsesFixedDate($request)) {
+            $tanggalError = $this->validatePayrollInteger(
+                data_get($request, 'payroll.tanggal_penggajian'),
+                'Tanggal penggajian',
+                1,
+                31
+            );
+            if ($tanggalError !== null) {
+                return $tanggalError;
+            }
+
+            $penyesuaian = strtolower(trim((string) data_get($request, 'payroll.penyesuaian_hari_libur', 'setelah')));
+            if (!in_array($penyesuaian, ['sebelum', 'setelah'], true)) {
+                return 'Penyesuaian hari libur harus Sebelum atau Setelah.';
+            }
+        } else {
+            $jadwalError = $this->validatePayrollInteger(
+                data_get($request, 'payroll.jadwal_penggajian'),
+                'Jadwal penggajian',
+                0,
+                99
+            );
+            if ($jadwalError !== null) {
+                return $jadwalError;
+            }
         }
 
         $punyaRekening = data_get($request, 'payroll.punya_rekening_payroll', null);
@@ -1494,12 +1511,41 @@ class AtsHiredCandidatesController extends Controller
         return null;
     }
 
+    private function payrollUsesFixedDate(Request $request): bool
+    {
+        $sources = [
+            data_get($request, 'employee.grade'),
+            data_get($request, 'employee.gradec'),
+            data_get($request, 'employee.position_name'),
+        ];
+        $text = strtoupper(implode(' ', array_map(function ($value) {
+            return trim((string) $value);
+        }, $sources)));
+
+        return (bool) preg_match('/\b(SUPERVISOR|MANAGER|MANAJER|DIREKTUR|DIRECTOR)\b/', $text);
+    }
+
+    private function payrollHolidayAdjustment(Request $request, bool $fixedDate): string
+    {
+        if (!$fixedDate) {
+            return 'setelah';
+        }
+
+        $value = strtolower(trim((string) data_get($request, 'payroll.penyesuaian_hari_libur', 'setelah')));
+
+        return in_array($value, ['sebelum', 'setelah'], true) ? $value : 'setelah';
+    }
+
     private function payrollSettingsPayload(Request $request): array
     {
+        $fixedDate = $this->payrollUsesFixedDate($request);
+
         return [
             'jadwal_pembayaran_thr' => trim((string) data_get($request, 'payroll.jadwal_pembayaran_thr')),
             'metode_pembayaran_gaji' => 'transfer',
-            'jadwal_penggajian' => (int) data_get($request, 'payroll.jadwal_penggajian'),
+            'jadwal_penggajian' => $fixedDate ? null : (int) data_get($request, 'payroll.jadwal_penggajian'),
+            'tanggal_penggajian' => $fixedDate ? (int) data_get($request, 'payroll.tanggal_penggajian') : null,
+            'penyesuaian_hari_libur' => $this->payrollHolidayAdjustment($request, $fixedDate),
             'satuan_jangka_waktu' => trim((string) data_get($request, 'payroll.satuan_jangka_waktu')),
             'jumlah_jangka_waktu' => (int) data_get($request, 'payroll.jumlah_jangka_waktu'),
         ];

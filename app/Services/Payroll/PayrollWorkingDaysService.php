@@ -303,14 +303,25 @@ class PayrollWorkingDaysService
         return 'IFNULL(JSON_LENGTH(rekap_masuk_kerja.tanggal), 0)';
     }
 
-    public static function sqlShowDataHariKerja(): string
+    /**
+     * Hari kerja untuk preview payroll: rekap/payroll dulu, lalu kalender+jamatan bila kolom rekap belum terisi.
+     */
+    public static function sqlShowDataHariKerja(?string $periodeYm = null): string
     {
-        return 'IFNULL(rekap_masuk_kerja.hari_kerja, IFNULL(payroll.hari_kerja, 0))';
+        $fromStored = 'IFNULL(rekap_masuk_kerja.hari_kerja, IFNULL(payroll.hari_kerja, 0))';
+        if ($periodeYm === null || !preg_match('/^\d{4}-\d{2}$/', $periodeYm)) {
+            return $fromStored;
+        }
+
+        $counts = self::calendarCountsForMonth($periodeYm);
+        $fallback = self::sqlFallbackHariKerjaFromJabatan($counts['mon_fri'], $counts['mon_sat']);
+
+        return 'COALESCE(rekap_masuk_kerja.hari_kerja, payroll.hari_kerja, ' . $fallback . ', 0)';
     }
 
-    public static function sqlShowDataTidakHadir(): string
+    public static function sqlShowDataTidakHadir(?string $periodeYm = null): string
     {
-        $hari = self::sqlShowDataHariKerja();
+        $hari = self::sqlShowDataHariKerja($periodeYm);
         $masuk = self::sqlShowDataMasukKerja();
 
         return 'GREATEST((' . $hari . ' - ' . $masuk . '), 0)';
