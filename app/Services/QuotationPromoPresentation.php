@@ -45,7 +45,8 @@ class QuotationPromoPresentation
             $views[] = $view;
         }
         if (!$views) return [$source, $details];
-        $header->data_pendukung_sampling = json_encode($headerRows);
+        $headerRows = QuotationPromo::mergeContractHeaderSamplingRows($headerRows);
+        $header->data_pendukung_sampling = json_encode($headerRows, JSON_UNESCAPED_UNICODE);
         $header->grand_total = (float) $source->grand_total + $uplift;
         $header->total_discount_promo = $discount;
         $header->discount_promo = $label;
