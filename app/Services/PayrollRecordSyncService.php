@@ -47,6 +47,31 @@ class PayrollRecordSyncService
             . ' ORDER BY t.is_active DESC, t.id DESC LIMIT 1)';
     }
 
+    /**
+     * Master payroll (BPJS TK, dll.): karyawan aktif → hanya baris is_active=1 (id terbesar).
+     * Karyawan nonaktif → aktif jika ada, else riwayat terbaru (payroll akhir).
+     */
+    public static function sqlJoinLatestPayrollMasterRow(string $table, string $foreignKey = 'id_karyawan'): string
+    {
+        return "{$table}.id = (SELECT t.id FROM {$table} t WHERE t.{$foreignKey} = master_karyawan.id"
+            . ' AND ((master_karyawan.is_active = 1 AND t.is_active = 1)'
+            . ' OR (master_karyawan.is_active = 0))'
+            . ' ORDER BY t.is_active DESC, t.id DESC LIMIT 1)';
+    }
+
+    /** Sama sqlJoinLatestPayrollMasterRow + filter kolom periode (mis. bpjs_kesehatan.bulan_efektif). */
+    public static function sqlJoinLatestPayrollMasterRowThroughPeriod(
+        string $table,
+        string $periodColumn,
+        string $foreignKey = 'id_karyawan'
+    ): string {
+        return "{$table}.id = (SELECT t.id FROM {$table} t WHERE t.{$foreignKey} = master_karyawan.id"
+            . " AND t.{$periodColumn} <= ?"
+            . ' AND ((master_karyawan.is_active = 1 AND t.is_active = 1)'
+            . ' OR (master_karyawan.is_active = 0))'
+            . ' ORDER BY t.is_active DESC, t.id DESC LIMIT 1)';
+    }
+
     /** Satu baris rekap absensi aktif per karyawan + bulan (abaikan rekap is_active = 0). */
     public static function applyJoinActiveRekapMasukKerja($join, string $bulanYm): void
     {

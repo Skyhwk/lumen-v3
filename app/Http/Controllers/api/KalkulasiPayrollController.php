@@ -185,13 +185,15 @@ class KalkulasiPayrollController extends Controller
             })
             ->leftJoin('bpjs_tk', function ($join) {
                 $join->on('master_karyawan.id', '=', 'bpjs_tk.id_karyawan')
-                    ->whereRaw(PayrollRecordSyncService::sqlJoinLatestRow('bpjs_tk'));
+                    ->whereRaw(PayrollRecordSyncService::sqlJoinLatestPayrollMasterRow('bpjs_tk'));
             })
             ->leftJoin('bpjs_kesehatan', function ($join) use ($periode) {
                 $join->on('master_karyawan.id', '=', 'bpjs_kesehatan.id_karyawan')
                     ->whereRaw(
-                        'bpjs_kesehatan.id = (SELECT t.id FROM bpjs_kesehatan t WHERE t.id_karyawan = master_karyawan.id'
-                        . ' AND t.bulan_efektif <= ? ORDER BY t.is_active DESC, t.id DESC LIMIT 1)',
+                        PayrollRecordSyncService::sqlJoinLatestPayrollMasterRowThroughPeriod(
+                            'bpjs_kesehatan',
+                            'bulan_efektif'
+                        ),
                         [$periode]
                     );
             })
