@@ -208,13 +208,25 @@ class KalkulasiPayrollController extends Controller
             })
             ->leftJoin('kasbon', function ($join) use ($periode) {
                 $join->on('master_karyawan.id', '=', 'kasbon.id_karyawan')
-                    ->where('kasbon.bulan_mulai_pemotongan', '<=', $periode);
-                PayrollRecordSyncService::applyJoinPayrollDebtFilter($join, 'kasbon', 'sisa_kasbon');
+                    ->whereRaw(
+                        PayrollRecordSyncService::sqlJoinLatestDeductionRow(
+                            'kasbon',
+                            'bulan_mulai_pemotongan',
+                            'sisa_kasbon'
+                        ),
+                        [$periode]
+                    );
             })
             ->leftJoin('denda_karyawan', function ($join) use ($periode) {
                 $join->on('master_karyawan.id', '=', 'denda_karyawan.id_karyawan')
-                    ->where('denda_karyawan.bulan_mulai_pemotongan', '<=', $periode);
-                PayrollRecordSyncService::applyJoinPayrollDebtFilter($join, 'denda_karyawan', 'sisa_denda');
+                    ->whereRaw(
+                        PayrollRecordSyncService::sqlJoinLatestDeductionRow(
+                            'denda_karyawan',
+                            'bulan_mulai_pemotongan',
+                            'sisa_denda'
+                        ),
+                        [$periode]
+                    );
             })
             ->leftJoin('pph_21', function ($join) use ($periode) {
                 $join->on('master_karyawan.id', '=', 'pph_21.id_karyawan')

@@ -113,7 +113,7 @@ class PayrollRecordSyncService
     /**
      * Sumber potongan payroll (submit).
      *
-     * @param  bool|null  $employeeIsActive  Wajib untuk pencadangan: karyawan aktif → hanya baris master is_active=1.
+     * @param  bool|null  $employeeIsActive  Karyawan aktif → hanya baris master is_active=1.
      */
     public static function scopePayrollDeductionSource(
         Builder $query,
@@ -126,20 +126,7 @@ class PayrollRecordSyncService
             $query->where($periodField, '<=', $periode);
         }
 
-        if ($balanceField === null) {
-            self::applyPencadanganMasterActiveFilter($query, $employeeIsActive);
-        } else {
-            $query->where(function ($q) {
-                $q->where('is_active', true)
-                    ->orWhere(function ($q) {
-                        $q->where('is_active', false)
-                            ->where(function ($status) {
-                                $status->where('status', 'ONGOING')
-                                    ->orWhereNull('status');
-                            });
-                    });
-            });
-        }
+        self::applyMasterDeductionActiveFilter($query, $employeeIsActive);
 
         $query->where(function ($status) {
             $status->where('status', 'ONGOING')
@@ -155,10 +142,29 @@ class PayrollRecordSyncService
     }
 
     /**
-     * Pencadangan upah: karyawan aktif → hanya baris master is_active=1.
+     * Join kasbon/denda/pencadangan di preview: satu baris id terbesar, selaras submit.
+     */
+    public static function sqlJoinLatestDeductionRow(
+        string $table,
+        string $periodColumn,
+        string $balanceField
+    ): string {
+        return "{$table}.id = (SELECT t.id FROM {$table} t WHERE t.id_karyawan = master_karyawan.id"
+            . " AND t.{$periodColumn} <= ?"
+            . ' AND (t.status = "ONGOING" OR t.status IS NULL)'
+            . " AND t.{$balanceField} > 0 AND t.nominal_potongan > 0"
+            . ' AND ('
+            . '(master_karyawan.is_active = 1 AND t.is_active = 1)'
+            . ' OR (master_karyawan.is_active = 0 AND (t.is_active = 1 OR (t.is_active = 0 AND (t.status = "ONGOING" OR t.status IS NULL))))'
+            . ')'
+            . ' ORDER BY t.id DESC LIMIT 1)';
+    }
+
+    /**
+     * Karyawan aktif → hanya baris master is_active=1.
      * Karyawan nonaktif → baris aktif atau nonaktif ONGOING (penyelesaian saat exit).
      */
-    private static function applyPencadanganMasterActiveFilter(Builder $query, ?bool $employeeIsActive): void
+    private static function applyMasterDeductionActiveFilter(Builder $query, ?bool $employeeIsActive): void
     {
         if ($employeeIsActive === true) {
             $query->where('is_active', true);
@@ -180,8 +186,7 @@ class PayrollRecordSyncService
 
     /**
      * Satu baris sumber potongan untuk submit payroll (lockForUpdate pada query pemanggil).
-     * Pencadangan: jika beberapa baris cocok, ambil id terbesar (rekaman terbaru).
-     * Kasbon/denda: tetap wajib unik — lebih dari satu baris = null (ambigu).
+     * Jika beberapa baris cocok, ambil id terbesar (rekaman terbaru).
      */
     public static function resolvePayrollDeductionSource(
         Builder $query,
@@ -201,9 +206,6 @@ class PayrollRecordSyncService
             ->get();
 
         if ($scoped->isEmpty()) {
-            return null;
-        }
-        if ($balanceField !== null && $scoped->count() !== 1) {
             return null;
         }
 

@@ -45,13 +45,12 @@ class PayrollDeductionService
                     $balanceField,
                     $periodField,
                     $payroll->periode_payroll,
-                    $balanceField === null ? (bool) $employee->is_active : null
+                    (bool) $employee->is_active
                 );
                 if ($source === null) {
                     throw new \DomainException($this->deductionSourceErrorMessage(
                         $field,
-                        $payroll->periode_payroll,
-                        $balanceField !== null
+                        $payroll->periode_payroll
                     ));
                 }
                 $before = $this->state($source, $balanceField);
@@ -174,7 +173,7 @@ class PayrollDeductionService
             });
     }
 
-    private function deductionSourceErrorMessage(string $field, string $periode, bool $strictUnique): string
+    private function deductionSourceErrorMessage(string $field, string $periode): string
     {
         $labels = [
             'loan' => 'kasbon',
@@ -182,12 +181,9 @@ class PayrollDeductionService
             'pencadangan_upah' => 'pencadangan upah',
         ];
         $label = $labels[$field] ?? $field;
-        if ($strictUnique) {
-            return "Sumber {$label} tidak ditemukan atau ambigu untuk periode {$periode}. Muat ulang dan periksa data master.";
-        }
 
         return "Data master {$label} tidak ditemukan untuk periode {$periode}. "
-            . 'Lengkapi master HR (menu pencadangan upah) atau set nominal pencadangan = 0 sebelum submit.';
+            . 'Muat ulang payroll, periksa master HR, atau set nominal potongan = 0 sebelum submit.';
     }
 
 }
