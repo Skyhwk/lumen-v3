@@ -28,11 +28,19 @@ class MasterSallaryController extends Controller
         $data = MasterSallary::select(
                 'master_sallary.*',
                 'master_divisi.nama_divisi',
+                'master_karyawan.grade',
+                'master_karyawan.kategori_grade',
+                'master_karyawan.tgl_mulai_kerja',
+                'master_jabatan.nama_jabatan',
                 DB::raw('(master_sallary.gaji_pokok + master_sallary.tunjangan_kerja) as total_gaji')
             )
             ->leftJoin('master_karyawan', function ($join) {
                 $join->on('master_sallary.id_karyawan', '=', 'master_karyawan.id')
                     ->where('master_karyawan.is_active', true);
+            })
+            ->leftJoin('master_jabatan', function ($join) {
+                $join->on('master_karyawan.id_jabatan', '=', 'master_jabatan.id')
+                    ->where('master_jabatan.is_active', true);
             })
             ->leftJoin('master_divisi', function ($join) {
                 $join->on('master_karyawan.id_department', '=', 'master_divisi.id')
@@ -67,17 +75,33 @@ class MasterSallaryController extends Controller
             ->pluck('id_karyawan')
             ->all();
 
-        $karyawan = MasterKaryawan::where('is_active', true)
-            ->when(!empty($existingIds), function ($query) use ($existingIds) {
-                $query->whereNotIn('id', $existingIds);
+        $karyawan = MasterKaryawan::query()
+            ->leftJoin('master_jabatan', function ($join) {
+                $join->on('master_karyawan.id_jabatan', '=', 'master_jabatan.id')
+                    ->where('master_jabatan.is_active', true);
             })
-            ->select('id', 'nama_lengkap')
-            ->orderBy('nama_lengkap')
+            ->where('master_karyawan.is_active', true)
+            ->when(!empty($existingIds), function ($query) use ($existingIds) {
+                $query->whereNotIn('master_karyawan.id', $existingIds);
+            })
+            ->select(
+                'master_karyawan.id',
+                'master_karyawan.nama_lengkap',
+                'master_karyawan.grade',
+                'master_karyawan.kategori_grade',
+                'master_karyawan.tgl_mulai_kerja',
+                'master_jabatan.nama_jabatan'
+            )
+            ->orderBy('master_karyawan.nama_lengkap')
             ->get()
             ->map(function ($row) {
                 return [
                     'id_karyawan' => $row->id,
                     'nama_lengkap' => $row->nama_lengkap,
+                    'grade' => $row->grade,
+                    'kategori_grade' => $row->kategori_grade,
+                    'nama_jabatan' => $row->nama_jabatan,
+                    'tgl_mulai_kerja' => $row->tgl_mulai_kerja,
                 ];
             });
 
@@ -148,8 +172,9 @@ class MasterSallaryController extends Controller
                 $masterSallary->karyawan = $oldMasterSallary->karyawan;
                 $masterSallary->nik_karyawan = $oldMasterSallary->nik_karyawan;
                 $masterSallary->id_karyawan = $oldMasterSallary->id_karyawan;
-                $masterSallary->tanggal_penggajian = $oldMasterSallary->tanggal_penggajian;
-                $masterSallary->penyesuaian_hari_libur = $oldMasterSallary->penyesuaian_hari_libur ?: 'setelah';
+                $masterSallary->jumlah_hari_kerja = $oldMasterSallary->jumlah_hari_kerja;
+                $masterSallary->satuan_jangka_waktu = $oldMasterSallary->satuan_jangka_waktu;
+                $masterSallary->jumlah_jangka_waktu = $oldMasterSallary->jumlah_jangka_waktu;
 
                 $message = 'Master Sallary data updated successfully';
             } else {
@@ -197,19 +222,6 @@ class MasterSallaryController extends Controller
         return $value;
     }
 
-    private function labelMetodePembayaran($value): string
-    {
-        $metode = strtolower(trim((string) $value));
-        if ($metode === 'tunai') {
-            return 'Tunai';
-        }
-        if ($metode === 'transfer') {
-            return 'Transfer';
-        }
-
-        return $metode !== '' ? (string) $value : '-';
-    }
-
     private function formatExportDateTime($value): string
     {
         $value = trim((string) $value);
@@ -234,35 +246,77 @@ class MasterSallaryController extends Controller
             return 'Jadwal pembayaran THR maksimal 100 karakter.';
         }
 
-        $metode = strtolower(trim((string) $request->metode_pembayaran_gaji));
-        if (!in_array($metode, ['tunai', 'transfer'], true)) {
-            return 'Metode pembayaran gaji harus Tunai atau Transfer.';
+        $karyawanId = $request->id_karyawan;
+        if ($karyawanId === null || trim((string) $karyawanId) === '') {
+            return 'Karyawan wajib dipilih.';
         }
 
-        $hariKerja = trim((string) $request->jumlah_hari_kerja);
-        if ($hariKerja === '' || !preg_match('/^\d+$/', $hariKerja)) {
-            return 'Jumlah hari kerja harus berupa angka.';
-        }
-        $hariKerja = (int) $hariKerja;
-        if ($hariKerja < 1 || $hariKerja > 31) {
-            return 'Jumlah hari kerja harus antara 1 dan 31.';
-        }
-
-        $jadwal = trim((string) $request->jadwal_penggajian);
-        if ($jadwal === '' || !preg_match('/^\d+$/', $jadwal)) {
-            return 'Jadwal penggajian harus berupa angka.';
-        }
-        $jadwal = (int) $jadwal;
-        if ($jadwal < 0 || $jadwal > 99) {
-            return 'Jadwal penggajian harus antara 0 dan 99.';
+        $fixedDate = $this->payrollUsesFixedDate($karyawanId);
+        if ($fixedDate === null) {
+            return 'Data karyawan tidak ditemukan.';
         }
 
         $masterSallary->jadwal_pembayaran_thr = $thr;
-        $masterSallary->metode_pembayaran_gaji = $metode;
-        $masterSallary->jumlah_hari_kerja = $hariKerja;
-        $masterSallary->jadwal_penggajian = $jadwal;
+        $masterSallary->metode_pembayaran_gaji = 'transfer';
+
+        if ($fixedDate) {
+            $tanggal = trim((string) $request->tanggal_penggajian);
+            if ($tanggal === '' || !preg_match('/^\d+$/', $tanggal)) {
+                return 'Tanggal penggajian harus berupa angka.';
+            }
+            $tanggal = (int) $tanggal;
+            if ($tanggal < 1 || $tanggal > 31) {
+                return 'Tanggal penggajian harus antara 1 dan 31.';
+            }
+
+            $penyesuaian = strtolower(trim((string) $request->penyesuaian_hari_libur));
+            if (!in_array($penyesuaian, ['sebelum', 'setelah'], true)) {
+                return 'Penyesuaian hari libur harus Sebelum atau Setelah.';
+            }
+
+            $masterSallary->jadwal_penggajian = null;
+            $masterSallary->tanggal_penggajian = $tanggal;
+            $masterSallary->penyesuaian_hari_libur = $penyesuaian;
+        } else {
+            $jadwal = trim((string) $request->jadwal_penggajian);
+            if ($jadwal === '' || !preg_match('/^\d+$/', $jadwal)) {
+                return 'Jadwal penggajian harus berupa angka.';
+            }
+            $jadwal = (int) $jadwal;
+            if ($jadwal < 0 || $jadwal > 99) {
+                return 'Jadwal penggajian harus antara 0 dan 99.';
+            }
+
+            $masterSallary->jadwal_penggajian = $jadwal;
+            $masterSallary->tanggal_penggajian = null;
+            $masterSallary->penyesuaian_hari_libur = 'setelah';
+        }
 
         return null;
+    }
+
+    private function payrollUsesFixedDate($karyawanId): ?bool
+    {
+        $karyawan = MasterKaryawan::query()
+            ->leftJoin('master_jabatan', 'master_karyawan.id_jabatan', '=', 'master_jabatan.id')
+            ->where('master_karyawan.id', $karyawanId)
+            ->first([
+                'master_karyawan.grade',
+                'master_karyawan.kategori_grade',
+                'master_jabatan.nama_jabatan',
+            ]);
+
+        if (!$karyawan) {
+            return null;
+        }
+
+        $text = strtoupper(implode(' ', [
+            trim((string) $karyawan->grade),
+            trim((string) $karyawan->kategori_grade),
+            trim((string) $karyawan->nama_jabatan),
+        ]));
+
+        return (bool) preg_match('/\b(SUPERVISOR|MANAGER|MANAJER|DIREKTUR|DIRECTOR)\b/', $text);
     }
 
     public function getHistory(Request $request)
@@ -320,7 +374,7 @@ class MasterSallaryController extends Controller
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Master Salary');
 
-        $sheet->mergeCells('A1:N1');
+        $sheet->mergeCells('A1:L1');
         $sheet->setCellValue('A1', 'Master Salary');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
         $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
@@ -334,16 +388,14 @@ class MasterSallaryController extends Controller
             'Tunjangan Kerja',
             'Total Gaji',
             'Jadwal Pembayaran THR',
-            'Metode Pembayaran Gaji',
-            'Jumlah Hari Kerja',
             'Jadwal Penggajian',
             'Bulan Efektif',
             'Created By',
             'Created At',
         ];
         $sheet->fromArray($headers, null, 'A3');
-        $sheet->getStyle('A3:N3')->getFont()->setBold(true);
-        $sheet->getStyle('A3:N3')->getFill()
+        $sheet->getStyle('A3:L3')->getFont()->setBold(true);
+        $sheet->getStyle('A3:L3')->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setARGB('FFCCCCCC');
 
@@ -354,7 +406,6 @@ class MasterSallaryController extends Controller
             $bulanEfektif = $this->formatBulanEfektif($row->bulan_efektif);
             $createdAt = $this->formatExportDateTime($row->created_at);
             $jadwalThr = trim((string) $row->jadwal_pembayaran_thr);
-            $jumlahHariKerja = $row->jumlah_hari_kerja;
             $jadwalPenggajian = $row->jadwal_penggajian;
 
             $sheet->setCellValue("A{$rowIdx}", $no++);
@@ -365,17 +416,15 @@ class MasterSallaryController extends Controller
             $sheet->setCellValue("F{$rowIdx}", (float) ($row->tunjangan_kerja ?? 0));
             $sheet->setCellValue("G{$rowIdx}", (float) ($row->total_gaji ?? 0));
             $sheet->setCellValue("H{$rowIdx}", $jadwalThr !== '' ? $jadwalThr : '-');
-            $sheet->setCellValue("I{$rowIdx}", $this->labelMetodePembayaran($row->metode_pembayaran_gaji));
-            $sheet->setCellValue("J{$rowIdx}", ($jumlahHariKerja === null || $jumlahHariKerja === '') ? '-' : (int) $jumlahHariKerja);
             $tanggalPenggajian = $row->tanggal_penggajian;
             $penyesuaianHariLibur = strtolower(trim((string) ($row->penyesuaian_hari_libur ?? 'setelah')));
             $jadwalLabel = ($tanggalPenggajian === null || $tanggalPenggajian === '')
                 ? (($jadwalPenggajian === null || $jadwalPenggajian === '') ? '-' : 'H+' . (int) $jadwalPenggajian)
                 : 'Tgl ' . (int) $tanggalPenggajian . ' (' . ($penyesuaianHariLibur === 'sebelum' ? 'sebelum libur' : 'setelah libur') . ')';
-            $sheet->setCellValue("K{$rowIdx}", $jadwalLabel);
-            $sheet->setCellValue("L{$rowIdx}", $bulanEfektif);
-            $sheet->setCellValue("M{$rowIdx}", $row->created_by ?? '-');
-            $sheet->setCellValue("N{$rowIdx}", $createdAt);
+            $sheet->setCellValue("I{$rowIdx}", $jadwalLabel);
+            $sheet->setCellValue("J{$rowIdx}", $bulanEfektif);
+            $sheet->setCellValue("K{$rowIdx}", $row->created_by ?? '-');
+            $sheet->setCellValue("L{$rowIdx}", $createdAt);
 
             foreach (['E', 'F', 'G'] as $col) {
                 $sheet->getStyle("{$col}{$rowIdx}")
@@ -386,12 +435,12 @@ class MasterSallaryController extends Controller
             $rowIdx++;
         }
 
-        foreach (range('A', 'N') as $col) {
+        foreach (range('A', 'L') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
         $lastRow = max($rowIdx - 1, 3);
-        $sheet->getStyle("A3:N{$lastRow}")->applyFromArray([
+        $sheet->getStyle("A3:L{$lastRow}")->applyFromArray([
             'borders' => [
                 'allBorders' => [
                     'borderStyle' => Border::BORDER_THIN,
