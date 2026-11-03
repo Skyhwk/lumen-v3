@@ -19,12 +19,18 @@ class DynamicApprovalChainService
     /**
      * @return list<int> karyawan_id urut dari atasan terdekat ke paling atas (max SM)
      */
-    public function orderedApproverIds(MasterKaryawan $submitter): array
+    /**
+     * @param list<int>|null $initialAtasanIds batasi BFS level-1 (mis. hanya atasan HO, tanpa SPV cabang)
+     * @return list<int>
+     */
+    public function orderedApproverIds(MasterKaryawan $submitter, ?array $initialAtasanIds = null): array
     {
         $submitterRank = $this->submitterRankForChain($submitter);
         $chain = [];
         $visited = [];
-        $frontier = $this->directAtasanIds($submitter);
+        $frontier = $initialAtasanIds !== null
+            ? array_values(array_filter(array_map('intval', $initialAtasanIds), fn ($id) => $id > 0))
+            : $this->directAtasanIds($submitter);
         $depth = 0;
 
         while ($frontier !== [] && $depth < 12) {

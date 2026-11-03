@@ -12,6 +12,9 @@ use App\Http\Controllers\Greatday\PermissionRequestsController;
 use App\Models\Hr\HrRequest;
 use App\Models\MasterKaryawan;
 use App\Services\Greatday\AtasanApprovalScope;
+use App\Services\Hr\AttendanceCorrectionAtasanQueueService;
+use App\Services\Hr\LeaveRequestAtasanQueueService;
+use App\Services\Hr\PermissionRequestAtasanQueueService;
 use App\Services\Hr\HrApprovalChainService;
 use App\Services\Hr\HrPendingApprovalsService;
 use App\Services\Hr\HrRequestResolver;
@@ -78,11 +81,19 @@ class FormsPendingApprovalsService
                 return $this->finalizeItems($legacyItems);
             }
 
-            $legacyItems = $lightweightForStats
-                ? $this->collectLegacyPendingApprovals($employee, $legacyOnlyControllers)
-                : $this->collectLegacyPendingApprovals($employee);
+            $legacyControllerNames = $lightweightForStats
+                ? $legacyOnlyControllers
+                : $this->legacyControllerNamesExceptHrFormQueues();
+
+            $legacyItems = $this->collectLegacyPendingApprovals($employee, $legacyControllerNames);
 
             $hrItems = app(HrPendingApprovalsService::class)->listForAtasan($employee);
+            $hrItems = array_merge(
+                $hrItems,
+                app(AttendanceCorrectionAtasanQueueService::class)->pendingItemsForAtasan($employee),
+                app(PermissionRequestAtasanQueueService::class)->pendingItemsForAtasan($employee),
+                app(LeaveRequestAtasanQueueService::class)->pendingItemsForAtasan($employee)
+            );
 
             return $this->finalizeItems($this->mergeHrAndLegacyExtras($hrItems, $legacyItems));
         }
@@ -325,5 +336,24 @@ class FormsPendingApprovalsService
     {
         $request = app(Request::class);
         $request->attributes->set('greatday_karyawan', $employee);
+    }
+
+    /** @return list<string> */
+    private function legacyControllerNamesExceptHrFormQueues(): array
+    {
+        $skip = [
+            'AttendanceCorrectionsController' => true,
+            'PermissionRequestsController' => true,
+            'LeaveRequestsController' => true,
+        ];
+        $names = [];
+        foreach (self::LEGACY_CONTROLLERS as $c) {
+            if (isset($skip[$c['name']])) {
+                continue;
+            }
+            $names[] = $c['name'];
+        }
+
+        return $names;
     }
 }

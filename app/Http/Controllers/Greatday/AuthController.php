@@ -11,7 +11,9 @@ use App\Models\MasterKaryawan;
 use App\Services\Greatday\GreatdayAuthService;
 use App\Services\Greatday\GreatdayMailer;
 use App\Support\Greatday\GreatdayAppData;
+use App\Support\Greatday\GreatdayImpersonation;
 use App\Support\Greatday\HrdPayroll;
+use App\Services\Greatday\GreatdayImpersonationService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\Request;
@@ -90,7 +92,7 @@ class AuthController extends Controller
             $response = response()->json([
                 'message' => 'Logged in successfully',
                 'data' => [
-                    'user' => $this->buildSessionUserPayload($user->karyawan, $user),
+                    'user' => $this->buildSessionUserPayload($user->karyawan, $user, null),
                     'token' => $token,
                     'menus' => collect(GreatdayAppData::menusForUser($karyawanId))->values()->toArray(),
                     'permissions' => GreatdayAppData::permissionsForUser($karyawanId),
@@ -125,7 +127,8 @@ class AuthController extends Controller
             return response()->json(['message' => 'User not found'], 404);
         }
 
-        $profile = $this->buildSessionUserPayload($karyawan, $account);
+        $tokenRow = $request->attributes->get('greatday_token');
+        $profile = $this->buildSessionUserPayload($karyawan, $account, $tokenRow);
 
         return response()->json([
             'data' => [
@@ -310,8 +313,19 @@ class AuthController extends Controller
         $fcmToken->save();
     }
 
-    private function buildSessionUserPayload(MasterKaryawan $karyawan, object $account): array
+    private function buildSessionUserPayload(MasterKaryawan $karyawan, object $account, $tokenRow = null): array
     {
+        $impersonation = app(GreatdayImpersonationService::class)->impersonationMetaForToken($tokenRow);
+
+        if (!$tokenRow) {
+            $impersonation = [
+                'can_impersonate' => GreatdayImpersonation::canImpersonate((int) $karyawan->id),
+                'is_impersonating' => false,
+                'impersonator_karyawan_id' => null,
+                'impersonator_name' => null,
+            ];
+        }
+
         return [
             'id' => $karyawan->id,
             'name' => $karyawan->nama_lengkap,
@@ -324,6 +338,10 @@ class AuthController extends Controller
             'employee' => $karyawan,
             'grade' => $karyawan->grade,
             'can_access_hrd_queue' => HrdPayroll::canAccessHrdQueue($karyawan),
+            'can_impersonate' => $impersonation['can_impersonate'],
+            'is_impersonating' => $impersonation['is_impersonating'],
+            'impersonator_karyawan_id' => $impersonation['impersonator_karyawan_id'],
+            'impersonator_name' => $impersonation['impersonator_name'],
         ];
     }
 

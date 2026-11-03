@@ -8,6 +8,7 @@ use App\Models\MasterDivisi;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
 use App\Services\GetAtasan;
+use App\Services\Hr\FormAtasanSubmitNotificationService;
 use App\Services\GetBawahan;
 use App\Services\Greatday\LeaveRequestValidationService;
 use App\Services\Hr\ApprovalService;
@@ -925,18 +926,19 @@ class PermohonanCutiController extends Controller
                 'is_active' => 1,
             ]);
 
-            // Kirim notifikasi ke atasan jika ada
-            $atasan = GetAtasan::where('id', $this->user_id)->get();
-            $sendNotifTo = $atasan->pluck('id')->toArray();
-            if (!empty($sendNotifTo)) {
-                Notification::whereIn('id', $sendNotifTo)
-                    ->title('Permohonan Cuti Baru!')
-                    ->message('Permohonan cuti baru diajukan oleh ' . $this->karyawan)
-                    ->url('/request/permohonan/permohonan-cuti')
-                    ->send();
-            }
-
             app(PortalHrSync::class)->syncLeaveFromLegacy((int) $leave->id);
+
+            if ($status === WorkflowStatus::PENDING && $employee) {
+                $sendNotifTo = app(FormAtasanSubmitNotificationService::class)
+                    ->initialApproverIds($employee, HrRequest::TYPE_LEAVE);
+                if ($sendNotifTo !== []) {
+                    Notification::whereIn('id', $sendNotifTo)
+                        ->title('Permohonan Cuti Baru!')
+                        ->message('Permohonan cuti baru diajukan oleh ' . $this->karyawan)
+                        ->url('/request/permohonan/permohonan-cuti')
+                        ->send();
+                }
+            }
 
             DB::commit();
             return response()->json([

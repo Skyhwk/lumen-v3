@@ -13,6 +13,9 @@ use App\Http\Controllers\Controller;
 use App\Services\PencadanganUpahPayrollService;
 use App\Services\PayrollDebtService;
 use App\Services\PayrollDeductionService;
+use App\Services\PayrollRecordSyncService;
+use App\Services\Payroll\PayrollTrainingSpecialLeaveService;
+use App\Services\Payroll\PayrollWorkingDaysService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -46,7 +49,7 @@ class KalkulasiPayrollController extends Controller
         // try {
             $data = Payroll::where('payroll_header_id', $request->id_header)->where('is_active', true)->newQuery();
             $data = $data->with(['karyawan' => function ($query) {
-                $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan');
+                $query->select('master_karyawan.id', 'nama_lengkap', 'nik_karyawan', 'is_active', 'effective_date');
             }, 'department' => function ($query) {
                 $query->select('master_divisi.id', 'nama_divisi');
             }])
@@ -113,34 +116,35 @@ class KalkulasiPayrollController extends Controller
                 ], 403);
             }
 
-            // dd($request->all());
-            // Calculate working days from rekap_libur_kalender
-            $workingDaysQuery = DB::table('rekap_libur_kalender')
-                ->select(DB::raw('
-                    JSON_LENGTH(JSON_EXTRACT(tanggal, \'$."' . $request->periode . '"\')) as working_days
-                '))
-                ->where(DB::raw('JSON_EXTRACT(tanggal, \'$."' . $request->periode . '"\')'), '!=', 'null')
-                ->where('is_active', 1)
-                ->where('tahun', explode('-', $request->periode)[0])
-                ->first();
+            $periodePayroll = $request->input('periode_payroll') ?? $request->input('periode');
+            if (!$periodePayroll) {
+                return response()->json([
+                    'data' => [],
+                    'message' => 'Periode payroll wajib diisi (periode_payroll).',
+                ], 422);
+            }
+            $periode = $request->input('periode') ?? $periodePayroll;
 
-            $workingDays = $workingDaysQuery ? $workingDaysQuery->working_days : 0;
-
-            $tidakHadirSql = '(' . $workingDays . ' - JSON_LENGTH(rekap_masuk_kerja.tanggal))';
+            $masukKerjaJsonLengthSql = PayrollWorkingDaysService::sqlShowDataMasukKerja();
+            $hariKerjaExpectedSql = PayrollWorkingDaysService::sqlShowDataHariKerja($periodePayroll);
+            $tidakHadirSql = PayrollWorkingDaysService::sqlShowDataTidakHadir($periodePayroll);
             $potonganAbsenEligibleSql = '(master_karyawan.status_karyawan NOT IN ("Permanent", "Contract", "Special") OR master_karyawan.is_active = 0)';
-            $potonganAbsenAmountSql = 'FLOOR(GREATEST(1000, ROUND((IFNULL(master_sallary.gaji_pokok, 0) + IFNULL(master_sallary.tunjangan_kerja, 0)) / ' . $workingDays . ' * ' . $tidakHadirSql . ', 0)) / 1000) * 1000';
-            $potonganAbsenCaseSql = 'CASE WHEN ' . $potonganAbsenEligibleSql . ' AND ' . $tidakHadirSql . ' > 0 THEN ' . $potonganAbsenAmountSql . ' ELSE 0 END';
+            $potonganAbsenAmountSql = 'FLOOR(GREATEST(1000, ROUND((IFNULL(master_sallary.gaji_pokok, 0) + IFNULL(master_sallary.tunjangan_kerja, 0)) / GREATEST(' . $hariKerjaExpectedSql . ', 1) * ' . $tidakHadirSql . ', 0)) / 1000) * 1000';
+            $potonganAbsenCaseSql = 'CASE WHEN ' . $potonganAbsenEligibleSql
+                . ' AND rekap_masuk_kerja.tanggal IS NOT NULL AND rekap_masuk_kerja.is_active = 1'
+                . ' AND ' . $hariKerjaExpectedSql . ' > 0 AND ' . $tidakHadirSql . ' > 0 THEN '
+                . $potonganAbsenAmountSql . ' ELSE 0 END';
 
             $pcPencadanganColumn = PencadanganUpahPayrollService::sqlShowDataPencadanganColumn();
             $pcThpRefundAdd = PencadanganUpahPayrollService::sqlShowDataThpRefundAdd();
             $pcThpDeductionSub = PencadanganUpahPayrollService::sqlShowDataThpDeductionSub();
 
-            $loanSql = PayrollDebtService::sqlPreviewAmount('kasbon');
-            $fineSql = PayrollDebtService::sqlPreviewAmount('denda_karyawan');
+            $loanSql = PayrollDebtService::sqlPreviewAmount('kasbon', $periodePayroll);
+            $fineSql = PayrollDebtService::sqlPreviewAmount('denda_karyawan', $periodePayroll);
 
             $query = DB::table('master_karyawan')
             ->select(
-                DB::raw('master_karyawan.id as karyawan_id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, CASE WHEN payroll.id IS NULL THEN master_karyawan.id ELSE payroll.id_karyawan END as id_karyawan, CASE WHEN payroll.id IS NULL THEN master_karyawan.id_jabatan ELSE payroll.id_jabatan END as id_jabatan, CASE WHEN payroll.id IS NULL THEN master_jabatan.nama_jabatan ELSE payroll.nama_jabatan END as nama_jabatan, CASE WHEN payroll.id IS NULL THEN rekening_karyawan.no_rekening ELSE payroll.no_rekening END as no_rekening , CASE WHEN payroll.id IS NULL THEN rekening_karyawan.nama_bank ELSE payroll.nama_bank END as nama_bank,payroll.keterangan,
+                DB::raw('master_karyawan.id as karyawan_id, master_karyawan.is_active as karyawan_is_active, master_karyawan.effective_date as karyawan_effective_date, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, CASE WHEN payroll.id IS NULL THEN master_karyawan.id ELSE payroll.id_karyawan END as id_karyawan, CASE WHEN payroll.id IS NULL THEN master_karyawan.id_jabatan ELSE payroll.id_jabatan END as id_jabatan, CASE WHEN payroll.id IS NULL THEN master_jabatan.nama_jabatan ELSE payroll.nama_jabatan END as nama_jabatan, CASE WHEN payroll.id IS NULL THEN rekening_karyawan.no_rekening ELSE payroll.no_rekening END as no_rekening , CASE WHEN payroll.id IS NULL THEN rekening_karyawan.nama_bank ELSE payroll.nama_bank END as nama_bank,payroll.keterangan,
                 ROUND(IFNULL(CASE WHEN payroll.id IS NULL THEN pph_21.pajak_bulanan ELSE payroll.pajak_pph END, 0), 0) as pajak,
                 ROUND(IFNULL(CASE WHEN payroll.id IS NULL THEN master_sallary.gaji_pokok ELSE payroll.gaji_pokok END, 0), 0) as gaji_pokok, 
                 ROUND(IFNULL(CASE WHEN payroll.id IS NULL THEN master_sallary.tunjangan_kerja ELSE payroll.tunjangan END, 0), 0) as tunjangan_kerja, 
@@ -160,63 +164,93 @@ class KalkulasiPayrollController extends Controller
                 IFNULL(bpjs_tk.nominal_potongan_karyawan, 0) + IFNULL(bpjs_kesehatan.nominal_potongan_karyawan, 0) +
                 ' . $potonganAbsenCaseSql . ' + ROUND(IFNULL(SUM(CASE WHEN payroll.id IS NULL THEN 0 ELSE payroll.potongan_lainnya END), 0), 0) +
                 ' . $pcThpDeductionSub . ')) ELSE payroll.take_home_pay END, 0) as take_home_pay, 
-                CASE WHEN payroll.id IS NULL THEN ' . $potonganAbsenCaseSql . ' ELSE payroll.potongan_absen END as potongan_absen,  
-                JSON_LENGTH(rekap_masuk_kerja.tanggal) as masuk_kerja,
-                CASE WHEN payroll.id IS NULL THEN ' . $workingDays . ' ELSE payroll.hari_kerja END as hari_kerja,
-                CASE WHEN payroll.id IS NULL THEN (' . $workingDays . ' - JSON_LENGTH(rekap_masuk_kerja.tanggal)) ELSE payroll.tidak_hadir END as tidak_hadir')
+                ' . $potonganAbsenCaseSql . ' as potongan_absen,
+                ' . $masukKerjaJsonLengthSql . ' as masuk_kerja,
+                ' . $hariKerjaExpectedSql . ' as hari_kerja,
+                ' . $tidakHadirSql . ' as tidak_hadir')
             )
-            ->join('rekap_masuk_kerja', function($join){
-                $join->on('rekap_masuk_kerja.karyawan_id', '=', 'master_karyawan.id')->where('rekap_masuk_kerja.is_active', true);
+            ->leftJoin('rekap_masuk_kerja', function ($join) use ($periodePayroll) {
+                PayrollRecordSyncService::applyJoinRekapMasukKerjaPayrollPreview($join, $periodePayroll);
             })
-            ->leftJoin('master_sallary', function($join){
-                $join->on('master_karyawan.id', '=', 'master_sallary.id_karyawan')
-                    ->where(function ($salary) {
-                        $salary->where('master_sallary.is_active', true)
-                            ->orWhere(function ($fallback) {
-                                // Use the latest salary history only for inactive employees without an active salary.
-                                $fallback->where('master_karyawan.is_active', false)
-                                    ->whereRaw('NOT EXISTS (SELECT 1 FROM master_sallary AS active_salary WHERE active_salary.id_karyawan = master_karyawan.id AND active_salary.is_active = 1)')
-                                    ->whereRaw('master_sallary.id = (SELECT MAX(latest_salary.id) FROM master_sallary AS latest_salary WHERE latest_salary.id_karyawan = master_karyawan.id)');
-                            });
-                    });
+            ->leftJoin('master_sallary', function ($join) {
+                PayrollRecordSyncService::applyJoinMasterSalary($join);
             })
-            ->leftJoin('bonus_karyawan', function($join) use ($request){
-                $join->on('master_karyawan.id', '=', 'bonus_karyawan.id_karyawan')
-                ->where('bonus_karyawan.is_active', true);
+            ->leftJoin('bonus_karyawan', function ($join) {
+                $join->on('master_karyawan.id', '=', 'bonus_karyawan.id_karyawan');
+                PayrollRecordSyncService::applyJoinBonusFilter($join);
             })
-            ->leftJoin('rekening_karyawan', function($join) use ($request){
+            ->leftJoin('rekening_karyawan', function ($join) {
                 $join->on('master_karyawan.id', '=', 'rekening_karyawan.id_karyawan')
-                ->where('rekening_karyawan.is_active', true);
+                    ->whereRaw(PayrollRecordSyncService::sqlJoinLatestRow('rekening_karyawan'));
             })
-            ->leftJoin('bpjs_tk', function($join) use ($request){
-                $join->on('master_karyawan.id', '=', 'bpjs_tk.id_karyawan')->where('bpjs_tk.is_active', true);
+            ->leftJoin('bpjs_tk', function ($join) use ($periode) {
+                $join->on('master_karyawan.id', '=', 'bpjs_tk.id_karyawan')
+                    ->whereRaw(
+                        PayrollRecordSyncService::sqlJoinLatestPayrollMasterRowThroughPeriod(
+                            'bpjs_tk',
+                            'bulan_efektif'
+                        ),
+                        [$periode]
+                    );
             })
-            ->leftJoin('bpjs_kesehatan', function($join) use ($request){
-                $join->on('master_karyawan.id', '=', 'bpjs_kesehatan.id_karyawan')->where('bpjs_kesehatan.bulan_efektif', '<=', $request->periode)->where('bpjs_kesehatan.is_active', true);
+            ->leftJoin('bpjs_kesehatan', function ($join) use ($periode) {
+                $join->on('master_karyawan.id', '=', 'bpjs_kesehatan.id_karyawan')
+                    ->whereRaw(
+                        PayrollRecordSyncService::sqlJoinLatestPayrollMasterRowThroughPeriod(
+                            'bpjs_kesehatan',
+                            'bulan_efektif'
+                        ),
+                        [$periode]
+                    );
             })
-            ->leftJoin('kasbon', function($join) use ($request) {
-                $join->on('master_karyawan.id', '=', 'kasbon.id_karyawan')->where('kasbon.is_active', true)
-                     ->where('kasbon.bulan_mulai_pemotongan', '<=', $request->periode);
+            ->leftJoin('kasbon', function ($join) use ($periode) {
+                $join->on('master_karyawan.id', '=', 'kasbon.id_karyawan')
+                    ->whereRaw(
+                        PayrollRecordSyncService::sqlJoinLatestDeductionRow(
+                            'kasbon',
+                            'bulan_mulai_pemotongan',
+                            'sisa_kasbon'
+                        ),
+                        [$periode]
+                    );
             })
-            ->leftJoin('denda_karyawan', function($join) use ($request) {
-                $join->on('master_karyawan.id', '=', 'denda_karyawan.id_karyawan')->where('denda_karyawan.is_active', true)
-                     ->where('denda_karyawan.bulan_mulai_pemotongan', '<=', $request->periode);
+            ->leftJoin('denda_karyawan', function ($join) use ($periode) {
+                $join->on('master_karyawan.id', '=', 'denda_karyawan.id_karyawan')
+                    ->whereRaw(
+                        PayrollRecordSyncService::sqlJoinLatestDeductionRow(
+                            'denda_karyawan',
+                            'bulan_mulai_pemotongan',
+                            'sisa_denda'
+                        ),
+                        [$periode]
+                    );
             })
-            ->leftJoin('pph_21', function($join) use ($request) {
-                $join->on('master_karyawan.id', '=', 'pph_21.id_karyawan')->where('pph_21.is_active', true)
-                     ->where('pph_21.bulan_mulai_pemotongan', '<=', $request->periode);
+            ->leftJoin('pph_21', function ($join) use ($periode) {
+                $join->on('master_karyawan.id', '=', 'pph_21.id_karyawan')
+                    ->whereRaw(
+                        'pph_21.id = (SELECT t.id FROM pph_21 t WHERE t.id_karyawan = master_karyawan.id'
+                        . ' AND t.bulan_mulai_pemotongan <= ? ORDER BY t.is_active DESC, t.id DESC LIMIT 1)',
+                        [$periode]
+                    );
             })
-            ->leftJoin('payroll', function($join) use ($request){
-                $join->on('master_karyawan.id', '=', 'payroll.id_karyawan')->where('payroll.periode_payroll', '=', $request->periode)->where('payroll.is_active', '=', true);
+            ->leftJoin('payroll', function ($join) use ($periodePayroll) {
+                $join->on('master_karyawan.id', '=', 'payroll.id_karyawan')
+                    ->where('payroll.periode_payroll', '=', $periodePayroll)
+                    ->where('payroll.is_active', '=', true);
             })
-            ->leftJoin('pencadangan_upah', function($join) use ($request){
+            ->leftJoin('pencadangan_upah', function ($join) use ($periodePayroll) {
                 $join->on('master_karyawan.id', '=', 'pencadangan_upah.id_karyawan')
-                     ->where('pencadangan_upah.is_active', true)
-                     ->where('pencadangan_upah.bulan_efektif', '<=', $request->periode_payroll)
-                     ->where(function ($query) {
-                         $query->where('pencadangan_upah.status', 'ONGOING')
-                             ->orWhereNull('pencadangan_upah.status');
-                     });
+                    ->whereRaw(
+                        'pencadangan_upah.id = (SELECT t.id FROM pencadangan_upah t WHERE t.id_karyawan = master_karyawan.id'
+                        . ' AND t.bulan_efektif <= ?'
+                        . ' AND (t.status = "ONGOING" OR t.status IS NULL)'
+                        . ' AND ('
+                        . '(master_karyawan.is_active = 1 AND t.is_active = 1)'
+                        . ' OR (master_karyawan.is_active = 0 AND (t.is_active = 1 OR t.is_active = 0))'
+                        . ')'
+                        . ' ORDER BY t.id DESC LIMIT 1)',
+                        [$periodePayroll]
+                    );
             })
             ->leftJoin('master_divisi', function($join){
                 $join->on('master_karyawan.id_department', '=', 'master_divisi.id');
@@ -224,22 +258,10 @@ class KalkulasiPayrollController extends Controller
             ->leftJoin('master_jabatan', function($join){
                 $join->on('master_karyawan.id_jabatan', '=', 'master_jabatan.id');
             })
-            ->groupBy(DB::raw('master_karyawan.id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_divisi.nama_divisi, master_karyawan.id_jabatan, master_jabatan.nama_jabatan, payroll.id_jabatan, payroll.nama_jabatan, payroll.id_karyawan, pph_21.pajak_bulanan,rekening_karyawan.no_rekening, rekening_karyawan.nama_bank,payroll.keterangan, master_sallary.gaji_pokok, master_sallary.tunjangan_kerja, bpjs_tk.nominal_potongan_karyawan, bpjs_tk.nominal_potongan_kantor, bpjs_kesehatan.nominal_potongan_karyawan, bpjs_kesehatan.nominal_potongan_kantor, payroll.id,payroll.status,payroll.payroll_header_id, rekap_masuk_kerja.tanggal'))
-            ->orderBy('master_karyawan.nik_karyawan', 'ASC')
+            ->groupBy(DB::raw('master_karyawan.id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_karyawan.is_active, master_karyawan.effective_date, master_divisi.nama_divisi, master_karyawan.id_jabatan, master_jabatan.nama_jabatan, payroll.id_jabatan, payroll.nama_jabatan, payroll.id_karyawan, pph_21.pajak_bulanan, rekening_karyawan.no_rekening, rekening_karyawan.nama_bank, payroll.keterangan, master_sallary.gaji_pokok, master_sallary.tunjangan_kerja, bpjs_tk.nominal_potongan_karyawan, bpjs_tk.nominal_potongan_kantor, bpjs_kesehatan.nominal_potongan_karyawan, bpjs_kesehatan.nominal_potongan_kantor, payroll.id, payroll.status, payroll.payroll_header_id, payroll.hari_kerja, payroll.gaji_pokok, payroll.tunjangan, payroll.pajak_pph, payroll.jamsostek, payroll.bpjs_kesehatan, payroll.bonus, payroll.incentive, payroll.potongan_lainnya, payroll.take_home_pay, payroll.no_rekening, payroll.nama_bank, rekap_masuk_kerja.is_active, rekap_masuk_kerja.tanggal, rekap_masuk_kerja.hari_kerja'))
+            ->orderBy('master_karyawan.nik_karyawan', 'ASC');
+            $this->constrainPayrollKaryawanVisibility($query, $periodePayroll);
             // ->where('master_karyawan.nik_karyawan', 'ISP232')
-            ->whereRaw(
-                '(
-                    master_karyawan.is_active = 1
-                    OR (
-                        master_karyawan.is_active = 0
-                        AND master_karyawan.effective_date IS NOT NULL
-                        AND DATE_FORMAT(DATE_ADD(master_karyawan.effective_date, INTERVAL 1 MONTH), "%Y-%m") >= ?
-                    )
-                )',
-                [$request->periode_payroll]
-            )
-            ->where('rekap_masuk_kerja.bulan', $request->periode_payroll);
-            // ->where('rekap_masuk_kerja.is_active', true);
             if($request->status_karyawan == 'Supervisor'){
                 $query->where('master_karyawan.grade', strtoupper($request->status_karyawan) );
             } else {
@@ -247,45 +269,46 @@ class KalkulasiPayrollController extends Controller
                 $query->where('master_karyawan.grade', '<>', 'SUPERVISOR');
             }
 
-            $data = $query;
-            // Create a summary query
-            $summaryQuery = DB::table(DB::raw("({$query->toSql()}) as subquery"))
-                ->mergeBindings($query)
-                ->select([
-                    DB::raw('SUM(gaji_pokok) as totalGaji'),
-                    DB::raw('SUM(tunjangan_kerja) as totalTunjangan'),
-                    DB::raw('SUM(bonus) as totalBonus'),
-                    DB::raw('SUM(pencadangan_upah) as totalPencadangan'),
-                    DB::raw('SUM(jamsostek) as totalJamsostek'),
-                    DB::raw('SUM(bpjs_kesehatan) as totalBpjsKes'),
-                    DB::raw('SUM(loan) as totalLoan'),
-                    DB::raw('SUM(sanksi) as totalSanksi'),
-                    DB::raw('SUM(potongan_absen) as totalPotonganAbsen'),
-                    DB::raw('SUM(pajak) as totalPajak'),
-                    DB::raw('SUM(take_home_pay) as totalThp')
-                ]);
+            $response = Datatables::of($query)
+                ->make(true)
+                ->getData();
 
-            $summary = $summaryQuery->first();
+            $trainingKaryawanIds = [];
+            foreach ($response->data ?? [] as $row) {
+                if (($row->status_karyawan ?? '') === 'Training' && empty($row->payroll_id)) {
+                    $trainingKaryawanIds[] = (int) ($row->karyawan_id ?? $row->id_karyawan ?? 0);
+                }
+            }
+            $specialLeaveDaysMap = PayrollTrainingSpecialLeaveService::mapApprovedSpecialLeaveDayCounts(
+                $trainingKaryawanIds,
+                $periodePayroll
+            );
+            foreach ($response->data ?? [] as $row) {
+                $kid = (int) ($row->karyawan_id ?? $row->id_karyawan ?? 0);
+                $excused = $specialLeaveDaysMap[$kid] ?? 0;
+                PayrollTrainingSpecialLeaveService::applyToPreviewRow($row, $excused);
+            }
 
-            // Prepare DataTable response
-            $response = Datatables::of($data)
-            ->make(true)
-            ->getData(); // Get raw data from DataTables
-
-            // Add totals to the response
-            $response->totals = [
-                'gaji_pokok' => $summary->totalGaji,
-                'tunjangan_kerja' => $summary->totalTunjangan,
-                'bonus' => $summary->totalBonus,
-                'pencadangan_upah' => $summary->totalPencadangan,
-                'jamsostek' => $summary->totalJamsostek,
-                'bpjs_kesehatan' => $summary->totalBpjsKes,
-                'loan' => $summary->totalLoan,
-                'sanksi' => $summary->totalSanksi,
-                'potongan_absen' => $summary->totalPotonganAbsen,
-                'pajak_pph' => $summary->totalPajak,
-                'take_home_pay' => $summary->totalThp,
+            $totalFieldMap = [
+                'gaji_pokok' => 'gaji_pokok',
+                'tunjangan_kerja' => 'tunjangan_kerja',
+                'bonus' => 'bonus',
+                'pencadangan_upah' => 'pencadangan_upah',
+                'jamsostek' => 'jamsostek',
+                'bpjs_kesehatan' => 'bpjs_kesehatan',
+                'loan' => 'loan',
+                'sanksi' => 'sanksi',
+                'potongan_absen' => 'potongan_absen',
+                'pajak_pph' => 'pajak',
+                'take_home_pay' => 'take_home_pay',
             ];
+            $totals = array_fill_keys(array_keys($totalFieldMap), 0);
+            foreach ($response->data ?? [] as $row) {
+                foreach ($totalFieldMap as $outKey => $rowKey) {
+                    $totals[$outKey] += (float) ($row->{$rowKey} ?? 0);
+                }
+            }
+            $response->totals = $totals;
 
             // Return the modified response as JSON
             return response()->json($response);
@@ -293,7 +316,7 @@ class KalkulasiPayrollController extends Controller
             return response()->json([
                 'data' => [],
                 'message' => $e->getMessage(),
-            ], 201);
+            ], 500);
         }
     }
 
@@ -588,6 +611,39 @@ class KalkulasiPayrollController extends Controller
         } catch (\Throwable $th){
             return response()->json(['message' => $th->getMessage()], 500);
         }
+    }
+
+    /**
+     * Aktif: wajib rekap absensi aktif periode.
+     * Non-aktif: bulan keluar, bulan berikutnya (proses bayar), atau sudah NA di master
+     * tapi tanggal efektif keluar masih setelah periode — tetap tampil bila ada rekap periode itu
+     * (gaji bulan terakhir bekerja sebelum bulan keluar).
+     */
+    private function constrainPayrollKaryawanVisibility($query, string $periode): void
+    {
+        $query->where(function ($outer) use ($periode) {
+            $outer->where(function ($active) {
+                $active->where('master_karyawan.is_active', 1)
+                    ->whereNotNull('rekap_masuk_kerja.tanggal')
+                    ->where('rekap_masuk_kerja.is_active', 1);
+            })->orWhere(function ($inactive) use ($periode) {
+                $inactive->where('master_karyawan.is_active', 0)
+                    ->whereNotNull('master_karyawan.effective_date')
+                    ->where(function ($exitMonth) use ($periode) {
+                        $exitMonth->whereRaw('DATE_FORMAT(master_karyawan.effective_date, "%Y-%m") = ?', [$periode])
+                            ->orWhereRaw(
+                                'DATE_FORMAT(DATE_ADD(master_karyawan.effective_date, INTERVAL 1 MONTH), "%Y-%m") = ?',
+                                [$periode]
+                            );
+                    });
+            })->orWhere(function ($inactiveLastWorked) use ($periode) {
+                $inactiveLastWorked->where('master_karyawan.is_active', 0)
+                    ->whereNotNull('master_karyawan.effective_date')
+                    ->whereRaw('DATE_FORMAT(master_karyawan.effective_date, "%Y-%m") > ?', [$periode])
+                    ->whereNotNull('rekap_masuk_kerja.tanggal')
+                    ->where('rekap_masuk_kerja.is_active', 1);
+            });
+        });
     }
 
     private function generateNoDoc()

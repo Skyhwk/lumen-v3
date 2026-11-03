@@ -19,14 +19,48 @@ use Yajra\Datatables\Datatables;
 
 class DendaKaryawanController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $data = PayrollRecordSyncService::scopeActiveKaryawanById(
             DendaKaryawan::query()->where('denda_karyawan.is_active', true),
             'denda_karyawan.id_karyawan'
         );
 
+        $statusTab = strtolower(trim((string) $request->input('status_tab', 'ongoing')));
+        if ($statusTab === 'end') {
+            $data->where('denda_karyawan.status', 'END');
+        } else {
+            $data->where(function ($query) {
+                $query->where('denda_karyawan.status', 'ONGOING')
+                    ->orWhereNull('denda_karyawan.status');
+            });
+        }
+
         return Datatables::of($data)->make(true);
+    }
+
+    public function tabCounts(Request $request)
+    {
+        $ongoing = PayrollRecordSyncService::scopeActiveKaryawanById(
+            DendaKaryawan::query()->where('denda_karyawan.is_active', true),
+            'denda_karyawan.id_karyawan'
+        )->where(function ($query) {
+            $query->where('denda_karyawan.status', 'ONGOING')
+                ->orWhereNull('denda_karyawan.status');
+        })->count();
+
+        $end = PayrollRecordSyncService::scopeActiveKaryawanById(
+            DendaKaryawan::query()->where('denda_karyawan.is_active', true),
+            'denda_karyawan.id_karyawan'
+        )->where('denda_karyawan.status', 'END')->count();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'ongoing' => $ongoing,
+                'end' => $end,
+            ],
+        ], 200);
     }
 
     public function getKaryawan()

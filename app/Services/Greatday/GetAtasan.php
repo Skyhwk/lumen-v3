@@ -4,6 +4,11 @@ namespace App\Services\Greatday;
 
 use App\Models\MasterKaryawan;
 
+/**
+ * Hirarki atasan legacy (semua atasan langsung + SPV atasnya).
+ * Untuk FCM/notifikasi submit cuti, izin, koreksi absen — pakai
+ * {@see \App\Services\Hr\FormAtasanSubmitNotificationService} agar selaras kebijakan Sampler cabang.
+ */
 class GetAtasan
 {
     protected $query;

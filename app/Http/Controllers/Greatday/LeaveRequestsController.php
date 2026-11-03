@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Greatday;
 
 use App\Services\Greatday\AtasanApprovalScope;
-use App\Services\Greatday\GetAtasan;
 use App\Services\Greatday\FirebaseService;
+use App\Services\Hr\FormAtasanSubmitNotificationService;
 use App\Services\Greatday\LeaveRequestValidationService;
 use App\Models\Hr\HrRequest;
 use App\Services\Hr\Greatday\FormSubmitterVoidService;
@@ -167,15 +167,13 @@ class LeaveRequestsController extends Controller
         $service = new FirebaseService();
 
         if ($employee->grade !== 'MANAGER') {
-            $getAtasan = GetAtasan::where('id', $employee->id)->get();
-
-            foreach ($getAtasan as $atasan) {
-                if ($atasan->grade === 'MANAGER') {
-                    $service->sendNotifications(
-                        [$atasan->id],
-                        NotificationCopy::legacyAtasanPending('Permohonan cuti', $this->nama_lengkap, NotificationCopy::pathForms('approval'))
-                    );
-                }
+            $recipientIds = app(FormAtasanSubmitNotificationService::class)
+                ->initialApproverIds($employee, HrRequest::TYPE_LEAVE);
+            if ($recipientIds !== []) {
+                $service->sendNotifications(
+                    $recipientIds,
+                    NotificationCopy::legacyAtasanPending('Permohonan cuti', $this->nama_lengkap, NotificationCopy::pathForms('approval'))
+                );
             }
         }
 

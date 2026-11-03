@@ -9,6 +9,13 @@ use App\Services\Hr\HrAttendanceDayExcuseLabels;
 
 class MonthlyAbsensiDataBuilder
 {
+    public static function isRestDayShift(?string $shift): bool
+    {
+        $normalized = strtolower(trim((string) $shift));
+
+        return in_array($normalized, ['off', 'libur'], true);
+    }
+
     public static function hariIndonesia(string $tanggal): string
     {
         $hari = date('D', strtotime($tanggal));
@@ -57,14 +64,14 @@ class MonthlyAbsensiDataBuilder
         $rangeEnd = date('Y-m-d', strtotime($endDate . ' +1 day'));
 
         $shiftByDate = ShiftKaryawan::query()
-            ->select('tanggal', 'shift')
+            ->select('tanggal', 'shift', 'time_in', 'time_out')
             ->where('karyawan_id', $karyawanId)
             ->whereBetween('tanggal', [$startDate, $endDate])
             ->get()
             ->keyBy(fn ($row) => (string) $row->tanggal);
 
         $absensiByDate = Absensi::query()
-            ->select('id', 'karyawan_id', 'tanggal', 'jam', 'kode_kartu')
+            ->select('id', 'karyawan_id', 'tanggal', 'jam', 'kode_kartu', 'kode_mesin')
             ->where('karyawan_id', $karyawanId)
             ->whereBetween('tanggal', [$startDate, $rangeEnd])
             ->orderBy('tanggal')
@@ -82,9 +89,9 @@ class MonthlyAbsensiDataBuilder
             $shiftRow = $shiftByDate->get($tanggal);
             $shift = $shiftRow ? (string) $shiftRow->shift : null;
 
-            if ($shift === 'off') {
+            if (self::isRestDayShift($shift)) {
                 $data[] = $this->mergeExcuseLabel(
-                    $this->composeOffDayRow($namaLabel, $karyawanId, $tanggal),
+                    $this->composeOffDayRow($namaLabel, $karyawanId, $tanggal, $shift),
                     $excuseLabels,
                     $tanggal
                 );
@@ -109,9 +116,17 @@ class MonthlyAbsensiDataBuilder
                     $excuseLabels,
                     $tanggal
                 );
+            } elseif ($shift === 'SHOB2') {
+                [$masukRow, $keluarRow] = $this->resolveShob2Punches($rowsToday, $rowsNext);
+                $data[] = $this->mergeExcuseLabel(
+                    $this->composeDayRow($namaLabel, $karyawanId, $tanggal, $masukRow, $keluarRow, 'SHOB2'),
+                    $excuseLabels,
+                    $tanggal
+                );
             } else {
                 $shiftLabel = $shift ?: 'SHREGULAR';
-                [$masukRow, $keluarRow] = $this->resolveRegularPunches($rowsToday);
+                $checkin = $this->shiftCheckinTime($shiftRow);
+                [$masukRow, $keluarRow] = $this->resolveThresholdPunches($rowsToday, $checkin);
                 $data[] = $this->mergeExcuseLabel(
                     $this->composeDayRow($namaLabel, $karyawanId, $tanggal, $masukRow, $keluarRow, $shiftLabel),
                     $excuseLabels,
@@ -132,8 +147,12 @@ class MonthlyAbsensiDataBuilder
         return $row;
     }
 
-    private function composeOffDayRow(string $namaLabel, int $karyawanId, string $tanggal): array
+    private function composeOffDayRow(string $namaLabel, int $karyawanId, string $tanggal, ?string $shift = null): array
     {
+        $shiftLabel = self::isRestDayShift($shift)
+            ? strtoupper(trim((string) $shift))
+            : 'OFF';
+
         return [
             'nama' => $namaLabel,
             'karyawan_id' => $karyawanId,
@@ -149,24 +168,66 @@ class MonthlyAbsensiDataBuilder
             'id_keluar' => '',
             'selisih' => '',
             'jam_kerja' => '',
-            'shift' => 'OFF',
+            'shift' => $shiftLabel,
+            'is_rest_day' => true,
         ];
     }
 
     /**
+     * Sama dengan AbsensiController::compareshift / extractMasukKeluarByThreshold:
+     * masuk = MIN(jam) jika <= time_in + 4 jam; keluar = MAX(jam) jika > threshold.
+     *
      * @param \Illuminate\Support\Collection $rowsToday
      * @return array{0: object|null, 1: object|null}
      */
-    private function resolveRegularPunches($rowsToday): array
+    private function resolveThresholdPunches($rowsToday, string $checkin): array
     {
-        $masuk = $rowsToday
-            ->filter(fn ($row) => (string) $row->jam <= '14:00:00')
-            ->sortBy('jam')
-            ->first();
-        $keluar = $rowsToday
-            ->filter(fn ($row) => (string) $row->jam > '14:00:00')
-            ->sortByDesc('jam')
-            ->first();
+        if ($rowsToday->isEmpty()) {
+            return [null, null];
+        }
+
+        $threshold = date('H:i:s', strtotime($checkin . ' +4 hours'));
+        $minJam = (string) $rowsToday->min('jam');
+        $maxJam = (string) $rowsToday->max('jam');
+
+        $masuk = null;
+        if ($minJam !== '' && $minJam <= $threshold) {
+            $masuk = $rowsToday->first(fn ($row) => (string) $row->jam === $minJam);
+        }
+
+        $keluar = null;
+        if ($maxJam !== '' && $maxJam > $threshold) {
+            $keluar = $rowsToday->first(fn ($row) => (string) $row->jam === $maxJam);
+        }
+
+        return [$masuk, $keluar];
+    }
+
+    private function shiftCheckinTime($shiftRow): string
+    {
+        if ($shiftRow && !empty($shiftRow->time_in)) {
+            $time = trim((string) $shiftRow->time_in);
+            if (preg_match('/^\d{1,2}:\d{2}(:\d{2})?$/', $time)) {
+                return strlen($time) === 5 ? $time . ':00' : $time;
+            }
+        }
+
+        return '08:00:00';
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection $rowsToday
+     * @param \Illuminate\Support\Collection $rowsNext
+     * @return array{0: object|null, 1: object|null}
+     */
+    private function resolveShob2Punches($rowsToday, $rowsNext): array
+    {
+        $masuk = $rowsToday->sortBy('jam')->first();
+        $keluar = null;
+        $minNext = $rowsNext->min('jam');
+        if ($minNext !== null && (string) $minNext < '14:00:00') {
+            $keluar = $rowsNext->first(fn ($row) => (string) $row->jam === (string) $minNext);
+        }
 
         return [$masuk, $keluar];
     }
@@ -178,23 +239,13 @@ class MonthlyAbsensiDataBuilder
      */
     private function resolve24JamPunches($rowsToday, $rowsNext): array
     {
-        $minIdToday = $rowsToday->min('id');
+        $minJamToday = $rowsToday->min('jam');
         $masuk = null;
-        if ($minIdToday !== null) {
-            $candidate = $rowsToday->firstWhere('id', $minIdToday);
-            if ($candidate && (string) $candidate->jam > '00:00:00') {
-                $masuk = $candidate;
-            }
+        if ($minJamToday !== null && (string) $minJamToday > '00:00:00') {
+            $masuk = $rowsToday->first(fn ($row) => (string) $row->jam === (string) $minJamToday);
         }
 
-        $maxIdNext = $rowsNext->max('id');
-        $keluar = null;
-        if ($maxIdNext !== null) {
-            $candidate = $rowsNext->firstWhere('id', $maxIdNext);
-            if ($candidate && (string) $candidate->jam < '14:00:00') {
-                $keluar = $candidate;
-            }
-        }
+        $keluar = ShiftAbsensiPunchRules::pickOvernightKeluarRow($rowsNext);
 
         return [$masuk, $keluar];
     }
@@ -206,19 +257,8 @@ class MonthlyAbsensiDataBuilder
      */
     private function resolveSecurity2Punches($rowsToday, $rowsNext): array
     {
-        $maxJam = $rowsToday->max('jam');
-        $masuk = $maxJam !== null
-            ? $rowsToday->first(fn ($row) => (string) $row->jam === (string) $maxJam)
-            : null;
-
-        $minIdNext = $rowsNext->min('id');
-        $keluar = null;
-        if ($minIdNext !== null) {
-            $candidate = $rowsNext->firstWhere('id', $minIdNext);
-            if ($candidate && (string) $candidate->jam < '14:00:00') {
-                $keluar = $candidate;
-            }
-        }
+        $masuk = ShiftAbsensiPunchRules::pickSecurity2MasukRow($rowsToday);
+        $keluar = ShiftAbsensiPunchRules::pickOvernightKeluarRow($rowsNext);
 
         return [$masuk, $keluar];
     }

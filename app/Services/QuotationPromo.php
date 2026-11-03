@@ -116,6 +116,7 @@ class QuotationPromo
                 }
             }
         }
+        $rows = self::mergeContractHeaderSamplingRows($rows);
         $header->data_pendukung_sampling = json_encode($rows, JSON_UNESCAPED_UNICODE);
         // Category breakdowns have different names on the contract header.
         // Pangan has no header breakdown column; its value remains in the financial totals.
@@ -129,6 +130,59 @@ class QuotationPromo
         $header->kode_promo = $first->kode_promo ?? null;
         $header->discount_promo = $first->discount_promo ?? null;
         $header->save();
+    }
+
+    /** Gabung baris header kontrak promo yang identik (selain periode), sama seperti groupDataSampling non-promo. */
+    public static function mergeContractHeaderSamplingRows(array $rows): array
+    {
+        $grouped = [];
+        foreach ($rows as $row) {
+            $row = (array) $row;
+            $key = self::contractHeaderSamplingMergeKey($row);
+            if (!isset($grouped[$key])) {
+                $row['periode'] = array_values(array_unique((array) ($row['periode'] ?? [])));
+                sort($row['periode']);
+                $grouped[$key] = $row;
+                continue;
+            }
+            foreach ((array) ($row['periode'] ?? []) as $period) {
+                if (!in_array($period, $grouped[$key]['periode'], true)) {
+                    $grouped[$key]['periode'][] = $period;
+                }
+            }
+            sort($grouped[$key]['periode']);
+            unset($grouped[$key]['_promo_display_total']);
+        }
+
+        return array_values($grouped);
+    }
+
+    private static function contractHeaderSamplingMergeKey(array $row): string
+    {
+        $parameters = $row['parameter'] ?? [];
+        if (is_array($parameters)) {
+            sort($parameters);
+        }
+        $regulasi = $row['regulasi'] ?? [];
+        if (is_array($regulasi)) {
+            $regulasi = array_values(array_filter($regulasi));
+            sort($regulasi);
+        }
+        $quantity = (int) ($row['jumlah_titik'] ?? 0);
+
+        return md5(json_encode([
+            'is_promo' => !empty($row['is_promo']),
+            'kategori_1' => $row['kategori_1'] ?? null,
+            'kategori_2' => $row['kategori_2'] ?? null,
+            'parameter' => $parameters,
+            'total_parameter' => $row['total_parameter'] ?? null,
+            'regulasi' => $regulasi,
+            'jumlah_titik' => $quantity,
+            'harga_satuan' => round((float) ($row['harga_satuan'] ?? 0), 2),
+            'harga_total' => round((float) ($row['harga_total'] ?? 0), 2),
+            'volume' => $row['volume'] ?? null,
+            'penamaan_titik' => self::headerPointNames($row['penamaan_titik'] ?? [], $quantity),
+        ], JSON_UNESCAPED_UNICODE));
     }
 
     public static function reduceQuoteBases($promo, $model, &$harga_air, &$harga_udara, &$harga_emisi, &$harga_padatan, &$harga_swab_test, &$harga_tanah, &$harga_pangan, &$transport, &$perdiem, &$jam, $outside, &$discountTotal)

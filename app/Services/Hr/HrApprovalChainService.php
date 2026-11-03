@@ -6,7 +6,6 @@ use App\Models\Hr\HrApprovalStep;
 use App\Models\Hr\HrRequest;
 use App\Models\MasterKaryawan;
 use App\Services\Greatday\AtasanApprovalScope;
-use App\Services\Greatday\DynamicApprovalChainService;
 use App\Services\Greatday\FirebaseService;
 use App\Support\Greatday\NotificationCopy;
 
@@ -86,8 +85,8 @@ class HrApprovalChainService
     }
 
     /** @return list<int> */
-    public function previewChain(MasterKaryawan $submitter): array
+    public function previewChain(MasterKaryawan $submitter, ?string $requestType = null): array
     {
-        return app(DynamicApprovalChainService::class)->orderedApproverIds($submitter);
+        return app(FormAtasanApprovalChainService::class)->orderedApproverIds($submitter, $requestType);
     }
 }

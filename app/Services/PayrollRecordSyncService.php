@@ -3,11 +3,8 @@
 namespace App\Services;
 
 use App\Models\{
-    BpjsKesehatan,
-    BpjsTk,
     MasterKaryawan,
     MasterSallary,
-    PPH21,
 };
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +12,8 @@ use Illuminate\Support\Facades\DB;
 class PayrollRecordSyncService
 {
     /**
-     * Nonaktifkan record payroll saat karyawan keluar.
+     * Tutup gaji aktif saat karyawan keluar. BPJS/PPh/kasbon/pencadangan tidak di-nonaktifkan
+     * otomatis agar masih bisa diproses di payroll sampai kewajiban selesai.
      */
     public static function deactivateForKaryawan(MasterKaryawan $karyawan, string $actor): void
     {
@@ -29,7 +27,7 @@ class PayrollRecordSyncService
             'deleted_by' => $actor,
         ];
 
-        foreach ([BpjsKesehatan::class, BpjsTk::class, PPH21::class, MasterSallary::class] as $modelClass) {
+        foreach ([MasterSallary::class] as $modelClass) {
             $modelClass::where(function ($query) use ($karyawan, $nik) {
                 $query->where('id_karyawan', $karyawan->id)
                     ->orWhere(function ($query) use ($nik) {
@@ -40,6 +38,240 @@ class PayrollRecordSyncService
                 ->where('is_active', true)
                 ->update($payload);
         }
+    }
+
+    /** Baris terbaru per karyawan (prioritas is_active = 1) untuk preview payroll. */
+    public static function sqlJoinLatestRow(string $table, string $foreignKey = 'id_karyawan'): string
+    {
+        return "{$table}.id = (SELECT t.id FROM {$table} t WHERE t.{$foreignKey} = master_karyawan.id"
+            . ' ORDER BY t.is_active DESC, t.id DESC LIMIT 1)';
+    }
+
+    /**
+     * Master payroll (BPJS TK, dll.): karyawan aktif → hanya baris is_active=1 (id terbesar).
+     * Karyawan nonaktif → aktif jika ada, else riwayat terbaru (payroll akhir).
+     */
+    public static function sqlJoinLatestPayrollMasterRow(string $table, string $foreignKey = 'id_karyawan'): string
+    {
+        return "{$table}.id = (SELECT t.id FROM {$table} t WHERE t.{$foreignKey} = master_karyawan.id"
+            . ' AND ((master_karyawan.is_active = 1 AND t.is_active = 1)'
+            . ' OR (master_karyawan.is_active = 0))'
+            . ' ORDER BY t.is_active DESC, t.id DESC LIMIT 1)';
+    }
+
+    /** Sama sqlJoinLatestPayrollMasterRow + filter kolom periode (mis. bpjs_kesehatan.bulan_efektif). */
+    public static function sqlJoinLatestPayrollMasterRowThroughPeriod(
+        string $table,
+        string $periodColumn,
+        string $foreignKey = 'id_karyawan'
+    ): string {
+        return "{$table}.id = (SELECT t.id FROM {$table} t WHERE t.{$foreignKey} = master_karyawan.id"
+            . " AND (t.{$periodColumn} IS NULL OR t.{$periodColumn} <= ?)"
+            . ' AND ((master_karyawan.is_active = 1 AND t.is_active = 1)'
+            . ' OR (master_karyawan.is_active = 0))'
+            . ' ORDER BY t.is_active DESC, t.id DESC LIMIT 1)';
+    }
+
+    /** Satu baris rekap absensi aktif per karyawan + bulan (abaikan rekap is_active = 0). */
+    public static function applyJoinActiveRekapMasukKerja($join, string $bulanYm): void
+    {
+        $join->on('master_karyawan.id', '=', 'rekap_masuk_kerja.karyawan_id')
+            ->whereRaw(
+                'rekap_masuk_kerja.id = (SELECT t.id FROM rekap_masuk_kerja t WHERE t.karyawan_id = master_karyawan.id'
+                . ' AND t.bulan = ? AND t.is_active = 1 ORDER BY t.id DESC LIMIT 1)',
+                [$bulanYm]
+            );
+    }
+
+    /**
+     * Gaji aktif; bila tidak ada baris is_active=1, pakai riwayat id terbesar (mis. setelah NA gaji).
+     */
+    public static function applyJoinMasterSalary($join): void
+    {
+        $join->on('master_karyawan.id', '=', 'master_sallary.id_karyawan')
+            ->where(function ($salary) {
+                $salary->where('master_sallary.is_active', true)
+                    ->orWhere(function ($fallback) {
+                        $fallback->whereRaw(
+                            'NOT EXISTS (SELECT 1 FROM master_sallary AS active_salary'
+                            . ' WHERE active_salary.id_karyawan = master_karyawan.id AND active_salary.is_active = 1)'
+                        )->whereRaw(
+                            'master_sallary.id = (SELECT MAX(latest_salary.id) FROM master_sallary AS latest_salary'
+                            . ' WHERE latest_salary.id_karyawan = master_karyawan.id)'
+                        );
+                    });
+            });
+    }
+
+    /**
+     * Preview payroll: rekap bulan periode; karyawan sudah keluar di bulan sebelumnya → rekap bulan keluar.
+     */
+    public static function applyJoinRekapMasukKerjaPayrollPreview($join, string $periodePayroll): void
+    {
+        $join->on('rekap_masuk_kerja.karyawan_id', '=', 'master_karyawan.id')
+            ->where('rekap_masuk_kerja.is_active', 1)
+            ->whereRaw(
+                'rekap_masuk_kerja.bulan = CASE '
+                . 'WHEN master_karyawan.is_active = 0 AND master_karyawan.effective_date IS NOT NULL '
+                . 'AND DATE_FORMAT(master_karyawan.effective_date, "%Y-%m") < ? '
+                . 'THEN DATE_FORMAT(master_karyawan.effective_date, "%Y-%m") '
+                . 'ELSE ? END',
+                [$periodePayroll, $periodePayroll]
+            );
+    }
+
+    /** Join utang/cicilan: aktif, atau non-aktif tapi masih ONGOING (mis. setelah NA manual). */
+    public static function applyJoinPayrollDebtFilter($join, string $table, string $balanceField): void
+    {
+        $join->where(function ($q) use ($table, $balanceField) {
+            $q->where("{$table}.is_active", true)
+                ->orWhere(function ($q) use ($table, $balanceField) {
+                    $q->where("{$table}.is_active", false)
+                        ->whereRaw('master_karyawan.is_active = 0')
+                        ->where(function ($status) use ($table) {
+                            $status->where("{$table}.status", 'ONGOING')
+                                ->orWhereNull("{$table}.status");
+                        })
+                        ->where("{$table}.{$balanceField}", '>', 0)
+                        ->where("{$table}.nominal_potongan", '>', 0);
+                });
+        })
+            ->where(function ($status) use ($table) {
+                $status->where("{$table}.status", 'ONGOING')
+                    ->orWhereNull("{$table}.status");
+            });
+    }
+
+    public static function applyJoinPencadanganFilter($join): void
+    {
+        $join->where(function ($q) {
+            $q->where('pencadangan_upah.is_active', true)
+                ->orWhere(function ($q) {
+                    $q->where('pencadangan_upah.is_active', false)
+                        ->whereRaw('master_karyawan.is_active = 0')
+                        ->where(function ($status) {
+                            $status->where('pencadangan_upah.status', 'ONGOING')
+                                ->orWhereNull('pencadangan_upah.status');
+                        });
+                });
+        })
+            ->where(function ($status) {
+                $status->where('pencadangan_upah.status', 'ONGOING')
+                    ->orWhereNull('pencadangan_upah.status');
+            });
+    }
+
+    public static function applyJoinBonusFilter($join): void
+    {
+        $join->where(function ($q) {
+            $q->where('bonus_karyawan.is_active', true)
+                ->orWhere(function ($q) {
+                    $q->where('bonus_karyawan.is_active', false)
+                        ->whereRaw('master_karyawan.is_active = 0');
+                });
+        });
+    }
+
+    /**
+     * Sumber potongan payroll (submit).
+     *
+     * @param  bool|null  $employeeIsActive  Karyawan aktif → hanya baris master is_active=1.
+     */
+    public static function scopePayrollDeductionSource(
+        Builder $query,
+        ?string $balanceField = null,
+        ?string $periodField = null,
+        ?string $periode = null,
+        ?bool $employeeIsActive = null
+    ): Builder {
+        if ($periodField !== null && $periode !== null) {
+            $query->where($periodField, '<=', $periode);
+        }
+
+        self::applyMasterDeductionActiveFilter($query, $employeeIsActive);
+
+        $query->where(function ($status) {
+            $status->where('status', 'ONGOING')
+                ->orWhereNull('status');
+        });
+
+        if ($balanceField !== null) {
+            $query->where($balanceField, '>', 0)
+                ->where('nominal_potongan', '>', 0);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Join kasbon/denda/pencadangan di preview: satu baris id terbesar, selaras submit.
+     */
+    public static function sqlJoinLatestDeductionRow(
+        string $table,
+        string $periodColumn,
+        string $balanceField
+    ): string {
+        return "{$table}.id = (SELECT t.id FROM {$table} t WHERE t.id_karyawan = master_karyawan.id"
+            . " AND t.{$periodColumn} <= ?"
+            . ' AND (t.status = "ONGOING" OR t.status IS NULL)'
+            . " AND t.{$balanceField} > 0 AND t.nominal_potongan > 0"
+            . ' AND ('
+            . '(master_karyawan.is_active = 1 AND t.is_active = 1)'
+            . ' OR (master_karyawan.is_active = 0 AND (t.is_active = 1 OR (t.is_active = 0 AND (t.status = "ONGOING" OR t.status IS NULL))))'
+            . ')'
+            . ' ORDER BY t.id DESC LIMIT 1)';
+    }
+
+    /**
+     * Karyawan aktif → hanya baris master is_active=1.
+     * Karyawan nonaktif → baris aktif atau nonaktif ONGOING (penyelesaian saat exit).
+     */
+    private static function applyMasterDeductionActiveFilter(Builder $query, ?bool $employeeIsActive): void
+    {
+        if ($employeeIsActive === true) {
+            $query->where('is_active', true);
+
+            return;
+        }
+
+        $query->where(function ($q) {
+            $q->where('is_active', true)
+                ->orWhere(function ($q) {
+                    $q->where('is_active', false)
+                        ->where(function ($status) {
+                            $status->where('status', 'ONGOING')
+                                ->orWhereNull('status');
+                        });
+                });
+        });
+    }
+
+    /**
+     * Satu baris sumber potongan untuk submit payroll (lockForUpdate pada query pemanggil).
+     * Jika beberapa baris cocok, ambil id terbesar (rekaman terbaru).
+     */
+    public static function resolvePayrollDeductionSource(
+        Builder $query,
+        ?string $balanceField,
+        ?string $periodField,
+        string $periode,
+        ?bool $employeeIsActive = null
+    ) {
+        $scoped = self::scopePayrollDeductionSource(
+            $query,
+            $balanceField,
+            $periodField,
+            $periode,
+            $employeeIsActive
+        )
+            ->orderByDesc('id')
+            ->get();
+
+        if ($scoped->isEmpty()) {
+            return null;
+        }
+
+        return $scoped->first();
     }
 
     /**

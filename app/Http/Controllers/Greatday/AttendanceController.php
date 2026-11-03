@@ -9,8 +9,11 @@ use App\Models\Greatday\LiburPerusahaan;
 use App\Models\MasterCabang;
 use App\Models\RfidCard;
 use App\Models\ShiftKaryawan;
+use App\Services\Hr\ShiftAbsensiPunchRules;
+use App\Services\Greatday\EmployeeWorkingDaysService;
 use App\Services\Greatday\LeaveAlpaExcuseCalendar;
 use App\Services\Greatday\OfficeCalendarService;
+use App\Services\Hr\HrLeaveBalanceLedgerService;
 use Carbon\Carbon;
 use Exception;
 use GuzzleHttp\Client;
@@ -357,7 +360,30 @@ class AttendanceController extends Controller
                 $attendanceData[] = $this->resolveAttendanceDayRow($currentDate, $ctx);
             }
 
-            return response()->json(['status' => 'success', 'data' => $attendanceData], 200);
+            $employee = $this->karyawan;
+            $workingDaysService = app(EmployeeWorkingDaysService::class);
+            $workSummary = $workingDaysService->monthSummaryForEmployee(
+                $employee,
+                $year,
+                $month,
+                $this->produksi()
+            );
+            $alpaDays = app(HrLeaveBalanceLedgerService::class)->alpaDaysForEmployeeBetween(
+                $employee,
+                $ctx['startDate'],
+                $ctx['endDate']
+            );
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $attendanceData,
+                'summary' => [
+                    'working_days' => $workSummary['working_days'],
+                    'alpa_days' => $alpaDays,
+                    'work_schedule_profile' => $workSummary['work_schedule_profile'],
+                    'security_shift_incomplete' => $workSummary['security_shift_incomplete'],
+                ],
+            ], 200);
         } catch (\Throwable $th) {
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
@@ -499,6 +525,9 @@ class AttendanceController extends Controller
             }
         }
 
+        $workScheduleProfile = app(EmployeeWorkingDaysService::class)
+            ->profileForEmployee($this->karyawan);
+
         return [
             'startDate' => $startDate,
             'endDate' => $endDate,
@@ -508,6 +537,7 @@ class AttendanceController extends Controller
             'excuseCalendar' => $excuseCalendar,
             'holidayDateSet' => $holidayDateSet,
             'additionalWorkingSet' => array_fill_keys($calendarPayload['calendar']['additional_working_dates'] ?? [], true),
+            'workScheduleProfile' => $workScheduleProfile,
         ];
     }
 
@@ -581,6 +611,11 @@ class AttendanceController extends Controller
             || ($checkoutTime !== null && $checkoutTime !== '');
         $skipIssue = $this->shouldSkipAttendanceIssue($dayKind, $hasPunch);
 
+        $shiftConfigured = true;
+        if (($ctx['workScheduleProfile'] ?? '') === EmployeeWorkingDaysService::PROFILE_SECURITY) {
+            $shiftConfigured = $shift !== null;
+        }
+
         return [
             'shift' => $shiftName,
             'checkin_time' => $checkinTime,
@@ -591,6 +626,7 @@ class AttendanceController extends Controller
             'day_name' => $dayName,
             'day_kind' => $dayKind,
             'skip_issue' => $skipIssue,
+            'shift_configured' => $shiftConfigured,
         ];
     }
 
@@ -826,13 +862,18 @@ class AttendanceController extends Controller
 
     private function insertProduksiAbsensiRow(string $tanggal, string $jam): void
     {
+        $shiftCode = ShiftKaryawan::on($this->produksi())
+            ->where('karyawan_id', $this->user_id)
+            ->where('tanggal', $tanggal)
+            ->value('shift');
+
         Absensi::on($this->produksi())->create([
             'karyawan_id' => $this->user_id,
             'tanggal' => $tanggal,
             'jam' => $jam,
             'hari' => $this->getDayName($tanggal),
             'kode_mesin' => 'GREATDAY',
-            'status' => 'Masuk',
+            'status' => ShiftAbsensiPunchRules::inferProductionStatus($shiftCode, $jam),
         ]);
     }
 

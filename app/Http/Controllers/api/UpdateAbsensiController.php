@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Services\Hr\MonthlyAbsensiDataBuilder;
 use App\Services\Hr\MonthlyAbsensiGenerateOrchestrator;
+use App\Services\Payroll\PayrollWorkingDaysService;
 
 
 class UpdateAbsensiController extends Controller
@@ -90,11 +91,11 @@ class UpdateAbsensiController extends Controller
         $orchestrator = new MonthlyAbsensiGenerateOrchestrator();
         DB::beginTransaction();
         try {
-            $absensiPayload = $request->absensi ? (array) $request->absensi : null;
+            // Generate manual = rekap saja (selaras absensi:generate-monthly), tanpa menulis ulang tabel absensi.
             $orchestrator->persistGenerate(
                 (int) $request->id_karyawan,
                 (string) $request->bulan,
-                $absensiPayload,
+                null,
                 (array) $request->data,
                 $this->karyawan ? (int) $this->karyawan : null
             );
@@ -158,35 +159,36 @@ class UpdateAbsensiController extends Controller
 
             $karyawan_id = $request->id_karyawan;
             $bulan = explode("-", $request->bulan);
-            $hari_kerja = RekapLiburKalender::where('tahun', $bulan[0])
-                ->where('is_active', true)
-                ->first();
-            $tgl_kerja = '';
-            $masuk_kerja = [];
+            $karyawanMeta = MasterKaryawan::select('id_jabatan')->find($request->id_karyawan);
+            $idJabatan = $karyawanMeta ? (int) $karyawanMeta->id_jabatan : null;
 
-            foreach (json_decode($hari_kerja->tanggal) as $key => $value) {
-                if ($key == $bulan[0] . '-' . $bulan[1]) {
-                    $tgl_kerja = $value;
-                }
-            }
-
+            $rekapRows = [];
             foreach ($request->tanggal as $key => $value) {
-                if ($request->masuk[$key] != '' && $request->keluar[$key] != '') {
-                    if (in_array($request->shift[$key], ['SHOB', 'SHOB2', 'SHSECURITY', 'SHSECURITY2', '24jam'])) {
-                        array_push($masuk_kerja, $request->tanggal[$key]);
-                    } else if ($request->shift[$key] != 'off') {
-                        if (in_array($request->tanggal[$key], $tgl_kerja)) {
-                            array_push($masuk_kerja, $request->tanggal[$key]);
-                        }
-                    }
-                }
+                $rekapRows[] = [
+                    'tanggal' => $value,
+                    'shift' => $request->shift[$key] ?? '',
+                    'masuk' => $request->masuk[$key] ?? '',
+                    'keluar' => $request->keluar[$key] ?? '',
+                ];
             }
+            $masuk_kerja = PayrollWorkingDaysService::collectMasukKerjaDates(
+                $rekapRows,
+                $idJabatan,
+                $request->bulan
+            );
+
+            $hariKerjaExpected = PayrollWorkingDaysService::expectedHariKerjaForKaryawan(
+                (int) $request->id_karyawan,
+                $idJabatan,
+                $request->bulan
+            );
 
             RekapMasukKerja::insert([
                 'karyawan_id' => $request->id_karyawan,
                 'tahun' => $bulan[0],
                 'bulan' => $request->bulan,
                 'tanggal' => json_encode($masuk_kerja),
+                'hari_kerja' => $hariKerjaExpected,
                 'added_by' => $this->karyawan,
                 'added_at' => date('Y-m-d H:i:s')
             ]);
