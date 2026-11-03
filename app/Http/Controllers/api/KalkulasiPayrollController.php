@@ -615,9 +615,9 @@ class KalkulasiPayrollController extends Controller
 
     /**
      * Aktif: wajib rekap absensi aktif periode.
-     * Non-aktif: hanya bulan keluar (periode = bulan effective_date).
-     * Gaji bulan keluar bisa diproses/bayar di bulan kalender berikutnya (+1 bulan),
-     * tapi periode payroll-nya tetap bulan keluar — tidak ikut periode gaji bulan berikutnya.
+     * Non-aktif: bulan keluar, bulan berikutnya (proses bayar), atau sudah NA di master
+     * tapi tanggal efektif keluar masih setelah periode — tetap tampil bila ada rekap periode itu
+     * (gaji bulan terakhir bekerja sebelum bulan keluar).
      */
     private function constrainPayrollKaryawanVisibility($query, string $periode): void
     {
@@ -636,6 +636,12 @@ class KalkulasiPayrollController extends Controller
                                 [$periode]
                             );
                     });
+            })->orWhere(function ($inactiveLastWorked) use ($periode) {
+                $inactiveLastWorked->where('master_karyawan.is_active', 0)
+                    ->whereNotNull('master_karyawan.effective_date')
+                    ->whereRaw('DATE_FORMAT(master_karyawan.effective_date, "%Y-%m") > ?', [$periode])
+                    ->whereNotNull('rekap_masuk_kerja.tanggal')
+                    ->where('rekap_masuk_kerja.is_active', 1);
             });
         });
     }
