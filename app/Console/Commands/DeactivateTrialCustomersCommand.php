@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 
 class DeactivateTrialCustomersCommand extends Command
 {
-    protected $signature = 'customers:deactivate-trial';
+    protected $signature = 'DeactivateTrialCustomersCommand';
 
     protected $description = 'Hard delete user trial PPI H+1 hari pembuatan pada jam 23.30 beserta data terkait';
 

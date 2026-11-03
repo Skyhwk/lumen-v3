@@ -133,10 +133,10 @@ class Kernel extends ConsoleKernel
             ->dailyAt('23:30')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping(30);
-        $schedule->command('customers:deactivate-trial')
-            ->dailyAt('23:30')
-            ->timezone('Asia/Jakarta')
-            ->withoutOverlapping(15);
+        // $schedule->command('customers:deactivate-trial')
+        //     ->dailyAt('23:30')
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping(15);
         // $schedule->command('qsd:monitor-revenue')
         //     ->everyFiveMinutes()
         //     ->timezone('Asia/Jakarta')
