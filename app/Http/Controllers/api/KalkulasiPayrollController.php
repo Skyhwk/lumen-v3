@@ -170,21 +170,10 @@ class KalkulasiPayrollController extends Controller
                 ' . $tidakHadirSql . ' as tidak_hadir')
             )
             ->leftJoin('rekap_masuk_kerja', function ($join) use ($periodePayroll) {
-                $join->on('rekap_masuk_kerja.karyawan_id', '=', 'master_karyawan.id')
-                    ->where('rekap_masuk_kerja.bulan', $periodePayroll)
-                    ->where('rekap_masuk_kerja.is_active', 1);
+                PayrollRecordSyncService::applyJoinRekapMasukKerjaPayrollPreview($join, $periodePayroll);
             })
-            ->leftJoin('master_sallary', function($join){
-                $join->on('master_karyawan.id', '=', 'master_sallary.id_karyawan')
-                    ->where(function ($salary) {
-                        $salary->where('master_sallary.is_active', true)
-                            ->orWhere(function ($fallback) {
-                                // Use the latest salary history only for inactive employees without an active salary.
-                                $fallback->where('master_karyawan.is_active', false)
-                                    ->whereRaw('NOT EXISTS (SELECT 1 FROM master_sallary AS active_salary WHERE active_salary.id_karyawan = master_karyawan.id AND active_salary.is_active = 1)')
-                                    ->whereRaw('master_sallary.id = (SELECT MAX(latest_salary.id) FROM master_sallary AS latest_salary WHERE latest_salary.id_karyawan = master_karyawan.id)');
-                            });
-                    });
+            ->leftJoin('master_sallary', function ($join) {
+                PayrollRecordSyncService::applyJoinMasterSalary($join);
             })
             ->leftJoin('bonus_karyawan', function ($join) {
                 $join->on('master_karyawan.id', '=', 'bonus_karyawan.id_karyawan');
@@ -632,7 +621,13 @@ class KalkulasiPayrollController extends Controller
             })->orWhere(function ($inactive) use ($periode) {
                 $inactive->where('master_karyawan.is_active', 0)
                     ->whereNotNull('master_karyawan.effective_date')
-                    ->whereRaw('DATE_FORMAT(master_karyawan.effective_date, "%Y-%m") = ?', [$periode]);
+                    ->where(function ($exitMonth) use ($periode) {
+                        $exitMonth->whereRaw('DATE_FORMAT(master_karyawan.effective_date, "%Y-%m") = ?', [$periode])
+                            ->orWhereRaw(
+                                'DATE_FORMAT(DATE_ADD(master_karyawan.effective_date, INTERVAL 1 MONTH), "%Y-%m") = ?',
+                                [$periode]
+                            );
+                    });
             });
         });
     }
