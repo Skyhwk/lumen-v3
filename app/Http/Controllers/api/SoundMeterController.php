@@ -87,6 +87,66 @@ class SoundMeterController extends Controller
         return DataTables::of($data)->make();
     }
 
+    public function sensorData(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $existingDevice = DeviceIntilab::where('kode', $request->kode)->first();
+            if ($existingDevice) {
+                return response()->json([
+                    'message' => 'Device dengan kode tersebut sudah ada dengan type ' . $existingDevice->category
+                ], 409);
+            }
+
+            $device = new DeviceIntilab();
+            $device->kode = $request->kode;
+            $device->nama = $request->nama;
+            $device->category = 'Sound Meter';
+            $device->created_at = Carbon::now();
+            $device->created_by = $this->karyawan;
+            $device->save();
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Berhasil menambahkan device'
+            ], 201);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $th->getMessage()
+            ], 500);
+        }
+    }
+
+    public function deleteDevice(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $device = DeviceIntilab::where('kode', $request->kode)->first();
+
+            if (!$device) {
+                return response()->json([
+                    'message' => 'Device tidak ditemukan'
+                ], 404);
+            }
+
+            DetailSoundMeter::where('id_device', $device->kode)->delete();
+
+            $device->delete();
+            DB::commit();
+            return response()->json([
+                'message' => 'Berhasil menghapus data device'
+            ], 201);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile()
+            ], 500);
+        }
+    }
+
    public function getDetailData(Request $request){
         $data = DetailSoundMeter::where('id_device', $request->kode)
             ->where('no_sampel', $request->no_sampel)

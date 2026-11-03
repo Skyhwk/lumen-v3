@@ -52,6 +52,30 @@ trait LegacyFormAtasanQueueLogic
             return $legacySteps;
         }
 
+        // Koreksi absen lama dapat di-approve tanpa memperbarui step HR.
+        // Gabungkan hanya bukti pelaku yang tersimpan, bukan status keseluruhan.
+        if ($hrRequestType === HrRequest::TYPE_ATTENDANCE_CORRECTION) {
+            $approvedBy = trim((string) ($row->approved_atasan_by ?? ''));
+            foreach ($fromHr as &$step) {
+                if ($approvedBy !== '' && strcasecmp(trim((string) ($step['actor'] ?? '')), $approvedBy) === 0
+                    && in_array($step['state'] ?? '', ['active', 'waiting'], true)) {
+                    $step['state'] = 'done';
+                    $step['acted_at'] = $row->approved_atasan_at ?? null;
+                }
+            }
+            unset($step);
+
+            $hasRejected = collect($fromHr)->contains('state', 'rejected');
+            $foundActive = false;
+            foreach ($fromHr as &$step) {
+                if (in_array($step['state'] ?? '', ['active', 'waiting'], true)) {
+                    $step['state'] = !$hasRejected && !$foundActive ? 'active' : 'waiting';
+                    $foundActive = true;
+                }
+            }
+            unset($step);
+        }
+
         return $fromHr;
     }
 
@@ -165,7 +189,9 @@ trait LegacyFormAtasanQueueLogic
 
         $steps = [];
         $total = count($ids);
-        $last = $total - 1;
+        $approvedBy = trim((string) ($row->approved_atasan_by ?? ''));
+        $approvedAt = $row->approved_atasan_at ?? null;
+        $approvedStepIndex = $this->legacyAtasanStepIndexMatchingName($ids, $names, $approvedBy);
 
         foreach ($ids as $index => $id) {
             $name = $names[$id] ?? null;
@@ -175,14 +201,25 @@ trait LegacyFormAtasanQueueLogic
             $note = null;
 
             if ($done) {
-                $state = 'done';
-                if ($index === $last && !empty($row->approved_atasan_by)) {
-                    $actor = $row->approved_atasan_by;
-                    $actedAt = $row->approved_atasan_at ?? null;
+                if ($hrRequestType === HrRequest::TYPE_ATTENDANCE_CORRECTION) {
+                    // Satu field legacy hanya membuktikan approval pelaku ini.
+                    $isApprovedActor = $approvedBy !== ''
+                        && strcasecmp(trim((string) $name), $approvedBy) === 0;
+                    $state = $isApprovedActor ? 'done' : 'waiting';
+                    if ($isApprovedActor) {
+                        $actor = $approvedBy;
+                        $actedAt = $approvedAt;
+                    }
+                } else {
+                    $state = 'done';
+                    if ($approvedBy !== '' && $index === $approvedStepIndex) {
+                        $actor = $approvedBy;
+                        $actedAt = $approvedAt;
+                    }
                 }
             } elseif ($rejected) {
                 if ($index < $rejectIndex) {
-                    $state = 'done';
+                    $state = $hrRequestType === HrRequest::TYPE_ATTENDANCE_CORRECTION ? 'waiting' : 'done';
                 } elseif ($index === $rejectIndex) {
                     $state = 'rejected';
                     $actor = $row->rejected_atasan_by ?: $name;
@@ -203,7 +240,56 @@ trait LegacyFormAtasanQueueLogic
             ];
         }
 
+        if ($hrRequestType === HrRequest::TYPE_ATTENDANCE_CORRECTION && $status === WorkflowStatus::PENDING && !$rejected) {
+            $steps = $this->activateNextLegacyAtasanStep($steps);
+        }
+
         return $steps;
+    }
+
+    /** Legacy hanya menyimpan approver terakhir; giliran berikutnya ada setelah step tersebut. */
+    private function activateNextLegacyAtasanStep(array $steps): array
+    {
+        $lastDoneIndex = -1;
+        foreach ($steps as $index => $step) {
+            if (($step['state'] ?? '') === 'done') {
+                $lastDoneIndex = $index;
+            }
+        }
+
+        $foundActive = false;
+        foreach ($steps as $index => &$step) {
+            if (in_array($step['state'] ?? '', ['active', 'waiting'], true)) {
+                $isNext = !$foundActive && $index > $lastDoneIndex;
+                $step['state'] = $isNext ? 'active' : 'waiting';
+                if ($isNext) {
+                    $foundActive = true;
+                }
+            }
+        }
+        unset($step);
+
+        return $steps;
+    }
+
+    /**
+     * @param array<int, int> $ids
+     * @param \Illuminate\Support\Collection<int, string>|array<int, string> $names
+     */
+    private function legacyAtasanStepIndexMatchingName(array $ids, $names, string $approverName): int
+    {
+        if ($approverName === '') {
+            return max(0, count($ids) - 1);
+        }
+
+        foreach ($ids as $index => $id) {
+            $name = trim((string) ($names[$id] ?? ''));
+            if ($name !== '' && strcasecmp($name, $approverName) === 0) {
+                return (int) $index;
+            }
+        }
+
+        return max(0, count($ids) - 1);
     }
 
     /** @return list<int> */
