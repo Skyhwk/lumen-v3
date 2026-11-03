@@ -760,11 +760,10 @@ class AtsHiredCandidatesController extends Controller
         $karyawan->id_cabang = data_get($request, 'employee.branch') ?: null;
         $karyawan->status_karyawan = data_get($request, 'employee.estatus', 'Training');
         $karyawan->tgl_mulai_kerja = data_get($request, 'employee.sdate') ?: null;
-        $karyawan->tgl_berakhir_kontrak = $this->resolveAgreementEndDate(
-            $karyawan->tgl_mulai_kerja,
-            data_get($request, 'payroll.satuan_jangka_waktu'),
-            data_get($request, 'payroll.jumlah_jangka_waktu')
-        ) ?: (data_get($request, 'employee.ecdate') ?: null);
+        $endContractDate = data_get($request, 'employee.ecdate');
+        $karyawan->tgl_berakhir_kontrak = ($endContractDate !== null && trim((string) $endContractDate) !== '')
+            ? $endContractDate
+            : null;
         $karyawan->id_jabatan = data_get($request, 'employee.position') ?: null;
         $karyawan->kategori_grade = data_get($request, 'employee.gradec');
         $karyawan->grade = data_get($request, 'employee.grade');
@@ -1313,23 +1312,6 @@ class AtsHiredCandidatesController extends Controller
         return substr($name, 0, 30);
     }
 
-    private function resolveAgreementEndDate($startDate, $unit, $amount): ?string
-    {
-        $count = (int) $amount;
-        if (empty($startDate) || $count < 1 || !in_array($unit, ['bulan', 'tahun'], true)) {
-            return null;
-        }
-
-        try {
-            $start = Carbon::parse($startDate);
-            $end = $unit === 'tahun' ? $start->copy()->addYears($count) : $start->copy()->addMonths($count);
-
-            return $end->format('Y-m-d');
-        } catch (\Exception $e) {
-            return null;
-        }
-    }
-
     private function resolveContractEndDate($startDate)
     {
         if (empty($startDate)) {
@@ -1426,12 +1408,8 @@ class AtsHiredCandidatesController extends Controller
         if ($jangkaWaktuError !== null) {
             return $jangkaWaktuError;
         }
-        if ($this->resolveAgreementEndDate(
-            data_get($request, 'employee.sdate'),
-            $satuanJangkaWaktu,
-            data_get($request, 'payroll.jumlah_jangka_waktu')
-        ) === null) {
-            return 'Tanggal masuk kerja wajib diisi untuk menghitung akhir jangka waktu perjanjian.';
+        if (trim((string) data_get($request, 'employee.sdate', '')) === '') {
+            return 'Tanggal masuk kerja wajib diisi untuk menghitung periode jangka waktu perjanjian di SPRJ.';
         }
 
         if ($this->payrollUsesFixedDate($request)) {
