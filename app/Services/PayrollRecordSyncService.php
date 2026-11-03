@@ -66,7 +66,7 @@ class PayrollRecordSyncService
         string $foreignKey = 'id_karyawan'
     ): string {
         return "{$table}.id = (SELECT t.id FROM {$table} t WHERE t.{$foreignKey} = master_karyawan.id"
-            . " AND t.{$periodColumn} <= ?"
+            . " AND (t.{$periodColumn} IS NULL OR t.{$periodColumn} <= ?)"
             . ' AND ((master_karyawan.is_active = 1 AND t.is_active = 1)'
             . ' OR (master_karyawan.is_active = 0))'
             . ' ORDER BY t.is_active DESC, t.id DESC LIMIT 1)';
