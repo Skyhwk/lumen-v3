@@ -23,6 +23,7 @@ class QuotationPromo
             $total += $row->harga_total;
         }
         $preparation = (float) ($model->total_biaya_preparasi ?? 0);
+        self::applySukaSuka($promo, $model, $total);
         $model->grand_total = $total + $preparation;
         $net = $model->grand_total; $outside = 0; $discount = 0;
         self::percentage($promo, $model, $net, $outside, $discount, ['preparasi' => $preparation], []);
@@ -65,6 +66,9 @@ class QuotationPromo
             $discount = 0;
             self::percentage($promo, new \stdClass(), $subtotal, $outside, $discount, [], []);
             $total += $subtotal;
+        }
+        if (self::isSukaSuka($promo)) {
+            $total += self::sukaSukaNominal($promo) * max(1, count($periods));
         }
         return [array_values($result), round($total, 2)];
     }
@@ -269,10 +273,49 @@ class QuotationPromo
             if (!self::hargaParameterMap($promo)) {
                 throw new \InvalidArgumentException('Konfigurasi Parameter Khusus tidak valid.');
             }
+        } elseif (self::isSukaSuka($promo)) {
+            self::sukaSukaNominal($promo);
         } elseif (!in_array($promo->metode, ['paket_pengujian', 'pengujian_free_pengujian', 'labeling'], true)) {
             throw new \InvalidArgumentException('Jenis promo tidak didukung.');
         }
         return $promo;
+    }
+
+    public static function isSukaSuka($promo)
+    {
+        return $promo && ($promo->metode ?? null) === 'suka_suka';
+    }
+
+    public static function sukaSukaNominal($promo)
+    {
+        if (!self::isSukaSuka($promo)) {
+            return 0;
+        }
+        $nominal = is_array($promo->konfigurasi ?? null)
+            ? ($promo->konfigurasi['nominal'] ?? 0)
+            : 0;
+        if (!is_numeric($nominal) || $nominal <= 0) {
+            throw new \InvalidArgumentException('Nominal promo wajib diisi lebih dari 0.');
+        }
+
+        return (float) $nominal;
+    }
+
+    public static function applySukaSuka($promo, $model, &$hargaTotal)
+    {
+        if (!self::isSukaSuka($promo)) {
+            return 0;
+        }
+        $nominal = self::sukaSukaNominal($promo);
+        $model->kode_promo = $promo->kode_promo;
+        $model->discount_promo = json_encode([
+            'deskripsi_promo_discount' => $promo->nama_diskon,
+            'jumlah_promo_discount' => $nominal,
+            'tipe' => 'suka_suka',
+        ]);
+        $hargaTotal += $nominal;
+
+        return $nominal;
     }
 
     public static function isParameterKhusus($promo)
@@ -309,6 +352,10 @@ class QuotationPromo
     public static function validateRows($promo, $rows)
     {
         $marked = array_values(array_filter($rows, fn($row) => !empty($row->is_promo)));
+        if (self::isSukaSuka($promo)) {
+            if ($marked) throw new \InvalidArgumentException('Promo suka suka tidak memakai pengujian promo terpisah.');
+            return;
+        }
         $isPackage = $promo && in_array($promo->metode, ['paket_pengujian', 'pengujian_free_pengujian'], true);
         if (!$isPackage) {
             if ($marked) throw new \InvalidArgumentException('Pengujian promo tidak sesuai dengan promo yang dipilih.');
@@ -344,6 +391,9 @@ class QuotationPromo
         $quantity = (int) $row->jumlah_titik;
         $total = $normalTotal ?? ($normalUnit * $quantity);
         if (!$promo) return [$normalUnit, $total];
+        if (self::isSukaSuka($promo)) {
+            return [0, 0];
+        }
         if (!empty($row->is_promo)) {
             if (!is_array($freeUsed)) $freeUsed = [];
             foreach (($promo->konfigurasi['data_pendukung_sampling'] ?? $promo->konfigurasi) as $key => $template) {

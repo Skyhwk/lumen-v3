@@ -499,6 +499,7 @@ class RenderKontrak
                 );
             }
 
+            QuotationPromoPresentation::writeSukaSukaItemRow($pdf, $data, $i, function ($n) { return self::rupiah($n); }, '13px', false);
             if ($data->total_biaya_lain > 0) {
                 $i = $i + 1;
                 $pdf->WriteHTML(

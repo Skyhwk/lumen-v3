@@ -450,6 +450,7 @@ class RenderSar
             }
             
 
+            QuotationPromoPresentation::writeSukaSukaItemRow($pdf, $data, $i, function ($n) { return $this->rupiah($n); });
             $biaya_lain = json_decode($data->biaya_lain);
             if ($biaya_lain != null) {
                 foreach ($biaya_lain as $k => $v) {
@@ -601,7 +602,7 @@ class RenderSar
                             <td style="text-align:right;padding:5px;">' . self::rupiah($data->grand_total) . '</td>
                         </tr>');
             $disc_promo = json_decode($data->discount_promo);
-            if ($disc_promo != null) {
+            if ($disc_promo != null && !QuotationPromoPresentation::isSukaSukaDiscount($disc_promo)) {
                 $pdf->WriteHTML(
                     ' <tr>
                         <td style="text-align:center;padding:5px;">' . $disc_promo->deskripsi_promo_discount .' '. $disc_promo->jumlah_promo_discount .'</td>

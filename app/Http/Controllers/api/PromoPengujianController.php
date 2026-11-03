@@ -96,6 +96,19 @@ class PromoPengujianController extends Controller {
         return ['parameters' => array_values($normalized)];
     }
 
+    private function sukaSukaKonfigurasi($nominal)
+    {
+        if ($nominal === null || $nominal === '') {
+            throw new \InvalidArgumentException('Nominal promo wajib diisi.');
+        }
+        $nominal = is_string($nominal) ? preg_replace('/[^\d]/', '', $nominal) : $nominal;
+        if (!is_numeric($nominal) || $nominal <= 0) {
+            throw new \InvalidArgumentException('Nominal promo wajib diisi lebih dari 0.');
+        }
+
+        return ['nominal' => +$nominal];
+    }
+
     public function index(Request $request) {
         $query = DB::table('promo_pengujian')
             ->select('id', 'kode_promo', 'metode', 'nama_diskon', 'konfigurasi')
@@ -179,6 +192,17 @@ class PromoPengujianController extends Controller {
                 ], 422);
             }
             $konfigurasi = [];
+        } else if ($metode === 'suka_suka') {
+            if (empty($kodePromo) || empty($namaDiskon)) {
+                return response()->json([
+                    'message' => 'Kode promo dan nama promo tidak boleh kosong'
+                ], 422);
+            }
+            try {
+                $konfigurasi = $this->sukaSukaKonfigurasi($request->input('nominal'));
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
         } 
         // else if ($metode === 'pengujian_free_pengujian') {
         //     $pemicu = $request->input('pemicu');
@@ -366,6 +390,18 @@ class PromoPengujianController extends Controller {
                 ], 422);
             }
             $konfigurasi = [];
+        } else if ($metode === 'suka_suka') {
+            if (empty($kodePromo) || empty($namaDiskon)) {
+                return response()->json([
+                    'message' => 'Kode promo dan nama promo tidak boleh kosong'
+                ], 422);
+            }
+            $defaultNominal = is_array($konfigurasi) ? ($konfigurasi['nominal'] ?? null) : null;
+            try {
+                $konfigurasi = $this->sukaSukaKonfigurasi($request->input('nominal', $defaultNominal));
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
         } 
         // else if ($metode === 'pengujian_free_pengujian') {
         //     $pemicu = $request->input('pemicu');
