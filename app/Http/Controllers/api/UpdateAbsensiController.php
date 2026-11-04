@@ -85,6 +85,50 @@ class UpdateAbsensiController extends Controller
             ], 500);
         }
     }
+
+    public function deleteJadwal(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $karyawanId = (int) $request->id;
+            if ($karyawanId < 1) {
+                return response()->json(['message' => 'Karyawan tidak valid.'], 422);
+            }
+
+            $tanggal = (string) ($request->tgl ?? '');
+            if ($tanggal === '') {
+                return response()->json(['message' => 'Tanggal wajib diisi.'], 422);
+            }
+
+            $masukDate = (string) ($request->tgl_masuk ?: $tanggal);
+            Absensi::where('karyawan_id', $karyawanId)
+                ->where('tanggal', $masukDate)
+                ->where('status', 'Masuk')
+                ->delete();
+
+            $keluarDate = (string) ($request->tgl_keluar ?: $tanggal);
+            if ($request->tgl_keluar === '' && in_array($request->shift, ['SHSECURITY2', '24jam'], true)) {
+                $keluarDate = date('Y-m-d', strtotime($tanggal . ' +1 day'));
+            }
+            Absensi::where('karyawan_id', $karyawanId)
+                ->where('tanggal', $keluarDate)
+                ->where('status', 'Keluar')
+                ->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Berhasil Menghapus Absensi.!',
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // Tested - Clear
     public function generateJadwal(Request $request)
     {
