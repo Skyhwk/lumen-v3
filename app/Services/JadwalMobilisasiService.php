@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\GaAsset;
 use App\Models\JadwalMobilisasi;
+use App\Models\KategoriPeralatanSampling;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -180,6 +181,16 @@ class JadwalMobilisasiService
         return JadwalMobilisasi::create($dataAttributes);
     }
 
+    private static function hasBatchJadwalIdsColumn(): bool
+    {
+        static $cached = null;
+        if ($cached === null) {
+            $cached = Schema::hasTable('jadwal_mobilisasi')
+                && Schema::hasColumn('jadwal_mobilisasi', 'batch_jadwal_ids');
+        }
+        return $cached;
+    }
+
     /**
      * Nonaktifkan data jadwal_mobilisasi HANYA ketika jadwal benar-benar di-cancel dari Sampling Plan.
      */
@@ -195,13 +206,16 @@ class JadwalMobilisasiService
         }
 
         $now = Carbon::now()->format('Y-m-d H:i:s');
+        $hasJsonCol = self::hasBatchJadwalIdsColumn();
 
         $query = JadwalMobilisasi::where('is_active', true)
-            ->where(function ($q) use ($normalized) {
+            ->where(function ($q) use ($normalized, $hasJsonCol) {
                 $q->where('batch_id', $normalized['csv']);
                 foreach ($normalized['ids'] as $jid) {
-                    $q->orWhereRaw('FIND_IN_SET(?, batch_id) > 0', [(string) $jid])
-                        ->orWhereJsonContains('batch_jadwal_ids', $jid);
+                    $q->orWhereRaw('FIND_IN_SET(?, batch_id) > 0', [(string) $jid]);
+                    if ($hasJsonCol) {
+                        $q->orWhereJsonContains('batch_jadwal_ids', $jid);
+                    }
                 }
             });
 
@@ -267,12 +281,16 @@ class JadwalMobilisasiService
             return null;
         }
 
+        $hasJsonCol = self::hasBatchJadwalIdsColumn();
+
         return JadwalMobilisasi::where('is_active', true)
-            ->where(function ($q) use ($normalized) {
+            ->where(function ($q) use ($normalized, $hasJsonCol) {
                 $q->where('batch_id', $normalized['csv']);
                 foreach ($normalized['ids'] as $jid) {
-                    $q->orWhereRaw('FIND_IN_SET(?, batch_id) > 0', [(string) $jid])
-                        ->orWhereJsonContains('batch_jadwal_ids', $jid);
+                    $q->orWhereRaw('FIND_IN_SET(?, batch_id) > 0', [(string) $jid]);
+                    if ($hasJsonCol) {
+                        $q->orWhereJsonContains('batch_jadwal_ids', $jid);
+                    }
                 }
             })
             ->orderByDesc('id')
@@ -360,7 +378,19 @@ class JadwalMobilisasiService
                     'nama_alat' => $nama,
                     'jumlah_alat' => $jumlah,
                 ];
-                foreach (['sub_kategori_aset_id', 'kategori_aset_id', 'condition', 'branch_id', 'location_id'] as $metaKey) {
+                foreach ([
+                    'id_kategori_peralatan',
+                    'jenis_peralatan',
+                    'warna',
+                    'nama_kategori_pengujian',
+                    'id_cabang',
+                    'lokasi_penempatan_alat',
+                    'sub_kategori_aset_id',
+                    'kategori_aset_id',
+                    'condition',
+                    'branch_id',
+                    'location_id',
+                ] as $metaKey) {
                     if (array_key_exists($metaKey, $item) && $item[$metaKey] !== null && $item[$metaKey] !== '') {
                         $entry[$metaKey] = $item[$metaKey];
                     }
@@ -373,53 +403,82 @@ class JadwalMobilisasiService
     }
 
     /**
-     * Ambil daftar peralatan dari ga_assets:
-     * WHERE sub_kategori_aset_id = 10 AND is_active = 1 AND condition = 'normal'
-     * GROUP BY name, sub_kategori_aset_id, kategori_aset_id, condition, branch_id, location_id
-     * beserta perhitungan sisa ketersediaan pada tanggal tersebut.
+     * Ambil daftar peralatan dari kategori_peralatan_sampling berdasarkan id_cabang dan warna,
+     * beserta perhitungan stok total (dari ga_assets / kategori_peralatan_sampling) dan sisa tersedia pada tanggal tersebut.
      */
-    public static function getPeralatanAvailable(?string $tanggal = null, $branchId = null, $excludeBatchIds = null): array
-    {
-        if (!Schema::hasTable('ga_assets')) {
+    public static function getPeralatanAvailable(
+        ?string $tanggal = null,
+        $branchId = null,
+        $excludeBatchIds = null,
+        ?string $warna = null
+    ): array {
+        if (!Schema::hasTable('kategori_peralatan_sampling')) {
             return [];
         }
 
-        $query = GaAsset::query()
-            ->select(
-                'name',
-                'sub_kategori_aset_id',
-                'kategori_aset_id',
-                'condition',
-                'branch_id',
-                'location_id',
-                DB::raw('COUNT(*) as total_unit')
-            )
-            ->where('sub_kategori_aset_id', 10)
-            ->where('is_active', 1)
-            ->where('condition', 'normal');
-
-        if ($branchId !== null && $branchId !== '' && (!is_array($branchId) || count(array_filter($branchId)) > 0)) {
-            if (is_array($branchId)) {
-                $cleanBranchIds = array_values(array_filter(array_map('intval', $branchId), fn ($v) => $v > 0));
-                if (!empty($cleanBranchIds)) {
-                    $query->whereIn('branch_id', $cleanBranchIds);
-                }
-            } else {
-                $query->where('branch_id', (int) $branchId);
-            }
+        $cleanBranchIds = [];
+        if ($branchId !== null && $branchId !== '') {
+            $rawBranches = is_array($branchId) ? $branchId : explode(',', (string) $branchId);
+            $cleanBranchIds = array_values(array_unique(array_filter(array_map('intval', $rawBranches), fn ($v) => $v > 0)));
         }
 
-        $rows = $query
-            ->groupBy(
-                'name',
-                'sub_kategori_aset_id',
-                'kategori_aset_id',
-                'condition',
-                'branch_id',
-                'location_id'
-            )
-            ->orderBy('name', 'asc')
+        $cleanWarna = trim((string) ($warna ?? ''));
+
+        $query = KategoriPeralatanSampling::query()
+            ->where('is_active', true);
+
+        if (!empty($cleanBranchIds)) {
+            $query->whereIn('id_cabang', $cleanBranchIds);
+        }
+
+        if ($cleanWarna !== '') {
+            $query->whereRaw('LOWER(warna) = ?', [strtolower($cleanWarna)]);
+        }
+
+        $kpsRows = $query
+            ->select([
+                'id',
+                'nama_alat',
+                'jenis_peralatan',
+                'warna',
+                'nama_kategori_pengujian',
+                'id_cabang',
+                'lokasi_penempatan_alat',
+            ])
+            ->orderBy('nama_alat', 'asc')
             ->get();
+
+        if ($kpsRows->isEmpty()) {
+            return [];
+        }
+
+        // Ambil total stok unit normal per (nama_alat, branch_id) dari ga_assets jika tersedia
+        $gaStockMap = [];
+        if (Schema::hasTable('ga_assets')) {
+            $gaQuery = GaAsset::query()
+                ->select(
+                    DB::raw('UPPER(TRIM(name)) as norm_name'),
+                    'branch_id',
+                    DB::raw('COUNT(*) as total_unit')
+                )
+                ->where('sub_kategori_aset_id', 10)
+                ->where('is_active', 1)
+                ->where('condition', 'normal');
+
+            if (!empty($cleanBranchIds)) {
+                $gaQuery->whereIn('branch_id', $cleanBranchIds);
+            }
+
+            $gaRows = $gaQuery
+                ->groupBy(DB::raw('UPPER(TRIM(name))'), 'branch_id')
+                ->get();
+
+            foreach ($gaRows as $g) {
+                $keyBranch = $g->norm_name . '|' . (int) ($g->branch_id ?? 0);
+                $gaStockMap[$keyBranch] = (int) $g->total_unit;
+                $gaStockMap[$g->norm_name] = ($gaStockMap[$g->norm_name] ?? 0) + (int) $g->total_unit;
+            }
+        }
 
         // Hitung jumlah alat yang sudah terpakai di tanggal yang sama pada jadwal_mobilisasi aktif
         $usedByToolKey = [];
@@ -449,13 +508,14 @@ class JadwalMobilisasiService
                     if (!is_array($item)) {
                         continue;
                     }
-                    $namaAlat = trim((string) ($item['nama_alat'] ?? ''));
+                    $namaAlat = strtoupper(trim((string) ($item['nama_alat'] ?? '')));
                     $qty = (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0);
-                    $itemBranch = isset($item['branch_id']) && $item['branch_id'] !== '' ? (int) $item['branch_id'] : null;
-                    $itemLoc = isset($item['location_id']) && $item['location_id'] !== '' ? (int) $item['location_id'] : null;
+                    $itemCabang = isset($item['id_cabang']) && $item['id_cabang'] !== ''
+                        ? (int) $item['id_cabang']
+                        : (isset($item['branch_id']) && $item['branch_id'] !== '' ? (int) $item['branch_id'] : 0);
 
                     if ($namaAlat !== '' && $qty > 0) {
-                        $specificKey = $namaAlat . '|' . ($itemBranch ?? '*') . '|' . ($itemLoc ?? '*');
+                        $specificKey = $namaAlat . '|' . $itemCabang;
                         $usedByToolKey[$specificKey] = ($usedByToolKey[$specificKey] ?? 0) + $qty;
                         $usedByToolKey[$namaAlat] = ($usedByToolKey[$namaAlat] ?? 0) + $qty;
                     }
@@ -463,25 +523,42 @@ class JadwalMobilisasiService
             }
         }
 
-        return $rows->map(function ($row) use ($usedByToolKey) {
-            $total = (int) $row->total_unit;
-            $specificKey = $row->name . '|' . ($row->branch_id ?? '*') . '|' . ($row->location_id ?? '*');
-            $used = $usedByToolKey[$specificKey] ?? ($usedByToolKey[$row->name] ?? 0);
-            $sisa = max(0, $total - (int) $used);
+        // Group / deduplicate berdasarkan nama_alat + id_cabang + warna supaya pilihan dropdown bersih
+        $grouped = [];
+        foreach ($kpsRows as $row) {
+            $namaAlat = trim((string) $row->nama_alat);
+            $normName = strtoupper($namaAlat);
+            $cabangId = $row->id_cabang !== null ? (int) $row->id_cabang : 0;
+            $warnaVal = trim((string) ($row->warna ?? ''));
+            $groupKey = $normName . '|' . $cabangId . '|' . strtolower($warnaVal);
 
-            return [
-                'id' => $row->name,
-                'nama' => $row->name,
-                'name' => $row->name,
-                'sub_kategori_aset_id' => (int) $row->sub_kategori_aset_id,
-                'kategori_aset_id' => (int) $row->kategori_aset_id,
-                'condition' => $row->condition,
-                'branch_id' => $row->branch_id !== null ? (int) $row->branch_id : null,
-                'location_id' => $row->location_id !== null ? (int) $row->location_id : null,
-                'total' => $total,
-                'terpakai' => (int) $used,
-                'stok' => $sisa,
-            ];
-        })->values()->all();
+            if (!isset($grouped[$groupKey])) {
+                $totalStok = $gaStockMap[$normName . '|' . $cabangId]
+                    ?? $gaStockMap[$normName]
+                    ?? 1;
+                $used = $usedByToolKey[$normName . '|' . $cabangId]
+                    ?? ($usedByToolKey[$normName] ?? 0);
+                $sisa = max(0, (int) $totalStok - (int) $used);
+
+                $grouped[$groupKey] = [
+                    'id' => (int) $row->id,
+                    'id_kategori_peralatan' => (int) $row->id,
+                    'nama' => $namaAlat,
+                    'name' => $namaAlat,
+                    'nama_alat' => $namaAlat,
+                    'jenis_peralatan' => $row->jenis_peralatan,
+                    'warna' => $row->warna,
+                    'nama_kategori_pengujian' => $row->nama_kategori_pengujian,
+                    'id_cabang' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
+                    'branch_id' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
+                    'lokasi_penempatan_alat' => $row->lokasi_penempatan_alat,
+                    'total' => (int) $totalStok,
+                    'terpakai' => (int) $used,
+                    'stok' => $sisa,
+                ];
+            }
+        }
+
+        return array_values($grouped);
     }
 }

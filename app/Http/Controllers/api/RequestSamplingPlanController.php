@@ -534,7 +534,8 @@ class RequestSamplingPlanController extends Controller
         $data = JadwalMobilisasiService::getPeralatanAvailable(
             $request->input('tanggal'),
             $request->input('branch_id') ?? $request->input('id_cabang'),
-            $request->input('batch_id')
+            $request->input('batch_id'),
+            $request->input('warna')
         );
 
         return response()->json([
