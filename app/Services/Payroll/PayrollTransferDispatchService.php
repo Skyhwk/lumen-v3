@@ -68,6 +68,7 @@ class PayrollTransferDispatchService
             'controller' => $controller,
             'function' => $function,
             'async' => (bool) config('payroll_disbursement.invoke_async', true),
+            'payroll_header_id' => (int) $header->id,
         ];
 
         $url = (string) config('payroll_disbursement.python_invoke_url');
