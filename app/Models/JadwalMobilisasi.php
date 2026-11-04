@@ -14,12 +14,11 @@ class JadwalMobilisasi extends Sector
         'batch_jadwal_ids' => 'array',
         'peralatan_sampling' => 'array',
         'is_active' => 'boolean',
-    ];
-
-    public $timestamps = false;
         'tanggal' => 'date',
         'released_io_at' => 'datetime',
     ];
+
+    public $timestamps = false;
 
     public function aset()
     {

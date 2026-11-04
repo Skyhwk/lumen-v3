@@ -13,7 +13,6 @@
                 <tr>
                     <td style="padding:20px 28px;border-bottom:3px solid #1e3a5f;">
                         <div style="font-size:16px;font-weight:700;color:#1e3a5f;letter-spacing:.3px;">PT INTI SURYA LABORATORIUM</div>
-                        <div style="margin-top:4px;font-size:12px;color:#4b5563;">Divisi Finance — Payroll</div>
                     </td>
                 </tr>
                 <tr>
@@ -54,10 +53,9 @@
                 </tr>
                 <tr>
                     <td style="padding:8px 28px 28px;">
-                        <p style="margin:16px 0 4px;font-size:13px;line-height:22px;">Hormat kami,</p>
+                        <p style="margin:16px 0 4px;font-size:13px;line-height:22px;">Salam hangat,</p>
                         <p style="margin:0;font-size:13px;line-height:20px;font-weight:700;">
-                            Divisi Finance<br>
-                            <span style="font-weight:400;">PT Inti Surya Laboratorium</span>
+                            Inti Surya Laboratorium
                         </p>
                     </td>
                 </tr>
