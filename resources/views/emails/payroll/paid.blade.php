@@ -3,52 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payroll {{ $periodeLabel }}</title>
+    <title>Pemberitahuan Pembayaran Gaji Periode {{ $periodeLabel }}</title>
 </head>
-<body style="margin:0;padding:0;background:#f4f6f9;font-family:Arial,Helvetica,sans-serif;color:#344256;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f6f9;">
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:#1f2937;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6;">
     <tr>
-        <td align="center" style="padding:24px 16px;">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#fff;border:1px solid #dfe5ec;border-radius:6px;overflow:hidden;">
+        <td align="center" style="padding:28px 16px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border:1px solid #d1d5db;">
                 <tr>
-                    <td style="padding:18px 20px;background:#1f2b3d;color:#fff;">
-                        <div style="font-size:15px;font-weight:700;letter-spacing:.1px;">PT INTI SURYA LABORATORIUM</div>
-                        <div style="margin-top:3px;font-size:11px;color:#b9c7d8;">Payroll · Finance</div>
+                    <td style="padding:20px 28px;border-bottom:3px solid #1e3a5f;">
+                        <div style="font-size:16px;font-weight:700;color:#1e3a5f;letter-spacing:.3px;">PT INTI SURYA LABORATORIUM</div>
+                        <div style="margin-top:4px;font-size:12px;color:#4b5563;">Divisi Finance — Payroll</div>
                     </td>
                 </tr>
                 <tr>
-                    <td style="padding:28px 22px 26px;">
-                        <p style="margin:0 0 16px;font-size:13px;line-height:20px;">Yth. <strong>{{ $nama }}</strong>,</p>
+                    <td style="padding:28px 28px 8px;">
+                        <p style="margin:0 0 18px;font-size:13px;line-height:22px;">Dengan hormat,</p>
+                        <p style="margin:0 0 20px;font-size:13px;line-height:22px;">Yth. <strong>{{ $nama }}</strong></p>
 
-                        <p style="margin:0 0 16px;font-size:13px;line-height:21px;">
-                            <strong>Good news!</strong> Gaji Anda untuk periode <strong>{{ $periodeLabel }}</strong> telah diproses dan ditransfer.
+                        <p style="margin:0 0 16px;font-size:13px;line-height:22px;text-align:justify;">
+                            Bersama ini kami sampaikan bahwa pembayaran gaji Anda untuk periode
+                            <strong>{{ $periodeLabel }}</strong> telah kami proses dan ditransfer ke rekening yang terdaftar.
                         </p>
 
-                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 18px;background:#f8fafc;border:1px solid #e2e8ef;border-radius:4px;">
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 20px;border:1px solid #d1d5db;">
                             <tr>
-                                <td style="padding:14px 16px;font-size:13px;line-height:20px;">
-                                    <span style="color:#667588;">Tanggal transfer</span><br>
-                                    <strong style="color:#1f2b3d;">{{ $tglTransferLabel ?? '-' }}</strong>
-                                </td>
+                                <td width="40%" style="padding:10px 14px;font-size:12px;color:#4b5563;background:#f9fafb;border-bottom:1px solid #e5e7eb;">Periode</td>
+                                <td style="padding:10px 14px;font-size:13px;font-weight:600;border-bottom:1px solid #e5e7eb;">{{ $periodeLabel }}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:10px 14px;font-size:12px;color:#4b5563;background:#f9fafb;">Tanggal transfer</td>
+                                <td style="padding:10px 14px;font-size:13px;font-weight:600;">{{ $tglTransferLabel ?? '-' }}</td>
                             </tr>
                         </table>
 
-                        <p style="margin:0 0 16px;font-size:13px;line-height:21px;">
-                            Slip gaji terlampir pada email ini (PDF terproteksi). Anda juga dapat melihat slip gaji melalui aplikasi <strong>Attendance</strong>.
+                        <p style="margin:0 0 16px;font-size:13px;line-height:22px;text-align:justify;">
+                            Terlampir slip gaji dalam bentuk berkas PDF yang dilindungi kata sandi.
+                            Kata sandi untuk membuka berkas tersebut adalah tanggal lahir Anda dengan format
+                            <strong>ddmmyyyy</strong>.
                         </p>
 
-                        <p style="margin:0;font-size:13px;line-height:21px;">Terima kasih atas kontribusi dan dedikasi Anda.</p>
+                        <p style="margin:0 0 16px;font-size:13px;line-height:22px;text-align:justify;">
+                            Selain itu, slip gaji juga dapat diakses melalui aplikasi <strong>Attendance</strong>.
+                        </p>
+
+                        <p style="margin:0 0 8px;font-size:13px;line-height:22px;text-align:justify;">
+                            Demikian pemberitahuan ini kami sampaikan. Atas perhatian dan kerja sama Anda, kami ucapkan terima kasih.
+                        </p>
                     </td>
                 </tr>
                 <tr>
-                    <td style="padding:17px 22px;background:#f8fafc;border-top:1px solid #e2e8ef;">
-                        <p style="margin:0 0 4px;font-size:12px;line-height:18px;">Salam,</p>
-                        <p style="margin:0;font-size:12px;font-weight:700;line-height:18px;">
-                            Tim Payroll<br>
+                    <td style="padding:8px 28px 28px;">
+                        <p style="margin:16px 0 4px;font-size:13px;line-height:22px;">Hormat kami,</p>
+                        <p style="margin:0;font-size:13px;line-height:20px;font-weight:700;">
+                            Divisi Finance<br>
                             <span style="font-weight:400;">PT Inti Surya Laboratorium</span>
                         </p>
-                        <p style="margin:12px 0 0;font-size:11px;line-height:16px;color:#8896a8;">
-                            Email ini dikirim otomatis. Mohon tidak membalas email ini.
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding:14px 28px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+                        <p style="margin:0;font-size:11px;line-height:17px;color:#6b7280;">
+                            Email ini dikirim secara otomatis oleh sistem. Mohon untuk tidak membalas email ini.
                         </p>
                     </td>
                 </tr>
