@@ -21,7 +21,7 @@ class AttendanceCorrectionsController extends Controller
 {
     public function index(Request $request)
     {
-        $data = AttendanceCorrections::with(['karyawan.jabatan']);
+        $data = AttendanceCorrections::with(['karyawan.jabatan'])->where('is_active', 1);
 
         if ($request->has('status')) {
             $data->where('status', $request->status);
@@ -111,10 +111,10 @@ class AttendanceCorrectionsController extends Controller
         return response()->json([
             'success' => true,
             'data' => [
-                'approved_atasan' => AttendanceCorrections::where('status', WorkflowStatus::APPROVED_ATASAN)->count(),
-                'pending' => AttendanceCorrections::where('status', WorkflowStatus::PENDING)->count(),
-                'approved_hrd' => AttendanceCorrections::where('status', WorkflowStatus::APPROVED_HRD)->count(),
-                'rejected_hrd' => AttendanceCorrections::where('status', WorkflowStatus::REJECTED_HRD)->count(),
+                'approved_atasan' => AttendanceCorrections::where('is_active', 1)->where('status', WorkflowStatus::APPROVED_ATASAN)->count(),
+                'pending' => AttendanceCorrections::where('is_active', 1)->where('status', WorkflowStatus::PENDING)->count(),
+                'approved_hrd' => AttendanceCorrections::where('is_active', 1)->where('status', WorkflowStatus::APPROVED_HRD)->count(),
+                'rejected_hrd' => AttendanceCorrections::where('is_active', 1)->where('status', WorkflowStatus::REJECTED_HRD)->count(),
             ],
         ]);
     }
@@ -129,7 +129,7 @@ class AttendanceCorrectionsController extends Controller
 
         DB::beginTransaction();
         try {
-            $correction = AttendanceCorrections::find($apiId);
+            $correction = AttendanceCorrections::where('is_active', 1)->find($apiId);
             if (!$correction) {
                 return response()->json(['message' => 'Data not found'], 404);
             }
@@ -171,7 +171,7 @@ class AttendanceCorrectionsController extends Controller
         }
 
         try {
-            $correction = AttendanceCorrections::find($apiId);
+            $correction = AttendanceCorrections::where('is_active', 1)->find($apiId);
             if (!$correction) {
                 return response()->json(['message' => 'Data not found'], 404);
             }

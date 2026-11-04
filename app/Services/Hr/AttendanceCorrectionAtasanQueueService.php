@@ -78,6 +78,7 @@ class AttendanceCorrectionAtasanQueueService
     private function pendingLegacyRows()
     {
         return AttendanceCorrections::query()
+            ->where('is_active', 1)
             ->where('status', WorkflowStatus::PENDING)
             ->whereNotNull('employee_id')
             ->with(['karyawan.jabatan'])

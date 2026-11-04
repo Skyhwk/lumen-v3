@@ -52,6 +52,30 @@ trait LegacyFormAtasanQueueLogic
             return $legacySteps;
         }
 
+        // Koreksi absen lama dapat di-approve tanpa memperbarui step HR.
+        // Gabungkan hanya bukti pelaku yang tersimpan, bukan status keseluruhan.
+        if ($hrRequestType === HrRequest::TYPE_ATTENDANCE_CORRECTION) {
+            $approvedBy = trim((string) ($row->approved_atasan_by ?? ''));
+            foreach ($fromHr as &$step) {
+                if ($approvedBy !== '' && strcasecmp(trim((string) ($step['actor'] ?? '')), $approvedBy) === 0
+                    && in_array($step['state'] ?? '', ['active', 'waiting'], true)) {
+                    $step['state'] = 'done';
+                    $step['acted_at'] = $row->approved_atasan_at ?? null;
+                }
+            }
+            unset($step);
+
+            $hasRejected = collect($fromHr)->contains('state', 'rejected');
+            $foundActive = false;
+            foreach ($fromHr as &$step) {
+                if (in_array($step['state'] ?? '', ['active', 'waiting'], true)) {
+                    $step['state'] = !$hasRejected && !$foundActive ? 'active' : 'waiting';
+                    $foundActive = true;
+                }
+            }
+            unset($step);
+        }
+
         return $fromHr;
     }
 
@@ -177,14 +201,25 @@ trait LegacyFormAtasanQueueLogic
             $note = null;
 
             if ($done) {
-                $state = 'done';
-                if ($approvedBy !== '' && $index === $approvedStepIndex) {
-                    $actor = $approvedBy;
-                    $actedAt = $approvedAt;
+                if ($hrRequestType === HrRequest::TYPE_ATTENDANCE_CORRECTION) {
+                    // Satu field legacy hanya membuktikan approval pelaku ini.
+                    $isApprovedActor = $approvedBy !== ''
+                        && strcasecmp(trim((string) $name), $approvedBy) === 0;
+                    $state = $isApprovedActor ? 'done' : 'waiting';
+                    if ($isApprovedActor) {
+                        $actor = $approvedBy;
+                        $actedAt = $approvedAt;
+                    }
+                } else {
+                    $state = 'done';
+                    if ($approvedBy !== '' && $index === $approvedStepIndex) {
+                        $actor = $approvedBy;
+                        $actedAt = $approvedAt;
+                    }
                 }
             } elseif ($rejected) {
                 if ($index < $rejectIndex) {
-                    $state = 'done';
+                    $state = $hrRequestType === HrRequest::TYPE_ATTENDANCE_CORRECTION ? 'waiting' : 'done';
                 } elseif ($index === $rejectIndex) {
                     $state = 'rejected';
                     $actor = $row->rejected_atasan_by ?: $name;
@@ -204,6 +239,35 @@ trait LegacyFormAtasanQueueLogic
                 'note' => $note,
             ];
         }
+
+        if ($hrRequestType === HrRequest::TYPE_ATTENDANCE_CORRECTION && $status === WorkflowStatus::PENDING && !$rejected) {
+            $steps = $this->activateNextLegacyAtasanStep($steps);
+        }
+
+        return $steps;
+    }
+
+    /** Legacy hanya menyimpan approver terakhir; giliran berikutnya ada setelah step tersebut. */
+    private function activateNextLegacyAtasanStep(array $steps): array
+    {
+        $lastDoneIndex = -1;
+        foreach ($steps as $index => $step) {
+            if (($step['state'] ?? '') === 'done') {
+                $lastDoneIndex = $index;
+            }
+        }
+
+        $foundActive = false;
+        foreach ($steps as $index => &$step) {
+            if (in_array($step['state'] ?? '', ['active', 'waiting'], true)) {
+                $isNext = !$foundActive && $index > $lastDoneIndex;
+                $step['state'] = $isNext ? 'active' : 'waiting';
+                if ($isNext) {
+                    $foundActive = true;
+                }
+            }
+        }
+        unset($step);
 
         return $steps;
     }
