@@ -275,6 +275,9 @@ class PortalLeaveDatatableQuery
             ->filterColumn('diajukan_pada', function ($query, $keyword) {
                 $query->where('leave_requests.created_at', 'like', "%{$keyword}%");
             })
+            ->filterColumn('jabatan_karyawan', function ($query, $keyword) {
+                $query->where('karyawan.grade', 'like', "%{$keyword}%");
+            })
             ->filterColumn('keterangan', function ($query, $keyword) {
                 $query->where('leave_requests.description', 'like', "%{$keyword}%");
             })

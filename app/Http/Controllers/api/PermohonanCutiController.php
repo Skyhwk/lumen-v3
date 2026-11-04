@@ -712,6 +712,9 @@ class PermohonanCutiController extends Controller
             ->filterColumn('diajukan_pada', function ($query, $keyword) {
                 $query->where('leave_requests.created_at', 'like', "%{$keyword}%");
             })
+            ->filterColumn('jabatan_karyawan', function ($query, $keyword) {
+                $query->where('karyawan.grade', 'like', "%{$keyword}%");
+            })
             ->filterColumn('approved_atasan_by', function ($query, $keyword) {
                 $query->where('leave_requests.approved_atasan_by', 'like', "%{$keyword}%");
             })
