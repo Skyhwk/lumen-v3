@@ -412,6 +412,12 @@ class RenderNonKontrak
                 $i++;
             }
 
+            $sukaSukaLine = QuotationPromoPresentation::sukaSukaLine($data);
+            QuotationPromoPresentation::writeSukaSukaItemRow($pdf, $data, $i, function ($n) { return $this->rupiah($n); });
+            if ($sukaSukaLine) {
+                $total_harga_pengujian += $sukaSukaLine['nominal'];
+            }
+
             $totalBiayaPreparasi = (float) ($data->total_biaya_preparasi ?? 0);
             $biaya_preparasi = json_decode($data->biaya_preparasi_padatan);
             if ($biaya_preparasi != null) {
@@ -519,12 +525,6 @@ class RenderNonKontrak
                 $hargaTransportasiPerdiemTaxable += $jam24Amount;
             }
             $hargaTransportasiPerdiemNonTaxable = max(0, $hargaTransportasiPerdiem - $hargaTransportasiPerdiemTaxable);
-
-            $sukaSukaLine = QuotationPromoPresentation::sukaSukaLine($data);
-            QuotationPromoPresentation::writeSukaSukaItemRow($pdf, $data, $i, function ($n) { return $this->rupiah($n); });
-            if ($sukaSukaLine) {
-                $total_harga_pengujian += $sukaSukaLine['nominal'];
-            }
 
             $biaya_lain = json_decode($data->biaya_lain);
             if (!is_array($biaya_lain)) {

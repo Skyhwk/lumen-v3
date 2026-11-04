@@ -368,6 +368,8 @@ class RenderInvoiceTitik
                             <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document .'<br/>' . ($periode ? $periode : '') . '</b></span></td>'
                     );
 
+                    QuotationPromoPresentation::writeSukaSukaInvoiceRow($pdf, $values);
+
                     if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
 
                         if (isset($values->keterangan_transportasi)) {
@@ -413,8 +415,6 @@ class RenderInvoiceTitik
                         ');
                     }
 
-                    QuotationPromoPresentation::writeSukaSukaInvoiceRow($pdf, $values);
-                    
                     if (isset($values->keterangan_lainnya)) {
                         foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
                             
@@ -632,6 +632,7 @@ class RenderInvoiceTitik
                             $isLastElement = $i == count(array_chunk($cekArray, 15)) - 1;
 
                             if ($isLastElement) {
+                                QuotationPromoPresentation::writeSukaSukaInvoiceRow($pdf, $values);
 
                                 if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
 
@@ -686,8 +687,6 @@ class RenderInvoiceTitik
                                         </tr>
                                     ');
                                 }
-
-                                QuotationPromoPresentation::writeSukaSukaInvoiceRow($pdf, $values);
 
                                 if (isset($values->keterangan_lainnya)) {
                                     foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
@@ -863,6 +862,7 @@ class RenderInvoiceTitik
                                 $isLastElement = $i == count(array_chunk($dataSampling->data_sampling, 15)) - 1;
 
                                 if ($isLastElement) {
+                                    QuotationPromoPresentation::writeSukaSukaInvoiceRow($pdf, $values);
 
                                     if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
 
@@ -925,8 +925,6 @@ class RenderInvoiceTitik
                                             </tr>
                                         ');
                                     }
-
-                                    QuotationPromoPresentation::writeSukaSukaInvoiceRow($pdf, $values);
 
                                     if (isset($values->keterangan_lainnya)) {
                                         foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {

@@ -409,6 +409,13 @@ class RenderSar
                 $total_harga_pengujian += $a->harga_total;
                 $i++;
             }
+
+            $sukaSukaLine = QuotationPromoPresentation::sukaSukaLine($data);
+            QuotationPromoPresentation::writeSukaSukaItemRow($pdf, $data, $i, function ($n) { return $this->rupiah($n); });
+            if ($sukaSukaLine) {
+                $total_harga_pengujian += $sukaSukaLine['nominal'];
+            }
+
             $hargaTransportasiPerdiem = 0;
             $wilayah = explode("-", $data->wilayah, 2);
             if ($data->transportasi > 0 && $data->harga_transportasi_total != null && !is_null($data->transportasi)) {
@@ -448,9 +455,7 @@ class RenderSar
                 $hargaTransportasiPerdiem += ($data->harga_perdiem_personil_total + $total_perdiem);
                 $i++;
             }
-            
 
-            QuotationPromoPresentation::writeSukaSukaItemRow($pdf, $data, $i, function ($n) { return $this->rupiah($n); });
             $biaya_lain = json_decode($data->biaya_lain);
             if ($biaya_lain != null) {
                 foreach ($biaya_lain as $k => $v) {

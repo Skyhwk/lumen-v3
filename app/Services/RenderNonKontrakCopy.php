@@ -435,6 +435,13 @@ class RenderNonKontrakCopy
                 $total_harga_pengujian += $a->harga_total;
                 $i++;
             }
+
+            $sukaSukaLine = QuotationPromoPresentation::sukaSukaLine($data);
+            QuotationPromoPresentation::writeSukaSukaItemRow($pdf, $data, $i, function ($n) { return $this->rupiah($n); });
+            if ($sukaSukaLine) {
+                $total_harga_pengujian += $sukaSukaLine['nominal'];
+            }
+
             // dd('stop');
             $wilayah = explode("-", $data->wilayah, 2);
             if ($data->transportasi > 0 && $data->harga_transportasi_total != null && !is_null($data->transportasi)) {
@@ -471,11 +478,6 @@ class RenderNonKontrakCopy
                     </tr>'
                 );
                 $i++;
-            }
-            $sukaSukaLine = QuotationPromoPresentation::sukaSukaLine($data);
-            QuotationPromoPresentation::writeSukaSukaItemRow($pdf, $data, $i, function ($n) { return $this->rupiah($n); });
-            if ($sukaSukaLine) {
-                $total_harga_pengujian += $sukaSukaLine['nominal'];
             }
             $biaya_lain = json_decode($data->biaya_lain);
             if ($biaya_lain != null) {

@@ -463,6 +463,8 @@ class RenderKontrak
 
             }
 
+            QuotationPromoPresentation::writeSukaSukaItemRow($pdf, $data, $i, function ($n) { return self::rupiah($n); });
+
             $wilayah = explode("-", $data->wilayah, 2);
 
             if ($data->transportasi > 0) {
@@ -499,7 +501,6 @@ class RenderKontrak
                 );
             }
 
-            QuotationPromoPresentation::writeSukaSukaItemRow($pdf, $data, $i, function ($n) { return self::rupiah($n); }, '13px', false);
             if ($data->total_biaya_lain > 0) {
                 $i = $i + 1;
                 $pdf->WriteHTML(
@@ -1265,6 +1266,8 @@ class RenderKontrak
                         }
                     }
                 }
+
+                QuotationPromoPresentation::writeSukaSukaItemRow($pdf, $v, $i, function ($n) { return self::rupiah($n); });
 
                 if ($v->transportasi > 0) {
                     $pdf->WriteHTML(
