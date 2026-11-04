@@ -415,10 +415,10 @@ class AtsHiredCandidatesController extends Controller
                 if (MasterKaryawan::where('email', $email)->exists()) {
                     return response()->json(['status' => false, 'message' => 'Email karyawan sudah terdaftar di Master Karyawan.'], 400);
                 }
-                if (User::where('email', $email)->exists()) {
+                if (User::where('email', $email)->where('is_active', 1)->exists()) {
                     return response()->json(['status' => false, 'message' => 'Email sudah digunakan akun sistem lain.'], 400);
                 }
-                if (User::where('username', $username)->exists()) {
+                if (User::where('username', $username)->where('is_active', 1)->exists()) {
                     return response()->json(['status' => false, 'message' => 'Username sudah digunakan akun sistem lain.'], 400);
                 }
 
