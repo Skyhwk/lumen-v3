@@ -174,7 +174,8 @@ class UpdateAbsensiController extends Controller
             $masuk_kerja = PayrollWorkingDaysService::collectMasukKerjaDates(
                 $rekapRows,
                 $idJabatan,
-                $request->bulan
+                $request->bulan,
+                (int) $request->id_karyawan
             );
 
             $hariKerjaExpected = PayrollWorkingDaysService::expectedHariKerjaForKaryawan(
