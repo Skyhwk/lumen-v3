@@ -57,39 +57,36 @@ class PerhitunganModalParameterController extends Controller
         $data->save();
     }
 
-    private function getEffectiveModalQuery($today = null)
+    private function getEffectiveModalQuery($today = null, $includeKomponen = true)
     {
         $today = $today ?: Carbon::today()->toDateString();
-        $effectiveDateSub = $this->getEffectiveDateExpression('mpmp2');
-        $effectiveDateFuture = $this->getEffectiveDateExpression('mpmp4');
+        $effectiveDateCurrent = $this->getEffectiveDateExpression('mpmp');
+        $effectiveDateCandidate = $this->getEffectiveDateExpression('candidate');
         $effectiveDatePrev = $this->getEffectiveDateExpression('mpmp3');
 
-        return DB::table('master_perhitungan_modal_parameter as mpmp')
+        $query = DB::table('master_perhitungan_modal_parameter as mpmp')
             ->leftJoin('parameter as mp', 'mpmp.id_parameter', '=', 'mp.id')
             ->where('mpmp.is_active', true)
             ->whereNull('mpmp.deleted_at')
-            ->whereRaw("mpmp.id = (
-                SELECT COALESCE(
-                    (
-                        SELECT mpmp2.id FROM master_perhitungan_modal_parameter mpmp2
-                        WHERE mpmp2.id_parameter = mpmp.id_parameter
-                        AND mpmp2.deleted_at IS NULL
-                        AND mpmp2.is_active = 1
-                        AND {$effectiveDateSub} <= ?
-                        ORDER BY {$effectiveDateSub} DESC, mpmp2.id DESC
-                        LIMIT 1
-                    ),
-                    (
-                        SELECT mpmp4.id FROM master_perhitungan_modal_parameter mpmp4
-                        WHERE mpmp4.id_parameter = mpmp.id_parameter
-                        AND mpmp4.deleted_at IS NULL
-                        AND mpmp4.is_active = 1
-                        AND {$effectiveDateFuture} > ?
-                        ORDER BY {$effectiveDateFuture} ASC, mpmp4.id DESC
-                        LIMIT 1
-                    )
-                )
-            )", [$today, $today])
+            // Keep the best active version: latest effective, or earliest future if none is effective.
+            ->whereNotExists(function ($sub) use ($today, $effectiveDateCurrent, $effectiveDateCandidate) {
+                $sub->select(DB::raw(1))
+                    ->from('master_perhitungan_modal_parameter as candidate')
+                    ->whereColumn('candidate.id_parameter', 'mpmp.id_parameter')
+                    ->where('candidate.is_active', true)
+                    ->whereNull('candidate.deleted_at')
+                    ->whereRaw("(
+                        ({$effectiveDateCandidate} <= ? AND {$effectiveDateCurrent} > ?)
+                        OR ({$effectiveDateCandidate} <= ? AND {$effectiveDateCurrent} <= ? AND (
+                            {$effectiveDateCandidate} > {$effectiveDateCurrent}
+                            OR ({$effectiveDateCandidate} = {$effectiveDateCurrent} AND candidate.id > mpmp.id)
+                        ))
+                        OR ({$effectiveDateCandidate} > ? AND {$effectiveDateCurrent} > ? AND (
+                            {$effectiveDateCandidate} < {$effectiveDateCurrent}
+                            OR ({$effectiveDateCandidate} = {$effectiveDateCurrent} AND candidate.id > mpmp.id)
+                        ))
+                    )", array_fill(0, 6, $today));
+            })
             ->select(
                 'mpmp.id',
                 'mpmp.id_kategori',
@@ -118,24 +115,18 @@ class PerhitunganModalParameterController extends Controller
                     AND {$effectiveDatePrev} <= '{$today}'
                     ORDER BY {$effectiveDatePrev} DESC, mpmp3.id DESC
                     LIMIT 1 OFFSET 1
-                ) as modal_sebelumnya"),
-                DB::raw("(
-                    SELECT COALESCE(
-                        JSON_ARRAYAGG(comp.row_json),
-                        JSON_ARRAY()
-                    )
-                    FROM (
-                        SELECT JSON_OBJECT(
-                            'label', k.label,
-                            'harga', CAST(k.harga AS DECIMAL(18, 2)),
-                            'urutan', k.urutan
-                        ) AS row_json
-                        FROM master_perhitungan_modal_parameter_komponen k
-                        WHERE k.id_perhitungan_modal = mpmp.id
-                        ORDER BY k.urutan ASC, k.id ASC
-                    ) AS comp
-                ) as komponen_perhitungan")
+                ) as modal_sebelumnya")
             );
+
+        if ($includeKomponen) {
+            $query->selectSub(function ($sub) {
+                $sub->from('master_perhitungan_modal_parameter_komponen as k')
+                    ->selectRaw("COALESCE(JSON_ARRAYAGG(JSON_OBJECT('label', k.label, 'harga', k.harga, 'urutan', k.urutan)), JSON_ARRAY())")
+                    ->whereColumn('k.id_perhitungan_modal', 'mpmp.id');
+            }, 'komponen_perhitungan');
+        }
+
+        return $query;
     }
 
     public function getAll(Request $request)
@@ -145,11 +136,68 @@ class PerhitunganModalParameterController extends Controller
         return response()->json(['data' => $data], 200);
     }
 
-    public function index()
+    private function limitTableRequest(Request $request)
     {
-        $data = $this->getEffectiveModalQuery();
+        $length = (int) $request->input('length', 50);
+        $request->merge([
+            'draw' => max(0, (int) $request->input('draw', 0)),
+            'start' => max(0, (int) $request->input('start', 0)),
+            'length' => $length > 0 ? min($length, 200) : 50,
+        ]);
+    }
 
-        return Datatables::of($data)
+    private function filterDisplayDate($query, $column, $keyword)
+    {
+        $months = [
+            1 => ['januari', 'january'],
+            2 => ['februari', 'february'],
+            3 => ['maret', 'march'],
+            4 => ['april'],
+            5 => ['mei', 'may'],
+            6 => ['juni', 'june'],
+            7 => ['juli', 'july'],
+            8 => ['agustus', 'august'],
+            9 => ['september'],
+            10 => ['oktober', 'october'],
+            11 => ['november'],
+            12 => ['desember', 'december'],
+        ];
+        $tokens = preg_split('/\s+/', strtolower(trim((string) $keyword)), -1, PREG_SPLIT_NO_EMPTY);
+
+        // Match each part of the displayed date, e.g. "1 jun 2026", without depending on SQL locale.
+        foreach ($tokens as $token) {
+            $matchingMonths = [];
+            if (strlen($token) >= 3 && ctype_alpha($token)) {
+                foreach ($months as $number => $names) {
+                    foreach ($names as $name) {
+                        if (strpos($name, $token) !== false) {
+                            $matchingMonths[] = $number;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            $query->where(function ($nested) use ($column, $token, $matchingMonths) {
+                if (!empty($matchingMonths)) {
+                    foreach ($matchingMonths as $month) {
+                        $nested->orWhereMonth($column, $month);
+                    }
+                } elseif (ctype_digit($token) && strlen($token) <= 2 && (int) $token >= 1 && (int) $token <= 31) {
+                    $nested->whereDay($column, (int) $token);
+                } else {
+                    $nested->where($column, 'like', "%{$token}%");
+                }
+            });
+        }
+    }
+
+    public function index(Request $request)
+    {
+        $this->limitTableRequest($request);
+        $data = $this->getEffectiveModalQuery(null, false);
+
+        $response = Datatables::of($data)
             ->filterColumn('nama_kategori', function ($query, $keyword) {
                 $query->where('mpmp.nama_kategori', 'like', "%{$keyword}%");
             })
@@ -166,13 +214,13 @@ class PerhitunganModalParameterController extends Controller
                 $query->where('mpmp.total_modal', 'like', "%{$keyword}%");
             })
             ->filterColumn('tanggal_berlaku', function ($query, $keyword) {
-                $query->where('mpmp.tanggal_berlaku', 'like', "%{$keyword}%");
+                $this->filterDisplayDate($query, 'mpmp.tanggal_berlaku', $keyword);
             })
             ->filterColumn('created_by', function ($query, $keyword) {
                 $query->where('mpmp.created_by', 'like', "%{$keyword}%");
             })
             ->filterColumn('created_at', function ($query, $keyword) {
-                $query->where('mpmp.created_at', 'like', "%{$keyword}%");
+                $this->filterDisplayDate($query, 'mpmp.created_at', $keyword);
             })
             ->filterColumn('komponen_perhitungan', function ($query, $keyword) {
                 $query->whereExists(function ($sub) use ($keyword) {
@@ -213,6 +261,28 @@ class PerhitunganModalParameterController extends Controller
                 $query->orderBy('mpmp.created_at', $order);
             })
             ->make(true);
+
+        // Load components only for the current page, in one query instead of per row.
+        $payload = $response->getData(true);
+        $ids = array_column($payload['data'] ?? [], 'id');
+        $komponen = collect();
+        if (!empty($ids)) {
+            $komponen = DB::table('master_perhitungan_modal_parameter_komponen')
+                ->whereIn('id_perhitungan_modal', $ids)
+                ->orderBy('urutan')
+                ->orderBy('id')
+                ->get(['id_perhitungan_modal', 'label', 'harga', 'urutan'])
+                ->groupBy('id_perhitungan_modal');
+        }
+        foreach ($payload['data'] as &$row) {
+            $row['komponen_perhitungan'] = $komponen->get($row['id'], collect())
+                ->map(function ($item) {
+                    return ['label' => $item->label, 'harga' => $item->harga, 'urutan' => $item->urutan];
+                })->values()->all();
+        }
+        unset($row);
+
+        return response()->json($payload);
     }
 
     public function show(Request $request)
@@ -455,6 +525,7 @@ class PerhitunganModalParameterController extends Controller
 
     public function getParameterBelumModal(Request $request)
     {
+        $this->limitTableRequest($request);
         try {
             $data = DB::table('parameter as mp')
                 ->leftJoin('master_perhitungan_modal_parameter as mpmp', function ($join) {
