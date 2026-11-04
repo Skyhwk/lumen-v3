@@ -75,7 +75,7 @@ class PromoPengujianAvailability
         return self::hasDataLama($quotation->data_lama ?? null);
     }
 
-    public static function contextFromPayload($payload, $modeQt = null)
+    public static function contextFromPayload($payload, $modeQt = null, $source = null)
     {
         $payload = is_array($payload) ? (object) $payload : $payload;
         if (!$payload) {
@@ -86,12 +86,13 @@ class PromoPengujianAvailability
         $info = is_array($info) ? (object) $info : $info;
         $id = $payload->id ?? ($info->id ?? null);
         $mode = $modeQt ?? ($payload->modeQt ?? ($info->modeQt ?? ($info->tipe ?? null)));
-        $row = $id ? self::findQuotation($id, $mode) : null;
+        $source = $source ?? ($payload->source ?? ($info->source ?? null));
+        $row = $id ? self::findQuotation($id, $mode, $source) : null;
 
         return (object) [
             'id' => $row->id ?? $id,
             'promo_id' => $row ? ($row->promo_id ?? null) : ($payload->promo_id ?? null),
-            'flag_status' => $row->flag_status ?? null,
+            'flag_status' => $row->flag_status ?? ($payload->flag_status ?? null),
             'data_lama' => $row->data_lama ?? ($payload->data_lama ?? ($info->data_lama ?? null)),
         ];
     }
@@ -100,7 +101,8 @@ class PromoPengujianAvailability
     {
         $id = $request->input('quotation_id') ?: $request->input('id_quotation');
         $modeQt = $request->input('mode_qt');
-        $row = $id ? self::findQuotation($id, $modeQt) : null;
+        $source = $request->input('source');
+        $row = $id ? self::findQuotation($id, $modeQt, $source) : null;
 
         if ($row) {
             return $row;
@@ -116,15 +118,20 @@ class PromoPengujianAvailability
         return (object) [
             'id' => $id,
             'promo_id' => $currentPromoId,
-            'flag_status' => null,
+            'flag_status' => $flagStatus,
             'data_lama' => $dataLama,
         ];
     }
 
-    public static function findQuotation($id, $modeQt = null)
+    public static function findQuotation($id, $modeQt = null, $source = null)
     {
         if (!$id) {
             return null;
+        }
+
+        $source = strtolower((string) $source);
+        if ($source === 'request_qr') {
+            return DB::table('request_qr')->where('id', $id)->first();
         }
 
         $tables = [];
