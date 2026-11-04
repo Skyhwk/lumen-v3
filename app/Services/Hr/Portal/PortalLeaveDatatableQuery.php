@@ -73,6 +73,33 @@ class PortalLeaveDatatableQuery
         return (int) $this->hrdProcessed($year)->select(DB::raw('1'))->count();
     }
 
+    public function hrdByStatus(int $year, string $status): Builder
+    {
+        $query = $this->hrdBaseQuery($year);
+
+        if ($status === WorkflowStatus::PENDING) {
+            return $query->where('leave_requests.status', WorkflowStatus::PENDING);
+        }
+        if ($status === WorkflowStatus::APPROVED_ATASAN) {
+            return $query
+                ->where('leave_requests.status', WorkflowStatus::APPROVED_ATASAN)
+                ->whereRaw(PortalHrApprovalStepSql::noPendingAtasanSteps('leave_requests'));
+        }
+        if ($status === WorkflowStatus::APPROVED_HRD) {
+            return $query->where('leave_requests.status', WorkflowStatus::APPROVED_HRD);
+        }
+        if ($status === WorkflowStatus::REJECTED_HRD) {
+            return $query->where('leave_requests.status', WorkflowStatus::REJECTED_HRD);
+        }
+
+        return $query->whereRaw('0 = 1');
+    }
+
+    public function countHrdByStatus(int $year, string $status): int
+    {
+        return (int) $this->hrdByStatus($year, $status)->select(DB::raw('1'))->count();
+    }
+
     private function hrdBaseQuery(int $year): Builder
     {
         return DB::table('hr_request as leave_requests')
@@ -95,6 +122,7 @@ class PortalLeaveDatatableQuery
             })
             ->select(
                 DB::raw('COALESCE(legacy_map.old_id, leave_requests.id) as id'),
+                'leave_requests.id as hr_request_id',
                 'leave_requests.no_document',
                 DB::raw("CASE lrd.leave_kind
                     WHEN 'special' THEN 'Special Leave'
@@ -118,6 +146,8 @@ class PortalLeaveDatatableQuery
                 END as status'),
                 'karyawan.id as employee_id',
                 'karyawan.nama_lengkap',
+                'karyawan.nik_karyawan',
+                'karyawan.image as karyawan_image',
                 'karyawan.grade as jabatan',
                 DB::raw($this->stepScalar('atasan', 'approved', 'actor_name') . ' as approved_atasan_by'),
                 DB::raw($this->stepScalar('atasan', 'approved', 'acted_at') . ' as approved_atasan_at'),
@@ -241,6 +271,9 @@ class PortalLeaveDatatableQuery
             })
             ->filterColumn('nama_pengaju', function ($query, $keyword) {
                 $query->where('leave_requests.created_by_name', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('diajukan_pada', function ($query, $keyword) {
+                $query->where('leave_requests.created_at', 'like', "%{$keyword}%");
             })
             ->filterColumn('keterangan', function ($query, $keyword) {
                 $query->where('leave_requests.description', 'like', "%{$keyword}%");
