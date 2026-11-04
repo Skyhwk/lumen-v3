@@ -270,7 +270,7 @@ class JadwalMobilisasiService
         return $data;
     }
 
-    private static function findActiveRecordByBatchIds($batchIds): ?JadwalMobilisasi
+    public static function findActiveRecordByBatchIds($batchIds): ?JadwalMobilisasi
     {
         if (!Schema::hasTable('jadwal_mobilisasi')) {
             return null;
@@ -295,6 +295,36 @@ class JadwalMobilisasiService
             })
             ->orderByDesc('id')
             ->first();
+    }
+
+    public static function storeKeteranganOperasionalHtml(string $html, ?string $existingFilename = null, string $prefix = 'ops'): ?string
+    {
+        return self::writeTxtContent($html, $existingFilename, $prefix);
+    }
+
+    public static function updateInformasiOperasional(JadwalMobilisasi $record, array $payload, ?string $actor = null): JadwalMobilisasi
+    {
+        $now = Carbon::now()->format('Y-m-d H:i:s');
+        $warna = trim((string) ($payload['warna'] ?? $record->warna ?? ''));
+        $peralatanList = self::normalizePeralatan($payload['peralatan_sampling'] ?? $record->peralatan_sampling ?? []);
+        $keteranganHtml = trim((string) ($payload['keterangan_operasional'] ?? ''));
+        $existingOpsFile = $record->keterangan_operasional ?? null;
+        $opsFilename = self::writeTxtContent($keteranganHtml, $existingOpsFile, 'ops');
+
+        $data = [
+            'warna' => $warna !== '' ? $warna : null,
+            'peralatan_sampling' => $peralatanList,
+            'updated_by' => $actor,
+            'updated_at' => $now,
+        ];
+
+        if (Schema::hasColumn('jadwal_mobilisasi', 'keterangan_operasional')) {
+            $data['keterangan_operasional'] = $opsFilename;
+        }
+
+        $record->update($data);
+
+        return $record->fresh();
     }
 
     private static function isTxtFilename(?string $value): bool
