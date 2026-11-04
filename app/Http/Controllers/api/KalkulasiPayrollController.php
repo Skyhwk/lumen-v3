@@ -128,12 +128,15 @@ class KalkulasiPayrollController extends Controller
             $masukKerjaJsonLengthSql = PayrollWorkingDaysService::sqlShowDataMasukKerja();
             $hariKerjaExpectedSql = PayrollWorkingDaysService::sqlShowDataHariKerja($periodePayroll);
             $tidakHadirSql = PayrollWorkingDaysService::sqlShowDataTidakHadir($periodePayroll);
+            $hariKerjaColumnSql = PayrollWorkingDaysService::sqlPreviewOrStoredHariKerja($periodePayroll);
+            $tidakHadirColumnSql = PayrollWorkingDaysService::sqlPreviewOrStoredTidakHadir($periodePayroll);
             $potonganAbsenEligibleSql = '(master_karyawan.status_karyawan NOT IN ("Permanent", "Contract", "Special") OR master_karyawan.is_active = 0)';
             $potonganAbsenAmountSql = 'FLOOR(GREATEST(1000, ROUND((IFNULL(master_sallary.gaji_pokok, 0) + IFNULL(master_sallary.tunjangan_kerja, 0)) / GREATEST(' . $hariKerjaExpectedSql . ', 1) * ' . $tidakHadirSql . ', 0)) / 1000) * 1000';
             $potonganAbsenCaseSql = 'CASE WHEN ' . $potonganAbsenEligibleSql
                 . ' AND rekap_masuk_kerja.tanggal IS NOT NULL AND rekap_masuk_kerja.is_active = 1'
                 . ' AND ' . $hariKerjaExpectedSql . ' > 0 AND ' . $tidakHadirSql . ' > 0 THEN '
                 . $potonganAbsenAmountSql . ' ELSE 0 END';
+            $potonganAbsenColumnSql = 'CASE WHEN payroll.id IS NULL THEN ' . $potonganAbsenCaseSql . ' ELSE IFNULL(payroll.potongan_absen, 0) END';
 
             $pcPencadanganColumn = PencadanganUpahPayrollService::sqlShowDataPencadanganColumn();
             $pcThpRefundAdd = PencadanganUpahPayrollService::sqlShowDataThpRefundAdd();
@@ -164,10 +167,10 @@ class KalkulasiPayrollController extends Controller
                 IFNULL(bpjs_tk.nominal_potongan_karyawan, 0) + IFNULL(bpjs_kesehatan.nominal_potongan_karyawan, 0) +
                 ' . $potonganAbsenCaseSql . ' + ROUND(IFNULL(SUM(CASE WHEN payroll.id IS NULL THEN 0 ELSE payroll.potongan_lainnya END), 0), 0) +
                 ' . $pcThpDeductionSub . ')) ELSE payroll.take_home_pay END, 0) as take_home_pay, 
-                ' . $potonganAbsenCaseSql . ' as potongan_absen,
+                ' . $potonganAbsenColumnSql . ' as potongan_absen,
                 ' . $masukKerjaJsonLengthSql . ' as masuk_kerja,
-                ' . $hariKerjaExpectedSql . ' as hari_kerja,
-                ' . $tidakHadirSql . ' as tidak_hadir')
+                ' . $hariKerjaColumnSql . ' as hari_kerja,
+                ' . $tidakHadirColumnSql . ' as tidak_hadir')
             )
             ->leftJoin('rekap_masuk_kerja', function ($join) use ($periodePayroll) {
                 PayrollRecordSyncService::applyJoinRekapMasukKerjaPayrollPreview($join, $periodePayroll);
@@ -258,7 +261,7 @@ class KalkulasiPayrollController extends Controller
             ->leftJoin('master_jabatan', function($join){
                 $join->on('master_karyawan.id_jabatan', '=', 'master_jabatan.id');
             })
-            ->groupBy(DB::raw('master_karyawan.id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_karyawan.is_active, master_karyawan.effective_date, master_divisi.nama_divisi, master_karyawan.id_jabatan, master_jabatan.nama_jabatan, payroll.id_jabatan, payroll.nama_jabatan, payroll.id_karyawan, pph_21.pajak_bulanan, rekening_karyawan.no_rekening, rekening_karyawan.nama_bank, payroll.keterangan, master_sallary.gaji_pokok, master_sallary.tunjangan_kerja, bpjs_tk.nominal_potongan_karyawan, bpjs_tk.nominal_potongan_kantor, bpjs_kesehatan.nominal_potongan_karyawan, bpjs_kesehatan.nominal_potongan_kantor, payroll.id, payroll.status, payroll.payroll_header_id, payroll.hari_kerja, payroll.gaji_pokok, payroll.tunjangan, payroll.pajak_pph, payroll.jamsostek, payroll.bpjs_kesehatan, payroll.bonus, payroll.incentive, payroll.potongan_lainnya, payroll.take_home_pay, payroll.no_rekening, payroll.nama_bank, rekap_masuk_kerja.is_active, rekap_masuk_kerja.tanggal, rekap_masuk_kerja.hari_kerja'))
+            ->groupBy(DB::raw('master_karyawan.id, master_karyawan.nama_lengkap, master_karyawan.nik_karyawan, master_karyawan.status_karyawan, master_karyawan.is_active, master_karyawan.effective_date, master_divisi.nama_divisi, master_karyawan.id_jabatan, master_jabatan.nama_jabatan, payroll.id_jabatan, payroll.nama_jabatan, payroll.id_karyawan, pph_21.pajak_bulanan, rekening_karyawan.no_rekening, rekening_karyawan.nama_bank, payroll.keterangan, master_sallary.gaji_pokok, master_sallary.tunjangan_kerja, bpjs_tk.nominal_potongan_karyawan, bpjs_tk.nominal_potongan_kantor, bpjs_kesehatan.nominal_potongan_karyawan, bpjs_kesehatan.nominal_potongan_kantor, payroll.id, payroll.status, payroll.payroll_header_id, payroll.hari_kerja, payroll.tidak_hadir, payroll.potongan_absen, payroll.gaji_pokok, payroll.tunjangan, payroll.pajak_pph, payroll.jamsostek, payroll.bpjs_kesehatan, payroll.bonus, payroll.incentive, payroll.potongan_lainnya, payroll.take_home_pay, payroll.no_rekening, payroll.nama_bank, rekap_masuk_kerja.is_active, rekap_masuk_kerja.tanggal, rekap_masuk_kerja.hari_kerja'))
             ->orderBy('master_karyawan.nik_karyawan', 'ASC');
             $this->constrainPayrollKaryawanVisibility($query, $periodePayroll);
             // ->where('master_karyawan.nik_karyawan', 'ISP232')

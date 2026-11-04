@@ -634,7 +634,7 @@ class LemburController extends Controller
             OvertimeRequestMembers::on('intilab_apps')->insert($details);
 
             $title = 'Request Lembur Kamu Berhasil Diperbaharui!';
-            $body = $this->grade === 'MANAGER'
+            $body = $this->grade === 'MANAGER' || $this->grade === 'SENIOR MANAGER'
                 ? 'Cek secara berkala untuk persetujuan HRD'
                 : 'Cek secara berkala untuk persetujuan atasan';
 
@@ -698,7 +698,7 @@ class LemburController extends Controller
             }
 
             $no_document = str_replace('.', '/', microtime(true));
-            $status = $this->grade === 'MANAGER' ? 'Approved Atasan' : 'Pending';
+            $status = $this->grade === 'MANAGER' || $this->grade === 'SENIOR MANAGER' ? 'Approved Atasan' : 'Pending';
             $header = OvertimeRequest::on('intilab_apps')->create([
                 'no_document' => $no_document,
                 'department_id' => $this->department,
@@ -708,8 +708,8 @@ class LemburController extends Controller
                 'end_time' => $request->jam_selesai,
                 'description' => $request->keterangan,
                 'status' => $status,
-                'approved_atasan_by' => $this->grade === 'MANAGER' ? $this->karyawan : null,
-                'approved_atasan_at' => $this->grade === 'MANAGER' ? Carbon::now()->format('Y-m-d H:i:s') : null,
+                'approved_atasan_by' => $this->grade === 'MANAGER' || $this->grade === 'SENIOR MANAGER' ? $this->karyawan : null,
+                'approved_atasan_at' => $this->grade === 'MANAGER' || $this->grade === 'SENIOR MANAGER' ? Carbon::now()->format('Y-m-d H:i:s') : null,
                 'created_by' => $this->karyawan,
                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                 'updated_by' => $this->karyawan,
@@ -733,7 +733,7 @@ class LemburController extends Controller
             OvertimeRequestMembers::on('intilab_apps')->insert($details);
 
             $sendNotifTo = [];
-            if ($this->grade === 'MANAGER') {
+            if ($this->grade === 'MANAGER' || $this->grade === 'SENIOR MANAGER') {
                 $idBuDella = 5;
                 $atasan = GetAtasan::where('id', $idBuDella)->get();
                 $bawahan = GetBawahan::where('id', $idBuDella)->get();
@@ -749,7 +749,7 @@ class LemburController extends Controller
                 ->url('/request/request-lembur')
                 ->send();
 
-            if ($this->grade !== 'MANAGER') {
+            if ($this->grade !== 'MANAGER' && $this->grade !== 'SENIOR MANAGER') {
                 $atasan = GetAtasan::where('id', $this->user_id)->get()->pluck('id')->toArray();
                 Notification::where('id', $atasan)
                     ->title('Lembur divisi ' . $this->department . ' Menunggu Persetujuan!')
@@ -767,7 +767,7 @@ class LemburController extends Controller
 
             $title = 'Request Lembur Kamu Berhasil Dibuat!';
 
-            $body = $this->grade === 'MANAGER'
+            $body = $this->grade === 'MANAGER' || $this->grade === 'SENIOR MANAGER'
                 ? 'Cek secara berkala untuk persetujuan HRD'
                 : 'Cek secara berkala untuk persetujuan atasan';
 
