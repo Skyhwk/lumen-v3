@@ -103,8 +103,11 @@ class PaymentPayrollKaryawanController extends Controller
      */
     public function completePayrollDisbursement(Request $request)
     {
-        $payrollHeaderId = PayrollDisbursementPendingQueue::dequeueNext();
-        if ($payrollHeaderId === null) {
+        $payrollHeaderId = (int) $request->input('payroll_header_id');
+        if ($payrollHeaderId <= 0) {
+            $payrollHeaderId = (int) PayrollDisbursementPendingQueue::dequeueNext();
+        }
+        if ($payrollHeaderId <= 0) {
             return response()->json([
                 'message' => 'Tidak ada payroll header dalam antrian disbursement.',
                 'processed' => false,

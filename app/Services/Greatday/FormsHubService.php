@@ -15,6 +15,7 @@ use App\Services\Hr\HrFormAttachmentStorage;
 use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\HrTableMode;
 use App\Support\Greatday\GreatdayAssetPaths;
+use App\Services\Hr\LegacyFormGreatdayApprovalSteps;
 use App\Services\Hr\Presenters\AttendanceCorrectionPresenter;
 use App\Services\Hr\Presenters\LeaveRequestPresenter;
 use App\Services\Hr\Presenters\OvertimeRequestPresenter;
@@ -226,7 +227,11 @@ class FormsHubService
             ->latest()
             ->get()
             ->filter(fn ($item) => $this->legacyRowMatchesTab('permission_requests', $item, $submissionTab))
-            ->map(fn ($item) => $this->enrichLegacyEmployee($this->applyEffectiveLegacyStatus('permission_requests', $item)));
+            ->map(fn ($item) => $this->enrichLegacyEmployee(
+                $this->applyEffectiveLegacyStatus('permission_requests', $item),
+                GreatdayAssetPaths::KEY_IZIN,
+                HrRequest::TYPE_PERMISSION
+            ));
 
         foreach ($permissions as $raw) {
             $items[] = $this->legacyItem('PermissionRequestsController', 'Permission Request', $raw);
@@ -240,7 +245,8 @@ class FormsHubService
             ->filter(fn ($item) => $this->legacyRowMatchesTab('attendance_corrections', $item, $submissionTab))
             ->map(fn ($item) => $this->enrichLegacyEmployee(
                 $this->applyEffectiveLegacyStatus('attendance_corrections', $item),
-                GreatdayAssetPaths::KEY_KOREKSI_ABSEN
+                GreatdayAssetPaths::KEY_KOREKSI_ABSEN,
+                HrRequest::TYPE_ATTENDANCE_CORRECTION
             ));
 
         foreach ($corrections as $raw) {
@@ -566,15 +572,23 @@ class FormsHubService
         $item->employee_position = $employee->jabatan ?? '';
         $this->applyLegacyAttachmentUrls($item, GreatdayAssetPaths::KEY_CUTI);
 
+        if (!HrRequestResolver::findMappedFromLegacyRow(HrRequest::TYPE_LEAVE, (int) $item->id)) {
+            app(LegacyFormGreatdayApprovalSteps::class)->applyToObject($item, HrRequest::TYPE_LEAVE);
+        }
+
         return $item;
     }
 
-    private function enrichLegacyEmployee($item, string $assetKey = GreatdayAssetPaths::KEY_IZIN)
+    private function enrichLegacyEmployee($item, string $assetKey = GreatdayAssetPaths::KEY_IZIN, ?string $hrRequestType = null)
     {
         $employee = MasterKaryawan::find($item->employee_id);
         $item->employee_name = $employee->nama_lengkap ?? '';
         $item->employee_position = $employee->jabatan ?? '';
         $this->applyLegacyAttachmentUrls($item, $assetKey);
+
+        if ($hrRequestType !== null && !HrRequestResolver::findMappedFromLegacyRow($hrRequestType, (int) $item->id)) {
+            app(LegacyFormGreatdayApprovalSteps::class)->applyToObject($item, $hrRequestType);
+        }
 
         return $item;
     }

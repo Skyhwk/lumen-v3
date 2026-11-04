@@ -131,7 +131,7 @@ class MonthlyAbsensiGenerateOrchestrator
         $karyawanMeta = MasterKaryawan::select('id_jabatan')->find($karyawanId);
         $idJabatan = $karyawanMeta ? (int) $karyawanMeta->id_jabatan : null;
 
-        $masukKerja = PayrollWorkingDaysService::collectMasukKerjaDates($rekapRows, $idJabatan, $bulanYm);
+        $masukKerja = PayrollWorkingDaysService::collectMasukKerjaDates($rekapRows, $idJabatan, $bulanYm, $karyawanId);
 
         $hariKerjaExpected = PayrollWorkingDaysService::expectedHariKerjaForKaryawan(
             $karyawanId,
@@ -161,7 +161,7 @@ class MonthlyAbsensiGenerateOrchestrator
         $karyawanMeta = MasterKaryawan::select('id_jabatan')->find($karyawanId);
         $idJabatan = $karyawanMeta ? (int) $karyawanMeta->id_jabatan : null;
 
-        $masukKerja = PayrollWorkingDaysService::collectMasukKerjaDates($rekapRows, $idJabatan, $bulanYm);
+        $masukKerja = PayrollWorkingDaysService::collectMasukKerjaDates($rekapRows, $idJabatan, $bulanYm, $karyawanId);
         $hariKerjaExpected = PayrollWorkingDaysService::expectedHariKerjaForKaryawan(
             $karyawanId,
             $idJabatan,
@@ -270,8 +270,7 @@ class MonthlyAbsensiGenerateOrchestrator
                     $this->persistGenerate(
                         $karyawanId,
                         $bulanYm,
-                        // Rekap otomatis hanya membaca punch asli; koreksi punch
-                        // tetap melalui jalur generate manual.
+                        // Generate (cron & portal) hanya rekap; ubah punch via Update / koreksi HRD.
                         null,
                         $payload['data'],
                         null

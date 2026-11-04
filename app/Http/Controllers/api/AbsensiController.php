@@ -13,6 +13,7 @@ use App\Models\RekapLiburKalender;
 use App\Models\Greatday\AbsensiAndroid;
 use App\Http\Controllers\Controller;
 use App\Services\Hr\HrAttendanceDayExcuseLabels;
+use App\Services\Hr\MonthlyAbsensiDataBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -410,7 +411,8 @@ class AbsensiController extends Controller
                     'shift' => 'SHOB2'
                 ];
             }
-        } else if ($shift == 'off') {
+        } else if (MonthlyAbsensiDataBuilder::isRestDayShift($shift)) {
+            $shiftLabel = strtoupper(trim((string) $shift));
             $data = [
                 'nama' => $nik_karyawan . ' - ' . $nama_lengkap,
                 'tanggal' => $tanggal,
@@ -419,7 +421,7 @@ class AbsensiController extends Controller
                 'keluar' => '',
                 'selisih' => '',
                 'jam_kerja' => '',
-                'shift' => 'OFF'
+                'shift' => $shiftLabel !== '' ? $shiftLabel : 'OFF',
             ];
         } else {
             $in = DATE('H:i:s', strtotime($checkin . '+4 hours'));
@@ -1094,8 +1096,10 @@ class AbsensiController extends Controller
         $nextDate = date('Y-m-d', strtotime($tanggal . ' +1 day'));
         $nextPunch = self::getMonthlyPunch($punchIndex, $karyawan->id, $nextDate);
 
-        if ($shiftRow && $shiftRow->shift === 'off') {
-            return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'OFF'), $tanggal, $tanggal);
+        if ($shiftRow && MonthlyAbsensiDataBuilder::isRestDayShift($shiftRow->shift)) {
+            $shiftLabel = strtoupper(trim((string) $shiftRow->shift));
+
+            return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $shiftLabel), $tanggal, $tanggal);
         }
 
         $checkin = ($shiftRow && $shiftRow->time_in) ? $shiftRow->time_in : '08:00:00';

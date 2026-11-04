@@ -91,11 +91,11 @@ class UpdateAbsensiController extends Controller
         $orchestrator = new MonthlyAbsensiGenerateOrchestrator();
         DB::beginTransaction();
         try {
-            $absensiPayload = $request->absensi ? (array) $request->absensi : null;
+            // Generate manual = rekap saja (selaras absensi:generate-monthly), tanpa menulis ulang tabel absensi.
             $orchestrator->persistGenerate(
                 (int) $request->id_karyawan,
                 (string) $request->bulan,
-                $absensiPayload,
+                null,
                 (array) $request->data,
                 $this->karyawan ? (int) $this->karyawan : null
             );
@@ -174,7 +174,8 @@ class UpdateAbsensiController extends Controller
             $masuk_kerja = PayrollWorkingDaysService::collectMasukKerjaDates(
                 $rekapRows,
                 $idJabatan,
-                $request->bulan
+                $request->bulan,
+                (int) $request->id_karyawan
             );
 
             $hariKerjaExpected = PayrollWorkingDaysService::expectedHariKerjaForKaryawan(

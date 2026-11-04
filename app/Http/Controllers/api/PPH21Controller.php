@@ -31,20 +31,39 @@ class PPH21Controller extends Controller
 
     public function getKaryawan()
     {
-        $existingNik = PPH21::where('is_active', true)->pluck('nik_karyawan')->toArray();
-        $existingNames = PPH21::where('is_active', true)->pluck('karyawan')->toArray();
+        $existingIds = PPH21::where('is_active', true)
+            ->whereNotNull('id_karyawan')
+            ->pluck('id_karyawan')
+            ->all();
+        $existingNiks = PPH21::where('is_active', true)
+            ->whereNull('id_karyawan')
+            ->whereNotNull('nik_karyawan')
+            ->pluck('nik_karyawan')
+            ->all();
 
         $karyawan = MasterKaryawan::where('is_active', true)
-            ->whereNotIn('nik_karyawan', $existingNik)
-            ->whereNotIn('nama_lengkap', $existingNames)
-            ->select('nik_karyawan', 'nama_lengkap')
-            ->get();
-        
-            return response()->json([
-                'success' => true,
-                'data' => $karyawan,
-                'message' => 'Available karyawan data retrieved successfully',
-            ], 201);
+            ->when(!empty($existingIds), function ($query) use ($existingIds) {
+                $query->whereNotIn('id', $existingIds);
+            })
+            ->when(!empty($existingNiks), function ($query) use ($existingNiks) {
+                $query->whereNotIn('nik_karyawan', $existingNiks);
+            })
+            ->select('id', 'nik_karyawan', 'nama_lengkap')
+            ->orderBy('nama_lengkap')
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'id_karyawan' => $row->id,
+                    'nik_karyawan' => $row->nik_karyawan,
+                    'nama_lengkap' => $row->nama_lengkap,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => $karyawan,
+            'message' => 'Available karyawan data retrieved successfully',
+        ], 201);
     }
 
     public function delete(Request $request){
@@ -74,19 +93,41 @@ class PPH21Controller extends Controller
                 ], 401);
             }
             // dd(str_replace(['Rp', '.', ','], '', $request->total_denda));
-            $existingKaryawan = PPH21::where('is_active', true)->pluck('nik_karyawan')->toArray();
+            $existing = $request->id ? PPH21::find($request->id) : null;
+            $karyawan = $this->resolveKaryawan($request, $existing);
+            if (!$karyawan) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Karyawan tidak ditemukan.',
+                ], 422);
+            }
 
-            if($request->id && in_array($request->nik_karyawan, $existingKaryawan)) {
-                $updatedData = PPH21::findorFail($request->id);
-                $updatedData->updated_at = DATE('Y-m-d H:i:s');
-                $updatedData->updated_by = $this->karyawan;
-                $updatedData->pajak_bulanan = str_replace(['Rp', '.', ','], '', $request->pajak_bulanan);
-                $updatedData->pajak_tahunan = str_replace(['Rp', '.', ','], '', $request->pajak_tahunan);
-                $updatedData->bulan_mulai_pemotongan = $request->bulan_mulai_pemotongan;
-                $updatedData->save();
+            $sameEmployee = $existing
+                && $existing->is_active
+                && (
+                    (int) $existing->id_karyawan === (int) $karyawan->id
+                    || ($existing->id_karyawan === null && $existing->nik_karyawan === $karyawan->nik_karyawan)
+                );
+
+            if ($existing && $existing->is_active && !$sameEmployee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data PPh tidak sesuai dengan karyawan yang dipilih.',
+                ], 422);
+            }
+
+            if ($sameEmployee) {
+                $existing->updated_at = DATE('Y-m-d H:i:s');
+                $existing->updated_by = $this->karyawan;
+                $existing->pajak_bulanan = str_replace(['Rp', '.', ','], '', $request->pajak_bulanan);
+                $existing->pajak_tahunan = str_replace(['Rp', '.', ','], '', $request->pajak_tahunan);
+                $existing->bulan_mulai_pemotongan = $request->bulan_mulai_pemotongan;
+                $existing->id_karyawan = $karyawan->id;
+                $existing->nik_karyawan = $karyawan->nik_karyawan;
+                $existing->karyawan = $karyawan->nama_lengkap;
+                $existing->save();
 
                 $message = 'PPH data updated successfully';
-
             } else {
                 $inputData = new PPH21();
                 $inputData->created_by = $this->karyawan;
@@ -94,12 +135,12 @@ class PPH21Controller extends Controller
                 $inputData->pajak_bulanan = str_replace(['Rp', '.', ','], '', $request->pajak_bulanan);
                 $inputData->pajak_tahunan = str_replace(['Rp', '.', ','], '', $request->pajak_tahunan);
                 $inputData->bulan_mulai_pemotongan = $request->bulan_mulai_pemotongan;
-                $karyawan = MasterKaryawan::where('nik_karyawan', $request->nik_karyawan)->first();
+                $inputData->id_karyawan = $karyawan->id;
                 $inputData->nik_karyawan = $karyawan->nik_karyawan;
-                $inputData->karyawan = $karyawan->nama_lengkap; 
+                $inputData->karyawan = $karyawan->nama_lengkap;
 
                 $message = 'PPH data inserted successfully';
-                
+
                 $inputData->save();
             }
 
@@ -111,6 +152,31 @@ class PPH21Controller extends Controller
         } catch (\Throwable $th){
             return response()->json(['message' => $th->getMessage()], 500);
         }
+    }
+
+    private function resolveKaryawan(Request $request, ?PPH21 $existing = null): ?MasterKaryawan
+    {
+        $karyawanId = trim((string) $request->id_karyawan);
+        $usesPphRowId = $existing
+            && $karyawanId !== ''
+            && (int) $karyawanId === (int) $existing->id
+            && $existing->id_karyawan === null;
+
+        if ($karyawanId !== '' && !$usesPphRowId) {
+            $karyawan = MasterKaryawan::find($karyawanId);
+            if ($karyawan) {
+                return $karyawan;
+            }
+        }
+
+        $nik = trim((string) ($request->nik_karyawan ?: optional($existing)->nik_karyawan));
+        if ($nik === '') {
+            return null;
+        }
+
+        return MasterKaryawan::where('nik_karyawan', $nik)
+            ->orderByDesc('is_active')
+            ->first();
     }
 
     public function getHistory(Request $request)

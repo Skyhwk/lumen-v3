@@ -9,6 +9,7 @@ use App\Models\Greatday\LiburPerusahaan;
 use App\Models\MasterCabang;
 use App\Models\RfidCard;
 use App\Models\ShiftKaryawan;
+use App\Services\Hr\ShiftAbsensiPunchRules;
 use App\Services\Greatday\EmployeeWorkingDaysService;
 use App\Services\Greatday\LeaveAlpaExcuseCalendar;
 use App\Services\Greatday\OfficeCalendarService;
@@ -861,13 +862,18 @@ class AttendanceController extends Controller
 
     private function insertProduksiAbsensiRow(string $tanggal, string $jam): void
     {
+        $shiftCode = ShiftKaryawan::on($this->produksi())
+            ->where('karyawan_id', $this->user_id)
+            ->where('tanggal', $tanggal)
+            ->value('shift');
+
         Absensi::on($this->produksi())->create([
             'karyawan_id' => $this->user_id,
             'tanggal' => $tanggal,
             'jam' => $jam,
             'hari' => $this->getDayName($tanggal),
             'kode_mesin' => 'GREATDAY',
-            'status' => 'Masuk',
+            'status' => ShiftAbsensiPunchRules::inferProductionStatus($shiftCode, $jam),
         ]);
     }
 
