@@ -448,7 +448,10 @@ class RequestQuotationController extends Controller
     {
         $payload = json_decode(json_encode($request->all(), JSON_OBJECT_AS_ARRAY));
         try {
-            $payload->_promo = \App\Services\QuotationPromo::resolve($payload->promo_id ?? null);
+            $payload->_promo = \App\Services\QuotationPromo::resolve(
+                $payload->promo_id ?? null,
+                \App\Services\PromoPengujianAvailability::contextFromPayload($payload)
+            );
             $periods = $payload->informasi_pelanggan->modeQt === 'kontrak'
                 ? array_map(fn($period) => $period->data_sampling ?? [], $payload->data_pendukung ?? [])
                 : [$payload->data_pendukung ?? []];

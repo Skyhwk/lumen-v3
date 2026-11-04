@@ -37,7 +37,10 @@ class ForwardNonKontrakJob extends Job
         DB::beginTransaction();
 
         try {
-            $promo = \App\Services\QuotationPromo::resolve($payload->promo_id ?? null);
+            $promo = \App\Services\QuotationPromo::resolve(
+                $payload->promo_id ?? null,
+                \App\Services\PromoPengujianAvailability::contextFromPayload($payload)
+            );
             $tahun_chek = date('y', strtotime($payload->informasi_pelanggan['tgl_penawaran']));  // 2 digit tahun (misal: 25)
             $bulan_chek = date('m', strtotime($payload->informasi_pelanggan['tgl_penawaran']));  // 2 digit bulan (misal: 01)
             $bulan_chek = self::romawi($bulan_chek);

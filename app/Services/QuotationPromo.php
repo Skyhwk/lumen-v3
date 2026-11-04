@@ -252,11 +252,12 @@ class QuotationPromo
         $model->discount_promo = json_encode(['deskripsi_promo_discount' => $promo->nama_diskon, 'jumlah_promo_discount' => $rate, 'dasar_diskon' => $basis]);
     }
 
-    public static function resolve($id)
+    public static function resolve($id, $quotation = null)
     {
         if (!$id) return null;
+        PromoPengujianAvailability::syncExpired();
         $promo = DB::table('promo_pengujian')->where('id', $id)->first();
-        if (!$promo || $promo->status !== 'aktif') {
+        if (!$promo || !PromoPengujianAvailability::canUse($promo, $quotation)) {
             throw new \InvalidArgumentException('Promo tidak ditemukan atau sudah tidak aktif. Pilih ulang promo.');
         }
         $promo->konfigurasi = json_decode($promo->konfigurasi, true) ?: [];
