@@ -349,7 +349,7 @@ class RequestSamplingPlanRevisiController extends Controller
                 "sampler" => $request->sampler,
                 "durasi" => $request->durasi,
                 "status" => $request->status,
-                "kendaraan" => $request->kendaraan,
+                "kendaraan" => JadwalServices::normalizeKendaraan($request->kendaraan),
                 "periode" => $request->periode ?? null,
                 "karyawan" => $this->karyawan,
                 'driver' => $request->driver ?? null,
@@ -508,7 +508,7 @@ class RequestSamplingPlanRevisiController extends Controller
         $detailKonflik = [];
 
         foreach ($dataBentrok as $row) {
-            $veh = $row->kendaraan;
+            $veh = JadwalServices::normalizeKendaraan($row->kendaraan);
 
             // Jika kendaraan ini belum masuk daftar konflik, masukkan.
             if (!isset($detailKonflik[$veh])) {

@@ -116,14 +116,23 @@ class JadwalMobilisasiService
             if ($estimasiMenit > 0) {
                 $parts[] = "{$estimasiMenit} Menit";
             }
-            $waktuBerangkat = !empty($parts) ? implode(' ', $parts) : '0 Menit';
+            $waktuBerangkat = !empty($parts) ? implode(' ', $parts) : '';
         }
 
-        $keteranganAkomodasi = trim((string) ($payload['keterangan_akomodasi'] ?? 'PT INTI SURYA LABORATORIUM'));
-        $rutePerjalanan = trim((string) ($payload['rute_perjalanan'] ?? 'TOLL'));
+        $keteranganAkomodasi = trim((string) ($payload['keterangan_akomodasi'] ?? ''));
+        $rutePerjalanan = trim((string) ($payload['rute_perjalanan'] ?? ''));
+        $hasEstimasi = $estimasiJam > 0
+            || $estimasiMenit > 0
+            || $waktuBerangkat !== ''
+            || $keteranganAkomodasi !== ''
+            || $rutePerjalanan !== '';
+
         $estimasiPerjalanan = trim((string) ($payload['estimasi_perjalanan'] ?? ''));
-        if ($estimasiPerjalanan === '') {
-            $estimasiPerjalanan = "{$waktuBerangkat} dari {$keteranganAkomodasi} & RUTE ({$rutePerjalanan})";
+        if ($estimasiPerjalanan === '' && $hasEstimasi) {
+            $durasiText = $waktuBerangkat !== '' ? $waktuBerangkat : '-';
+            $asalText = $keteranganAkomodasi !== '' ? $keteranganAkomodasi : '-';
+            $ruteText = $rutePerjalanan !== '' ? $rutePerjalanan : '-';
+            $estimasiPerjalanan = "{$durasiText} dari {$asalText} & RUTE ({$ruteText})";
         }
 
         $peralatanList = self::normalizePeralatan($payload['peralatan_sampling'] ?? []);
@@ -148,7 +157,7 @@ class JadwalMobilisasiService
             'tujuan_sampling_manual' => $tujuanManual !== '' ? $tujuanManual : null,
             'estimasi_jam' => $estimasiJam,
             'estimasi_menit' => $estimasiMenit,
-            'waktu_berangkat' => $waktuBerangkat,
+            'waktu_berangkat' => $waktuBerangkat !== '' ? $waktuBerangkat : null,
             'keterangan_akomodasi' => $keteranganAkomodasi !== '' ? $keteranganAkomodasi : null,
             'rute_perjalanan' => $rutePerjalanan !== '' ? $rutePerjalanan : null,
             'estimasi_perjalanan' => $estimasiPerjalanan !== '' ? $estimasiPerjalanan : null,
@@ -452,7 +461,8 @@ class JadwalMobilisasiService
             return [];
         }
 
-        // Ambil total stok unit normal per (nama_alat, branch_id) dari ga_assets jika tersedia
+        // Stok fisik opsional dari ga_assets (unit sampling normal). Tidak dipakai jika 0,
+        // supaya katalog kategori_peralatan_sampling tetap jadi sumber hitungan.
         $gaStockMap = [];
         if (Schema::hasTable('ga_assets')) {
             $gaQuery = GaAsset::query()
@@ -461,9 +471,22 @@ class JadwalMobilisasiService
                     'branch_id',
                     DB::raw('COUNT(*) as total_unit')
                 )
-                ->where('sub_kategori_aset_id', 10)
                 ->where('is_active', 1)
                 ->where('condition', 'normal');
+
+            if (Schema::hasColumn('ga_assets', 'record_kind')) {
+                $gaQuery->where('record_kind', GaAsset::RECORD_UNIT);
+            }
+
+            if (Schema::hasTable('master_sub_kategori_aset')) {
+                $gaQuery->whereIn('sub_kategori_aset_id', function ($sub) {
+                    $sub->select('id')
+                        ->from('master_sub_kategori_aset')
+                        ->whereRaw("UPPER(TRIM(nama_sub_kategori)) = 'SAMPLING'");
+                });
+            } else {
+                $gaQuery->where('sub_kategori_aset_id', 10);
+            }
 
             if (!empty($cleanBranchIds)) {
                 $gaQuery->whereIn('branch_id', $cleanBranchIds);
@@ -476,7 +499,6 @@ class JadwalMobilisasiService
             foreach ($gaRows as $g) {
                 $keyBranch = $g->norm_name . '|' . (int) ($g->branch_id ?? 0);
                 $gaStockMap[$keyBranch] = (int) $g->total_unit;
-                $gaStockMap[$g->norm_name] = ($gaStockMap[$g->norm_name] ?? 0) + (int) $g->total_unit;
             }
         }
 
@@ -490,7 +512,7 @@ class JadwalMobilisasiService
 
             foreach ($activeMobilisasi as $mob) {
                 if (!empty($normalizedExclude['ids'])) {
-                    $mobBatch = self::normalizeBatchIds($mob->batch_id);
+                    $mobBatch = self::normalizeBatchIds($mob->batch_id ?: ($mob->batch_jadwal_ids ?? []));
                     if (!empty(array_intersect($normalizedExclude['ids'], $mobBatch['ids']))) {
                         continue;
                     }
@@ -517,13 +539,13 @@ class JadwalMobilisasiService
                     if ($namaAlat !== '' && $qty > 0) {
                         $specificKey = $namaAlat . '|' . $itemCabang;
                         $usedByToolKey[$specificKey] = ($usedByToolKey[$specificKey] ?? 0) + $qty;
-                        $usedByToolKey[$namaAlat] = ($usedByToolKey[$namaAlat] ?? 0) + $qty;
                     }
                 }
             }
         }
 
-        // Group / deduplicate berdasarkan nama_alat + id_cabang + warna supaya pilihan dropdown bersih
+        // Group berdasarkan nama_alat + id_cabang + warna.
+        // Total default = jumlah row aktif di kategori_peralatan_sampling (bukan 0 dari ga_assets kosong).
         $grouped = [];
         foreach ($kpsRows as $row) {
             $namaAlat = trim((string) $row->nama_alat);
@@ -533,13 +555,6 @@ class JadwalMobilisasiService
             $groupKey = $normName . '|' . $cabangId . '|' . strtolower($warnaVal);
 
             if (!isset($grouped[$groupKey])) {
-                $totalStok = $gaStockMap[$normName . '|' . $cabangId]
-                    ?? $gaStockMap[$normName]
-                    ?? 1;
-                $used = $usedByToolKey[$normName . '|' . $cabangId]
-                    ?? ($usedByToolKey[$normName] ?? 0);
-                $sisa = max(0, (int) $totalStok - (int) $used);
-
                 $grouped[$groupKey] = [
                     'id' => (int) $row->id,
                     'id_kategori_peralatan' => (int) $row->id,
@@ -552,12 +567,31 @@ class JadwalMobilisasiService
                     'id_cabang' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
                     'branch_id' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
                     'lokasi_penempatan_alat' => $row->lokasi_penempatan_alat,
-                    'total' => (int) $totalStok,
-                    'terpakai' => (int) $used,
-                    'stok' => $sisa,
+                    'kps_count' => 0,
                 ];
             }
+
+            $grouped[$groupKey]['kps_count']++;
         }
+
+        foreach ($grouped as &$item) {
+            $normName = strtoupper((string) $item['nama_alat']);
+            $cabangId = (int) ($item['id_cabang'] ?? 0);
+            $kpsCount = max(1, (int) ($item['kps_count'] ?? 1));
+            $gaCount = (int) ($gaStockMap[$normName . '|' . $cabangId] ?? 0);
+            $totalStok = $gaCount > 0 ? $gaCount : $kpsCount;
+            $used = (int) ($usedByToolKey[$normName . '|' . $cabangId] ?? 0);
+            if ($cabangId !== 0) {
+                $used += (int) ($usedByToolKey[$normName . '|0'] ?? 0);
+            }
+
+            $item['total'] = $totalStok;
+            $item['terpakai'] = $used;
+            $item['sisa'] = max(0, $totalStok - $used);
+            $item['stok'] = $totalStok;
+            unset($item['kps_count']);
+        }
+        unset($item);
 
         return array_values($grouped);
     }
