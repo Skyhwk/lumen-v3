@@ -43,7 +43,7 @@ trait LegacyFormAtasanQueueLogic
         }
 
         $fromHr = HrApprovalChainPresenter::atasanStepsForPortal($hrRequest);
-        if ($fromHr === []) {
+        if ($fromHr === [] || count($fromHr) < count($legacySteps)) {
             return $legacySteps;
         }
 
