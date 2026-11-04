@@ -103,6 +103,15 @@ class AttendanceCorrectionsController extends Controller
             ->filterColumn('approved_hrd_at', function ($query, $keyword) {
                 $query->where('approved_hrd_at', 'like', "%{$keyword}%");
             })
+            ->filterColumn('rejected_hrd_by', function ($query, $keyword) {
+                $query->where('rejected_hrd_by', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('rejected_hrd_at', function ($query, $keyword) {
+                $query->where('rejected_hrd_at', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('reject_hrd_reason', function ($query, $keyword) {
+                $query->where('reject_hrd_reason', 'like', "%{$keyword}%");
+            })
             ->make(true);
     }
 
