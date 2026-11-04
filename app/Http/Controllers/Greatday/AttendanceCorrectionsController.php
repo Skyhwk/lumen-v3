@@ -12,6 +12,8 @@ use App\Services\Hr\Greatday\AttendanceCorrectionHrService;
 use App\Services\Hr\Greatday\FormSubmitterVoidService;
 use App\Services\Hr\HrFormAttachmentStorage;
 use App\Services\Hr\HrRequestResolver;
+use App\Services\Hr\LegacyFormGreatdayApprovalSteps;
+use App\Services\Hr\WorkflowStatus;
 use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
 use App\Support\Greatday\NotificationCopy;
@@ -54,6 +56,10 @@ class AttendanceCorrectionsController extends Controller
                 $attachments = HrFormAttachmentStorage::resolvePublicUrls($item->attachment, GreatdayAssetPaths::KEY_KOREKSI_ABSEN);
                 $item->attachments = $attachments;
                 $item->attachment = $attachments[0] ?? null;
+
+                if (!HrRequestResolver::findMappedFromLegacyRow(HrRequest::TYPE_ATTENDANCE_CORRECTION, (int) $item->id)) {
+                    app(LegacyFormGreatdayApprovalSteps::class)->applyToObject($item, HrRequest::TYPE_ATTENDANCE_CORRECTION);
+                }
 
                 return $item;
             });
@@ -121,18 +127,22 @@ class AttendanceCorrectionsController extends Controller
     public function approve(Request $request)
     {
         if ($this->usesHrTables()) {
-            $resolved = HrRequestResolver::findByApiId(HrRequest::TYPE_ATTENDANCE_CORRECTION, (int) $request->id);
+            $apiId = (int) $request->id;
+            $resolved = HrRequestResolver::findByApiId(HrRequest::TYPE_ATTENDANCE_CORRECTION, $apiId);
             if (!$resolved) {
-                return response()->json(['message' => 'Attendance correction not found'], 404);
-            }
-            if ($deny = $this->assertPendingForAtasan($resolved->status)) {
-                return $deny;
-            }
-            if ($deny = $this->assertHrChainApprover($resolved)) {
-                return $deny;
-            }
+                if (!$this->legacyAttendanceCorrectionForAtasanAction($apiId)) {
+                    return response()->json(['message' => 'Attendance correction not found'], 404);
+                }
+            } else {
+                if ($deny = $this->assertPendingForAtasan($resolved->status)) {
+                    return $deny;
+                }
+                if ($deny = $this->assertHrChainApprover($resolved)) {
+                    return $deny;
+                }
 
-            return app(AttendanceCorrectionHrService::class)->approve((int) $request->id, $this->karyawan);
+                return app(AttendanceCorrectionHrService::class)->approve($apiId, $this->karyawan);
+            }
         }
 
         $attendanceCorrection = AttendanceCorrection::find($request->id);
@@ -168,18 +178,22 @@ class AttendanceCorrectionsController extends Controller
     public function reject(Request $request)
     {
         if ($this->usesHrTables()) {
-            $resolved = HrRequestResolver::findByApiId(HrRequest::TYPE_ATTENDANCE_CORRECTION, (int) $request->id);
+            $apiId = (int) $request->id;
+            $resolved = HrRequestResolver::findByApiId(HrRequest::TYPE_ATTENDANCE_CORRECTION, $apiId);
             if (!$resolved) {
-                return response()->json(['message' => 'Attendance correction not found'], 404);
-            }
-            if ($deny = $this->assertPendingForAtasanReject($resolved->status)) {
-                return $deny;
-            }
-            if ($deny = $this->assertHrChainApprover($resolved)) {
-                return $deny;
-            }
+                if (!$this->legacyAttendanceCorrectionForAtasanAction($apiId)) {
+                    return response()->json(['message' => 'Attendance correction not found'], 404);
+                }
+            } else {
+                if ($deny = $this->assertPendingForAtasanReject($resolved->status)) {
+                    return $deny;
+                }
+                if ($deny = $this->assertHrChainApprover($resolved)) {
+                    return $deny;
+                }
 
-            return app(AttendanceCorrectionHrService::class)->reject((int) $request->id, $this->karyawan, $request->reject_reason);
+                return app(AttendanceCorrectionHrService::class)->reject($apiId, $this->karyawan, $request->reject_reason);
+            }
         }
 
         $attendanceCorrection = AttendanceCorrection::find($request->id);
@@ -231,5 +245,18 @@ class AttendanceCorrectionsController extends Controller
         } catch (\InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+    }
+
+    /**
+     * Legacy intilab_apps (tanpa map HR) — antrian persetujuan bisa tampil meski is_active=0.
+     */
+    private function legacyAttendanceCorrectionForAtasanAction(int $apiId): ?AttendanceCorrection
+    {
+        $row = AttendanceCorrection::find($apiId);
+        if (!$row || $row->status !== WorkflowStatus::PENDING) {
+            return null;
+        }
+
+        return $row;
     }
 }

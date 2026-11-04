@@ -170,21 +170,10 @@ class KalkulasiPayrollController extends Controller
                 ' . $tidakHadirSql . ' as tidak_hadir')
             )
             ->leftJoin('rekap_masuk_kerja', function ($join) use ($periodePayroll) {
-                $join->on('rekap_masuk_kerja.karyawan_id', '=', 'master_karyawan.id')
-                    ->where('rekap_masuk_kerja.bulan', $periodePayroll)
-                    ->where('rekap_masuk_kerja.is_active', 1);
+                PayrollRecordSyncService::applyJoinRekapMasukKerjaPayrollPreview($join, $periodePayroll);
             })
-            ->leftJoin('master_sallary', function($join){
-                $join->on('master_karyawan.id', '=', 'master_sallary.id_karyawan')
-                    ->where(function ($salary) {
-                        $salary->where('master_sallary.is_active', true)
-                            ->orWhere(function ($fallback) {
-                                // Use the latest salary history only for inactive employees without an active salary.
-                                $fallback->where('master_karyawan.is_active', false)
-                                    ->whereRaw('NOT EXISTS (SELECT 1 FROM master_sallary AS active_salary WHERE active_salary.id_karyawan = master_karyawan.id AND active_salary.is_active = 1)')
-                                    ->whereRaw('master_sallary.id = (SELECT MAX(latest_salary.id) FROM master_sallary AS latest_salary WHERE latest_salary.id_karyawan = master_karyawan.id)');
-                            });
-                    });
+            ->leftJoin('master_sallary', function ($join) {
+                PayrollRecordSyncService::applyJoinMasterSalary($join);
             })
             ->leftJoin('bonus_karyawan', function ($join) {
                 $join->on('master_karyawan.id', '=', 'bonus_karyawan.id_karyawan');
@@ -194,27 +183,47 @@ class KalkulasiPayrollController extends Controller
                 $join->on('master_karyawan.id', '=', 'rekening_karyawan.id_karyawan')
                     ->whereRaw(PayrollRecordSyncService::sqlJoinLatestRow('rekening_karyawan'));
             })
-            ->leftJoin('bpjs_tk', function ($join) {
+            ->leftJoin('bpjs_tk', function ($join) use ($periode) {
                 $join->on('master_karyawan.id', '=', 'bpjs_tk.id_karyawan')
-                    ->whereRaw(PayrollRecordSyncService::sqlJoinLatestRow('bpjs_tk'));
+                    ->whereRaw(
+                        PayrollRecordSyncService::sqlJoinLatestPayrollMasterRowThroughPeriod(
+                            'bpjs_tk',
+                            'bulan_efektif'
+                        ),
+                        [$periode]
+                    );
             })
             ->leftJoin('bpjs_kesehatan', function ($join) use ($periode) {
                 $join->on('master_karyawan.id', '=', 'bpjs_kesehatan.id_karyawan')
                     ->whereRaw(
-                        'bpjs_kesehatan.id = (SELECT t.id FROM bpjs_kesehatan t WHERE t.id_karyawan = master_karyawan.id'
-                        . ' AND t.bulan_efektif <= ? ORDER BY t.is_active DESC, t.id DESC LIMIT 1)',
+                        PayrollRecordSyncService::sqlJoinLatestPayrollMasterRowThroughPeriod(
+                            'bpjs_kesehatan',
+                            'bulan_efektif'
+                        ),
                         [$periode]
                     );
             })
             ->leftJoin('kasbon', function ($join) use ($periode) {
                 $join->on('master_karyawan.id', '=', 'kasbon.id_karyawan')
-                    ->where('kasbon.bulan_mulai_pemotongan', '<=', $periode);
-                PayrollRecordSyncService::applyJoinPayrollDebtFilter($join, 'kasbon', 'sisa_kasbon');
+                    ->whereRaw(
+                        PayrollRecordSyncService::sqlJoinLatestDeductionRow(
+                            'kasbon',
+                            'bulan_mulai_pemotongan',
+                            'sisa_kasbon'
+                        ),
+                        [$periode]
+                    );
             })
             ->leftJoin('denda_karyawan', function ($join) use ($periode) {
                 $join->on('master_karyawan.id', '=', 'denda_karyawan.id_karyawan')
-                    ->where('denda_karyawan.bulan_mulai_pemotongan', '<=', $periode);
-                PayrollRecordSyncService::applyJoinPayrollDebtFilter($join, 'denda_karyawan', 'sisa_denda');
+                    ->whereRaw(
+                        PayrollRecordSyncService::sqlJoinLatestDeductionRow(
+                            'denda_karyawan',
+                            'bulan_mulai_pemotongan',
+                            'sisa_denda'
+                        ),
+                        [$periode]
+                    );
             })
             ->leftJoin('pph_21', function ($join) use ($periode) {
                 $join->on('master_karyawan.id', '=', 'pph_21.id_karyawan')
@@ -231,8 +240,17 @@ class KalkulasiPayrollController extends Controller
             })
             ->leftJoin('pencadangan_upah', function ($join) use ($periodePayroll) {
                 $join->on('master_karyawan.id', '=', 'pencadangan_upah.id_karyawan')
-                    ->where('pencadangan_upah.bulan_efektif', '<=', $periodePayroll);
-                PayrollRecordSyncService::applyJoinPencadanganFilter($join);
+                    ->whereRaw(
+                        'pencadangan_upah.id = (SELECT t.id FROM pencadangan_upah t WHERE t.id_karyawan = master_karyawan.id'
+                        . ' AND t.bulan_efektif <= ?'
+                        . ' AND (t.status = "ONGOING" OR t.status IS NULL)'
+                        . ' AND ('
+                        . '(master_karyawan.is_active = 1 AND t.is_active = 1)'
+                        . ' OR (master_karyawan.is_active = 0 AND (t.is_active = 1 OR t.is_active = 0))'
+                        . ')'
+                        . ' ORDER BY t.id DESC LIMIT 1)',
+                        [$periodePayroll]
+                    );
             })
             ->leftJoin('master_divisi', function($join){
                 $join->on('master_karyawan.id_department', '=', 'master_divisi.id');
@@ -597,9 +615,9 @@ class KalkulasiPayrollController extends Controller
 
     /**
      * Aktif: wajib rekap absensi aktif periode.
-     * Non-aktif: hanya bulan keluar (periode = bulan effective_date).
-     * Gaji bulan keluar bisa diproses/bayar di bulan kalender berikutnya (+1 bulan),
-     * tapi periode payroll-nya tetap bulan keluar — tidak ikut periode gaji bulan berikutnya.
+     * Non-aktif: bulan keluar, bulan berikutnya (proses bayar), atau sudah NA di master
+     * tapi tanggal efektif keluar masih setelah periode — tetap tampil bila ada rekap periode itu
+     * (gaji bulan terakhir bekerja sebelum bulan keluar).
      */
     private function constrainPayrollKaryawanVisibility($query, string $periode): void
     {
@@ -611,7 +629,19 @@ class KalkulasiPayrollController extends Controller
             })->orWhere(function ($inactive) use ($periode) {
                 $inactive->where('master_karyawan.is_active', 0)
                     ->whereNotNull('master_karyawan.effective_date')
-                    ->whereRaw('DATE_FORMAT(master_karyawan.effective_date, "%Y-%m") = ?', [$periode]);
+                    ->where(function ($exitMonth) use ($periode) {
+                        $exitMonth->whereRaw('DATE_FORMAT(master_karyawan.effective_date, "%Y-%m") = ?', [$periode])
+                            ->orWhereRaw(
+                                'DATE_FORMAT(DATE_ADD(master_karyawan.effective_date, INTERVAL 1 MONTH), "%Y-%m") = ?',
+                                [$periode]
+                            );
+                    });
+            })->orWhere(function ($inactiveLastWorked) use ($periode) {
+                $inactiveLastWorked->where('master_karyawan.is_active', 0)
+                    ->whereNotNull('master_karyawan.effective_date')
+                    ->whereRaw('DATE_FORMAT(master_karyawan.effective_date, "%Y-%m") > ?', [$periode])
+                    ->whereNotNull('rekap_masuk_kerja.tanggal')
+                    ->where('rekap_masuk_kerja.is_active', 1);
             });
         });
     }
