@@ -44,7 +44,24 @@ class PromoPengujianAvailabilityTest extends TestCase
         $this->assertTrue(PromoPengujianAvailability::isGrandfathered(9, (object) [
             'promo_id' => 9,
             'flag_status' => 'emailed',
-            'data_lama' => json_encode(['no_order' => 'ISL/001']),
+            'data_lama' => json_encode([
+                'id_qt' => 2,
+                'no_qt' => 'ISL/QT/24-I/000002',
+                'id_order' => 343,
+                'no_order' => 'TCUM012401',
+                'status_sp' => 'false',
+            ]),
+        ]));
+        $this->assertFalse(PromoPengujianAvailability::isGrandfathered(9, (object) [
+            'promo_id' => 9,
+            'flag_status' => 'emailed',
+            'data_lama' => json_encode([
+                'id_qt' => 2,
+                'no_qt' => 'ISL/QT/24-I/000002',
+                'id_order' => null,
+                'no_order' => null,
+                'status_sp' => 'false',
+            ]),
         ]));
         $this->assertFalse(PromoPengujianAvailability::isGrandfathered(9, (object) [
             'promo_id' => 9,

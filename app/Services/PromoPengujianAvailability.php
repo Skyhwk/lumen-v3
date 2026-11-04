@@ -149,19 +149,81 @@ class PromoPengujianAvailability
 
     public static function hasDataLama($dataLama): bool
     {
-        if ($dataLama === null || $dataLama === '' || $dataLama === 'null' || $dataLama === '[]' || $dataLama === '{}') {
+        $decoded = self::decodeDataLama($dataLama);
+        if ($decoded === null) {
             return false;
         }
+
+        if (self::isList($decoded)) {
+            foreach ($decoded as $item) {
+                if (self::dataLamaHasOrder($item)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return self::dataLamaHasOrder($decoded);
+    }
+
+    private static function decodeDataLama($dataLama)
+    {
+        if ($dataLama === null || $dataLama === '' || $dataLama === 'null' || $dataLama === '[]' || $dataLama === '{}') {
+            return null;
+        }
+
         if (is_array($dataLama) || is_object($dataLama)) {
-            return !empty((array) $dataLama);
+            return $dataLama;
         }
 
         $decoded = json_decode($dataLama);
-        if (json_last_error() === JSON_ERROR_NONE) {
-            return !empty((array) $decoded);
+        if (json_last_error() !== JSON_ERROR_NONE || $decoded === null) {
+            return null;
         }
 
-        return trim((string) $dataLama) !== '';
+        return $decoded;
+    }
+
+    private static function dataLamaHasOrder($item): bool
+    {
+        if ($item === null || (!is_array($item) && !is_object($item))) {
+            return false;
+        }
+
+        $row = (array) $item;
+        if (isset($row['data_lama'])) {
+            return self::hasDataLama($row['data_lama']);
+        }
+
+        $idOrder = $row['id_order'] ?? ($row['id_order_header'] ?? null);
+        $noOrder = $row['no_order'] ?? null;
+
+        return self::filledOrderValue($idOrder) && self::filledOrderValue($noOrder);
+    }
+
+    private static function filledOrderValue($value): bool
+    {
+        if ($value === null || $value === false) {
+            return false;
+        }
+
+        $text = trim((string) $value);
+
+        return $text !== '' && strtolower($text) !== 'null' && $text !== '0';
+    }
+
+    private static function isList($value): bool
+    {
+        if (!is_array($value)) {
+            return false;
+        }
+
+        if (function_exists('array_is_list')) {
+            return array_is_list($value);
+        }
+
+        return $value === [] || array_keys($value) === range(0, count($value) - 1);
     }
 
     private static function dateOrNull($value)
