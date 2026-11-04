@@ -400,4 +400,19 @@ class PayrollWorkingDaysService
 
         return 'GREATEST((' . $hari . ' - ' . $masuk . '), 0)';
     }
+
+    /**
+     * Kolom preview generate: hitung dari rekap, tapi baris yang sudah submit memakai snapshot payroll.
+     */
+    public static function sqlPreviewOrStoredHariKerja(?string $periodeYm = null): string
+    {
+        return 'CASE WHEN payroll.id IS NULL THEN ' . self::sqlShowDataHariKerja($periodeYm)
+            . ' ELSE IFNULL(payroll.hari_kerja, 0) END';
+    }
+
+    public static function sqlPreviewOrStoredTidakHadir(?string $periodeYm = null): string
+    {
+        return 'CASE WHEN payroll.id IS NULL THEN ' . self::sqlShowDataTidakHadir($periodeYm)
+            . ' ELSE IFNULL(payroll.tidak_hadir, 0) END';
+    }
 }
