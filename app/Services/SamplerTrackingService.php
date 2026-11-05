@@ -756,6 +756,7 @@ class SamplerTrackingService
             })->sortBy('id')->sortBy('event_at')->unique('event_type');
 
             foreach ($events as $event) {
+                if (!$this->mayInheritTeamEvent($member, $event)) continue;
                 $existing = $member->events()->where('event_type', $event->event_type)->first();
                 if ($existing) {
                     if ((int) $existing->is_auto === 1
@@ -798,6 +799,11 @@ class SamplerTrackingService
                 ->first();
 
             if ($replacement) {
+                if ($this->normalizeScheduleDate($replacement->tanggal_sampling) !== $this->normalizeScheduleDate($session->tanggal_sampling)) {
+                    SamplerTrackingHistory::link((int) $session->id, (int) $replacement->id, 'sampling_date_changed');
+                    $this->archiveTrackingSession($session);
+                    continue;
+                }
                 // A generic sync may already have created the replacement
                 // session. Keep the original session as the canonical record
                 // because events and trouble rows reference its ID, then fold
@@ -986,6 +992,17 @@ class SamplerTrackingService
                 $canMaterialize = in_array($teamKey, $creationKeys, true);
                 $visitQuotation = $quotation ?: $first->no_quotation;
                 $visitDate = Carbon::parse($first->tanggal)->toDateString();
+                // A reused team key must never rewrite the date of a recorded journey.
+                if ($session->exists && $this->normalizeScheduleDate($session->tanggal_sampling) !== $visitDate) {
+                    $replacedSessionId = (int) $session->id;
+                    SamplerTrackingHistory::append((int) $session->id, 'sampling_date_isolated', [
+                        'reason' => 'new_date_requires_new_session', 'previous_date' => $session->tanggal_sampling,
+                        'new_date' => $visitDate, 'actor' => $first->updated_by ?? null,
+                    ]);
+                    $this->archiveTrackingSession($session);
+                    $session = new SamplerTrackingSession();
+                    $session->team_key = $teamKey;
+                }
                 if ($canMaterialize && !$this->quotationHasActivePersiapanOnDate($visitQuotation, $visitDate)) {
                     $canMaterialize = false;
                 }
@@ -1052,6 +1069,7 @@ class SamplerTrackingService
 
                 foreach ($rows as $row) {
                     $member = $this->findMember($session->id, $row);
+                    $joining = !$member->exists || !$member->is_active;
                     $effectiveDuration = $this->resolveEffectiveDuration($row->durasi_personal, $row->durasi);
 
                     $memberValues = $this->onlyExistingColumns($member->getTable(), [
@@ -1085,10 +1103,15 @@ class SamplerTrackingService
 
                     $this->reattachSamplerEvidenceFromSiblingSessions($member, $session, $quotation);
 
-                    // A sampler can be assigned after the team has already
-                    // departed or checked in. Give the new/current member the
-                    // same completed team milestones so their activity starts
-                    // from the team's actual progress, not from an empty form.
+                    if ($joining) {
+                        SamplerTrackingHistory::append((int) $session->id, 'member_joined', [
+                            'member_id' => (int) $member->id, 'sampler_id' => $member->sampler_id,
+                            'name' => $member->sampler_name, 'joined_at' => $now->toDateTimeString(),
+                            'actor' => $row->updated_by ?? $row->created_by ?? null,
+                            'reason' => 'schedule_membership_changed', 'past_team_activity_inherited' => false,
+                        ]);
+                    }
+                    // Team actions after joining still fan out normally. Past actions do not imply attendance.
                     $this->backfillTeamEventsForMember($member);
 
                     $activeMemberIds[] = $member->id;
@@ -1728,7 +1751,12 @@ class SamplerTrackingService
 
         foreach ($sessions as $session) {
             foreach ($session->activeMembers as $member) {
-                if (SamplerTrackingActivity::hasEvent($member, 'departure')) continue;
+                if ($member->events->contains(function ($event) {
+                    return $event->event_type === 'departure' && SamplerTrackingJourney::isJourneyBoundary($event);
+                })) continue;
+                $member->setRelation('events', $member->events->reject(function ($event) {
+                    return $event->event_type === 'departure' && !SamplerTrackingJourney::isJourneyBoundary($event);
+                })->values());
                 $departure = $this->departureForMember($member, $session->tanggal_sampling);
                 if ($departure) {
                     $reference = clone $departure;
@@ -1751,31 +1779,7 @@ class SamplerTrackingService
     }
     public function departureForMember($member, $date)
     {
-        $own = $member->events->firstWhere('event_type', 'departure');
-        if ($own) return $own;
-        if (!$member->sampler_id) return null;
-        // A recorded check-in binds this visit to the journey active at arrival.
-        // A journey can span dates; only a later return closes its departure.
-        $checkin = $member->events->where('event_type', 'checkin')->sortBy('event_at')->first();
-        $at = $checkin ? $checkin->event_at : $this->now()->toDateTimeString();
-        $latest = SamplerTrackingEvent::whereIn('event_type', ['departure', 'return'])
-            ->where('event_at', '<=', $at)
-            ->whereHas('member', function ($query) use ($member, $date) {
-                $query->where('sampler_id', $member->sampler_id)->where('is_active', true)
-                    ->whereHas('session', function ($session) use ($date) {
-                        $session->where('is_active', true)->where('tanggal_sampling', '<=', $date);
-                    });
-            })
-            ->when($checkin, function ($query) use ($checkin) {
-                $query->where(function ($before) use ($checkin) {
-                    $before->where('event_at', '<', $checkin->event_at)
-                        ->orWhere(function ($sameTime) use ($checkin) {
-                            $sameTime->where('event_at', $checkin->event_at)->where('id', '<', $checkin->id);
-                        });
-                });
-            })
-            ->orderByDesc('event_at')->orderByDesc('id')->first();
-        return $latest && $latest->event_type === 'departure' ? $latest : null;
+        return (new SamplerTrackingJourney())->departureForMember($member, (string) $date);
     }
 
     public function consolidateActivities($sessions)
@@ -2641,6 +2645,7 @@ public function buildTrackingRows($sessions)
     }
     public function storeEvent(array $payload)
     {
+        SamplerTrackingJourney::clearCache();
         $source = SamplerTrackingMember::with('session')->where('id', $payload['member_id'])->where('is_active', true)->firstOrFail();
         if (!$source->session || !$source->session->is_active) {
             throw ValidationException::withMessages([
@@ -2673,6 +2678,11 @@ public function buildTrackingRows($sessions)
 
             $eventType = $payload['event_type'];
             $this->ensureEventSequence($member, $eventType);
+            if ($eventType === 'departure' && $this->departureForMember($member, $session->tanggal_sampling)) {
+                throw ValidationException::withMessages([
+                    'event_type' => ['Perjalanan Anda masih berjalan. Lanjutkan activity dengan perjalanan tersebut sebelum membuat Berangkat baru.'],
+                ]);
+            }
             $movementGroup = $member->current_movement_group ?: $this->makeMovementGroupCode($member->session);
 
             $activities = $this->eventActivities($member);
@@ -2687,13 +2697,34 @@ public function buildTrackingRows($sessions)
                 ->get();
             $ownActivityMember = $activity ? $this->sessionMemberForSampler($activity, $member) : $member;
             $troubleService = new SamplerTrackingTroubleService();
-            $members = $members->filter(function ($target) use ($activity, $ownActivityMember, $eventType) {
+            $members = $members->filter(function ($target) use ($activity, $ownActivityMember, $eventType, $member) {
                 $logical = $activity ? $this->sessionMemberForSampler($activity, $target) : $target;
                 if (in_array($eventType, ['checkout', 'return'], true) && SamplerTrackingActivity::duration($logical) !== SamplerTrackingActivity::duration($ownActivityMember)) {
                     return false;
                 }
 
-                return !$this->memberHasTrackingEvent($target->id, $eventType);
+                if ($this->memberHasTrackingEvent($target->id, $eventType)) return false;
+                if ((int) $target->id !== (int) $member->id) {
+                    $reason = null;
+                    if ($eventType === 'departure' && $this->departureForMember($target, $target->session->tanggal_sampling)) {
+                        $reason = 'existing_personal_journey';
+                    } elseif ($eventType === 'checkin' && !$this->departureForMember($target, $target->session->tanggal_sampling)) {
+                        $reason = 'personal_departure_required';
+                    } elseif ($eventType === 'checkout' && !$this->memberHasTrackingEvent($target->id, 'checkin')) {
+                        $reason = 'personal_checkin_required';
+                    } elseif ($eventType === 'return' && !$this->memberHasTrackingEvent($target->id, 'checkout')) {
+                        $reason = 'personal_checkout_required';
+                    }
+                    if ($reason) {
+                        SamplerTrackingHistory::append((int) $target->sampler_tracking_session_id, 'activity_fanout_skipped', [
+                            'event_type' => $eventType, 'reason' => $reason,
+                            'triggered_by' => ['member_id' => (int) $member->id, 'name' => $member->sampler_name],
+                            'affected' => [['member_id' => (int) $target->id, 'sampler_id' => $target->sampler_id, 'name' => $target->sampler_name]],
+                        ]);
+                        return false;
+                    }
+                }
+                return true;
             });
 
             if ($eventType === 'checkin' && $members->contains(function ($target) use ($activity, $member) {
@@ -2778,6 +2809,7 @@ public function buildTrackingRows($sessions)
                             'name' => $target ? $target->sampler_name : null,
                             'effective_duration' => $target ? $target->effective_duration : null,
                             'automatic' => (bool) $event->is_auto,
+                            'journey' => $target ? (new SamplerTrackingJourney())->reference($target, (string) $target->session->tanggal_sampling) : null,
                         ];
                     })->values()->all(),
                 ]);
@@ -2786,6 +2818,7 @@ public function buildTrackingRows($sessions)
             return collect($events);
         });
 
+        SamplerTrackingJourney::clearCache();
         $this->notifyTeamLockAfterFanout($source, $lockedTeammates);
 
         return $events;
@@ -2951,7 +2984,7 @@ public function buildTrackingRows($sessions)
                 ]);
             }
             if ($currentIndex === 0) {
-                if (!SamplerTrackingActivity::hasEvent($this->sessionMemberForSampler($sessions->first(), $member), 'departure')) {
+                if (!$this->departureForMember($this->sessionMemberForSampler($sessions->first(), $member), $member->session->tanggal_sampling)) {
                     throw ValidationException::withMessages([
                         'event_type' => ['Berangkat sampling harus dilakukan sebelum check in lokasi pertama.'],
                     ]);
@@ -3030,11 +3063,33 @@ public function buildTrackingRows($sessions)
         return trim(($sourceEvent->note ?: '') . "\n" . $reason . '; sumber event #' . $sourceEvent->id . '.');
     }
 
-    /**
-     * Copy each already-completed milestone in a session to a member who was
-     * assigned later. The original event stays untouched and remains the
-     * source of its time, photo, coordinates, and actor.
-     */
+    /** Membership is prospective; preserve old evidence without manufacturing attendance. */
+    protected function mayInheritTeamEvent(SamplerTrackingMember $member, $event): bool
+    {
+        $session = $member->session;
+        $joinedAt = SamplerTrackingJourney::joinedAt($member);
+        $reason = !$event->event_at ? 'missing_activity_time'
+            : (!$joinedAt ? 'unknown_join_time'
+                : ((string) $event->event_at < $joinedAt ? 'activity_before_member_joined' : null));
+        if (!$reason && substr((string) $event->event_at, 0, 10) < substr((string) $session->tanggal_sampling, 0, 10)) {
+            $reason = 'activity_before_sampling_date';
+        }
+        if (!$reason) return true;
+        $key = 'membership|' . $member->id . '|' . $event->id . '|' . $joinedAt;
+        $history = json_decode($session->meta_history ?: '[]', true) ?: [];
+        if (!collect($history)->contains('decision_key', $key)) {
+            SamplerTrackingHistory::append((int) $session->id, 'activity_inheritance_skipped', [
+                'decision_key' => $key, 'reason' => $reason, 'joined_at' => $joinedAt,
+                'source_event_id' => (int) $event->id, 'event_type' => $event->event_type,
+                'event_at' => $event->event_at,
+                'affected' => [['member_id' => (int) $member->id, 'sampler_id' => $member->sampler_id, 'name' => $member->sampler_name]],
+            ]);
+            $session->refresh();
+        }
+        return false;
+    }
+
+    /** Restore missing team milestones only when the member had already joined at the event time. */
     protected function backfillTeamEventsForMember(SamplerTrackingMember $member): void
     {
         if (!$member->exists || !$member->sampler_tracking_session_id) {
@@ -3085,6 +3140,7 @@ public function buildTrackingRows($sessions)
 
         $eventModel = new SamplerTrackingEvent();
         foreach ($sourceEvents as $sourceEvent) {
+            if (!$this->mayInheritTeamEvent($member, $sourceEvent)) continue;
             $donorDuration = $donorDurations->get($sourceEvent->sampler_tracking_member_id);
             if (!$this->canInheritTeamEvent($sourceEvent->event_type, $donorDuration, $member->effective_duration)) {
                 continue;

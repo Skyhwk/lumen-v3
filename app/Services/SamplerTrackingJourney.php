@@ -18,6 +18,79 @@ class SamplerTrackingJourney
         self::$samplerEventsCache = [];
     }
 
+    /** Live team fan-out is valid. A retrospective copy is evidence of the old team, not a new journey. */
+    public static function isJourneyBoundary($event): bool
+    {
+        if (!$event || !$event->event_at) return false;
+        if ((bool) $event->is_auto && preg_match('/(?:Salinan otomatis tim|Koreksi anggota sejak awal).*sumber event #/s', (string) $event->note)) {
+            $joinedAt = $event->member ? self::joinedAt($event->member) : null;
+            if (!$joinedAt || (string) $event->event_at < $joinedAt) return false;
+        }
+        $session = optional($event->member)->session;
+        return !$session || !$session->tanggal_sampling
+            || substr((string) $event->event_at, 0, 10) >= substr((string) $session->tanggal_sampling, 0, 10);
+    }
+
+    public static function joinedAt(SamplerTrackingMember $member): ?string
+    {
+        $joinedAt = $member->created_at ? (string) $member->created_at : null;
+        $history = json_decode(optional($member->session)->meta_history ?: '[]', true);
+        foreach (is_array($history) ? $history : [] as $entry) {
+            if (is_array($entry) && ($entry['type'] ?? null) === 'member_joined'
+                && (int) ($entry['member_id'] ?? 0) === (int) $member->id) {
+                $joinedAt = $entry['joined_at'] ?? $joinedAt;
+            }
+        }
+        return $joinedAt;
+    }
+
+    /** The person's departure event is the stable journey identity, across orders and dates. */
+    public function departureForMember(SamplerTrackingMember $member, string $date)
+    {
+        if (!$member->sampler_id) return null;
+        $checkin = $member->events->where('event_type', 'checkin')->sortBy('event_at')->first();
+        $at = $checkin ? (string) $checkin->event_at : Carbon::now('Asia/Jakarta')->toDateTimeString();
+        $query = $this->eventsQueryForSampler($member->sampler_id)->with('member.session')
+            ->where('event_at', '<=', $at)
+            ->whereHas('member.session', function ($query) use ($date) {
+                $query->whereDate('tanggal_sampling', '<=', $date);
+            })->when($checkin, function ($query) use ($checkin) {
+                $query->where(function ($before) use ($checkin) {
+                    $before->where('event_at', '<', $checkin->event_at)->orWhere(function ($same) use ($checkin) {
+                        $same->where('event_at', $checkin->event_at)->where('id', '<', $checkin->id);
+                    });
+                });
+            });
+        $ownDeparture = $member->events->where('event_type', 'departure')->filter(function ($event) use ($at) {
+            return self::isJourneyBoundary($event) && (string) $event->event_at <= $at;
+        })->sortByDesc('event_at')->first();
+        // Stop at the nearest valid boundary instead of materializing a year of events per request.
+        $departure = $ownDeparture ?: (clone $query)->where('event_type', 'departure')
+            ->orderByDesc('event_at')->orderByDesc('id')->lazy(50)->first(function ($event) {
+                return self::isJourneyBoundary($event);
+            });
+        if (!$departure) return null;
+        $returned = (clone $query)->where('event_type', 'return')->where('event_at', '>=', $departure->event_at)
+            ->whereHas('member.session', function ($query) use ($departure) {
+                $query->whereDate('tanggal_sampling', '>=', $departure->member->session->tanggal_sampling);
+            })->orderByDesc('event_at')->orderByDesc('id')->lazy(50)->contains(function ($event) use ($departure) {
+                return self::isJourneyBoundary($event)
+                    && ((string) $event->event_at > (string) $departure->event_at || (int) $event->id > (int) $departure->id);
+            });
+        return $returned ? null : $departure;
+    }
+
+    public function reference(SamplerTrackingMember $member, string $date): ?array
+    {
+        $departure = $this->departureForMember($member, $date);
+        return $departure ? [
+            'journey_id' => 'sampler-' . $member->sampler_id . '-departure-' . $departure->id,
+            'departure_event_id' => (int) $departure->id,
+            'departure_session_id' => (int) $departure->sampler_tracking_session_id,
+            'departure_at' => (string) $departure->event_at,
+        ] : null;
+    }
+
     /** Only started assignments may extend an open journey; schedules alone cannot. */
     public function extension(SamplerTrackingMember $member, string $date, string $baseDue, $asOf = null): ?array
     {
@@ -26,18 +99,9 @@ class SamplerTrackingJourney
         $asOf = $asOf ? Carbon::parse($asOf, 'Asia/Jakarta') : Carbon::now('Asia/Jakarta');
         $asOf = $asOf->min(Carbon::now('Asia/Jakarta'));
         if (Carbon::parse($checkin->event_at, 'Asia/Jakarta')->gt($asOf)) return null;
-        $departure = $this->eventsQueryForSampler($member->sampler_id)->with('member.session')
-            ->where('event_type', 'departure')->where('event_at', '<=', $checkin->event_at)
-            ->whereHas('member.session', function ($query) use ($date) {
-                $query->whereDate('tanggal_sampling', '<=', $date);
-            })->orderByDesc('event_at')->orderByDesc('id')->first();
+        $departure = $this->departureForMember($member, $date);
         if (!$departure || !$departure->member || !$departure->member->session) return null;
         $departureDate = $departure->member->session->tanggal_sampling;
-        if ($this->eventsQueryForSampler($member->sampler_id)->where('event_type', 'return')
-            ->where('event_at', '>=', $departure->event_at)->where('event_at', '<', $checkin->event_at)
-            ->whereHas('member.session', function ($query) use ($departureDate) {
-                $query->whereDate('tanggal_sampling', '>=', $departureDate);
-            })->exists()) return null;
         $due = $baseDue;
         $cursor = (string) $checkin->event_at;
         $inclusive = true;
@@ -51,6 +115,7 @@ class SamplerTrackingJourney
                 ->orderBy('event_at')->orderBy('id')->get();
             $stopped = false;
             foreach ($events as $event) {
+                if (in_array($event->event_type, ['departure', 'return'], true) && !self::isJourneyBoundary($event)) continue;
                 if ($event->event_type === 'departure' && (string) $event->event_at > (string) $departure->event_at) {
                     $stopped = true;
                     break;
@@ -90,12 +155,7 @@ class SamplerTrackingJourney
             return false;
         }
 
-        $departure = $member->events->where('event_type', 'departure')->filter(function ($event) use ($checkin) {
-            return $event->event_at && Carbon::parse($event->event_at)->lte(Carbon::parse($checkin->event_at));
-        })->sortByDesc('event_at')->first();
-        if (!$departure) {
-            $departure = $this->findDepartureForSampler($member->sampler_id, (string) $checkin->event_at, $date);
-        }
+        $departure = $this->departureForMember($member, $date);
         if (!$departure) return false;
 
         $departure->loadMissing('member.session');
@@ -122,7 +182,7 @@ class SamplerTrackingJourney
 
         return $events->where('event_type', 'departure')
             ->filter(function ($event) use ($checkinAt, $date) {
-                if ((string) $event->event_at > $checkinAt) {
+                if (!self::isJourneyBoundary($event) || (string) $event->event_at > $checkinAt) {
                     return false;
                 }
                 $sessionDate = optional(optional($event->member)->session)->tanggal_sampling;
@@ -142,7 +202,7 @@ class SamplerTrackingJourney
 
         return $events->where('event_type', 'return')
             ->filter(function ($event) use ($minAt, $departureDate) {
-                if ((string) $event->event_at < $minAt) {
+                if (!self::isJourneyBoundary($event) || (string) $event->event_at < $minAt) {
                     return false;
                 }
                 $sessionDate = optional(optional($event->member)->session)->tanggal_sampling;
@@ -164,7 +224,7 @@ class SamplerTrackingJourney
         return $events->where('event_type', 'departure')
             ->contains(function ($event) use ($departureAt, $returnAt, $returnId) {
                 $eventAt = (string) $event->event_at;
-                if ($eventAt <= $departureAt) {
+                if (!self::isJourneyBoundary($event) || $eventAt <= $departureAt) {
                     return false;
                 }
                 if ($eventAt < $returnAt) {

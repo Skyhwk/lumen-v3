@@ -122,6 +122,166 @@ class SamplerTrackingSyncTest extends TestCase
         parent::tearDown();
     }
 
+    public function testLateJoinDoesNotInheritPastAttendanceAndCanStartOwnJourney(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-17 05:00:00', 'Asia/Jakarta'));
+        $this->schedule(['durasi' => 0]);
+        $session = $this->prepare('2026-09-17')->firstOrFail();
+        $original = $session->activeMembers()->firstOrFail();
+        foreach (['departure' => '06:00:00', 'checkin' => '07:00:00', 'checkout' => '08:00:00', 'return' => '09:00:00'] as $type => $time) {
+            $this->recordTroubleJourneyEvent($session, $original, $type, '2026-09-17 ' . $time);
+        }
+        $originalIds = $original->events()->pluck('id')->all();
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-17 10:00:00', 'Asia/Jakarta'));
+        $before = $this->service->snapshotSchedules('Q1');
+        $this->schedule(['userid' => 20, 'sampler' => 'Late member', 'durasi' => 0]);
+        $this->service->syncScheduleEdit($before, 'Q1');
+        $late = $session->activeMembers()->where('sampler_id', 20)->firstOrFail();
+        $this->assertSame(0, $late->events()->count());
+        $audit = collect(json_decode($session->fresh()->meta_history, true));
+        $this->assertSame(4, $audit->where('type', 'activity_inheritance_skipped')->count());
+        $this->assertSame('2026-09-17 10:00:00', $audit->where('type', 'member_joined')->last()['joined_at']);
+        $this->service->syncQuotation('Q1');
+        $this->assertSame(4, collect(json_decode($session->fresh()->meta_history, true))->where('type', 'activity_inheritance_skipped')->count());
+        $this->service->storeEvent(['member_id' => $late->id, 'event_type' => 'departure']);
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-17 10:01:00', 'Asia/Jakarta'));
+        $this->service->storeEvent(['member_id' => $late->id, 'event_type' => 'checkin']);
+        $this->assertSame(['departure', 'checkin'], $late->events()->orderBy('id')->pluck('event_type')->all());
+        $this->assertSame($originalIds, $original->events()->pluck('id')->all());
+        $history = collect(json_decode($session->fresh()->meta_history, true))->where('type', 'activity_recorded')->last();
+        $this->assertNotEmpty($history['affected'][0]['journey']['journey_id']);
+    }
+
+    public function testLateJoinUsesExistingOpenJourneyWithoutCopyingOtherTeamsDeparture(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-16 05:00:00', 'Asia/Jakarta'));
+        $this->schedule(['tanggal' => '2026-09-16', 'durasi' => 2]);
+        $old = $this->prepare('2026-09-16')->firstOrFail();
+        $person = $old->activeMembers()->firstOrFail();
+        foreach (['departure' => '2026-09-16 06:00:00', 'checkin' => '2026-09-16 08:00:00', 'checkout' => '2026-09-17 08:30:00'] as $type => $at) {
+            $this->recordTroubleJourneyEvent($old, $person, $type, $at);
+        }
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-17 05:00:00', 'Asia/Jakarta'));
+        $this->schedule(['userid' => 20, 'sampler' => 'Other team', 'durasi' => 0]);
+        $target = $this->prepare('2026-09-17')->firstWhere('tanggal_sampling', '2026-09-17');
+        $this->assertNotEquals($old->id, $target->id);
+        $teammate = $target->activeMembers()->firstOrFail();
+        $this->recordTroubleJourneyEvent($target, $teammate, 'departure', '2026-09-17 06:30:00');
+        $this->recordTroubleJourneyEvent($target, $teammate, 'checkin', '2026-09-17 07:30:00');
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-17 10:00:00', 'Asia/Jakarta'));
+        $before = $this->service->snapshotSchedules('Q1');
+        $this->schedule(['durasi' => 0]);
+        $this->service->syncScheduleEdit($before, 'Q1');
+        $late = $target->activeMembers()->where('sampler_id', 10)->firstOrFail();
+        $this->assertSame(0, $late->events()->count(), json_encode($late->events()->get()->toArray()));
+        $departure = $this->service->departureForMember($late, '2026-09-17');
+        $this->assertEquals($person->events()->where('event_type', 'departure')->value('id'), $departure->id);
+        $this->service->storeEvent(['member_id' => $late->id, 'event_type' => 'checkin']);
+        $this->assertSame(['checkin'], $late->events()->pluck('event_type')->all());
+        $journey = new \App\Services\SamplerTrackingJourney();
+        $this->assertSame($journey->reference($person->fresh(), '2026-09-16')['journey_id'], $journey->reference($late->fresh(), '2026-09-17')['journey_id']);
+    }
+
+    public function testLateJoinWithoutDepartureDoesNotReceiveCheckinCheckoutOrReturnFanout(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-17 05:00:00', 'Asia/Jakarta'));
+        $this->schedule(['durasi' => 0]);
+        $session = $this->prepare('2026-09-17')->firstOrFail();
+        $original = $session->activeMembers()->firstOrFail();
+        $this->recordTroubleJourneyEvent($session, $original, 'departure', '2026-09-17 06:00:00');
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-17 10:00:00', 'Asia/Jakarta'));
+        $before = $this->service->snapshotSchedules('Q1');
+        $this->schedule(['userid' => 20, 'sampler' => 'Late member', 'durasi' => 0]);
+        $this->service->syncScheduleEdit($before, 'Q1');
+        PersiapanSampelHeader::query()->update(['is_emailed_bas' => true]);
+        foreach (['checkin', 'checkout', 'return'] as $type) {
+            $this->service->storeEvent(['member_id' => $original->id, 'event_type' => $type]);
+        }
+        $late = $session->activeMembers()->where('sampler_id', 20)->firstOrFail();
+        $this->assertSame(0, $late->events()->count());
+        $this->assertSame(4, $original->events()->count());
+        $this->assertSame(3, collect(json_decode($session->fresh()->meta_history, true))->where('type', 'activity_fanout_skipped')->count());
+    }
+
+    public function testRealAutomaticDepartureStillDefinesJourneyAndCannotBeStartedTwice(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-17 05:00:00', 'Asia/Jakarta'));
+        $this->schedule();
+        $this->schedule(['userid' => 20, 'sampler' => 'Teammate']);
+        $session = $this->prepare('2026-09-17')->firstOrFail();
+        $members = $session->activeMembers()->orderBy('id')->get();
+        $this->service->storeEvent(['member_id' => $members[0]->id, 'event_type' => 'departure']);
+        $auto = $members[1]->events()->where('event_type', 'departure')->firstOrFail();
+        $this->assertTrue((bool) $auto->is_auto);
+        $this->assertTrue(\App\Services\SamplerTrackingJourney::isJourneyBoundary($auto));
+        // Restoring evidence for somebody already on the team is also valid.
+        $auto->note = 'Salinan otomatis tim; sumber event #1.'; $auto->save();
+        $this->assertTrue(\App\Services\SamplerTrackingJourney::isJourneyBoundary($auto));
+        $this->expectException(ValidationException::class);
+        $this->service->storeEvent(['member_id' => $members[1]->id, 'event_type' => 'departure']);
+    }
+
+    public function testRetrospectiveDepartureCopiesDoNotSplitCompletedJourney(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-11-05 08:00:00', 'Asia/Jakarta'));
+        [$night, $person] = $this->troubleAssignment('original-night', '2026-11-03', 2);
+        [$day, $next] = $this->troubleAssignment('following-stop', '2026-11-04', 0);
+        [$future, $copy] = $this->troubleAssignment('moved-date', '2026-11-05', 0);
+        foreach (['departure' => '2026-11-03 05:26:30', 'checkin' => '2026-11-03 07:58:31', 'checkout' => '2026-11-04 10:11:38'] as $type => $at) {
+            $this->recordTroubleJourneyEvent($night, $person, $type, $at);
+        }
+        foreach (['checkin' => '2026-11-04 10:11:44', 'checkout' => '2026-11-04 10:40:51', 'return' => '2026-11-04 12:03:32'] as $type => $at) {
+            $this->recordTroubleJourneyEvent($day, $next, $type, $at);
+        }
+        $this->recordTroubleJourneyEvent($future, $copy, 'departure', '2026-11-03 05:58:56');
+        $events = $this->db->getConnection('mysql')->table('sampler_tracking_events');
+        $events->where('sampler_tracking_member_id', $copy->id)->update(['is_auto' => true, 'note' => 'Salinan otomatis tim; sumber event #12.']);
+        $before = $events->orderBy('id')->get()->toJson();
+        $this->assertTrue($this->troubleProgress($night)['complete']);
+        $this->assertTrue($this->troubleProgress($day)['complete']);
+        // Same-date retrospective membership copies (Farhan/KADIN) are excluded too.
+        $future->tanggal_sampling = '2026-11-03'; $future->save();
+        $this->assertTrue($this->troubleProgress($night)['complete']);
+        $this->assertTrue($this->troubleProgress($day)['complete']);
+        $this->assertSame($before, $events->orderBy('id')->get()->toJson());
+    }
+
+    public function testDateMoveKeepsOldEvidenceAndPreparedNewDateStartsEmpty(): void
+    {
+        $row = $this->schedule();
+        $old = $this->prepare('2026-09-17')->firstOrFail();
+        $person = $this->attendance($old);
+        $ids = $person->events()->pluck('id')->all();
+        $before = $this->service->snapshotSchedules('Q1');
+        $row->tanggal = '2026-09-18'; $row->save();
+        $this->service->syncScheduleEdit($before, 'Q1');
+        $new = $this->prepare('2026-09-18')->firstOrFail();
+        $this->assertNotEquals($old->id, $new->id);
+        $this->assertSame('2026-09-17', $old->fresh()->tanggal_sampling);
+        $this->assertFalse((bool) $old->fresh()->is_active);
+        $this->assertSame($ids, $person->events()->pluck('id')->all());
+        $this->assertSame(0, $new->events()->count());
+    }
+
+    public function testPreviouslyRekeyedSessionCannotCarryEvidenceIntoAnotherDate(): void
+    {
+        $row = $this->schedule();
+        $old = $this->prepare('2026-09-17')->firstOrFail();
+        $person = $this->attendance($old);
+        $ids = $person->events()->pluck('id')->all();
+        $row->tanggal = '2026-09-18'; $row->save();
+        $key = new \ReflectionMethod($this->service, 'makeTeamKey');
+        $key->setAccessible(true);
+        $old->team_key = $key->invoke($this->service, $row); $old->save();
+        $new = $this->prepare('2026-09-18')->firstWhere('tanggal_sampling', '2026-09-18');
+        $this->assertNotNull($new);
+        $this->assertNotEquals($old->id, $new->id);
+        $this->assertSame('2026-09-17', $old->fresh()->tanggal_sampling);
+        $this->assertSame($ids, $person->events()->pluck('id')->all());
+        $this->assertSame(0, $new->events()->count());
+        $this->assertEquals($old->id, collect(json_decode($new->fresh()->meta_history, true))->firstWhere('type', 'session_replaces')['from_session_id']);
+    }
+
     /** @dataProvider checkoutDurationChanges */
     public function testScheduleEditReopensLongerCheckoutEvenForOriginalActor(array $after, int $triggerIndex): void
     {
@@ -1841,6 +2001,7 @@ class SamplerTrackingSyncTest extends TestCase
 
     public function testSavingPreparationForOneSamplerDoesNotRemoveOtherTeamMembers(): void
     {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-17 07:00:00', 'Asia/Jakarta'));
         $this->schedule();
         $this->schedule(['userid' => 20, 'sampler' => 'B']);
         $session = $this->prepare('2026-09-17')->first();
@@ -1863,7 +2024,7 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame(4, $session->events()->count());
     }
 
-    public function testCorrectingOriginalSamplerCopiesTeamAttendanceWithoutDeletingOriginal(): void
+    public function testCorrectingOriginalSamplerPreservesOriginalProofWithoutInventingNewAttendance(): void
     {
         $this->schedule();
         $session = $this->prepare('2026-09-17')->first();
@@ -1876,9 +2037,7 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame(2, $oldMember->events()->count());
         $newMember = $session->activeMembers()->firstOrFail();
         $this->assertSame('B', $newMember->sampler_name);
-        $this->assertSame(2, $newMember->events()->count());
-        $this->assertEquals(1, $newMember->events()->first()->is_auto);
-        $this->assertEquals($oldMember->id, $newMember->events()->first()->triggered_by_member_id);
+        $this->assertSame(0, $newMember->events()->count());
     }
 
     public function testQuotationSyncDoesNotDeactivateOtherQuotations(): void
@@ -2119,7 +2278,7 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame($ids, $member->events()->pluck('id')->all());
     }
 
-    public function testAsepAndAndikCorrectedToAsepAndEkoInheritsAsepsCheckinOnce(): void
+    public function testAsepAndAndikCorrectedToAsepAndEkoRequiresEkoToCheckInAfterJoining(): void
     {
         $this->schedule(['sampler' => 'Asep']);
         $andikSchedule = $this->schedule(['userid' => 20, 'sampler' => 'Andik']);
@@ -2133,20 +2292,15 @@ class SamplerTrackingSyncTest extends TestCase
         $andikSchedule->save();
         $this->service->syncScheduleEdit($before, 'Q1');
         $eko = $session->activeMembers()->where('sampler_name', 'Eko')->firstOrFail();
-        $event = $eko->events()->firstOrFail();
-        $this->assertSame('checkin', $event->event_type);
-        $this->assertEquals($source->event_at, $event->event_at);
-        $this->assertSame($source->photo, $event->photo);
-        $this->assertEquals($asep->id, $event->triggered_by_member_id);
-        $this->assertEquals(1, $event->is_auto);
-        $this->assertStringContainsString('sumber event #' . $source->id, $event->note);
+        $this->assertSame(0, $eko->events()->count());
+        $this->assertSame($source->id, $asep->events()->firstOrFail()->id);
         $this->assertSame(0, $session->activeMembers()->where('sampler_name', 'Andik')->count());
         $before = $this->service->snapshotSchedules('Q1');
         $andikSchedule->durasi = 2;
         $andikSchedule->save();
         $this->service->syncScheduleEdit($before, 'Q1');
         $this->service->syncQuotation('Q1');
-        $this->assertSame(1, $eko->events()->count());
+        $this->assertSame(0, $eko->events()->count());
         $this->assertSame(1, $asep->events()->count());
     }
 
@@ -2163,7 +2317,7 @@ class SamplerTrackingSyncTest extends TestCase
         $row->save();
         $this->service->syncScheduleEdit($before, 'Q1');
         $eko = $session->activeMembers()->where('sampler_name', 'Eko')->firstOrFail();
-        $this->assertSame(['checkin'], $eko->events()->pluck('event_type')->all());
+        $this->assertSame([], $eko->events()->pluck('event_type')->all());
     }
 
     public function testBlockedTeammateStillReceivesAutoEventAndTeamLockNotice(): void
