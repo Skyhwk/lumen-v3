@@ -36,5 +36,19 @@ return [
         'signature_company_website' => env('QUOTATION_SIGNATURE_COMPANY_WEBSITE', 'www.intilab.com'),
         // Optional override logo footer: [{ "path": "img/email-signature/logo-isl.png", "width": 220, "height": 63 }, ...]
         'signature_footer_logos' => [],
+        'resolve_sales_from_master' => false,
+        'fallback_sales_id' => 1068,
+        'source_skip_kode_promo' => [],
+    ],
+    'campaigns' => [
+        'jan_to_june' => [
+            'kode_promo_marker' => 'Auto_Jan_to_June',
+            'created_by' => 'Quotation Auto Generate Jan to June',
+            'generated_by' => 'Quotation Auto Generate Jan to June',
+            'emailed_by' => 'Quotation Auto Generate Jan to June',
+            'resolve_sales_from_master' => true,
+            'fallback_sales_id' => 1068,
+            'source_skip_kode_promo' => ['AUTO', 'Auto_Jan_to_June'],
+        ],
     ],
 ];

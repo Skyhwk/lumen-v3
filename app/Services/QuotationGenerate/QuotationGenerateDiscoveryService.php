@@ -284,9 +284,24 @@ SQL;
         ];
     }
 
+    private function sourceSkipKodePromoSql(string $alias): string
+    {
+        $markers = array_values(array_filter(array_map('strval', (array) config('quotation_auto.generate.source_skip_kode_promo', []))));
+        if ($markers === []) {
+            return '';
+        }
+
+        $escaped = implode(',', array_map(function ($marker) {
+            return "'" . str_replace("'", "''", $marker) . "'";
+        }, $markers));
+
+        return "AND ({$alias}.kode_promo IS NULL OR TRIM({$alias}.kode_promo) = '' OR {$alias}.kode_promo NOT IN ({$escaped}))";
+    }
+
     private function quotationRankedSubquerySql(): string
     {
         $konsultan = self::KONSULTAN_EMPTY;
+        $skipSql = $this->sourceSkipKodePromoSql('rq');
 
         return <<<SQL
 SELECT
@@ -305,6 +320,7 @@ WHERE rq.created_at >= ?
   AND rq.pelanggan_ID IS NOT NULL
   AND rq.pelanggan_ID != ''
   AND {$konsultan}
+  {$skipSql}
 SQL;
     }
 
