@@ -2,28 +2,37 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Http\Controllers\api\Concerns\BuildsFeeSamplingDatatable;
 use App\Models\PengajuanFeeSampling;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
-use Yajra\Datatables\Datatables;
-use Illuminate\Database\Eloquent\Collection;
 use App\Services\NotificationFdlService;
 
 class PaymentFeeSamplingController extends Controller
 {
+    use BuildsFeeSamplingDatatable;
+
     public function index(Request $request)
     {
-        $data = PengajuanFeeSampling::with(['detail_fee' => function ($q) {
-            $q->where('is_approve', 1);
-        }])
+        $data = PengajuanFeeSampling::query()
             ->where('is_approve_finance', 1)
             ->whereNull('transfer_date')
             ->whereIn('status_payment', ["Approved by finance"]);
 
-        return Datatables::of($data)->make(true);
+        return $this->buildFeeSamplingDatatable($data);
+    }
+
+    public function summary(Request $request)
+    {
+        $data = PengajuanFeeSampling::query()
+            ->where('is_approve_finance', 1)
+            ->whereNull('transfer_date')
+            ->whereIn('status_payment', ["Approved by finance"]);
+
+        return $this->feeSamplingSummaryJson($data, $request);
     }
 
     public function handleUpdateTransfer(Request $request)
