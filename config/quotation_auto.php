@@ -51,4 +51,13 @@ return [
             'source_skip_kode_promo' => ['AUTO', 'Auto_Jan_to_June'],
         ],
     ],
+    'python' => [
+        'invoke_url' => rtrim((string) env('PDF_COMBINER_SERVICE', 'http://10.88.22.231:2999'), '/') . '/lumen/invoke',
+        'invoke_secret' => env('QUOTATION_GENERATE_INVOKE_SECRET', env('INVOKE_SECRET', '')),
+        'invoke_timeout_seconds' => (int) env('QUOTATION_GENERATE_PYTHON_TIMEOUT', 1800),
+        'lumen_timeout_seconds' => (int) env('QUOTATION_GENERATE_LUMEN_TIMEOUT', 1700),
+        'controller' => 'QuotationGenerateJanToJuneController',
+        'run_function' => 'run',
+        'test_function' => 'runTest',
+    ],
 ];
