@@ -586,7 +586,10 @@ class FormsHubService
         $item->employee_position = $employee->jabatan ?? '';
         $this->applyLegacyAttachmentUrls($item, $assetKey);
 
-        if ($hrRequestType !== null && !HrRequestResolver::findMappedFromLegacyRow($hrRequestType, (int) $item->id)) {
+        $shouldExposeApprovalSteps = $hrRequestType === HrRequest::TYPE_PERMISSION
+            || ($hrRequestType !== null && !HrRequestResolver::findMappedFromLegacyRow($hrRequestType, (int) $item->id));
+
+        if ($shouldExposeApprovalSteps) {
             app(LegacyFormGreatdayApprovalSteps::class)->applyToObject($item, $hrRequestType);
         }
 
