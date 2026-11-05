@@ -10,7 +10,6 @@ use App\Models\LhpsAirDetail;
 use App\Models\LhpsAirCustom;
 use App\Models\OrderHeader;
 use App\Models\OrderDetail;
-use App\Models\SampelDiantar;
 use App\Models\MetodeSampling;
 use App\Models\MasterBakumutu;
 use App\Models\MasterRegulasi;
@@ -32,6 +31,7 @@ use App\Helpers\EmailLhpRilisHelpers;
 use App\Services\TemplateLhps;
 use App\Services\SendEmail;
 use App\Services\LhpTemplate;
+use App\Services\WsFinalAirParameterService;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\PrintLhp;
 
@@ -57,17 +57,13 @@ class DraftAirController extends Controller
             ->get();
 
         $data->each(function ($item) {
-            $query = SampelDiantar::with('detail')
-                ->where('no_order', $item->no_order);
-
-            if (!empty($item->periode)) {
-                $query->where('periode_kontrak', $item->periode);
-            }
-
-            $item->setRelation(
-                'sampelDiantar',
-                $query->first()
+            $header = WsFinalAirParameterService::findSampelDiantarHeaderForSample(
+                (string) $item->no_order,
+                (string) $item->no_sampel,
+                $item->periode ?? null
             );
+
+            $item->setRelation('sampelDiantar', $header);
         });
 
         return Datatables::of($data)->make(true);
@@ -774,20 +770,18 @@ class DraftAirController extends Controller
             ->where('is_active', true)
             ->first();
 
-        if (!$orderDetail || !$orderDetail->sampelDiantar) return $results;
-
-        // Ambil parsed_internal_data dari sampel_diantar
-        $sampelDiantar = null;
-        foreach ($orderDetail->sampelDiantar->detail as $detail) {
-            $internalData = json_decode(html_entity_decode($detail->internal_data), true);
-            $match = collect($internalData)->firstWhere('no_sampel', $noSampel);
-            if ($match) {
-                $sampelDiantar = $match;
-                break;
-            }
+        if (!$orderDetail) {
+            return $results;
         }
 
-        if (!$sampelDiantar) return $results;
+        $sampelDiantar = WsFinalAirParameterService::findSdInternalRowForSample(
+            (string) $orderDetail->no_order,
+            (string) $noSampel
+        );
+
+        if (!$sampelDiantar) {
+            return $results;
+        }
 
         $cekPH    = OrderDetail::where('no_sampel', $noSampel)->whereJsonContains('parameter', "128;pH")->first();
         $cekSuhu  = OrderDetail::where('no_sampel', $noSampel)->whereJsonContains('parameter', "160;Suhu")->first();

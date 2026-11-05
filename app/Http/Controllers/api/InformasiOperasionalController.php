@@ -317,7 +317,9 @@ class InformasiOperasionalController extends Controller
                 $request->input('tanggal'),
                 $this->nullableInt($request->input('id_mobilisasi')),
                 $this->nullableInt($request->input('id_cabang') ?? $request->input('branch_id')),
-                array_filter(array_map('intval', (array) $request->input('keep_ids', [])))
+                array_filter(array_map('intval', (array) $request->input('keep_ids', []))),
+                $this->nullableInt($request->input('kategori_aset_id')),
+                $this->nullableInt($request->input('sub_kategori_aset_id'))
             ),
         ]);
     }
@@ -409,7 +411,7 @@ class InformasiOperasionalController extends Controller
             $nama = trim((string) ($item['nama_alat'] ?? ''));
             $jumlah = max(1, (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 1));
             $kategoriId = $this->nullableInt($item['kategori_aset_id'] ?? null);
-            $subKategoriId = $this->nullableInt($item['sub_kategori_aset_id'] ?? $item['id_kategori_peralatan'] ?? null);
+            $subKategoriId = $this->nullableInt($item['sub_kategori_aset_id'] ?? null);
             $matched = $this->takeAssigned($remainingAssigned, $nama, $kategoriId, $subKategoriId);
             $pickedIds = array_map(fn ($aset) => (int) $aset->id_aset, $matched);
             $slots = array_pad($pickedIds, $jumlah, null);
@@ -444,7 +446,9 @@ class InformasiOperasionalController extends Controller
                     $row['tanggal'] ?? null,
                     $record ? $record->id : null,
                     $this->nullableInt($item['id_cabang'] ?? $item['branch_id'] ?? $row['id_cabang'] ?? null),
-                    $slots
+                    $slots,
+                    $kategoriId,
+                    $subKategoriId
                 );
             }
             $groups[] = $group;
@@ -779,23 +783,15 @@ class InformasiOperasionalController extends Controller
     {
         return GaAsset::query()
             ->where('is_active', true)
-            ->where('publication_state', 'published')
-            ->where('lifecycle_state', 'active')
             ->where('condition', 'normal')
-            ->where('record_kind', GaAsset::RECORD_UNIT)
-            ->where('sub_kategori_aset_id', 10);
+            ->where(function ($query) {
+                $query->where('record_kind', GaAsset::RECORD_UNIT)
+                    ->orWhereNull('record_kind');
+            });
     }
 
-    private function assetOptions($namaAlat, $tanggal, $currentMobilisasiId, $branchId, array $keepIds = [])
+    private function assetOptions($namaAlat, $tanggal, $currentMobilisasiId, $branchId, array $keepIds = [], $kategoriId = null, $subKategoriId = null)
     {
-        $query = $this->eligibleAsset();
-        if ($namaAlat !== '') {
-            $query->where('name', 'like', '%' . $namaAlat . '%');
-        }
-        if ($branchId) {
-            $query->where('branch_id', $branchId);
-        }
-
         $usedIds = [];
         if ($tanggal && Schema::hasTable('jadwal_mobilisasi_aset')) {
             $usedQuery = DB::table('jadwal_mobilisasi_aset as a')
@@ -809,35 +805,81 @@ class InformasiOperasionalController extends Controller
             $usedIds = $usedQuery->pluck('a.id_aset')->map(fn ($id) => (int) $id)->all();
         }
 
-        if ($usedIds) {
-            $query->whereNotIn('id', $usedIds);
-        }
-
-        $options = $query->orderBy('cs_code')->orderBy('name')->get([
+        $columns = [
             'id', 'name', 'asset_code', 'cs_code', 'brand', 'model_spec',
             'kategori_aset_id', 'sub_kategori_aset_id',
-        ]);
+        ];
+
+        $buildQuery = function ($useKategori, $useBranch) use ($namaAlat, $kategoriId, $subKategoriId, $branchId, $usedIds) {
+            $query = $this->eligibleAsset();
+            $nama = trim((string) $namaAlat);
+
+            if ($useKategori && $subKategoriId) {
+                $query->where('sub_kategori_aset_id', $subKategoriId);
+            } elseif ($useKategori && $kategoriId) {
+                $query->where('kategori_aset_id', $kategoriId);
+            }
+
+            if ($nama !== '') {
+                $query->where(function ($inner) use ($nama) {
+                    $inner->where('name', 'like', '%' . $nama . '%')
+                        ->orWhere('asset_code', 'like', '%' . $nama . '%')
+                        ->orWhere('cs_code', 'like', '%' . $nama . '%');
+                });
+            }
+
+            if ($useBranch && $branchId) {
+                $query->where('branch_id', $branchId);
+            }
+            if ($usedIds) {
+                $query->whereNotIn('id', $usedIds);
+            }
+
+            return $query;
+        };
+
+        $options = $buildQuery(true, true)
+            ->orderBy('asset_code')
+            ->orderBy('cs_code')
+            ->orderBy('name')
+            ->get($columns);
+
+        if ($options->isEmpty() && ($kategoriId || $subKategoriId) && trim((string) $namaAlat) !== '') {
+            $options = $buildQuery(false, true)
+                ->orderBy('asset_code')
+                ->orderBy('cs_code')
+                ->orderBy('name')
+                ->get($columns);
+        }
+
+        if ($options->isEmpty() && $branchId) {
+            $options = $buildQuery(false, false)
+                ->orderBy('asset_code')
+                ->orderBy('cs_code')
+                ->orderBy('name')
+                ->get($columns);
+        }
 
         $keepIds = array_values(array_unique(array_filter(array_map('intval', $keepIds))));
         $missing = array_diff($keepIds, $options->pluck('id')->map(fn ($id) => (int) $id)->all());
         if ($missing) {
-            $options = $options->concat(GaAsset::whereIn('id', $missing)->get([
-                'id', 'name', 'asset_code', 'cs_code', 'brand', 'model_spec',
-                'kategori_aset_id', 'sub_kategori_aset_id',
-            ]));
+            $options = $options->concat(GaAsset::whereIn('id', $missing)->get($columns));
         }
 
         return $options->map(function ($asset) {
-            $code = $asset->cs_code ?: $asset->asset_code;
-            $label = trim(($code ?: $asset->name) . ($asset->name && $code ? '' : ''));
-            if ($code && $asset->name && strcasecmp($code, $asset->name) !== 0) {
-                $label = $code;
-            }
+            $code = trim((string) ($asset->asset_code ?: $asset->cs_code ?: ''));
+            $name = trim((string) ($asset->name ?? ''));
+            $label = $code !== '' && $name !== '' && strcasecmp($code, $name) !== 0
+                ? $code . ' — ' . $name
+                : ($code !== '' ? $code : $name);
 
             return [
                 'id' => $asset->id,
-                'text' => $label ?: $asset->name,
-                'cs_code' => $code,
+                'text' => $label,
+                'label' => $label,
+                'name' => $name,
+                'asset_code' => $asset->asset_code,
+                'cs_code' => $asset->cs_code ?: $asset->asset_code,
                 'kategori_aset_id' => $asset->kategori_aset_id,
                 'sub_kategori_aset_id' => $asset->sub_kategori_aset_id,
             ];

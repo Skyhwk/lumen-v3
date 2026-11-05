@@ -2,13 +2,15 @@
 
 namespace App\Services\Hr;
 
-use App\Models\Greatday\LeaveRequest;
+use App\Models\Greatday\LeaveRequest as GreatdayLeaveRequest;
+use App\Models\LeaveRequest;
 use App\Models\Hr\HrRequest;
 use App\Models\MasterKaryawan;
 use App\Services\Greatday\AtasanApprovalScope;
 use App\Services\Greatday\PendingApprovalSummary;
 use App\Services\Hr\Concerns\LegacyFormAtasanQueueLogic;
 use App\Services\Hr\Presenters\LeaveRequestPresenter;
+use App\Services\Hr\WorkflowStatus;
 
 class LeaveRequestAtasanQueueService
 {
@@ -50,12 +52,69 @@ class LeaveRequestAtasanQueueService
         return $items;
     }
 
-    /** @return \Illuminate\Support\Collection<int, LeaveRequest> */
+    /** @return list<int> */
+    public function employeeIdsWaitingOnAtasanNamed(string $keyword): array
+    {
+        return $this->resolveEmployeeIdsWaitingOnAtasanNamed(
+            $keyword,
+            $this->hrdPendingLegacyRows(),
+            HrRequest::TYPE_LEAVE
+        );
+    }
+
+    public function waitingAtasanNameForLegacyRow(object $row): string
+    {
+        $legacyId = $this->legacyApiIdFromRow($row);
+        if ($legacyId <= 0) {
+            return '-';
+        }
+
+        return $this->resolveWaitingAtasanName($row, HrRequest::TYPE_LEAVE, $legacyId);
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function atasanStepsForLegacyRow(object $row): array
+    {
+        $legacyId = $this->legacyApiIdFromRow($row);
+        if ($legacyId <= 0) {
+            return [];
+        }
+
+        return $this->resolveAtasanSteps($row, HrRequest::TYPE_LEAVE, $legacyId);
+    }
+
+    private function legacyApiIdFromRow(object $row): int
+    {
+        if (isset($row->id) && (int) $row->id > 0) {
+            return (int) $row->id;
+        }
+        if (isset($row->hr_request_id) && (int) $row->hr_request_id > 0) {
+            return (int) $row->hr_request_id;
+        }
+
+        return 0;
+    }
+
+    /** @return \Illuminate\Support\Collection<int, GreatdayLeaveRequest> */
     private function pendingLegacyRows()
     {
-        return LeaveRequest::query()
+        return GreatdayLeaveRequest::query()
             ->where('status', WorkflowStatus::PENDING)
             ->where('is_active', true)
+            ->whereNotNull('employee_id')
+            ->whereNull('rejected_atasan_by')
+            ->whereNull('rejected_hrd_by')
+            ->whereNull('approved_hrd_by')
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    /** @return \Illuminate\Support\Collection<int, LeaveRequest> */
+    private function hrdPendingLegacyRows()
+    {
+        return LeaveRequest::on('intilab_apps')
+            ->where('status', WorkflowStatus::PENDING)
+            ->where('is_active', 1)
             ->whereNotNull('employee_id')
             ->whereNull('rejected_atasan_by')
             ->whereNull('rejected_hrd_by')
@@ -67,7 +126,7 @@ class LeaveRequestAtasanQueueService
     /**
      * @return array<string, mixed>
      */
-    private function mapPendingItem(LeaveRequest $legacyRow, ?HrRequest $hrRequest, bool $canApprove): array
+    private function mapPendingItem(GreatdayLeaveRequest $legacyRow, ?HrRequest $hrRequest, bool $canApprove): array
     {
         $legacyId = (int) $legacyRow->id;
         $controller = 'LeaveRequestsController';
