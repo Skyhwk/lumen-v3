@@ -211,15 +211,21 @@ class RenderInformasiOperasionalService
         $extras = [];
         foreach ($peralatan as $item) {
             $key = self::norm($item['nama_alat'] ?? '');
-            if ($key === '' || isset($used[$key])) {
+            $alt = self::norm($item['nama_aset'] ?? '');
+            if (($key !== '' && isset($used[$key])) || ($alt !== '' && isset($used[$alt]))) {
                 continue;
             }
-            $extras[] = $item['nama_alat'];
-            $used[$key] = true;
+            $label = $item['nama_alat'] ?: ($item['nama_aset'] ?? '');
+            if ($label === '') {
+                continue;
+            }
+            $extras[] = $label;
+            if ($key !== '') $used[$key] = true;
+            if ($alt !== '') $used[$alt] = true;
         }
         if ($extras) {
             $groups[] = [
-                'label' => 'Alat Tambahan Sampling Plan',
+                'label' => 'Aset yang sudah di-set (Monitoring Alat)',
                 'rows' => self::mapAlatRows($extras, $peralatan, $used),
             ];
         }
@@ -234,18 +240,41 @@ class RenderInformasiOperasionalService
             $match = self::matchAlat($name, $peralatan);
             if ($match) {
                 $used[self::norm($match['nama_alat'] ?? $name)] = true;
+                $used[self::norm($match['nama_aset'] ?? '')] = true;
                 $used[self::norm($name)] = true;
             }
+            $nomor = $match ? self::csCodeList($match) : '';
             $rows[] = [
                 'nama' => $name,
-                'nomor' => $match && !empty($match['nomor_alat'])
-                    ? implode(', ', (array) $match['nomor_alat'])
-                    : '',
-                'jumlah' => $match ? (string) ($match['jumlah'] ?? '') : '',
+                'nomor' => $nomor,
+                'jumlah' => $nomor !== '' ? (string) ($match['jumlah'] ?? count((array) ($match['cs_code'] ?? []))) : '',
             ];
         }
 
         return $rows;
+    }
+
+    private static function csCodeList(array $match): string
+    {
+        $raw = $match['cs_code'] ?? [];
+        if (!is_array($raw)) {
+            $raw = [$raw];
+        }
+
+        $codes = [];
+        foreach ($raw as $item) {
+            $value = is_array($item)
+                ? trim((string) ($item['cs_code'] ?? ''))
+                : trim((string) $item);
+            if ($value === '' || stripos($value, 'GA-') === 0) {
+                continue;
+            }
+            $codes[] = $value;
+        }
+
+        return implode('<br>', array_map(function ($code) {
+            return htmlspecialchars($code, ENT_QUOTES, 'UTF-8');
+        }, array_values(array_unique($codes))));
     }
 
     public static function matchAlat($templateName, $peralatan)
@@ -256,12 +285,17 @@ class RenderInformasiOperasionalService
         }
 
         foreach ($peralatan as $item) {
-            $name = self::norm($item['nama_alat'] ?? '');
-            if ($name === '') {
+            if (self::csCodeList($item) === '') {
                 continue;
             }
-            if ($name === $target || strpos($target, $name) !== false || strpos($name, $target) !== false) {
-                return $item;
+            foreach (['nama_alat', 'nama_aset'] as $field) {
+                $name = self::norm($item[$field] ?? '');
+                if ($name === '') {
+                    continue;
+                }
+                if ($name === $target || strpos($target, $name) !== false || strpos($name, $target) !== false) {
+                    return $item;
+                }
             }
         }
 
