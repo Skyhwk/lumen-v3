@@ -109,6 +109,15 @@ class SamplerTrackingJourney
             return false;
         }
 
+        // This stop already closed itself. A copied departure on another PT
+        // (late team add) must not reopen it.
+        $return->loadMissing('member');
+        $ownSessionId = (int) $member->sampler_tracking_session_id;
+        $returnSessionId = (int) optional($return->member)->sampler_tracking_session_id;
+        if ($ownSessionId > 0 && $returnSessionId === $ownSessionId) {
+            return true;
+        }
+
         // Never use the return from a subsequent departure to finish an older stop.
         // Fan-out copies at the exact departure time belong to the same journey.
         $nextDeparture = $this->hasNextDepartureForSampler($member->sampler_id, (string) $departure->event_at, $return);

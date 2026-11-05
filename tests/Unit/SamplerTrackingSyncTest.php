@@ -788,6 +788,41 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertFalse($this->troubleProgress($old)['complete']);
     }
 
+    public function testOwnReturnIsNotSplitByCopiedDepartureOnAnotherSameDaySession(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-11-05 08:00:00', 'Asia/Jakarta'));
+        [$eritta, $morning] = $this->troubleAssignment('eritta-pharma', '2026-11-04', 0);
+        [$menara, $afternoon] = $this->troubleAssignment('menara-kadin', '2026-11-04', 0);
+        foreach ([
+            ['departure', '2026-11-04 05:53:04'],
+            ['checkin', '2026-11-04 08:29:57'],
+            ['checkout', '2026-11-04 09:12:56'],
+            ['return', '2026-11-04 11:14:27'],
+        ] as [$type, $at]) {
+            $this->recordTroubleJourneyEvent($eritta, $morning, $type, $at);
+        }
+        foreach ([
+            ['departure', '2026-11-04 06:01:17'],
+            ['checkin', '2026-11-04 07:52:45'],
+            ['checkout', '2026-11-04 16:13:43'],
+            ['return', '2026-11-04 18:20:39'],
+        ] as [$type, $at]) {
+            $this->recordTroubleJourneyEvent($menara, $afternoon, $type, $at);
+        }
+
+        $this->assertTrue($this->troubleProgress($eritta)['complete']);
+        $this->assertTrue($this->troubleProgress($menara)['complete']);
+
+        $service = new \App\Services\SamplerTrackingTroubleService();
+        $this->assertSame(0, $service->collect('2026-11-04', [10]));
+        $this->db->getConnection('mysql')->table('sampler_tracking_troubles')->insert([
+            'sampler_id' => 10, 'tracking_session_id' => $eritta->id,
+            'activity_date' => '2026-11-04', 'is_active' => 1, 'is_clear' => 0,
+        ]);
+        $this->assertCount(0, $service->unresolved(10));
+        $this->assertEquals(1, $this->db->getConnection('mysql')->table('sampler_tracking_troubles')->value('is_clear'));
+    }
+
     public function testTroubleJourneyStillRequiresCheckoutAndReturnAfterCheckout(): void
     {
         \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-10-29 10:00:00', 'Asia/Jakarta'));
@@ -1812,6 +1847,65 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame($eventIds, $member->events()->pluck('id')->all());
         $this->assertSame('existing-proof.jpg', $member->events()->first()->photo);
         $this->assertCount(1, $this->service->listByDate('2026-09-17'));
+    }
+
+    public function testAddingTeammateOnSameDayStillCopiesDeparture(): void
+    {
+        $this->schedule(['userid' => 166, 'sampler' => 'Hafizh']);
+        $session = $this->prepare('2026-09-17')->first();
+        $hafizh = $session->activeMembers()->firstOrFail();
+        $this->db->getConnection('mysql')->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_tracking_member_id' => $hafizh->id,
+            'triggered_by_member_id' => $hafizh->id,
+            'event_type' => 'departure',
+            'event_at' => '2026-09-17 05:58:56',
+            'is_auto' => 0,
+        ]);
+        $before = $this->service->snapshotSchedules('Q1');
+        $this->schedule(['userid' => 1064, 'sampler' => 'Muhamad Rizky']);
+        $this->service->syncScheduleEdit($before, 'Q1');
+        $rizky = $session->fresh()->activeMembers()->where('sampler_name', 'Muhamad Rizky')->firstOrFail();
+        $copied = $rizky->events()->firstOrFail();
+        $this->assertTrue((bool) $session->fresh()->is_active);
+        $this->assertEquals($session->id, $rizky->sampler_tracking_session_id);
+        $this->assertSame('departure', $copied->event_type);
+        $this->assertSame('2026-09-17 05:58:56', $copied->event_at);
+        $this->assertEquals(1, $copied->is_auto);
+        $this->assertEquals($hafizh->id, $copied->triggered_by_member_id);
+    }
+
+    public function testRescheduleToAnotherDateDoesNotCopyOldDepartureToNewTeam(): void
+    {
+        $this->schedule(['userid' => 166, 'sampler' => 'Hafizh']);
+        $session = $this->prepare('2026-09-17')->first();
+        $hafizh = $session->activeMembers()->firstOrFail();
+        $this->db->getConnection('mysql')->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_tracking_member_id' => $hafizh->id,
+            'triggered_by_member_id' => $hafizh->id,
+            'event_type' => 'departure',
+            'event_at' => '2026-09-17 05:58:56',
+            'is_auto' => 0,
+        ]);
+        $before = $this->service->snapshotSchedules('Q1');
+        Jadwal::query()->update(['is_active' => false]);
+        $this->schedule(['tanggal' => '2026-09-19', 'userid' => 166, 'sampler' => 'Hafizh']);
+        $this->schedule(['tanggal' => '2026-09-19', 'userid' => 1064, 'sampler' => 'Muhamad Rizky']);
+        $this->prepare('2026-09-19');
+        $this->service->syncScheduleEdit($before, 'Q1');
+
+        $this->assertFalse((bool) $session->fresh()->is_active);
+        $this->assertSame('2026-09-17', $session->fresh()->tanggal_sampling);
+        $this->assertSame(1, $hafizh->events()->where('event_type', 'departure')->count());
+
+        $newSession = SamplerTrackingSession::where('is_active', true)
+            ->whereDate('tanggal_sampling', '2026-09-19')
+            ->firstOrFail();
+        $this->assertNotEquals($session->id, $newSession->id);
+        $rizky = $newSession->activeMembers()->where('sampler_name', 'Muhamad Rizky')->firstOrFail();
+        $this->assertSame(0, $rizky->events()->count());
+        $this->assertSame(0, $newSession->events()->count());
     }
 
     public function testEditSamplingDateCreatesNewActivityAndDeactivatesOldSession(): void

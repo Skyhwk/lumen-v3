@@ -14,6 +14,77 @@ class PermissionRequestAtasanQueueService
 {
     use LegacyFormAtasanQueueLogic;
 
+    /** @var array<int, int> */
+    private $resolvedKaryawanIds = [];
+
+    /**
+     * Sama dengan AttendanceCorrectionAtasanQueueService::waitingAtasanNameForLegacyRow.
+     * Baris datatable izin tidak berbentuk model legacy, jadi dinormalkan dulu.
+     */
+    public function waitingAtasanNameForLegacyRow(object $row): string
+    {
+        $legacy = $this->legacyChainRow($row);
+
+        return $this->resolveWaitingAtasanName($legacy, HrRequest::TYPE_PERMISSION, (int) $legacy->id);
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function atasanStepsForLegacyRow(object $row): array
+    {
+        $legacy = $this->legacyChainRow($row);
+
+        return $this->resolveAtasanSteps($legacy, HrRequest::TYPE_PERMISSION, (int) $legacy->id);
+    }
+
+    /**
+     * Bentuk yang dibaca LegacyFormAtasanQueueLogic: id legacy, employee_id = master_karyawan.id, status mentah.
+     */
+    private function legacyChainRow(object $row): object
+    {
+        if (!isset($row->status_raw) && isset($row->employee_id, $row->status)) {
+            $legacy = clone $row;
+            $legacy->id = (int) $row->id;
+            $legacy->employee_id = $this->resolveKaryawanId((int) $row->employee_id);
+
+            return $legacy;
+        }
+
+        $karyawanId = (int) ($row->karyawan_id ?? 0);
+        if ($karyawanId <= 0) {
+            $karyawanId = $this->resolveKaryawanId((int) ($row->permission_employee_id ?? 0));
+        }
+
+        return (object) [
+            'id' => (int) ($row->legacy_id ?? 0),
+            'employee_id' => $karyawanId,
+            'status' => (string) ($row->status_raw ?? ''),
+            'approved_atasan_by' => $row->approved_atasan_by ?? null,
+            'approved_atasan_at' => $row->approved_atasan_at ?? null,
+            'rejected_atasan_by' => $row->rejected_atasan_by ?? null,
+            'rejected_atasan_at' => $row->rejected_atasan_at ?? null,
+            'reject_atasan_reason' => $row->reject_atasan_reason ?? null,
+        ];
+    }
+
+    private function resolveKaryawanId(int $employeeId): int
+    {
+        if ($employeeId <= 0) {
+            return 0;
+        }
+        if (array_key_exists($employeeId, $this->resolvedKaryawanIds)) {
+            return $this->resolvedKaryawanIds[$employeeId];
+        }
+
+        $byId = MasterKaryawan::query()->where('id', $employeeId)->value('id');
+        if ($byId) {
+            return $this->resolvedKaryawanIds[$employeeId] = (int) $byId;
+        }
+
+        $byUserId = MasterKaryawan::query()->where('user_id', $employeeId)->value('id');
+
+        return $this->resolvedKaryawanIds[$employeeId] = $byUserId ? (int) $byUserId : 0;
+    }
+
     /**
      * @return list<array<string, mixed>>
      */

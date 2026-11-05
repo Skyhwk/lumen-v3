@@ -70,6 +70,10 @@ class PortalHrdIzinDatatableQuery
 
         return [
             DB::raw("CONCAT('PR-', COALESCE(legacy_map.old_id, pr.id)) as id"),
+            'pr.id as hr_request_id',
+            'legacy_map.old_id as legacy_id',
+            'pr.karyawan_id as karyawan_id',
+            'pr.status as status_raw',
             'pr.no_document',
             'd.nama_divisi',
             DB::raw($statusCase . ' as status'),
@@ -90,8 +94,10 @@ class PortalHrdIzinDatatableQuery
             DB::raw(PortalHrApprovalStepSql::scalar('pr', 'hrd', 'approved', 'acted_at') . ' as approved_hrd_at'),
             DB::raw(PortalHrApprovalStepSql::scalar('pr', 'atasan', 'rejected', 'actor_name') . ' as rejected_atasan_by'),
             DB::raw(PortalHrApprovalStepSql::scalar('pr', 'atasan', 'rejected', 'acted_at') . ' as rejected_atasan_at'),
+            DB::raw(PortalHrApprovalStepSql::scalar('pr', 'atasan', 'rejected', 'reason') . ' as reject_atasan_reason'),
             DB::raw(PortalHrApprovalStepSql::scalar('pr', 'hrd', 'rejected', 'actor_name') . ' as rejected_hrd_by'),
             DB::raw(PortalHrApprovalStepSql::scalar('pr', 'hrd', 'rejected', 'acted_at') . ' as rejected_hrd_at'),
+            DB::raw(PortalHrApprovalStepSql::scalar('pr', 'hrd', 'rejected', 'reason') . ' as reject_hrd_reason'),
             'u.nama_lengkap as nama_karyawan',
             'pr.created_by_name as nama_pengaju',
             'pd.attachment_path as filename',
