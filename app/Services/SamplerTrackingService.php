@@ -574,12 +574,19 @@ class SamplerTrackingService
             ->where('is_active', true)->get()
             ->mapWithKeys(function ($session) { return [$session->id => $session->activeMembers]; });
         $keyFor = function ($row) { return $this->makeTeamKey($row); };
+        $rawMapping = SamplerTrackingScheduleIdentity::replacements($before, $after, $keyFor);
         $mapping = $this->continuityMappingForScheduleEdit(
-            SamplerTrackingScheduleIdentity::replacements($before, $after, $keyFor),
+            $rawMapping,
             $before,
+            $after,
             $rescheduledIds,
             $keyFor
         );
+        $dateMovedOldKeys = array_values(array_diff(array_keys($rawMapping), array_keys($mapping)));
+        $dateMovedNewKeys = array_values(array_unique(array_map(function ($oldKey) use ($rawMapping) {
+            return $rawMapping[$oldKey];
+        }, $dateMovedOldKeys)));
+        $this->deactivateSessionsByTeamKeys($dateMovedOldKeys, $quotation);
         $afterById = $after->keyBy('id');
         $editedKeys = $before->filter(function ($row) use ($afterById, $rescheduledIds) {
             if (in_array((int) $row->id, $rescheduledIds, true)) {
@@ -597,7 +604,10 @@ class SamplerTrackingService
             collect($affectedScopes)->flatten()->unique()->values()->all(),
             $this->persiapanBackedCreationKeys($quotation)
         ));
-        $sessions = $this->syncQuotationDates($quotation, $after, $affectedScopes, $editCreationKeys);
+        if ($dateMovedNewKeys && $this->quotationHasActivePersiapan($quotation)) {
+            $editCreationKeys = array_values(array_unique(array_merge($editCreationKeys, $dateMovedNewKeys)));
+        }
+        $sessions = $this->syncQuotationDates($quotation, $after, $affectedScopes, $editCreationKeys, $dateMovedNewKeys);
         foreach ($sessions as $session) {
             if ($editedKeys->contains($session->team_key) && $previousMembers->has($session->id)) {
                 $this->inheritCorrectedTeamEvents($session, $previousMembers->get($session->id));
@@ -659,15 +669,28 @@ class SamplerTrackingService
         return Carbon::parse($value)->toDateString();
     }
 
-    protected function continuityMappingForScheduleEdit(array $mapping, $before, array $rescheduledIds, callable $keyFor)
+    /**
+     * Keep session identity only for same-day corrections (time/vehicle/team).
+     * A different sampling date is a new activity, including when Jadwal Service
+     * replaces rows instead of updating the same ID.
+     */
+    protected function continuityMappingForScheduleEdit(array $mapping, $before, $after, array $rescheduledIds, callable $keyFor)
     {
-        if (empty($rescheduledIds)) {
-            return $mapping;
-        }
         $rescheduledOldKeys = $before->whereIn('id', $rescheduledIds)->map($keyFor)->flip()->all();
+        $oldDates = $before->groupBy($keyFor)->map(function ($group) {
+            return $this->normalizeScheduleDate($group->first()->tanggal ?? null);
+        });
+        $newDates = $after->groupBy($keyFor)->map(function ($group) {
+            return $this->normalizeScheduleDate($group->first()->tanggal ?? null);
+        });
         $continuity = [];
         foreach ($mapping as $oldKey => $newKey) {
             if (isset($rescheduledOldKeys[$oldKey])) {
+                continue;
+            }
+            $oldDate = $oldDates->get($oldKey);
+            $newDate = $newDates->get($newKey);
+            if ($oldDate && $newDate && $oldDate !== $newDate) {
                 continue;
             }
             $continuity[$oldKey] = $newKey;
@@ -704,6 +727,38 @@ class SamplerTrackingService
         }
     }
 
+    protected function deactivateSessionsByTeamKeys(array $teamKeys, $quotation): void
+    {
+        $teamKeys = array_values(array_unique(array_filter($teamKeys)));
+        if (!$teamKeys) {
+            return;
+        }
+
+        $sessionUpdate = $this->onlyExistingColumns((new SamplerTrackingSession())->getTable(), ['is_active' => false]);
+        $memberUpdate = $this->onlyExistingColumns((new SamplerTrackingMember())->getTable(), ['is_active' => false]);
+        if ($sessionUpdate === []) {
+            return;
+        }
+
+        $sessions = SamplerTrackingSession::whereIn('team_key', $teamKeys)
+            ->where('is_active', true)
+            ->when($quotation !== null, function ($query) use ($quotation) {
+                $query->where('no_quotation', $quotation);
+            })
+            ->get();
+
+        foreach ($sessions as $session) {
+            SamplerTrackingHistory::append((int) $session->id, 'session_deactivated', [
+                'reason' => 'sampling_date_changed', 'before' => SamplerTrackingHistory::snapshot($session),
+            ]);
+            SamplerTrackingSession::where('id', $session->id)->update($sessionUpdate);
+            if ($memberUpdate !== []) {
+                SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)->update($memberUpdate);
+            }
+            (new SamplerTrackingTroubleService())->deactivateForSessions([$session->id]);
+        }
+    }
+
     protected function findActiveSessionForScheduleRow($row, $quotation)
     {
         foreach ([$this->makeTeamKey($row), $this->makeLegacyTeamKey($row)] as $teamKey) {
@@ -725,6 +780,7 @@ class SamplerTrackingService
     /** A schedule edit corrects the original team; a new visit never uses this path. */
     protected function inheritCorrectedTeamEvents($session, $previousMembers)
     {
+        $sessionDate = $this->normalizeScheduleDate($session->tanggal_sampling);
         $members = $session->activeMembers()->with('events')->get();
         $activeIds = $members->pluck('id');
         $donors = $previousMembers->filter(function ($member) use ($activeIds) {
@@ -745,12 +801,14 @@ class SamplerTrackingService
             if ($eligibleDonors->isEmpty()) {
                 continue;
             }
-            $events = $eligibleDonors->flatMap(function ($donor) use ($member) {
-                return $donor->events->filter(function ($event) use ($donor, $member) {
+            $events = $eligibleDonors->flatMap(function ($donor) use ($member, $sessionDate) {
+                return $donor->events->filter(function ($event) use ($donor, $member, $sessionDate) {
                     return $this->canInheritTeamEvent(
                         $event->event_type,
                         $donor->effective_duration,
-                        $member->effective_duration
+                        $member->effective_duration,
+                        $event->event_at ?? null,
+                        $sessionDate
                     );
                 });
             })->sortBy('id')->sortBy('event_at')->unique('event_type');
@@ -877,7 +935,7 @@ class SamplerTrackingService
      * still contain every sampler in those visits, so a team event remains
      * consistent without re-syncing other orders on the same day.
      */
-    protected function syncQuotationDates($quotation, $after, array $scopesByDate, array $creationKeys = [])
+    protected function syncQuotationDates($quotation, $after, array $scopesByDate, array $creationKeys = [], array $dateMovedCreationKeys = [])
     {
         $sessions = collect();
         foreach ($scopesByDate as $date => $scopeKeys) {
@@ -891,7 +949,8 @@ class SamplerTrackingService
                 true,
                 $quotation,
                 $creationKeys,
-                $scopeKeys
+                $scopeKeys,
+                $dateMovedCreationKeys
             ));
         }
 
@@ -943,18 +1002,18 @@ class SamplerTrackingService
         ]);
     }
 
-    protected function syncJadwalRows($jadwals, $date, $deactivateMissingSessions = false, $quotation = null, array $creationKeys = [], array $scopeTeamKeys = [])
+    protected function syncJadwalRows($jadwals, $date, $deactivateMissingSessions = false, $quotation = null, array $creationKeys = [], array $scopeTeamKeys = [], array $dateMovedCreationKeys = [])
     {
         $now = $this->now();
         $sessions = [];
         $activeTeamKeys = [];
 
-        DB::transaction(function () use ($jadwals, $now, &$sessions, &$activeTeamKeys, $date, $deactivateMissingSessions, $quotation, $creationKeys, $scopeTeamKeys) {
+        DB::transaction(function () use ($jadwals, $now, &$sessions, &$activeTeamKeys, $date, $deactivateMissingSessions, $quotation, $creationKeys, $scopeTeamKeys, $dateMovedCreationKeys) {
             $this->reconcileReplacedSessions($jadwals, $date, $quotation);
 
             $jadwals->groupBy(function ($row) {
                 return $this->makeTeamKey($row);
-            })->each(function ($rows, $teamKey) use ($now, &$sessions, &$activeTeamKeys, $creationKeys, $quotation, $date, $jadwals) {
+            })->each(function ($rows, $teamKey) use ($now, &$sessions, &$activeTeamKeys, $creationKeys, $dateMovedCreationKeys, $quotation, $date, $jadwals) {
                 $first = $rows->first();
                 $replacedSessionId = null;
                 $keeper = $this->findRescheduleKeeperSession($first, $quotation, $date, $teamKey, $jadwals);
@@ -986,7 +1045,8 @@ class SamplerTrackingService
                 $canMaterialize = in_array($teamKey, $creationKeys, true);
                 $visitQuotation = $quotation ?: $first->no_quotation;
                 $visitDate = Carbon::parse($first->tanggal)->toDateString();
-                if ($canMaterialize && !$this->quotationHasActivePersiapanOnDate($visitQuotation, $visitDate)) {
+                $dateMovedVisit = in_array($teamKey, $dateMovedCreationKeys, true);
+                if ($canMaterialize && !$this->quotationHasActivePersiapanOnDate($visitQuotation, $visitDate) && !$dateMovedVisit) {
                     $canMaterialize = false;
                 }
                 if ($canMaterialize && $this->revisionQuotationPendingReOrder($visitQuotation)) {
@@ -3012,8 +3072,17 @@ public function buildTrackingRows($sessions)
             ->exists();
     }
 
-    protected function canInheritTeamEvent(string $eventType, $donorEffectiveDuration, $recipientEffectiveDuration): bool
-    {
+    protected function canInheritTeamEvent(
+        string $eventType,
+        $donorEffectiveDuration,
+        $recipientEffectiveDuration,
+        $eventAt = null,
+        $sessionDate = null
+    ): bool {
+        if (!$this->eventMatchesSessionDate($eventAt, $sessionDate)) {
+            return false;
+        }
+
         if (in_array($eventType, ['departure', 'checkin'], true)) {
             return true;
         }
@@ -3023,6 +3092,21 @@ public function buildTrackingRows($sessions)
         }
 
         return false;
+    }
+
+    /** Team copies are same-day only. A moved schedule must not inherit yesterday's departure. */
+    protected function eventMatchesSessionDate($eventAt, $sessionDate): bool
+    {
+        if ($eventAt === null || $eventAt === '' || $sessionDate === null || $sessionDate === '') {
+            return true;
+        }
+
+        try {
+            return Carbon::parse($eventAt, 'Asia/Jakarta')->toDateString()
+                === Carbon::parse($sessionDate, 'Asia/Jakarta')->toDateString();
+        } catch (\Exception $exception) {
+            return false;
+        }
     }
 
     protected function inheritedTeamEventNote($sourceEvent, string $reason): string
@@ -3083,10 +3167,17 @@ public function buildTrackingRows($sessions)
             $sourceEvents->pluck('sampler_tracking_member_id')->filter()->unique()->all()
         )->pluck('effective_duration', 'id');
 
+        $sessionDate = $this->normalizeScheduleDate($session->tanggal_sampling);
         $eventModel = new SamplerTrackingEvent();
         foreach ($sourceEvents as $sourceEvent) {
             $donorDuration = $donorDurations->get($sourceEvent->sampler_tracking_member_id);
-            if (!$this->canInheritTeamEvent($sourceEvent->event_type, $donorDuration, $member->effective_duration)) {
+            if (!$this->canInheritTeamEvent(
+                $sourceEvent->event_type,
+                $donorDuration,
+                $member->effective_duration,
+                $sourceEvent->event_at ?? null,
+                $sessionDate
+            )) {
                 continue;
             }
 
