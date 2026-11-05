@@ -334,7 +334,7 @@ class DashboardSmsController extends Controller
 
                 [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRows($periode, null, $scopeIds);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
-                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $scopeIds);
+                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $scopeIds, $cek);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 $years = [
@@ -502,7 +502,7 @@ class DashboardSmsController extends Controller
 
                 [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRowsForKaryawanScope($periode, $teamRootId);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
-                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $bawahanIds);
+                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $bawahanIds, $cek);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 return response()->json([
@@ -629,7 +629,7 @@ class DashboardSmsController extends Controller
                 [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRowsForKaryawanScope($periode, $karyawanId);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
                 $samplingScopeIds              = ($isSalesStaff || $isExecutive) ? [$karyawanId] : $scopeIds;
-                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $samplingScopeIds);
+                $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $samplingScopeIds, $cek);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 return response()->json([
@@ -1405,25 +1405,72 @@ class DashboardSmsController extends Controller
         ];
     }
 
-    private function enrichRevenueHeadingWithSampling(array $heading, ?string $periode, ?array $salesIds): array
+    private function enrichRevenueHeadingWithSampling(array $heading, ?string $periode, ?array $salesIds, $cek = null): array
     {
         $totals = $this->calculateSamplingRevenueTotals($periode, $salesIds);
-        $suffix = "\nBelum Sampling : Rp " . number_format($totals['belum_sampling'], 0, ',', '.')
-            . "\nSudah Sampling : Rp " . number_format($totals['sudah_sampling'], 0, ',', '.');
+        $kontrakExist = (float) ($cek->revenue_order_kontrak_exist ?? 0);
+        $kontrakNew = (float) ($cek->revenue_order_kontrak_new ?? 0);
+        $nonExist = (float) ($cek->revenue_order_nonkontrak_exist ?? 0);
+        $nonNew = (float) ($cek->revenue_order_nonkontrak_new ?? 0);
+        $kontrakTotal = $kontrakExist + $kontrakNew;
+        $nonTotal = $nonExist + $nonNew;
 
-        foreach ($heading as &$item) {
+        $enriched = [];
+        foreach ($heading as $item) {
             if (($item['title'] ?? '') === 'Revenue') {
-                $item['info'] = ($item['info'] ?? '') . $suffix;
+                $item['info'] = ($item['info'] ?? '')
+                    . "\nKontrak : Rp " . number_format($kontrakTotal, 0, ',', '.')
+                    . "\nNon-Kontrak : Rp " . number_format($nonTotal, 0, ',', '.');
+                $enriched[] = $item;
+                $enriched[] = [
+                    'title' => 'Revenue Kontrak',
+                    'value' => 'Rp ' . number_format($kontrakTotal, 0, ',', '.'),
+                    'color' => 'dark',
+                    'info' => 'Exist : Rp ' . number_format($kontrakExist, 0, ',', '.')
+                        . "\nNew : Rp " . number_format($kontrakNew, 0, ',', '.')
+                        . "\nBelum Sampling : Rp " . number_format($totals['kontrak']['belum_sampling'], 0, ',', '.')
+                        . "\nSudah Sampling : Rp " . number_format($totals['kontrak']['sudah_sampling'], 0, ',', '.'),
+                ];
+                $enriched[] = [
+                    'title' => 'Revenue Non-Kontrak',
+                    'value' => 'Rp ' . number_format($nonTotal, 0, ',', '.'),
+                    'color' => 'dark',
+                    'info' => 'Exist : Rp ' . number_format($nonExist, 0, ',', '.')
+                        . "\nNew : Rp " . number_format($nonNew, 0, ',', '.')
+                        . "\nBelum Sampling : Rp " . number_format($totals['non_kontrak']['belum_sampling'], 0, ',', '.')
+                        . "\nSudah Sampling : Rp " . number_format($totals['non_kontrak']['sudah_sampling'], 0, ',', '.'),
+                ];
+                continue;
             }
-        }
-        unset($item);
 
-        return $heading;
+            $enriched[] = $item;
+        }
+
+        return $enriched;
+    }
+
+    private function emptySamplingRevenueTotals(): array
+    {
+        return [
+            'belum_sampling' => 0.0,
+            'sudah_sampling' => 0.0,
+            'kontrak' => ['belum_sampling' => 0.0, 'sudah_sampling' => 0.0],
+            'non_kontrak' => ['belum_sampling' => 0.0, 'sudah_sampling' => 0.0],
+        ];
+    }
+
+    private function isKontrakDailyQsdRow($row): bool
+    {
+        if (strtoupper(trim((string) ($row->kontrak ?? ''))) === 'C') {
+            return true;
+        }
+
+        return stripos((string) ($row->no_quotation ?? ''), '/QTC') !== false;
     }
 
     private function calculateSamplingRevenueTotals(?string $periode, ?array $salesIds): array
     {
-        $empty = ['belum_sampling' => 0.0, 'sudah_sampling' => 0.0];
+        $empty = $this->emptySamplingRevenueTotals();
         if (!$periode) {
             return $empty;
         }
@@ -1434,7 +1481,7 @@ class DashboardSmsController extends Controller
         }
 
         $query = \DB::table('daily_qsd')
-            ->select('no_order', 'no_quotation', 'periode', 'status_sampling', 'total_revenue')
+            ->select('no_order', 'no_quotation', 'periode', 'status_sampling', 'total_revenue', 'kontrak')
             ->whereNotNull('no_order')
             ->where('no_order', '!=', '')
             ->whereYear('tanggal_kelompok', (int) $year)
@@ -1454,8 +1501,7 @@ class DashboardSmsController extends Controller
         $sSamplingMap = $this->mapOrderTypeSSamplingStatus($rows);
         $sdSamplingMap = $this->mapOrderTypeSdSamplingStatus($rows);
 
-        $belum = 0.0;
-        $sudah = 0.0;
+        $totals = $this->emptySamplingRevenueTotals();
 
         foreach ($rows as $row) {
             $revenue = (float) ($row->total_revenue ?? 0);
@@ -1464,8 +1510,6 @@ class DashboardSmsController extends Controller
             }
 
             $category = $this->resolveRowSamplingCategory($row, $samplingCategoryByOrder);
-            $isSampled = false;
-
             if ($category === 'sd') {
                 $isSampled = (bool) ($sdSamplingMap[$this->sdSamplingKey($row)] ?? false);
             } else {
@@ -1473,17 +1517,13 @@ class DashboardSmsController extends Controller
                 $isSampled = (bool) ($sSamplingMap[$this->sSamplingKey($row)] ?? false);
             }
 
-            if ($isSampled) {
-                $sudah += $revenue;
-            } else {
-                $belum += $revenue;
-            }
+            $bucket = $this->isKontrakDailyQsdRow($row) ? 'kontrak' : 'non_kontrak';
+            $statusKey = $isSampled ? 'sudah_sampling' : 'belum_sampling';
+            $totals[$statusKey] += $revenue;
+            $totals[$bucket][$statusKey] += $revenue;
         }
 
-        return [
-            'belum_sampling' => $belum,
-            'sudah_sampling' => $sudah,
-        ];
+        return $totals;
     }
 
     private function mapOrderSamplingCategories($noOrders, $rows): array
