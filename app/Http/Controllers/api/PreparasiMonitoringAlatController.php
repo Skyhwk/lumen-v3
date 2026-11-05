@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\GaAsset;
 use App\Models\JadwalMobilisasi;
 use App\Models\JadwalMobilisasiAset;
+use App\Models\KategoriPeralatanSampling;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -31,6 +32,7 @@ class PreparasiMonitoringAlatController extends Controller
             $row->request_alat = $this->requestSummary($peralatan);
             $row->jumlah_request = $this->requestCount($peralatan);
             $row->jumlah_set = (int) ($row->jumlah_set ?? 0);
+            $row->sampler = $this->uniqueNames($row->sampler ?? '');
             return $row;
         });
 
@@ -60,24 +62,31 @@ class PreparasiMonitoringAlatController extends Controller
             ->orderBy('id')
             ->get();
 
+        $peralatan = $this->decodePeralatan($mobilisasi->peralatan_sampling);
+        $jenisByNama = $this->jenisPeralatanByNama($peralatan);
         $groups = [];
         $remainingAssigned = $assigned;
-        foreach ($this->decodePeralatan($mobilisasi->peralatan_sampling) as $index => $item) {
+        foreach ($peralatan as $index => $item) {
             $nama = trim((string) ($item['nama_alat'] ?? ''));
             $jumlah = max(1, (int) ($item['jumlah_alat'] ?? 1));
             $kategoriId = $this->nullableInt($item['kategori_aset_id'] ?? null);
             $subKategoriId = $this->nullableInt($item['sub_kategori_aset_id'] ?? null);
+            $jenis = trim((string) ($item['jenis_peralatan'] ?? ''));
+            if ($jenis === '' && $nama !== '') {
+                $jenis = $jenisByNama[strtolower($nama)] ?? '';
+            }
             $matched = $this->takeAssigned($remainingAssigned, $nama, $kategoriId, $subKategoriId);
             $pickedIds = array_map(fn ($row) => (int) $row->id_aset, $matched);
             $slots = array_pad($pickedIds, max($jumlah, count($pickedIds)), null);
             $groups[] = [
                 'key' => $index,
                 'nama_alat' => $nama,
+                'jenis_peralatan' => $jenis !== '' ? $jenis : null,
                 'jumlah_alat' => $jumlah,
                 'kategori_aset_id' => $kategoriId,
                 'sub_kategori_aset_id' => $subKategoriId,
                 'slots' => $slots,
-                'options' => $this->assetOptions($kategoriId, $subKategoriId, $nama, array_filter($slots)),
+                'options' => $this->assetOptions($kategoriId, $subKategoriId, $nama, array_filter($slots), $jenis),
             ];
         }
 
@@ -176,18 +185,22 @@ class PreparasiMonitoringAlatController extends Controller
             ->where('is_active', true)
             ->groupBy('id_mobilisasi');
 
-        $tim = DB::table('jadwal')
+        // Tim = sampler di batch jadwal yang sama dengan Sampling Plan (1–2 orang).
+        // Jangan join by no_quotation+tanggal: itu menggabungkan semua tim QT hari itu + driver.
+        $tim = DB::table('jadwal as j')
+            ->join('jadwal_mobilisasi as m', function ($join) {
+                $join->whereRaw('FIND_IN_SET(j.id, m.batch_id) > 0')
+                    ->where('m.is_active', true);
+            })
+            ->where('j.is_active', true)
+            ->where('j.tanggal', $tanggal)
+            ->groupBy('m.id')
             ->select(
-                'no_quotation',
-                'tanggal',
-                DB::raw('MAX(nama_perusahaan) as nama_perusahaan'),
-                DB::raw('MAX(wilayah) as wilayah'),
-                DB::raw("GROUP_CONCAT(DISTINCT NULLIF(TRIM(sampler), '') SEPARATOR ', ') as sampler"),
-                DB::raw("GROUP_CONCAT(DISTINCT NULLIF(TRIM(driver), '') SEPARATOR ', ') as driver")
-            )
-            ->where('is_active', true)
-            ->where('tanggal', $tanggal)
-            ->groupBy('no_quotation', 'tanggal');
+                'm.id as id_mobilisasi',
+                DB::raw('MAX(j.nama_perusahaan) as nama_perusahaan'),
+                DB::raw('MAX(j.wilayah) as wilayah'),
+                DB::raw("GROUP_CONCAT(DISTINCT NULLIF(TRIM(j.sampler), '') SEPARATOR ', ') as sampler")
+            );
 
         return JadwalMobilisasi::query()
             ->from('jadwal_mobilisasi as m')
@@ -195,8 +208,7 @@ class PreparasiMonitoringAlatController extends Controller
                 $join->on('assigned.id_mobilisasi', '=', 'm.id');
             })
             ->leftJoinSub($tim, 'tim', function ($join) {
-                $join->on('tim.no_quotation', '=', 'm.no_quotation')
-                    ->on('tim.tanggal', '=', 'm.tanggal');
+                $join->on('tim.id_mobilisasi', '=', 'm.id');
             })
             ->where('m.is_active', true)
             ->where('m.tanggal', $tanggal)
@@ -212,7 +224,6 @@ class PreparasiMonitoringAlatController extends Controller
                 'tim.nama_perusahaan',
                 'tim.wilayah',
                 'tim.sampler',
-                'tim.driver',
                 'assigned.jumlah_set',
                 'assigned.set_by',
                 'assigned.set_at'
@@ -230,9 +241,12 @@ class PreparasiMonitoringAlatController extends Controller
             ->where('record_kind', GaAsset::RECORD_UNIT);
     }
 
-    private function assetOptions($kategoriId, $subKategoriId, $namaAlat, array $keepIds = [])
+    private function assetOptions($kategoriId, $subKategoriId, $namaAlat, array $keepIds = [], $jenisPeralatan = null)
     {
-        $query = $this->eligibleAsset();
+        $query = $this->eligibleAsset()->with([
+            'subKategori:id,nama_sub_kategori',
+            'kategori:id,nama_kategori',
+        ]);
         if ($subKategoriId) {
             $query->where('sub_kategori_aset_id', $subKategoriId);
         } elseif ($kategoriId) {
@@ -241,30 +255,71 @@ class PreparasiMonitoringAlatController extends Controller
             $query->where('name', 'like', '%' . $namaAlat . '%');
         }
 
-        $options = $query->orderBy('cs_code')->orderBy('name')->get([
-            'id', 'name', 'asset_code', 'cs_code', 'brand', 'model_spec',
-            'kategori_aset_id', 'sub_kategori_aset_id',
-        ]);
+        $options = $query->orderBy('cs_code')->orderBy('name')->get();
 
         $keepIds = array_values(array_unique(array_map('intval', $keepIds)));
         $missing = array_diff($keepIds, $options->pluck('id')->map(fn ($id) => (int) $id)->all());
         if ($missing) {
-            $options = $options->concat(GaAsset::whereIn('id', $missing)->get([
-                'id', 'name', 'asset_code', 'cs_code', 'brand', 'model_spec',
-                'kategori_aset_id', 'sub_kategori_aset_id',
-            ]));
+            $options = $options->concat(
+                GaAsset::with(['subKategori:id,nama_sub_kategori', 'kategori:id,nama_kategori'])
+                    ->whereIn('id', $missing)
+                    ->get()
+            );
         }
 
-        return $options->map(function ($asset) {
-            $code = $asset->cs_code ?: $asset->asset_code;
-            $label = trim($code . ' — ' . $asset->name . ($asset->brand ? ' (' . $asset->brand . ')' : ''));
-            return [
-                'id' => $asset->id,
-                'text' => $label,
-                'kategori_aset_id' => $asset->kategori_aset_id,
-                'sub_kategori_aset_id' => $asset->sub_kategori_aset_id,
-            ];
+        $jenisFallback = trim((string) $jenisPeralatan);
+
+        return $options->map(function ($asset) use ($jenisFallback) {
+            return $this->presentAssetOption($asset, $jenisFallback);
         })->values();
+    }
+
+    private function presentAssetOption(GaAsset $asset, $jenisFallback = '')
+    {
+        $cs = trim((string) ($asset->cs_code ?? ''));
+        $name = trim((string) ($asset->name ?? ''));
+        $jenis = trim((string) (
+            optional($asset->subKategori)->nama_sub_kategori
+            ?: optional($asset->kategori)->nama_kategori
+            ?: $jenisFallback
+        ));
+        $label = $cs !== '' && $name !== '' && strcasecmp($cs, $name) !== 0
+            ? $cs . ' — ' . $name
+            : ($cs !== '' ? $cs : $name);
+
+        return [
+            'id' => $asset->id,
+            'text' => $label,
+            'label' => $label,
+            'name' => $name,
+            'cs_code' => $cs,
+            'jenis_peralatan' => $jenis !== '' ? $jenis : null,
+            'kategori_aset_id' => $asset->kategori_aset_id,
+            'sub_kategori_aset_id' => $asset->sub_kategori_aset_id,
+        ];
+    }
+
+    private function jenisPeralatanByNama(array $peralatan)
+    {
+        $names = collect($peralatan)
+            ->map(fn ($item) => trim((string) ($item['nama_alat'] ?? '')))
+            ->filter()
+            ->unique()
+            ->values();
+        if ($names->isEmpty() || !class_exists(KategoriPeralatanSampling::class)) {
+            return [];
+        }
+
+        return KategoriPeralatanSampling::query()
+            ->where('is_active', true)
+            ->whereIn('nama_alat', $names->all())
+            ->whereNotNull('jenis_peralatan')
+            ->whereRaw("TRIM(jenis_peralatan) <> ''")
+            ->get(['nama_alat', 'jenis_peralatan'])
+            ->mapWithKeys(function ($row) {
+                return [strtolower(trim((string) $row->nama_alat)) => trim((string) $row->jenis_peralatan)];
+            })
+            ->all();
     }
 
     private function takeAssigned(&$assigned, $nama, $kategoriId, $subKategoriId)
@@ -368,6 +423,16 @@ class PreparasiMonitoringAlatController extends Controller
         }
 
         return $tanggal;
+    }
+
+    private function uniqueNames($raw)
+    {
+        return collect(explode(',', (string) $raw))
+            ->map(fn ($name) => trim($name))
+            ->filter()
+            ->unique()
+            ->values()
+            ->implode(', ');
     }
 
     private function nullableInt($value)

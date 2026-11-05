@@ -68,6 +68,10 @@ class InformasiOperasionalController extends Controller
                 DB::raw('MAX(sp.status_jadwal) as status_jadwal'),
                 DB::raw('MAX(sp.tambahan) as qs_tambahan'),
                 DB::raw('MAX(sp.keterangan_lain) as qs_keterangan_lain'),
+                DB::raw('MAX(sp.petugas_jadwal) as petugas_jadwal'),
+                DB::raw('MAX(sp.approved_at) as approved_at'),
+                DB::raw('MAX(sp.approved_by) as approved_by'),
+                DB::raw('MAX(sp.created_by) as created_by_sp'),
                 DB::raw('MAX(sp.google_maps_url) as google_maps_url')
             )
             ->where($jadwalTable . '.is_active', true)
@@ -110,25 +114,63 @@ class InformasiOperasionalController extends Controller
                     return null;
                 }
 
-                $record = JadwalMobilisasiService::findActiveRecordByBatchIds($row->batch_id);
-                if (!$record) {
+                $mob = JadwalMobilisasiService::findActiveByBatchIds($row->batch_id);
+                if (!$mob) {
                     return null;
                 }
 
-                $peralatan = $this->decodePeralatan($record->peralatan_sampling);
+                $peralatan = $this->decodePeralatan($mob['peralatan_sampling'] ?? []);
+                $namaAlat = [];
+                $jumlahAlat = [];
+                foreach ($peralatan as $item) {
+                    $nama = trim((string) ($item['nama_alat'] ?? ''));
+                    if ($nama === '') {
+                        continue;
+                    }
+                    $namaAlat[] = $nama;
+                    $jumlahAlat[] = (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0);
+                }
+
+                $ketOps = trim(html_entity_decode(strip_tags((string) ($mob['keterangan_operasional'] ?? $mob['keterangan_operasional_sp'] ?? '')), ENT_QUOTES, 'UTF-8'));
 
                 return [
-                    'id' => $record->id,
-                    'tujuan_sampling' => $record->tujuan_sampling,
-                    'waktu_berangkat' => $record->waktu_berangkat,
-                    'keterangan_akomodasi' => $record->keterangan_akomodasi,
-                    'rute_perjalanan' => $record->rute_perjalanan,
-                    'estimasi_perjalanan' => $record->estimasi_perjalanan,
-                    'status_rilis_io' => $record->status_rilis_io ?? 'draft',
-                    'has_keterangan' => $this->hasKeterangan($record),
+                    'id' => $mob['id'] ?? null,
+                    'tujuan_sampling' => $mob['tujuan_sampling'] ?? null,
+                    'waktu_berangkat' => $mob['waktu_berangkat'] ?? null,
+                    'estimasi_jam' => $mob['estimasi_jam'] ?? 0,
+                    'estimasi_menit' => $mob['estimasi_menit'] ?? 0,
+                    'keterangan_akomodasi' => $mob['keterangan_akomodasi'] ?? null,
+                    'rute_perjalanan' => $mob['rute_perjalanan'] ?? null,
+                    'estimasi_perjalanan' => $mob['estimasi_perjalanan'] ?? null,
+                    'status_rilis_io' => $mob['status_rilis_io'] ?? 'draft',
+                    'has_keterangan' => $ketOps !== '',
+                    'keterangan_operasional' => $ketOps,
                     'peralatan_summary' => $this->requestSummary($peralatan),
+                    'nama_alat' => $namaAlat,
+                    'jumlah_alat_list' => $jumlahAlat,
                     'jumlah_alat' => $this->requestCount($peralatan),
                 ];
+            })
+            ->addColumn('keterangan_qs', function ($row) {
+                $items = array_merge(
+                    $this->parseJsonList($row->qs_tambahan ?? null, true),
+                    $this->parseJsonList($row->qs_keterangan_lain ?? null, false)
+                );
+
+                return $items ? implode(', ', $items) : '';
+            })
+            ->addColumn('petugas_sampling_plan', function ($row) {
+                return $row->petugas_jadwal ?: ($row->created_by_sp ?? '');
+            })
+            ->addColumn('validasi_sp', function ($row) {
+                if ((int) ($row->is_approved ?? 0) !== 1 || empty($row->approved_at)) {
+                    return '';
+                }
+                try {
+                    return Carbon::parse($row->approved_at)->locale('id')->translatedFormat('d F Y H:i');
+                } catch (\Throwable $e) {
+                    return (string) $row->approved_at;
+                }
             })
             ->with(['cabang_options' => $this->cabangOptions()])
             ->make(true);
@@ -401,7 +443,7 @@ class InformasiOperasionalController extends Controller
         $assetIds = $assigned->pluck('id_aset')->filter()->unique()->all();
         if ($assetIds) {
             $assetMap = GaAsset::whereIn('id', $assetIds)
-                ->get(['id', 'cs_code', 'asset_code', 'name'])
+                ->get(['id', 'cs_code', 'name'])
                 ->keyBy('id');
         }
 
@@ -418,11 +460,8 @@ class InformasiOperasionalController extends Controller
             $nomorAlat = [];
             foreach ($pickedIds as $idAset) {
                 $asset = $assetMap[$idAset] ?? null;
-                if (!$asset) {
-                    continue;
-                }
-                $code = $asset->cs_code ?: $asset->asset_code;
-                if ($code) {
+                $code = trim((string) ($asset->cs_code ?? ''));
+                if ($code !== '') {
                     $nomorAlat[] = $code;
                 }
             }
@@ -507,19 +546,72 @@ class InformasiOperasionalController extends Controller
             'status_rilis_io' => $mob['status_rilis_io'] ?? 'draft',
             'groups' => $groups,
             'petugas' => $this->petugasSampling($row['sampler'] ?? ''),
-            'peralatan' => array_map(function ($group) {
-                return [
-                    'nama_alat' => $group['nama_alat'] ?? '',
-                    'jumlah' => (int) ($group['jumlah_alat'] ?? 0),
-                    'nomor_alat' => $group['nomor_alat'] ?? [],
-                ];
-            }, $groups),
+            'peralatan' => $this->assignedPeralatanFromMonitoringAlat($record),
             'qs_tambahan' => $this->parseJsonList($row['qs_tambahan'] ?? null, true),
             'qs_keterangan_lain' => $this->parseJsonList($row['qs_keterangan_lain'] ?? null, false),
             'petugas_sampling_plan' => $row['petugas_jadwal'] ?? ($row['created_by_sp'] ?? '-'),
             'validasi_by' => $isApproved ? ($row['approved_by'] ?? '-') : '-',
             'validasi_at' => $isApproved ? $validasiAt : '-',
         ]);
+    }
+
+    private function assignedPeralatanFromMonitoringAlat($record): array
+    {
+        if (!$record || !Schema::hasTable('jadwal_mobilisasi_aset')) {
+            return [];
+        }
+
+        $assigned = JadwalMobilisasiAset::query()
+            ->where('id_mobilisasi', $record->id)
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->get();
+        if ($assigned->isEmpty()) {
+            return [];
+        }
+
+        $assetIds = $assigned->pluck('id_aset')->filter()->unique()->all();
+        if (!$assetIds) {
+            return [];
+        }
+
+        $assetMap = GaAsset::query()
+            ->whereIn('id', $assetIds)
+            ->get(['id', 'cs_code', 'name'])
+            ->keyBy('id');
+
+        $grouped = [];
+        foreach ($assigned as $row) {
+            $asset = $assetMap[$row->id_aset] ?? null;
+            $cs = trim((string) ($asset->cs_code ?? ''));
+            if ($cs === '') {
+                continue;
+            }
+
+            $namaAlat = trim((string) ($row->nama_alat ?? ''));
+            $namaAset = trim((string) ($asset->name ?? ''));
+            $key = strtolower($namaAlat !== '' ? $namaAlat : $namaAset);
+            if ($key === '') {
+                $key = 'aset-' . (int) $row->id_aset;
+            }
+
+            if (!isset($grouped[$key])) {
+                $grouped[$key] = [
+                    'nama_alat' => $namaAlat !== '' ? $namaAlat : $namaAset,
+                    'nama_aset' => $namaAset,
+                    'jenis_peralatan' => null,
+                    'jumlah' => 0,
+                    'nomor_alat' => [],
+                    'cs_code' => [],
+                ];
+            }
+
+            $grouped[$key]['jumlah']++;
+            $grouped[$key]['nomor_alat'][] = $cs;
+            $grouped[$key]['cs_code'][] = $cs;
+        }
+
+        return array_values($grouped);
     }
 
     private function petugasSampling(?string $samplerCsv): array
@@ -806,7 +898,7 @@ class InformasiOperasionalController extends Controller
         }
 
         $columns = [
-            'id', 'name', 'asset_code', 'cs_code', 'brand', 'model_spec',
+            'id', 'name', 'cs_code', 'brand', 'model_spec',
             'kategori_aset_id', 'sub_kategori_aset_id',
         ];
 
@@ -823,7 +915,6 @@ class InformasiOperasionalController extends Controller
             if ($nama !== '') {
                 $query->where(function ($inner) use ($nama) {
                     $inner->where('name', 'like', '%' . $nama . '%')
-                        ->orWhere('asset_code', 'like', '%' . $nama . '%')
                         ->orWhere('cs_code', 'like', '%' . $nama . '%');
                 });
             }
@@ -839,14 +930,12 @@ class InformasiOperasionalController extends Controller
         };
 
         $options = $buildQuery(true, true)
-            ->orderBy('asset_code')
             ->orderBy('cs_code')
             ->orderBy('name')
             ->get($columns);
 
         if ($options->isEmpty() && ($kategoriId || $subKategoriId) && trim((string) $namaAlat) !== '') {
             $options = $buildQuery(false, true)
-                ->orderBy('asset_code')
                 ->orderBy('cs_code')
                 ->orderBy('name')
                 ->get($columns);
@@ -854,7 +943,6 @@ class InformasiOperasionalController extends Controller
 
         if ($options->isEmpty() && $branchId) {
             $options = $buildQuery(false, false)
-                ->orderBy('asset_code')
                 ->orderBy('cs_code')
                 ->orderBy('name')
                 ->get($columns);
@@ -867,7 +955,7 @@ class InformasiOperasionalController extends Controller
         }
 
         return $options->map(function ($asset) {
-            $code = trim((string) ($asset->asset_code ?: $asset->cs_code ?: ''));
+            $code = trim((string) ($asset->cs_code ?? ''));
             $name = trim((string) ($asset->name ?? ''));
             $label = $code !== '' && $name !== '' && strcasecmp($code, $name) !== 0
                 ? $code . ' — ' . $name
@@ -878,8 +966,7 @@ class InformasiOperasionalController extends Controller
                 'text' => $label,
                 'label' => $label,
                 'name' => $name,
-                'asset_code' => $asset->asset_code,
-                'cs_code' => $asset->cs_code ?: $asset->asset_code,
+                'cs_code' => $code,
                 'kategori_aset_id' => $asset->kategori_aset_id,
                 'sub_kategori_aset_id' => $asset->sub_kategori_aset_id,
             ];
