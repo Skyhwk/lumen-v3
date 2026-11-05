@@ -31,9 +31,22 @@ class QuotationPromoPresentation
         return ['nama' => $nama, 'nominal' => $nominal];
     }
 
-    public static function writeSukaSukaItemRow($pdf, $source, &$i, callable $rupiah, $fontSize = '13px', $nextNumberAlready = true)
+    public static function sukaSukaItemLine($source)
     {
         $line = self::sukaSukaLine($source);
+        if (!$line) {
+            return null;
+        }
+        $qty = self::sukaSukaQuotationQty($source);
+        $line['qty'] = $qty;
+        $line['total'] = $line['nominal'] * $qty;
+
+        return $line;
+    }
+
+    public static function writeSukaSukaItemRow($pdf, $source, &$i, callable $rupiah, $fontSize = '13px', $nextNumberAlready = true)
+    {
+        $line = self::sukaSukaItemLine($source);
         if (!$line) {
             return false;
         }
@@ -44,9 +57,9 @@ class QuotationPromoPresentation
             ' <tr>
                 <td style="vertical-align: middle; text-align:center;font-size: ' . $fontSize . ';">' . $i . '</td>
                 <td style="font-size: ' . $fontSize . ';padding: 5px;">' . htmlspecialchars($line['nama'], ENT_QUOTES, 'UTF-8') . '</td>
-                <td style="font-size: ' . $fontSize . '; text-align:center;"></td>
+                <td style="font-size: ' . $fontSize . '; text-align:center;">' . $line['qty'] . '</td>
                 <td style="font-size: ' . $fontSize . '; text-align:right; padding: 5px;">' . $rupiah($line['nominal']) . '</td>
-                <td style="font-size: ' . $fontSize . '; text-align:right; padding: 5px;">' . $rupiah($line['nominal']) . '</td>
+                <td style="font-size: ' . $fontSize . '; text-align:right; padding: 5px;">' . $rupiah($line['total']) . '</td>
             </tr>'
         );
         if ($nextNumberAlready) {
@@ -94,11 +107,26 @@ class QuotationPromoPresentation
         return true;
     }
 
+    public static function sukaSukaQuotationQty($source)
+    {
+        if (!empty($source->periode_kontrak)) {
+            return 1;
+        }
+
+        return self::countSukaSukaPeriods($source);
+    }
+
     public static function sukaSukaPeriodMultiplier($source)
     {
         if (($source->periode ?? '') !== 'all') {
             return 1;
         }
+
+        return self::countSukaSukaPeriods($source);
+    }
+
+    private static function countSukaSukaPeriods($source)
+    {
         $rows = json_decode($source->data_pendukung_sampling ?? '[]');
         if (!is_array($rows) || !$rows) {
             return 1;

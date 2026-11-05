@@ -305,4 +305,41 @@ class QuotationPromoTest extends TestCase
         $this->assertEquals(8775000, QuotationPromoPresentation::displayedSubTotal($withCashDiscount));
         $this->assertTrue(QuotationPromoPresentation::showAfterDiscount($withCashDiscount));
     }
+
+    public function testSukaSukaSummaryQtyFollowsContractPeriodsAndDetailStaysOne()
+    {
+        $discount = json_encode([
+            'deskripsi_promo_discount' => 'PAKET PENGUJIAN MURAH',
+            'jumlah_promo_discount' => 550000,
+            'tipe' => 'suka_suka',
+        ]);
+        $header = (object) [
+            'discount_promo' => $discount,
+            'data_pendukung_sampling' => json_encode([
+                (object) [
+                    'kategori_1' => '1-Air',
+                    'periode' => ['2026-11', '2026-12', '2027-01', '2027-02'],
+                ],
+            ]),
+        ];
+        $summary = QuotationPromoPresentation::sukaSukaItemLine($header);
+        $this->assertEquals(4, $summary['qty']);
+        $this->assertEquals(550000, $summary['nominal']);
+        $this->assertEquals(2200000, $summary['total']);
+
+        $detail = (object) [
+            'discount_promo' => $discount,
+            'periode_kontrak' => '2026-11',
+            'data_pendukung_sampling' => json_encode([
+                (object) [
+                    'periode_kontrak' => '2026-11',
+                    'data_sampling' => [],
+                ],
+            ]),
+        ];
+        $detailLine = QuotationPromoPresentation::sukaSukaItemLine($detail);
+        $this->assertEquals(1, $detailLine['qty']);
+        $this->assertEquals(550000, $detailLine['nominal']);
+        $this->assertEquals(550000, $detailLine['total']);
+    }
 }
