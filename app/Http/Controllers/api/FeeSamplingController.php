@@ -26,24 +26,24 @@ class FeeSamplingController extends Controller
     //     return Datatables::of($data)->make(true);
     // }
 
-    public function index(Request $request)
+    private function paidQuery(Request $request)
     {
-        $data = PengajuanFeeSampling::query()
+        $uploaded = (int) $request->input('is_upload_bukti_pembayaran', 0);
+
+        return PengajuanFeeSampling::query()
             ->where('is_approve_finance', 1)
             ->whereNotNull('transfer_date')
-            ->where('is_upload_bukti_pembayaran', 0);
+            ->where('is_upload_bukti_pembayaran', $uploaded ? 1 : 0);
+    }
 
-        return $this->buildFeeSamplingDatatable($data);
+    public function index(Request $request)
+    {
+        return $this->buildFeeSamplingDatatable($this->paidQuery($request));
     }
 
     public function summary(Request $request)
     {
-        $data = PengajuanFeeSampling::query()
-            ->where('is_approve_finance', 1)
-            ->whereNotNull('transfer_date')
-            ->where('is_upload_bukti_pembayaran', 0);
-
-        return $this->feeSamplingSummaryJson($data, $request);
+        return $this->feeSamplingSummaryJson($this->paidQuery($request), $request);
     }
     
     public function uploadFile(Request $request)
