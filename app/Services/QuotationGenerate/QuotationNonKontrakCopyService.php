@@ -42,10 +42,16 @@ class QuotationNonKontrakCopyService
         $newQuotation->updated_by = $approver;
         $newQuotation->updated_at = $now;
         $newQuotation->kode_promo = $marker;
+        $newQuotation->discount_promo = null;
+        $newQuotation->total_discount_promo = 0;
         $this->attachPromoPengujian($newQuotation, $marker);
 
         if (config('quotation_auto.generate.resolve_sales_from_master')) {
             $newQuotation->sales_id = $this->resolveSalesIdFromMaster($newQuotation->pelanggan_ID);
+        }
+
+        if (config('quotation_auto.generate.recalculate_sampling_prices')) {
+            (new QuotationSamplingPriceRecalculator())->refresh($newQuotation);
         }
 
         $newQuotation->save();
@@ -60,9 +66,14 @@ class QuotationNonKontrakCopyService
         }
 
         $promo = DB::table('promo_pengujian')->where('kode_promo', $marker)->first();
-        if ($promo) {
-            $quotation->promo_id = $promo->id;
+        if (!$promo) {
+            if (config('quotation_auto.generate.require_promo_id')) {
+                throw new \RuntimeException('Promo pengujian ' . $marker . ' belum ada, promo_id tidak bisa di-set ke QT.');
+            }
+            return;
         }
+
+        $quotation->promo_id = $promo->id;
     }
 
     public function resolveSalesIdFromMaster($pelangganId): int

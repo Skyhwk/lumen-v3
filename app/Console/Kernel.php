@@ -97,6 +97,7 @@ class Kernel extends ConsoleKernel
         Commands\QuotationDispatchCommand::class,
         Commands\QuotationGenerateCommand::class,
         Commands\GenerateJanToJuneCommand::class,
+        Commands\GenerateAutoQtCommand::class,
         Commands\UpdateQuotationStatusFromExcelCommand::class,
         Commands\GenerateMonthlyAbsensiCommand::class,
         Commands\BackfillRekapHariKerjaCommand::class,

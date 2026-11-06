@@ -39,6 +39,9 @@ return [
         'resolve_sales_from_master' => false,
         'fallback_sales_id' => 1068,
         'source_skip_kode_promo' => [],
+        'source_skip_kode_promo_prefix' => [],
+        'recalculate_sampling_prices' => false,
+        'require_promo_id' => false,
     ],
     'campaigns' => [
         'jan_to_june' => [
@@ -49,6 +52,19 @@ return [
             'resolve_sales_from_master' => true,
             'fallback_sales_id' => 1068,
             'source_skip_kode_promo' => ['AUTO', 'Auto_Jan_to_June'],
+            'recalculate_sampling_prices' => false,
+        ],
+        'auto_qt' => [
+            'kode_promo_marker' => 'AUTO',
+            'created_by' => 'Quotation Auto Generate',
+            'generated_by' => 'Quotation Auto Generate',
+            'emailed_by' => 'Quotation Auto Generate',
+            'resolve_sales_from_master' => true,
+            'fallback_sales_id' => 1068,
+            'source_skip_kode_promo' => ['AUTO', 'Auto_Jan_to_June'],
+            'source_skip_kode_promo_prefix' => ['Auto_'],
+            'recalculate_sampling_prices' => true,
+            'require_promo_id' => true,
         ],
     ],
     'python' => [
@@ -57,6 +73,11 @@ return [
         'invoke_timeout_seconds' => (int) env('QUOTATION_GENERATE_PYTHON_TIMEOUT', 1800),
         'lumen_timeout_seconds' => (int) env('QUOTATION_GENERATE_LUMEN_TIMEOUT', 1700),
         'controller' => 'QuotationGenerateJanToJuneController',
+        'run_function' => 'run',
+        'test_function' => 'runTest',
+    ],
+    'python_auto_qt' => [
+        'controller' => 'QuotationGenerateAutoQtController',
         'run_function' => 'run',
         'test_function' => 'runTest',
     ],
