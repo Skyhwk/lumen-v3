@@ -187,6 +187,13 @@ return [
             'days' => 7,
         ],
 
+        'auto_qt' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/auto_qt/log.log'),
+            'level' => 'info',
+            'days' => 30,
+        ],
+
         'custom_email_log' => [
             'driver' => 'single',
             'path' => storage_path('logs/custom_email.log'),
