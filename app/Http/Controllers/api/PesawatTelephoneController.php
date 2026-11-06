@@ -54,6 +54,18 @@ class PesawatTelephoneController extends Controller
                 'vad' => 'Voice Activity Detection (VAD) bisa menyebabkan suara putus-putus/noise saat gateway PSTN. Default: nonaktif.',
             ],
             'tftp_path' => env('CISCO_TFTP_PATH', '/srv/tftp'),
+            'datetime_notes' => [
+                'timezone' => 'Indonesia WIB (UTC+7): pilih SE Asia Standard Time. Jangan pakai Singapore Standard Time (+8).',
+                'ntp' => 'Telepon harus bisa akses UDP port 123 ke server NTP. Jika jam salah/jauh, buka firewall atau gunakan IP NTP internal/LAN.',
+                'regenerate' => 'Setelah ubah zona waktu/NTP, regenerate cnf.xml lalu reboot atau re-provision telepon.',
+            ],
+            'xml_profile_options' => [
+                ['value' => 'auto', 'label' => 'Otomatis (sesuai model)'],
+                ['value' => 'minimal', 'label' => 'Minimal — CP-3905 / SPA basic'],
+                ['value' => 'legacy', 'label' => 'Legacy — CP-79xx (7945, 7962, …)'],
+                ['value' => 'standard', 'label' => 'Standar — CP-7821 / 78xx (call, hold, transfer, pickup)'],
+                ['value' => 'full', 'label' => 'Full — timer/sipStack lengkap (opsional)'],
+            ],
         ], 200);
     }
 
@@ -300,7 +312,8 @@ class PesawatTelephoneController extends Controller
             $configJson['lines'] = $lines;
         }
 
-        $configJson = CiscoPhoneCnfXmlService::mergeConfig($configJson);
+        $phoneModel = trim((string) $request->phone_model);
+        $configJson = CiscoPhoneCnfXmlService::mergeConfig($configJson, $phoneModel ?: null);
 
         $configJson['sip_server'] = $request->sip_server ?: ($configJson['sip_server'] ?? $defaults['sip_server']);
         $configJson['phone_password'] = $request->phone_password ?? ($configJson['phone_password'] ?? '');
@@ -438,9 +451,12 @@ class PesawatTelephoneController extends Controller
     private function ciscoModels(): array
     {
         return [
-            'CP-3905', 'CP-3911', 'CP-3925', 'CP-3941', 'CP-3945', 'CP-3951', 'CP-3965',
-            'CP-7821', 'CP-7841', 'CP-7851', 'CP-7861', 'CP-8811', 'CP-8821', 'CP-8841',
-            'CP-8851', 'CP-8861', 'CP-8941', 'CP-8945', 'CP-8961', 'CP-9951', 'CP-9971',
+            'CP-3905', 'CP-3905V01', 'CP-3911', 'CP-3925', 'CP-3941', 'CP-3945', 'CP-3951', 'CP-3965',
+            'CP-7821', 'CP-7841', 'CP-7851', 'CP-7861',
+            'CP-7906', 'CP-7911', 'CP-7912', 'CP-7920', 'CP-7921', 'CP-7925', 'CP-7931', 'CP-7936', 'CP-7937',
+            'CP-7940', 'CP-7941', 'CP-7942', 'CP-7945', 'CP-7945G-GE',
+            'CP-7960', 'CP-7961', 'CP-7962', 'CP-7965',
+            'CP-8811', 'CP-8821', 'CP-8841', 'CP-8851', 'CP-8861', 'CP-8941', 'CP-8945', 'CP-8961', 'CP-9951', 'CP-9971',
             'SPA303', 'SPA504G', 'SPA508G', 'SPA509G', 'SPA512G', 'SPA514G', 'SPA525G',
             'ATA191', 'ATA192',
         ];
