@@ -82,18 +82,15 @@ class QuotationGenerateAutoQtRunner
         $write('Send email         : ' . ($sendEmail ? 'ON' : 'OFF'));
         if ($sendEmail && $emailTestMode) {
             $testEmails = $this->splitEmails((string) config('quotation_auto.generate.email_test_to'));
-            $testBcc = $this->splitEmails(implode(',', (array) config('quotation_auto.generate.email_test_bcc', ['patah@intilab.com'])));
-            $extraBcc = array_slice($testEmails, 1);
             $write(
                 'Email test mode    : ON → To ' . ($testEmails[0] ?? '-')
-                . ' | BCC ' . implode(', ', array_values(array_unique(array_merge($testBcc, $extraBcc))))
-                . ' + atasan Patah'
+                . ' | BCC sales@intilab.com + sales PJ + atasan grade SUPERVISOR (manager tidak ikut)'
             );
         } elseif (!$sendEmail) {
             $write('Email customer     : tidak dikirim (send_email=false)');
         } else {
             $write('Email customer     : ON ke email_pic_order');
-            $write('BCC produksi       : sales@intilab.com + sales PJ + atasan sales PJ');
+            $write('BCC                : sales@intilab.com + sales PJ + atasan grade SUPERVISOR');
         }
         $write('Window order skip  : ' . $window->orderFrom()->toDateTimeString() . ' s/d ' . $window->orderUntil()->copy()->subSecond()->toDateTimeString());
         $write('Syarat             : punya QT + tidak ada order di window 6 bulan');

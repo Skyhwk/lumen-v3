@@ -70,11 +70,16 @@ class QuotationGenerateEmailService
             }
 
             $to = $emails[0];
-            $testBcc = (array) config('quotation_auto.generate.email_test_bcc', ['patah@intilab.com']);
-            $bcc = array_merge($testBcc, array_slice($emails, 1));
-            foreach ($testBcc as $seed) {
-                $bcc = array_merge($bcc, $this->atasanEmailsFor($this->findKaryawanByEmail((string) $seed)));
+            $sales = $this->findKaryawanByEmail($to);
+            $quotation->loadMissing(['sales']);
+            if ($sales === null) {
+                $sales = $quotation->sales;
             }
+
+            $bcc = array_merge(
+                $this->buildSalesBccList($sales, $to),
+                array_slice($emails, 1)
+            );
 
             return [
                 'to' => $to,
@@ -151,21 +156,27 @@ class QuotationGenerateEmailService
     }
 
     /**
-     * BCC produksi: sales@intilab.com + sales PJ + atasan langsung sales PJ.
+     * BCC: sales@intilab.com + sales PJ + atasan langsung ber-grade SUPERVISOR saja.
      *
      * @return array<int, string>
      */
     private function buildBccList(QuotationNonKontrak $quotation, string $to): array
     {
-        $bcc = (array) config('quotation_auto.generate.default_email_bcc', ['sales@intilab.com']);
-
         $quotation->loadMissing(['sales']);
-        $sales = $quotation->sales;
+
+        return $this->buildSalesBccList($quotation->sales, $to);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function buildSalesBccList($sales, string $to): array
+    {
+        $bcc = (array) config('quotation_auto.generate.default_email_bcc', ['sales@intilab.com']);
         if ($sales !== null && !empty($sales->email)) {
             $bcc[] = trim((string) $sales->email);
         }
-
-        foreach ($this->atasanEmailsFor($sales) as $email) {
+        foreach ($this->supervisorAtasanEmails($sales) as $email) {
             $bcc[] = $email;
         }
 
@@ -179,25 +190,18 @@ class QuotationGenerateEmailService
             return null;
         }
 
-        $candidates = [$email];
-        if ($email === 'patah@intilab.com') {
-            $candidates[] = 'abdulpatah@intilab.com';
-        }
-
         return MasterKaryawan::query()
             ->where('is_active', 1)
-            ->where(function ($query) use ($candidates) {
-                foreach ($candidates as $candidate) {
-                    $query->orWhereRaw('LOWER(email) = ?', [$candidate]);
-                }
-            })
+            ->whereRaw('LOWER(email) = ?', [$email])
             ->first();
     }
 
     /**
+     * Atasan langsung yang grade-nya SUPERVISOR. Manager / senior manager tidak ikut.
+     *
      * @return array<int, string>
      */
-    private function atasanEmailsFor($karyawan): array
+    private function supervisorAtasanEmails($karyawan): array
     {
         if ($karyawan === null) {
             return [];
@@ -214,6 +218,10 @@ class QuotationGenerateEmailService
             ->whereIn('id', $ids)
             ->where('is_active', 1)
             ->whereNotNull('email')
+            ->where(function ($query) {
+                $query->whereRaw("UPPER(TRIM(grade)) = 'SUPERVISOR'")
+                    ->orWhereRaw("UPPER(TRIM(grade)) = 'SPV'");
+            })
             ->pluck('email')
             ->map(function ($email) {
                 return trim((string) $email);
