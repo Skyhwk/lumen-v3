@@ -53,24 +53,27 @@ class GenerateAutoQtCommand extends Command
     {
         try {
             $month = $this->resolveMonth();
+            $options = $this->resolveOptions($month);
         } catch (\Throwable $exception) {
             $this->error($exception->getMessage());
             return self::FAILURE;
         }
 
-        $needsLocalOptions = $this->option('dry-run')
-            || ($this->option('customer') !== null && $this->option('customer') !== '');
+        $this->printPreflight($month, $options);
+
+        $needsLocalOptions = !empty($options['dry_run'])
+            || ($options['customer'] !== null && $options['customer'] !== '');
         $usePython = !$this->option('direct') && !$needsLocalOptions;
 
         if ($usePython) {
-            return $this->dispatchViaPython($month, (bool) $this->option('test'));
+            return $this->dispatchViaPython($month, $options);
         }
 
         if ($needsLocalOptions && !$this->option('direct')) {
             $this->line('Opsi dry-run / customer memakai PHP langsung.');
         }
 
-        return $this->runDirect($month);
+        return $this->runDirect($month, $options);
     }
 
     private function resolveMonth(): string
@@ -88,13 +91,78 @@ class GenerateAutoQtCommand extends Command
         throw new \InvalidArgumentException('Bulan target wajib. Contoh: php artisan generateAutoQt --desember atau --12-2026');
     }
 
-    private function dispatchViaPython(string $month, bool $test): int
+    /**
+     * @return array{test:bool,dry_run:bool,email:?string,limit:?int,customer:?string,batch:?int,item_pause:?int,chunk_pause:?int}
+     */
+    private function resolveOptions(string $month): array
     {
-        QuotationAutoQtJobState::write($month, $test, [
-            'email' => trim((string) ($this->option('email') ?? '')),
-            'limit' => $this->option('limit') !== null && $this->option('limit') !== ''
-                ? (int) $this->option('limit')
+        $email = trim((string) ($this->option('email') ?? ''));
+        $test = (bool) $this->option('test') || $email !== '';
+        $limit = $this->option('limit') !== null && $this->option('limit') !== ''
+            ? (int) $this->option('limit')
+            : null;
+        if ($limit !== null && $limit < 1) {
+            throw new \InvalidArgumentException('--limit harus angka positif.');
+        }
+        if ($test && $email === '') {
+            $email = 'harold@intilab.com';
+        }
+        if ($email !== '') {
+            foreach (preg_split('/[,;]+/', $email) as $item) {
+                $item = strtolower(trim($item));
+                if ($item === '') {
+                    continue;
+                }
+                if (!filter_var($item, FILTER_VALIDATE_EMAIL)) {
+                    throw new \InvalidArgumentException('Email test tidak valid: ' . $item);
+                }
+            }
+        }
+
+        QuotationAutoQtMonth::parse($month);
+
+        return [
+            'test' => $test,
+            'dry_run' => (bool) $this->option('dry-run'),
+            'email' => $email !== '' ? $email : null,
+            'limit' => $limit,
+            'customer' => $this->option('customer') !== null && $this->option('customer') !== ''
+                ? (string) $this->option('customer')
                 : null,
+            'batch' => $this->option('batch') !== null ? (int) $this->option('batch') : null,
+            'item_pause' => $this->option('item-pause') !== null && $this->option('item-pause') !== ''
+                ? (int) $this->option('item-pause')
+                : null,
+            'chunk_pause' => $this->option('chunk-pause') !== null && $this->option('chunk-pause') !== ''
+                ? (int) $this->option('chunk-pause')
+                : null,
+        ];
+    }
+
+    /**
+     * @param  array{test:bool,dry_run:bool,email:?string,limit:?int,customer:?string}  $options
+     */
+    private function printPreflight(string $month, array $options): void
+    {
+        $window = QuotationAutoQtMonth::parse($month);
+        $this->info('Preflight generateAutoQt');
+        $this->line('Bulan     : ' . $window->label() . ' (' . $window->token() . ')');
+        $this->line('Mode      : ' . ($options['dry_run'] ? 'DRY RUN' : ($options['test'] ? 'TEST' : 'PRODUKSI')));
+        $this->line('Limit     : ' . ($options['limit'] !== null ? $options['limit'] : ($options['test'] ? '2 (default tes)' : 'semua eligible')));
+        if ($options['test']) {
+            $this->line('Email     : ' . ($options['email'] ?: 'harold@intilab.com') . ' (bukan customer)');
+        } else {
+            $this->warn('Email     : produksi — send_email default OFF, tidak ke PIC kecuali env nyala');
+        }
+        $this->line('Python    : ' . (!$this->option('direct') && empty($options['dry_run']) && empty($options['customer']) ? 'YA' : 'tidak'));
+    }
+
+    private function dispatchViaPython(string $month, array $options): int
+    {
+        $test = !empty($options['test']);
+        QuotationAutoQtJobState::write($month, $test, [
+            'email' => $options['email'] ?? null,
+            'limit' => $options['limit'] ?? null,
         ]);
 
         $url = (string) config('quotation_auto.python_auto_qt.invoke_url', config('quotation_auto.python.invoke_url'));
@@ -125,7 +193,7 @@ class GenerateAutoQtCommand extends Command
             $response = $http->post($url, $payload);
         } catch (\Throwable $exception) {
             $this->error('Gagal memanggil Python: ' . $exception->getMessage());
-            $this->line('Coba lokal: php artisan generateAutoQt --' . $month . ' --direct' . ($test ? ' --test' : '') . ' --email=harold@intilab.com');
+            $this->line('Coba lokal: php artisan generateAutoQt --' . $month . ' --direct --test --email=' . ($options['email'] ?: 'harold@intilab.com'));
 
             return self::FAILURE;
         }
@@ -158,35 +226,26 @@ class GenerateAutoQtCommand extends Command
         return $ok ? self::SUCCESS : self::FAILURE;
     }
 
-    private function runDirect(string $month): int
+    private function runDirect(string $month, array $options): int
     {
-        $result = (new QuotationGenerateAutoQtRunner())->run([
-            'month' => $month,
-            'test' => (bool) $this->option('test'),
-            'dry_run' => (bool) $this->option('dry-run'),
-            'email' => trim((string) ($this->option('email') ?? '')) ?: null,
-            'limit' => $this->option('limit') !== null && $this->option('limit') !== ''
-                ? (int) $this->option('limit')
-                : null,
-            'customer' => $this->option('customer'),
-            'batch' => $this->option('batch') !== null ? (int) $this->option('batch') : null,
-            'item_pause' => $this->option('item-pause') !== null && $this->option('item-pause') !== ''
-                ? (int) $this->option('item-pause')
-                : null,
-            'chunk_pause' => $this->option('chunk-pause') !== null && $this->option('chunk-pause') !== ''
-                ? (int) $this->option('chunk-pause')
-                : null,
-        ], function ($line, $level) {
-            if ($level === 'error') {
-                $this->error($line);
-            } elseif ($level === 'warn') {
-                $this->warn($line);
-            } elseif ($level === 'info') {
-                $this->info($line);
-            } else {
-                $this->line($line);
-            }
-        });
+        try {
+            $result = (new QuotationGenerateAutoQtRunner())->run(array_merge($options, [
+                'month' => $month,
+            ]), function ($line, $level) {
+                if ($level === 'error') {
+                    $this->error($line);
+                } elseif ($level === 'warn') {
+                    $this->warn($line);
+                } elseif ($level === 'info') {
+                    $this->info($line);
+                } else {
+                    $this->line($line);
+                }
+            });
+        } catch (\Throwable $exception) {
+            $this->error($exception->getMessage());
+            return self::FAILURE;
+        }
 
         return !empty($result['success']) ? self::SUCCESS : self::FAILURE;
     }
