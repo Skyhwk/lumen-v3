@@ -27,7 +27,7 @@ class GenerateAutoQtCommand extends Command
                             {--desember}
                             {--limit= : Max eligible rows to process}
                             {--batch= : Chunk size (default 100)}
-                            {--item-pause= : Jeda antar setiap QT detik (default 5)}
+                            {--item-pause= : Jeda antar email detik (default 1)}
                             {--chunk-pause= : Jeda antar chunk detik (default 0)}
                             {--dry-run : Hanya simulasi, tanpa copy/generate/email}
                             {--test : Tes 2 QT, email hanya ke harold@intilab.com (tanpa BCC)}
@@ -142,7 +142,9 @@ class GenerateAutoQtCommand extends Command
         $this->line(json_encode([
             'month' => $lumenBody['data']['month'] ?? $month,
             'processed' => $lumenBody['data']['processed'] ?? null,
-            'success_count' => $lumenBody['data']['success_count'] ?? null,
+            'built' => $lumenBody['data']['built'] ?? null,
+            'rendered' => $lumenBody['data']['rendered'] ?? null,
+            'emailed' => $lumenBody['data']['emailed'] ?? null,
             'failed_count' => $lumenBody['data']['failed_count'] ?? null,
         ], JSON_UNESCAPED_UNICODE));
 

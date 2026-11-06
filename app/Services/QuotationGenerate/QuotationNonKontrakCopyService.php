@@ -42,16 +42,22 @@ class QuotationNonKontrakCopyService
         $newQuotation->updated_by = $approver;
         $newQuotation->updated_at = $now;
         $newQuotation->kode_promo = $marker;
-        $newQuotation->discount_promo = null;
-        $newQuotation->total_discount_promo = 0;
         $this->attachPromoPengujian($newQuotation, $marker);
 
         if (config('quotation_auto.generate.resolve_sales_from_master')) {
             $newQuotation->sales_id = $this->resolveSalesIdFromMaster($newQuotation->pelanggan_ID);
         }
 
+        $recalculator = new QuotationSamplingPriceRecalculator();
+        if (config('quotation_auto.generate.clear_source_discounts')) {
+            $recalculator->clearDiscounts($newQuotation);
+        } else {
+            $newQuotation->discount_promo = null;
+            $newQuotation->total_discount_promo = 0;
+        }
+
         if (config('quotation_auto.generate.recalculate_sampling_prices')) {
-            (new QuotationSamplingPriceRecalculator())->refresh($newQuotation);
+            $recalculator->refresh($newQuotation);
         }
 
         $newQuotation->save();

@@ -14,6 +14,7 @@ return [
         'dispatch_chunk_size' => (int) env('QUOTATION_DISPATCH_CHUNK_SIZE', 100),
         'dispatch_item_pause_seconds' => (int) env('QUOTATION_DISPATCH_ITEM_PAUSE_SECONDS', 5),
         'dispatch_chunk_pause_seconds' => (int) env('QUOTATION_DISPATCH_CHUNK_PAUSE_SECONDS', 0),
+        'email_item_pause_seconds' => (int) env('QUOTATION_EMAIL_ITEM_PAUSE_SECONDS', 1),
         'created_by' => env('QUOTATION_GENERATE_CREATED_BY', 'Quotation Auto Generate'),
         'generated_by' => env('QUOTATION_GENERATE_GENERATED_BY', 'Quotation Auto Generate'),
         'emailed_by' => env('QUOTATION_GENERATE_EMAILED_BY', 'Quotation Auto Generate'),
@@ -41,6 +42,7 @@ return [
         'source_skip_kode_promo' => [],
         'source_skip_kode_promo_prefix' => [],
         'recalculate_sampling_prices' => false,
+        'clear_source_discounts' => false,
         'require_promo_id' => false,
     ],
     'campaigns' => [
@@ -64,6 +66,7 @@ return [
             'source_skip_kode_promo' => ['AUTO', 'Auto_Jan_to_June'],
             'source_skip_kode_promo_prefix' => ['Auto_'],
             'recalculate_sampling_prices' => true,
+            'clear_source_discounts' => true,
             'require_promo_id' => true,
         ],
     ],
