@@ -54,6 +54,11 @@ class PesawatTelephoneController extends Controller
                 'vad' => 'Voice Activity Detection (VAD) bisa menyebabkan suara putus-putus/noise saat gateway PSTN. Default: nonaktif.',
             ],
             'tftp_path' => env('CISCO_TFTP_PATH', '/srv/tftp'),
+            'datetime_notes' => [
+                'timezone' => 'Indonesia WIB (UTC+7): pilih SE Asia Standard Time. Jangan pakai Singapore Standard Time (+8).',
+                'ntp' => 'Telepon harus bisa akses UDP port 123 ke server NTP. Jika jam salah/jauh, buka firewall atau gunakan IP NTP internal/LAN.',
+                'regenerate' => 'Setelah ubah zona waktu/NTP, regenerate cnf.xml lalu reboot atau re-provision telepon.',
+            ],
             'xml_profile_options' => [
                 ['value' => 'auto', 'label' => 'Otomatis (sesuai model)'],
                 ['value' => 'minimal', 'label' => 'Minimal — CP-3905 / SPA basic'],
