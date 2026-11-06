@@ -30,8 +30,8 @@ class CiscoPhoneCnfXmlService
             'timer_t2' => 4000,
             'timer_invite_expires' => 180,
             'timer_relay_expires' => 180,
-            'start_media_port' => 16384,
-            'stop_media_port' => 32766,
+            'start_media_port' => 16348,
+            'stop_media_port' => 20134,
             'sip_invite_retx' => 6,
             'sip_invite_tx_interval' => 500,
             'sip_invite_tx_max_duration' => 32000,
@@ -41,13 +41,14 @@ class CiscoPhoneCnfXmlService
             'date_template' => 'D/M/Y',
             'time_zone' => 'SE Asia Standard Time',
             'ntp_servers' => [
-                ['name' => '0.id.pool.ntp.org', 'ntp_mode' => 'unicast'],
+                ['name' => '0.id.pool.ntp.org', 'ntp_mode' => 'unicast', 'priority' => 1],
+                ['name' => '1.id.pool.ntp.org', 'ntp_mode' => 'unicast', 'priority' => 2],
             ],
             'phone_password' => '',
             'background_image_access' => false,
             'phone_personalization_disabled' => true,
             'dnd_call_alert' => 'flashOnly',
-            'call_hold_ringback' => '1',
+            'call_hold_ringback' => '2',
             'call_pickup_enabled' => true,
             'call_pickup_policy' => 'Cisco Call Pickup',
             'call_pickup_url' => '',
@@ -87,6 +88,11 @@ class CiscoPhoneCnfXmlService
             'voip_control_port' => 5060,
             'dscp_for_audio' => 184,
             'call_stats' => false,
+            'kpml' => 3,
+            'stutter_msg_waiting' => 1,
+            'silent_period_call_waiting' => 10,
+            'always_use_prime_line' => false,
+            'transfer_onhook_enabled' => false,
             'xml_profile' => 'auto',
             'lines' => [
                 [
@@ -154,6 +160,10 @@ class CiscoPhoneCnfXmlService
 
         $merged['preferred_codec'] = self::normalizePreferredCodec($merged['preferred_codec'] ?? 'g711ulaw');
         $merged['enable_vad'] = filter_var($merged['enable_vad'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $merged['date_template'] = self::normalizeDateTemplate($merged['date_template'] ?? 'D/M/Y');
+        $merged['time_zone'] = self::normalizeTimeZone($merged['time_zone'] ?? 'SE Asia Standard Time');
+        $merged['ntp_servers'] = self::normalizeNtpServers($merged['ntp_servers'] ?? []);
+        $merged = self::applyAutoAudioDefaults($merged);
 
         // CP-3905 / CP3905V01 sering gagal register jika pakai TCP — defaultkan UDP untuk model basic
         if (self::isBasicPhoneModel($merged['phone_model'])) {
@@ -164,12 +174,39 @@ class CiscoPhoneCnfXmlService
             $merged['user_locale'] = '';
         }
 
-        // Telepon konvensional 79xx: hindari G.722 default (firmware lama sering tidak stabil)
-        if (self::isLegacyPhoneModel($merged['phone_model']) && !isset($input['g722_codec_support'])) {
-            $merged['g722_codec_support'] = 0;
-        }
-
         return $merged;
+    }
+
+    /**
+     * Profil audio otomatis — selaras referensi CP-7821 (VAD off, PCMU, DTMF AVT, tanpa G.722/G.729).
+     */
+    public static function applyAutoAudioDefaults(array $config): array
+    {
+        $audio = [
+            'preferred_codec' => 'g711ulaw',
+            'enable_vad' => false,
+            'g711ulaw_codec_support' => 1,
+            'g711alaw_codec_support' => 0,
+            'g722_codec_support' => 0,
+            'g729_codec_support' => 0,
+            'dtmf_avt_payload' => 101,
+            'dtmf_db_level' => 3,
+            'dtmf_out_of_band' => 'avt',
+            'rfc2543_hold' => false,
+            'call_hold_ringback' => '2',
+            'start_media_port' => 16348,
+            'stop_media_port' => 20134,
+            'voip_control_port' => 5060,
+            'dscp_for_audio' => 184,
+            'call_stats' => false,
+            'kpml' => 3,
+            'stutter_msg_waiting' => 1,
+            'silent_period_call_waiting' => 10,
+            'always_use_prime_line' => false,
+            'transfer_onhook_enabled' => false,
+        ];
+
+        return array_replace($config, $audio);
     }
 
     /**
@@ -357,14 +394,15 @@ class CiscoPhoneCnfXmlService
         $this->appendTextNode($doc, $sipProfile, 'timerRegisterExpires', (string) ($config['timer_register_expires'] ?? 3600));
         $this->appendTextNode($doc, $sipProfile, 'timerRegisterDelta', (string) ($config['timer_register_delta'] ?? 5));
         $this->appendTextNode($doc, $sipProfile, 'timerKeepAliveExpires', (string) ($config['timer_keep_alive_expires'] ?? 120));
-        $this->appendTextNode($doc, $sipProfile, 'startMediaPort', (string) ($config['start_media_port'] ?? 16384));
-        $this->appendTextNode($doc, $sipProfile, 'stopMediaPort', (string) ($config['stop_media_port'] ?? 32766));
+        $this->appendTextNode($doc, $sipProfile, 'startMediaPort', (string) ($config['start_media_port'] ?? 16348));
+        $this->appendTextNode($doc, $sipProfile, 'stopMediaPort', (string) ($config['stop_media_port'] ?? 20134));
 
         if ($this->hasSipProxySettings($config)) {
             $this->appendSipProxies($doc, $sipProfile, $config);
         }
 
         $this->appendSipAudioCodecSettings($doc, $sipProfile, $config, false);
+        $this->appendReferenceAudioSipExtras($doc, $sipProfile, $config);
         $this->appendSipLines($doc, $sipProfile, $config);
 
         $device->appendChild($sipProfile);
@@ -415,8 +453,8 @@ class CiscoPhoneCnfXmlService
         $this->appendTextNode($doc, $sipProfile, 'timerRegisterExpires', (string) ($config['timer_register_expires'] ?? 3600));
         $this->appendTextNode($doc, $sipProfile, 'timerRegisterDelta', (string) ($config['timer_register_delta'] ?? 5));
         $this->appendTextNode($doc, $sipProfile, 'timerKeepAliveExpires', (string) ($config['timer_keep_alive_expires'] ?? 120));
-        $this->appendTextNode($doc, $sipProfile, 'startMediaPort', (string) ($config['start_media_port'] ?? 16384));
-        $this->appendTextNode($doc, $sipProfile, 'stopMediaPort', (string) ($config['stop_media_port'] ?? 32766));
+        $this->appendTextNode($doc, $sipProfile, 'startMediaPort', (string) ($config['start_media_port'] ?? 16348));
+        $this->appendTextNode($doc, $sipProfile, 'stopMediaPort', (string) ($config['stop_media_port'] ?? 20134));
 
         if ($this->hasSipProxySettings($config)) {
             $this->appendSipProxies($doc, $sipProfile, $config);
@@ -424,6 +462,7 @@ class CiscoPhoneCnfXmlService
 
         $this->appendEssentialSipCallFeatures($doc, $sipProfile, $config);
         $this->appendSipAudioCodecSettings($doc, $sipProfile, $config, false);
+        $this->appendReferenceAudioSipExtras($doc, $sipProfile, $config);
         $this->appendSipLines($doc, $sipProfile, $config);
 
         $device->appendChild($sipProfile);
@@ -438,7 +477,7 @@ class CiscoPhoneCnfXmlService
         $this->appendUriNode($doc, $sipCallFeatures, 'callPickupListUri', '#');
         $this->appendUriNode($doc, $sipCallFeatures, 'callPickupGroupUri', $config['call_pickup_group_uri'] ?? '');
         $this->appendTextNode($doc, $sipCallFeatures, 'rfc2543Hold', ($config['rfc2543_hold'] ?? false) ? 'true' : 'false');
-        $this->appendTextNode($doc, $sipCallFeatures, 'callHoldRingback', $config['call_hold_ringback'] ?? '1');
+        $this->appendTextNode($doc, $sipCallFeatures, 'callHoldRingback', $config['call_hold_ringback'] ?? '2');
         $this->appendTextNode($doc, $sipCallFeatures, 'callHoldRingbackDuration', (string) ($config['call_hold_ringback_duration'] ?? 10));
         $this->appendUriNode($doc, $sipCallFeatures, 'callTransferUri', $config['call_transfer_uri'] ?? '');
         $this->appendUriNode($doc, $sipCallFeatures, 'callTransferBlindUri', $config['call_transfer_blind_uri'] ?? '');
@@ -515,8 +554,8 @@ class CiscoPhoneCnfXmlService
         $this->appendTextNode($doc, $sipProfile, 'timerT2', (string) ($config['timer_t2'] ?? 4000));
         $this->appendTextNode($doc, $sipProfile, 'timerInviteExpires', (string) ($config['timer_invite_expires'] ?? 180));
         $this->appendTextNode($doc, $sipProfile, 'timerRelayExpires', (string) ($config['timer_relay_expires'] ?? 180));
-        $this->appendTextNode($doc, $sipProfile, 'startMediaPort', (string) ($config['start_media_port'] ?? 16384));
-        $this->appendTextNode($doc, $sipProfile, 'stopMediaPort', (string) ($config['stop_media_port'] ?? 32766));
+        $this->appendTextNode($doc, $sipProfile, 'startMediaPort', (string) ($config['start_media_port'] ?? 16348));
+        $this->appendTextNode($doc, $sipProfile, 'stopMediaPort', (string) ($config['stop_media_port'] ?? 20134));
 
         if ($this->hasSipProxySettings($config)) {
             $this->appendSipProxies($doc, $sipProfile, $config);
@@ -591,26 +630,98 @@ class CiscoPhoneCnfXmlService
         $callManagerGroup->appendChild($members);
         $devicePool->appendChild($callManagerGroup);
 
-        $dateTime = $doc->createElement('dateTime');
+        // Cisco SIP: dateTimeSetting langsung di devicePool (bukan wrapper <dateTime>)
         $dateTimeSetting = $doc->createElement('dateTimeSetting');
         $this->appendTextNode($doc, $dateTimeSetting, 'dateTemplate', $config['date_template'] ?? 'D/M/Y');
         $this->appendTextNode($doc, $dateTimeSetting, 'timeZone', $config['time_zone'] ?? 'SE Asia Standard Time');
 
         $ntps = $doc->createElement('ntps');
-        foreach ($config['ntp_servers'] ?? [] as $ntp) {
+        foreach ($config['ntp_servers'] ?? [] as $index => $ntp) {
             if (empty($ntp['name'])) {
                 continue;
             }
             $ntpEl = $doc->createElement('ntp');
-            $this->appendTextNode($doc, $ntpEl, 'name', $ntp['name']);
-            $this->appendTextNode($doc, $ntpEl, 'ntpMode', $ntp['ntp_mode'] ?? 'unicast');
+            $priority = (int) ($ntp['priority'] ?? ($index + 1));
+            if ($priority > 0) {
+                $ntpEl->setAttribute('priority', (string) $priority);
+            }
+            $this->appendTextNode($doc, $ntpEl, 'name', trim($ntp['name']));
+            $this->appendTextNode($doc, $ntpEl, 'ntpMode', self::normalizeNtpMode($ntp['ntp_mode'] ?? 'unicast'));
             $ntps->appendChild($ntpEl);
         }
         $dateTimeSetting->appendChild($ntps);
-        $dateTime->appendChild($dateTimeSetting);
-        $devicePool->appendChild($dateTime);
+        $devicePool->appendChild($dateTimeSetting);
 
         $device->appendChild($devicePool);
+    }
+
+    public static function normalizeDateTemplate(string $template): string
+    {
+        $template = trim($template);
+        $allowed = ['D/M/Y', 'M/D/Y', 'Y-M-D', 'D.M.Y', 'D/M/YA', 'D/M/YY'];
+
+        return in_array($template, $allowed, true) ? $template : 'D/M/Y';
+    }
+
+    /**
+     * Zona waktu Windows-style untuk Cisco (WIB = SE Asia Standard Time, UTC+7).
+     */
+    public static function normalizeTimeZone(string $zone): string
+    {
+        $zone = trim($zone);
+        $aliases = [
+            'WIB' => 'SE Asia Standard Time',
+            'WITA' => 'Tokyo Standard Time',
+            'WIT' => 'Tokyo Standard Time',
+            'Asia/Jakarta' => 'SE Asia Standard Time',
+            'Asia/Singapore' => 'Singapore Standard Time',
+            'GMT+7' => 'SE Asia Standard Time',
+            'UTC+7' => 'SE Asia Standard Time',
+        ];
+
+        if (isset($aliases[$zone])) {
+            return $aliases[$zone];
+        }
+
+        return $zone !== '' ? $zone : 'SE Asia Standard Time';
+    }
+
+    public static function normalizeNtpMode(string $mode): string
+    {
+        $mode = strtolower(trim($mode));
+
+        $map = [
+            'unicast' => 'Unicast',
+            'anycast' => 'Anycast',
+            'multicast' => 'Multicast',
+            'directntp' => 'DirectNTP',
+        ];
+
+        return $map[$mode] ?? 'Unicast';
+    }
+
+    public static function normalizeNtpServers(array $servers): array
+    {
+        $normalized = [];
+        $priority = 1;
+
+        foreach ($servers as $ntp) {
+            if (!is_array($ntp) || empty($ntp['name'])) {
+                continue;
+            }
+            $normalized[] = [
+                'name' => trim($ntp['name']),
+                'ntp_mode' => $ntp['ntp_mode'] ?? 'unicast',
+                'priority' => (int) ($ntp['priority'] ?? $priority),
+            ];
+            $priority++;
+        }
+
+        if ($normalized === []) {
+            return self::defaultConfig()['ntp_servers'];
+        }
+
+        return $normalized;
     }
 
     private function appendSipCallFeatures(DOMDocument $doc, \DOMElement $sipProfile, array $config): void
@@ -624,7 +735,7 @@ class CiscoPhoneCnfXmlService
         $this->appendUriNode($doc, $sipCallFeatures, 'meetMeServiceUri', $config['meet_me_service_url'] ?? '');
         $this->appendUriNode($doc, $sipCallFeatures, 'abbreviatedDialUri', $config['abbreviated_dial_url'] ?? '');
         $this->appendTextNode($doc, $sipCallFeatures, 'rfc2543Hold', ($config['rfc2543_hold'] ?? false) ? 'true' : 'false');
-        $this->appendTextNode($doc, $sipCallFeatures, 'callHoldRingback', $config['call_hold_ringback'] ?? '1');
+        $this->appendTextNode($doc, $sipCallFeatures, 'callHoldRingback', $config['call_hold_ringback'] ?? '2');
         $this->appendTextNode($doc, $sipCallFeatures, 'callHoldRingbackDuration', (string) ($config['call_hold_ringback_duration'] ?? 10));
         $this->appendUriNode($doc, $sipCallFeatures, 'callTransferUri', $config['call_transfer_uri'] ?? '');
         $this->appendUriNode($doc, $sipCallFeatures, 'callTransferBlindUri', $config['call_transfer_blind_uri'] ?? '');
@@ -683,10 +794,29 @@ class CiscoPhoneCnfXmlService
         $this->appendTextNode($doc, $sipProfile, 'g729CodecSupport', (string) ($config['g729_codec_support'] ?? 0));
 
         if ($extended) {
-            $this->appendTextNode($doc, $sipProfile, 'voipControlPort', (string) ($config['voip_control_port'] ?? ($config['sip_port'] ?? 5060)));
-            $this->appendTextNode($doc, $sipProfile, 'dscpForAudio', (string) ($config['dscp_for_audio'] ?? 184));
-            $this->appendTextNode($doc, $sipProfile, 'callStats', ($config['call_stats'] ?? false) ? 'true' : 'false');
+            $this->appendReferenceAudioSipExtras($doc, $sipProfile, $config);
         }
+    }
+
+    /**
+     * Parameter tambahan di sipProfile (referensi backup CP-7821 — suara jernih, VAD off).
+     */
+    private function appendReferenceAudioSipExtras(DOMDocument $doc, \DOMElement $sipProfile, array $config): void
+    {
+        $this->appendTextNode($doc, $sipProfile, 'transferOnhookEnabled', ($config['transfer_onhook_enabled'] ?? false) ? 'true' : 'false');
+        $this->appendTextNode($doc, $sipProfile, 'alwaysUsePrimeLine', ($config['always_use_prime_line'] ?? false) ? 'true' : 'false');
+        $this->appendTextNode($doc, $sipProfile, 'alwaysUsePrimeLineVoiceMail', 'false');
+        $this->appendTextNode($doc, $sipProfile, 'kpml', (string) ($config['kpml'] ?? 3));
+        $this->appendTextNode($doc, $sipProfile, 'stutterMsgWaiting', (string) ($config['stutter_msg_waiting'] ?? 1));
+        $this->appendTextNode($doc, $sipProfile, 'callStats', ($config['call_stats'] ?? false) ? 'true' : 'false');
+        $this->appendTextNode(
+            $doc,
+            $sipProfile,
+            'silentPeriodBetweenCallWaitingBursts',
+            (string) ($config['silent_period_call_waiting'] ?? 10)
+        );
+        $this->appendTextNode($doc, $sipProfile, 'voipControlPort', (string) ($config['voip_control_port'] ?? ($config['sip_port'] ?? 5060)));
+        $this->appendTextNode($doc, $sipProfile, 'dscpForAudio', (string) ($config['dscp_for_audio'] ?? 184));
     }
 
     public static function normalizePreferredCodec(string $codec): string
