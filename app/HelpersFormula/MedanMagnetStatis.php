@@ -58,7 +58,7 @@ class MedanMagnetStatis
         $rataRataMagnet = $totalNilaiMagnet / $jumlahNilai;
 
         if($data->data_lapangan['parameter'] == 'Medan Magnet Statis'){
-            $rataRataMagnet = $rataRataMagnet * 1000000;
+            $rataRataMagnet = $rataRataMagnet / 1000000;
 
             if($rataRataMagnet < 0.00000001){
                 $rataRataMagnet = '<0.00000001';
