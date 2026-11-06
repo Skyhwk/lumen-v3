@@ -8,6 +8,7 @@ use App\Models\QuotationNonKontrak;
 use App\Services\GenerateQrDocument;
 use App\Services\GenerateToken;
 use App\Services\RenderNonKontrak;
+use App\Support\QuotationDocumentSlug;
 use Carbon\Carbon;
 
 class QuotationGenerateLinkService
@@ -68,6 +69,65 @@ class QuotationGenerateLinkService
             throw new \RuntimeException('Generate link belum tersedia untuk quotation id ' . $quotation->id);
         }
 
-        return (string) env('PORTALV3_LINK', '') . $link->token;
+        return $this->portalAuthBaseWithToken((string) $link->token);
+    }
+
+    /**
+     * Link perantara di portal (tracking buka email) — slug: "/" diganti "-".
+     */
+    public function portalTrackingLink(QuotationNonKontrak $quotation): string
+    {
+        if (empty($quotation->no_document)) {
+            throw new \RuntimeException('no_document kosong untuk quotation id ' . $quotation->id);
+        }
+
+        $base = $this->portalTrackingBase();
+        $path = (string) config('quotation_auto.link_tracking.portal_redirect_path', '/public/auth/redirect');
+        if ($path !== '' && $path[0] !== '/') {
+            $path = '/' . $path;
+        }
+
+        $slug = QuotationDocumentSlug::fromDocumentNumber((string) $quotation->no_document);
+
+        return $base . $path . '?no_quotation=' . rawurlencode($slug);
+    }
+
+    /**
+     * URL penawaran asli di portal (setelah tracking redirect).
+     */
+    public function portalAuthBaseWithToken(string $token): string
+    {
+        $base = $this->portalAuthBase();
+
+        return $base . ltrim($token, '/');
+    }
+
+    private function portalAuthBase(): string
+    {
+        $base = rtrim((string) config('quotation_auto.link_tracking.portal_auth_base', ''), '/');
+        if ($base === '') {
+            throw new \RuntimeException(
+                'PORTALV3_LINK (atau PORTAL_API) belum dikonfigurasi di .env untuk redirect penawaran.'
+            );
+        }
+
+        return $base . '/';
+    }
+
+    private function portalTrackingBase(): string
+    {
+        $base = rtrim((string) config('quotation_auto.link_tracking.portal_base', ''), '/');
+        if ($base !== '') {
+            return $base;
+        }
+
+        $authBase = rtrim((string) config('quotation_auto.link_tracking.portal_auth_base', ''), '/');
+        if ($authBase !== '') {
+            return preg_replace('#/public/auth/?$#', '', $authBase) ?: $authBase;
+        }
+
+        throw new \RuntimeException(
+            'PORTALV4 atau PORTALV3_LINK belum dikonfigurasi di .env untuk link tracking quotation auto.'
+        );
     }
 }
