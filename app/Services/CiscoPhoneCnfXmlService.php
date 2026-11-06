@@ -56,8 +56,7 @@ class CiscoPhoneCnfXmlService
             'cnf_join_enabled' => true,
             'meet_me_service_url' => '',
             'abbreviated_dial_url' => '',
-            'third_party_pbx' => true,
-            'rfc2543_hold' => true,
+            'rfc2543_hold' => false,
             'semi_attended_transfer' => true,
             'local_cfwd_enable' => true,
             'remote_cc_enable' => true,
@@ -173,7 +172,6 @@ class CiscoPhoneCnfXmlService
         $merged['time_zone'] = self::normalizeTimeZone($merged['time_zone'] ?? 'SE Asia Standard Time');
         $merged['ntp_servers'] = self::normalizeNtpServers($merged['ntp_servers'] ?? []);
         $merged = self::applyAutoAudioDefaults($merged);
-        $merged = self::applyThirdPartyPbxDefaults($merged);
 
         // CP-3905 / CP3905V01 sering gagal register jika pakai TCP — defaultkan UDP untuk model basic
         if (self::isBasicPhoneModel($merged['phone_model'])) {
@@ -216,40 +214,6 @@ class CiscoPhoneCnfXmlService
         ];
 
         return array_replace($config, $audio);
-    }
-
-    /**
-     * Grandstream UCM / PBX non-CUCM: media RTP & hold sering baru jalan setelah re-INVITE (hold/unhold).
-     */
-    public static function applyThirdPartyPbxDefaults(array $config): array
-    {
-        if (!filter_var($config['third_party_pbx'] ?? true, FILTER_VALIDATE_BOOLEAN)) {
-            return $config;
-        }
-
-        $config['register_with_proxy'] = filter_var($config['register_with_proxy'] ?? true, FILTER_VALIDATE_BOOLEAN);
-        $config['rfc2543_hold'] = filter_var($config['rfc2543_hold'] ?? true, FILTER_VALIDATE_BOOLEAN);
-        $config['omit_preferred_codec'] = filter_var($config['omit_preferred_codec'] ?? true, FILTER_VALIDATE_BOOLEAN);
-        $config['semi_attended_transfer'] = filter_var($config['semi_attended_transfer'] ?? true, FILTER_VALIDATE_BOOLEAN);
-        $config['local_cfwd_enable'] = filter_var($config['local_cfwd_enable'] ?? true, FILTER_VALIDATE_BOOLEAN);
-        $config['remote_cc_enable'] = filter_var($config['remote_cc_enable'] ?? true, FILTER_VALIDATE_BOOLEAN);
-
-        if (!empty($config['lines']) && is_array($config['lines'])) {
-            foreach ($config['lines'] as &$line) {
-                $idle = $line['ring_setting_idle'] ?? '4';
-                $active = $line['ring_setting_active'] ?? '5';
-                if (in_array(strtolower((string) $idle), ['normal', 'default', ''], true)) {
-                    $line['ring_setting_idle'] = '4';
-                }
-                if (in_array(strtolower((string) $active), ['normal', 'default', ''], true)) {
-                    $line['ring_setting_active'] = '5';
-                }
-                $line['call_waiting'] = $line['call_waiting'] ?? 3;
-            }
-            unset($line);
-        }
-
-        return $config;
     }
 
     /**
@@ -449,29 +413,24 @@ class CiscoPhoneCnfXmlService
         $device->appendChild($sipProfile);
     }
 
-    /**
-     * Profil default CP-7821 / 78xx / 88xx: register, multi-line, hold, transfer, call pickup & group, CNF join.
-     * Tanpa sipStack dan timer SIP lanjutan (cukup untuk fitur dasar sesuai dokumentasi Cisco).
-     */
+    /** Profil Enterprise CP-78xx/88xx untuk PBX SIP pihak ketiga. */
     private function generateStandardXml(array $config, string $phoneModel, ?string $userId, ?string $password): string
     {
-        $transport = strtoupper($config['transport_layer_protocol'] ?? 'UDP');
-        if (!in_array($transport, ['UDP', 'TCP', 'TLS'], true)) {
-            $transport = 'UDP';
-        }
-
         $doc = new DOMDocument('1.0', 'UTF-8');
         $doc->formatOutput = true;
 
         $device = $doc->createElement('device');
         $doc->appendChild($device);
 
+        $this->appendTextNode($doc, $device, 'fullConfig', 'true');
         $this->appendTextNode($doc, $device, 'deviceProtocol', $config['device_protocol'] ?? 'SIP');
         $this->appendDevicePool($doc, $device, $config);
-        $this->appendStandardSipProfile($doc, $device, $config, $phoneModel, $transport);
+        $this->appendStandardSipProfile($doc, $device, $config, $phoneModel);
         $this->appendCommonProfile($doc, $device, $config);
         $this->appendNetworkLocale($doc, $device, $config);
         $this->appendLoadInformation($doc, $device, $config, $phoneModel);
+        $this->appendTextNode($doc, $device, 'deviceSecurityMode', '1');
+        $this->appendTextNode($doc, $device, 'transportLayerProtocol', $this->normalizeEnterpriseTransport($config['transport_layer_protocol'] ?? 'UDP'));
 
         if ($userId !== null && $userId !== '') {
             $this->appendTextNode($doc, $device, 'userId', $userId);
@@ -484,28 +443,24 @@ class CiscoPhoneCnfXmlService
         return $doc->saveXML();
     }
 
-    private function appendStandardSipProfile(DOMDocument $doc, \DOMElement $device, array $config, string $phoneModel, string $transport): void
+    private function appendStandardSipProfile(DOMDocument $doc, \DOMElement $device, array $config, string $phoneModel): void
     {
         $sipProfile = $doc->createElement('sipProfile');
 
+        $this->appendSipProxies($doc, $sipProfile, $config);
+        $this->appendEssentialSipCallFeatures($doc, $sipProfile, $config);
+        $this->appendReferenceCompatibleSipStack($doc, $sipProfile, $config);
+        $this->appendSipAudioCodecSettings($doc, $sipProfile, $config, false);
+        $this->appendReferenceAudioSipExtras($doc, $sipProfile, $config);
         $this->appendTextNode($doc, $sipProfile, 'natEnabled', ($config['nat_enabled'] ?? false) ? 'true' : 'false');
-        $this->appendTextNode($doc, $sipProfile, 'userAgent', $phoneModel);
-        $this->appendTextNode($doc, $sipProfile, 'transportLayerProtocol', $transport);
-        $this->appendTextNode($doc, $sipProfile, 'timerRegisterExpires', (string) ($config['timer_register_expires'] ?? 3600));
-        $this->appendTextNode($doc, $sipProfile, 'timerRegisterDelta', (string) ($config['timer_register_delta'] ?? 5));
-        $this->appendTextNode($doc, $sipProfile, 'timerKeepAliveExpires', (string) ($config['timer_keep_alive_expires'] ?? 120));
+        $this->appendTextNode($doc, $sipProfile, 'natReceivedProcessing', 'false');
+        $this->appendTextNode($doc, $sipProfile, 'natAddress', '');
+        $this->appendTextNode($doc, $sipProfile, 'phoneLabel', $config['phone_label'] ?? $phoneModel);
         $this->appendTextNode($doc, $sipProfile, 'startMediaPort', (string) ($config['start_media_port'] ?? 16348));
         $this->appendTextNode($doc, $sipProfile, 'stopMediaPort', (string) ($config['stop_media_port'] ?? 20134));
 
-        $this->appendSipProxies($doc, $sipProfile, $config);
-
-        $this->appendEssentialSipCallFeatures($doc, $sipProfile, $config);
-        if (filter_var($config['third_party_pbx'] ?? true, FILTER_VALIDATE_BOOLEAN)) {
-            $this->appendReferenceCompatibleSipStack($doc, $sipProfile, $config);
-        }
-        $this->appendSipAudioCodecSettings($doc, $sipProfile, $config, false);
-        $this->appendReferenceAudioSipExtras($doc, $sipProfile, $config);
-        $this->appendSipLines($doc, $sipProfile, $config);
+        // CP-78xx Enterprise mengambil alamat PBX dari devicePool; line harus menunjuk alias ini.
+        $this->appendEnterpriseSipLines($doc, $sipProfile, $config);
 
         $device->appendChild($sipProfile);
     }
@@ -515,29 +470,20 @@ class CiscoPhoneCnfXmlService
     {
         $sipCallFeatures = $doc->createElement('sipCallFeatures');
         $this->appendTextNode($doc, $sipCallFeatures, 'cnfJoinEnabled', ($config['cnf_join_enabled'] ?? true) ? 'true' : 'false');
-        $this->appendUriNode($doc, $sipCallFeatures, 'callPickupUri', $config['call_pickup_url'] ?? '');
-        $this->appendUriNode($doc, $sipCallFeatures, 'callPickupListUri', '#');
-        $this->appendUriNode($doc, $sipCallFeatures, 'callPickupGroupUri', $config['call_pickup_group_uri'] ?? '');
-        $this->appendTextNode($doc, $sipCallFeatures, 'rfc2543Hold', ($config['rfc2543_hold'] ?? true) ? 'true' : 'false');
+        $this->appendTextNode($doc, $sipCallFeatures, 'callForwardURI', $config['call_forward_uri'] ?: 'x-serviceuri-cfwdall');
+        $this->appendTextNode($doc, $sipCallFeatures, 'callPickupURI', $config['call_pickup_url'] ?: 'x-cisco-serviceuri-pickup');
+        $this->appendTextNode($doc, $sipCallFeatures, 'callPickupListURI', 'x-cisco-serviceuri-opickup');
+        $this->appendTextNode($doc, $sipCallFeatures, 'callPickupGroupURI', $config['call_pickup_group_uri'] ?: 'x-cisco-serviceuri-gpickup');
+        $this->appendTextNode($doc, $sipCallFeatures, 'meetMeServiceURI', $config['meet_me_service_url'] ?: 'x-cisco-serviceuri-meetme');
+        $this->appendTextNode($doc, $sipCallFeatures, 'abbreviatedDialURI', $config['abbreviated_dial_url'] ?: 'x-cisco-serviceuri-abbrdial');
+        $this->appendTextNode($doc, $sipCallFeatures, 'rfc2543Hold', ($config['rfc2543_hold'] ?? false) ? 'true' : 'false');
         $this->appendTextNode($doc, $sipCallFeatures, 'callHoldRingback', $config['call_hold_ringback'] ?? '2');
-        $this->appendTextNode($doc, $sipCallFeatures, 'callHoldRingbackDuration', (string) ($config['call_hold_ringback_duration'] ?? 10));
         $this->appendTextNode($doc, $sipCallFeatures, 'localCfwdEnable', ($config['local_cfwd_enable'] ?? true) ? 'true' : 'false');
         $this->appendTextNode($doc, $sipCallFeatures, 'semiAttendedTransfer', ($config['semi_attended_transfer'] ?? true) ? 'true' : 'false');
+        $this->appendTextNode($doc, $sipCallFeatures, 'anonymousCallBlock', '2');
+        $this->appendTextNode($doc, $sipCallFeatures, 'callerIdBlocking', '2');
+        $this->appendTextNode($doc, $sipCallFeatures, 'dndControl', '0');
         $this->appendTextNode($doc, $sipCallFeatures, 'remoteCcEnable', ($config['remote_cc_enable'] ?? true) ? 'true' : 'false');
-        $this->appendUriNode($doc, $sipCallFeatures, 'callTransferUri', $config['call_transfer_uri'] ?? '');
-        $this->appendUriNode($doc, $sipCallFeatures, 'callTransferBlindUri', $config['call_transfer_blind_uri'] ?? '');
-        $this->appendUriNode($doc, $sipCallFeatures, 'callTransferSemiAttendedUri', $config['call_transfer_semi_attended_uri'] ?? '');
-        $this->appendUriNode($doc, $sipCallFeatures, 'callTransferAttendedUri', $config['call_transfer_attended_uri'] ?? '');
-        $this->appendTextNode($doc, $sipCallFeatures, 'callPickupEnabled', ($config['call_pickup_enabled'] ?? true) ? 'true' : 'false');
-        $this->appendTextNode($doc, $sipCallFeatures, 'callPickupPolicy', $config['call_pickup_policy'] ?? 'Cisco Call Pickup');
-
-        if (!empty($config['meet_me_service_url'])) {
-            $this->appendUriNode($doc, $sipCallFeatures, 'meetMeServiceUri', $config['meet_me_service_url']);
-        }
-
-        if (!empty($config['call_forward_uri'])) {
-            $this->appendUriNode($doc, $sipCallFeatures, 'callForwardUri', $config['call_forward_uri']);
-        }
 
         $sipProfile->appendChild($sipCallFeatures);
     }
@@ -664,11 +610,12 @@ class CiscoPhoneCnfXmlService
         $member->setAttribute('priority', '0');
 
         $callManager = $doc->createElement('callManager');
-        $this->appendTextNode($doc, $callManager, 'processNodeName', $config['sip_server'] ?? '');
-
         $ports = $doc->createElement('ports');
+        $this->appendTextNode($doc, $ports, 'ethernetPhonePort', '2000');
         $this->appendTextNode($doc, $ports, 'sipPort', (string) ($config['sip_port'] ?? 5060));
+        $this->appendTextNode($doc, $ports, 'securedSipPort', '5061');
         $callManager->appendChild($ports);
+        $this->appendTextNode($doc, $callManager, 'processNodeName', $config['sip_server'] ?? '');
 
         $member->appendChild($callManager);
         $members->appendChild($member);
@@ -827,18 +774,12 @@ class CiscoPhoneCnfXmlService
     private function appendSipProxies(DOMDocument $doc, \DOMElement $sipProfile, array $config): void
     {
         $sipProxies = $doc->createElement('sipProxies');
-        if (!empty($config['backup_proxy'])) {
-            $this->appendTextNode($doc, $sipProxies, 'backupProxy', $config['backup_proxy']);
-            $this->appendTextNode($doc, $sipProxies, 'backupProxyPort', (string) ($config['backup_proxy_port'] ?? ''));
-        }
-        if (!empty($config['emergency_proxy'])) {
-            $this->appendTextNode($doc, $sipProxies, 'emergencyProxy', $config['emergency_proxy']);
-            $this->appendTextNode($doc, $sipProxies, 'emergencyProxyPort', (string) ($config['emergency_proxy_port'] ?? ''));
-        }
-        if (!empty($config['outbound_proxy'])) {
-            $this->appendTextNode($doc, $sipProxies, 'outboundProxy', $config['outbound_proxy']);
-            $this->appendTextNode($doc, $sipProxies, 'outboundProxyPort', (string) ($config['outbound_proxy_port'] ?? ''));
-        }
+        $this->appendTextNode($doc, $sipProxies, 'backupProxy', $config['backup_proxy'] ?? '');
+        $this->appendTextNode($doc, $sipProxies, 'backupProxyPort', (string) ($config['backup_proxy_port'] ?? ''));
+        $this->appendTextNode($doc, $sipProxies, 'emergencyProxy', $config['emergency_proxy'] ?? '');
+        $this->appendTextNode($doc, $sipProxies, 'emergencyProxyPort', (string) ($config['emergency_proxy_port'] ?? ''));
+        $this->appendTextNode($doc, $sipProxies, 'outboundProxy', $config['outbound_proxy'] ?? '');
+        $this->appendTextNode($doc, $sipProxies, 'outboundProxyPort', (string) ($config['outbound_proxy_port'] ?? ''));
         $this->appendTextNode($doc, $sipProxies, 'registerWithProxy', ($config['register_with_proxy'] ?? true) ? 'true' : 'false');
         $sipProfile->appendChild($sipProxies);
     }
@@ -849,9 +790,7 @@ class CiscoPhoneCnfXmlService
         $preferredCodec = self::normalizePreferredCodec($config['preferred_codec'] ?? 'g711ulaw');
 
         $this->appendTextNode($doc, $sipProfile, 'enableVad', $enableVad);
-        if (empty($config['omit_preferred_codec'])) {
-            $this->appendTextNode($doc, $sipProfile, 'preferredCodec', $preferredCodec);
-        }
+        $this->appendTextNode($doc, $sipProfile, 'preferredCodec', $preferredCodec);
         $this->appendTextNode($doc, $sipProfile, 'dtmfAvtPayload', (string) ($config['dtmf_avt_payload'] ?? 101));
         $this->appendTextNode($doc, $sipProfile, 'dtmfDbLevel', (string) ($config['dtmf_db_level'] ?? 3));
         $this->appendTextNode($doc, $sipProfile, 'dtmfOutofBand', $config['dtmf_out_of_band'] ?? 'avt');
@@ -904,6 +843,21 @@ class CiscoPhoneCnfXmlService
         $key = strtolower(trim($codec));
 
         return $map[$key] ?? 'g711ulaw';
+    }
+
+    /** CP-78xx Enterprise memakai angka: 1 TCP, 2 UDP, 3 TLS. */
+    private function normalizeEnterpriseTransport(string $transport): string
+    {
+        $map = [
+            'TCP' => '1',
+            'UDP' => '2',
+            'TLS' => '3',
+            '1' => '1',
+            '2' => '2',
+            '3' => '3',
+        ];
+
+        return $map[strtoupper(trim($transport))] ?? '2';
     }
 
     private function appendSipLines(DOMDocument $doc, \DOMElement $sipProfile, array $config): void
@@ -959,6 +913,54 @@ class CiscoPhoneCnfXmlService
         $sipProfile->appendChild($sipLines);
     }
 
+    /** Struktur line CP-78xx Enterprise; proxy wajib memakai alias dari devicePool. */
+    private function appendEnterpriseSipLines(DOMDocument $doc, \DOMElement $sipProfile, array $config): void
+    {
+        $sipLines = $doc->createElement('sipLines');
+
+        foreach ($config['lines'] ?? [] as $line) {
+            if (empty($line['name']) && empty($line['auth_name'])) {
+                continue;
+            }
+
+            $name = $line['name'] ?? ($line['auth_name'] ?? '');
+            $lineEl = $doc->createElement('line');
+            $lineEl->setAttribute('button', (string) ($line['button'] ?? 1));
+
+            $this->appendTextNode($doc, $lineEl, 'featureID', (string) ($line['feature_id'] ?? 9));
+            $this->appendTextNode($doc, $lineEl, 'featureLabel', $line['feature_label'] ?? ($line['display_name'] ?? $name));
+            $this->appendTextNode($doc, $lineEl, 'proxy', 'USECALLMANAGER');
+            $this->appendTextNode($doc, $lineEl, 'port', (string) ($line['port'] ?? ($config['sip_port'] ?? 5060)));
+            $this->appendTextNode($doc, $lineEl, 'name', $name);
+            $this->appendTextNode($doc, $lineEl, 'displayName', $line['display_name'] ?? $name);
+
+            $autoAnswer = $doc->createElement('autoAnswer');
+            $this->appendTextNode($doc, $autoAnswer, 'autoAnswerEnabled', !empty($line['auto_answer']) ? '3' : '2');
+            $lineEl->appendChild($autoAnswer);
+
+            $this->appendTextNode($doc, $lineEl, 'callWaiting', (string) ($line['call_waiting'] ?? 3));
+            $this->appendTextNode($doc, $lineEl, 'authName', $line['auth_name'] ?? $name);
+            $this->appendTextNode($doc, $lineEl, 'authPassword', $line['auth_password'] ?? '');
+            $this->appendTextNode($doc, $lineEl, 'sharedLine', ($line['shared_line'] ?? false) ? 'true' : 'false');
+            $this->appendTextNode($doc, $lineEl, 'messageWaitingLampPolicy', (string) ($line['message_waiting_lamp_policy'] ?? 1));
+            $this->appendTextNode($doc, $lineEl, 'messagesNumber', $line['messages_number'] ?? '*97');
+            $this->appendTextNode($doc, $lineEl, 'ringSettingIdle', (string) ($line['ring_setting_idle'] ?? '4'));
+            $this->appendTextNode($doc, $lineEl, 'ringSettingActive', (string) ($line['ring_setting_active'] ?? '5'));
+            $this->appendTextNode($doc, $lineEl, 'contact', $line['contact'] ?? $name);
+
+            $forward = $doc->createElement('forwardCallInfoDisplay');
+            $this->appendTextNode($doc, $forward, 'callerName', ($line['caller_name'] ?? true) ? 'true' : 'false');
+            $this->appendTextNode($doc, $forward, 'callerNumber', ($line['caller_number'] ?? false) ? 'true' : 'false');
+            $this->appendTextNode($doc, $forward, 'redirectedNumber', ($line['redirected_number'] ?? false) ? 'true' : 'false');
+            $this->appendTextNode($doc, $forward, 'dialedNumber', ($line['dialed_number'] ?? true) ? 'true' : 'false');
+            $lineEl->appendChild($forward);
+
+            $sipLines->appendChild($lineEl);
+        }
+
+        $sipProfile->appendChild($sipLines);
+    }
+
     private function appendCommonProfile(DOMDocument $doc, \DOMElement $device, array $config): void
     {
         $commonProfile = $doc->createElement('commonProfile');
@@ -998,7 +1000,6 @@ class CiscoPhoneCnfXmlService
 
         if ($loadInfo !== '') {
             $loadInformation = $doc->createElement('loadInformation');
-            $loadInformation->setAttribute('model', $phoneModel);
             $loadInformation->appendChild($doc->createTextNode($loadInfo));
             $device->appendChild($loadInformation);
         }
