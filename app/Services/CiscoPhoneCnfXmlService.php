@@ -133,10 +133,14 @@ class CiscoPhoneCnfXmlService
         return 'SEP' . self::normalizeMac($mac) . '.cnf.xml';
     }
 
-    public static function mergeConfig(array $input): array
+    public static function mergeConfig(array $input, ?string $phoneModel = null): array
     {
         $defaults = self::defaultConfig();
         $merged = array_replace_recursive($defaults, $input);
+
+        $merged['phone_model'] = self::canonicalPhoneModel(
+            $phoneModel ?? ($merged['phone_model'] ?? 'CP-3905')
+        );
 
         if (!empty($merged['lines']) && is_array($merged['lines'])) {
             foreach ($merged['lines'] as $index => &$line) {
@@ -151,8 +155,8 @@ class CiscoPhoneCnfXmlService
         $merged['preferred_codec'] = self::normalizePreferredCodec($merged['preferred_codec'] ?? 'g711ulaw');
         $merged['enable_vad'] = filter_var($merged['enable_vad'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
-        // CP-3905 sering gagal register jika pakai TCP — defaultkan UDP untuk model basic
-        if (self::isBasicPhoneModel($merged['phone_model'] ?? 'CP-3905')) {
+        // CP-3905 / CP3905V01 sering gagal register jika pakai TCP — defaultkan UDP untuk model basic
+        if (self::isBasicPhoneModel($merged['phone_model'])) {
             if (strtoupper($merged['transport_layer_protocol'] ?? 'UDP') === 'TCP') {
                 $merged['transport_layer_protocol'] = 'UDP';
             }
@@ -160,49 +164,122 @@ class CiscoPhoneCnfXmlService
             $merged['user_locale'] = '';
         }
 
+        // Telepon konvensional 79xx: hindari G.722 default (firmware lama sering tidak stabil)
+        if (self::isLegacyPhoneModel($merged['phone_model']) && !isset($input['g722_codec_support'])) {
+            $merged['g722_codec_support'] = 0;
+        }
+
         return $merged;
+    }
+
+    /**
+     * Normalisasi nama model (CP3905V01, cp-7945G-GE → CP-3905, CP-7945) untuk matching & userAgent.
+     */
+    public static function canonicalPhoneModel(string $model): string
+    {
+        $model = trim($model);
+        if ($model === '') {
+            return 'CP-3905';
+        }
+
+        $compact = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $model));
+
+        if (preg_match('/^CP(\d{4})/', $compact, $m)) {
+            return 'CP-' . $m[1];
+        }
+
+        if (preg_match('/^(SPA\d+[A-Z0-9]*)/', $compact, $m)) {
+            return $m[1];
+        }
+
+        if (preg_match('/^(ATA\d+)/', $compact, $m)) {
+            return $m[1];
+        }
+
+        return trim($model);
+    }
+
+    public static function normalizePhoneModelKey(string $model): string
+    {
+        return strtoupper(preg_replace('/[^A-Za-z0-9]/', '', self::canonicalPhoneModel($model)));
     }
 
     public function generate(array $config, string $mac, string $phoneModel, ?string $userId = null, ?string $password = null): string
     {
-        $config = self::mergeConfig($config);
-        $config['phone_model'] = trim($phoneModel) ?: 'CP-3905';
-        $phoneModel = $config['phone_model'];
+        $phoneModel = self::canonicalPhoneModel(trim($phoneModel) ?: 'CP-3905');
+        $config = self::mergeConfig($config, $phoneModel);
 
-        if ($this->shouldUseMinimalProfile($phoneModel, $config)) {
-            return $this->generateMinimalXml($config, $phoneModel, $userId, $password);
+        switch ($this->resolveProfileType($phoneModel, $config)) {
+            case 'minimal':
+                return $this->generateMinimalXml($config, $phoneModel, $userId, $password);
+            case 'legacy':
+                return $this->generateLegacyXml($config, $phoneModel, $userId, $password);
+            case 'full':
+                return $this->generateFullXml($config, $phoneModel, $userId, $password);
+            default:
+                return $this->generateStandardXml($config, $phoneModel, $userId, $password);
         }
-
-        return $this->generateFullXml($config, $phoneModel, $userId, $password);
     }
 
-    private function shouldUseMinimalProfile(string $phoneModel, array $config): bool
+    /**
+     * @return 'minimal'|'legacy'|'standard'|'full'
+     */
+    private function resolveProfileType(string $phoneModel, array $config): string
     {
-        $profile = $config['xml_profile'] ?? 'auto';
+        $profile = strtolower(trim($config['xml_profile'] ?? 'auto'));
 
-        if ($profile === 'full') {
-            return false;
+        if (in_array($profile, ['minimal', 'legacy', 'standard', 'full'], true)) {
+            return $profile;
         }
 
-        if ($profile === 'minimal') {
-            return true;
+        if (self::isBasicPhoneModel($phoneModel)) {
+            return 'minimal';
         }
 
-        return self::isBasicPhoneModel($phoneModel);
+        if (self::isLegacyPhoneModel($phoneModel)) {
+            return 'legacy';
+        }
+
+        // CP-7821, 78xx, 88xx, … — cukup profil standar (call, hold, transfer, pickup/group)
+        return 'standard';
     }
 
     public static function isBasicPhoneModel(string $model): bool
     {
-        $model = strtoupper(trim($model));
-        $basicPrefixes = ['CP-3905', 'CP-3911', 'CP-3925', 'CP-3941', 'SPA112', 'SPA122', 'SPA303', 'SPA504G', 'SPA508G', 'SPA509G'];
+        $key = self::normalizePhoneModelKey($model);
+        $basicPrefixes = [
+            'CP3905', 'CP3911', 'CP3925', 'CP3941',
+            'SPA112', 'SPA122', 'SPA303', 'SPA504G', 'SPA508G', 'SPA509G',
+        ];
 
         foreach ($basicPrefixes as $prefix) {
-            if (strpos($model, strtoupper($prefix)) === 0) {
+            if (strpos($key, $prefix) === 0) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /** CP-79xx / seri konvensional (7945, 7962, dll.) — profil XML medium, tanpa blok fitur berat. */
+    public static function isLegacyPhoneModel(string $model): bool
+    {
+        $key = self::normalizePhoneModelKey($model);
+
+        return (bool) preg_match('/^CP79\d{2}/', $key);
+    }
+
+    public static function defaultXmlProfileForModel(string $model): string
+    {
+        if (self::isBasicPhoneModel($model)) {
+            return 'minimal';
+        }
+
+        if (self::isLegacyPhoneModel($model)) {
+            return 'legacy';
+        }
+
+        return 'standard';
     }
 
     private function generateMinimalXml(array $config, string $phoneModel, ?string $userId, ?string $password): string
@@ -219,6 +296,7 @@ class CiscoPhoneCnfXmlService
         $device = $doc->createElement('device');
         $doc->appendChild($device);
 
+        $this->appendTextNode($doc, $device, 'deviceProtocol', $config['device_protocol'] ?? 'SIP');
         $this->appendDevicePool($doc, $device, $config);
         $this->appendMinimalSipProfile($doc, $device, $config, $phoneModel, $transport);
         $this->appendCommonProfile($doc, $device, $config);
@@ -232,6 +310,152 @@ class CiscoPhoneCnfXmlService
         }
 
         return $doc->saveXML();
+    }
+
+    /**
+     * Profil untuk CP-7945, CP-7962, dan seri 79xx konvensional.
+     * Cukup lengkap untuk register & multi-line, tanpa sipCallFeatures/sipStack yang sering ditolak firmware lama.
+     */
+    private function generateLegacyXml(array $config, string $phoneModel, ?string $userId, ?string $password): string
+    {
+        $transport = strtoupper($config['transport_layer_protocol'] ?? 'UDP');
+        if (!in_array($transport, ['UDP', 'TCP', 'TLS'], true)) {
+            $transport = 'UDP';
+        }
+
+        $doc = new DOMDocument('1.0', 'UTF-8');
+        $doc->formatOutput = true;
+
+        $device = $doc->createElement('device');
+        $doc->appendChild($device);
+
+        $this->appendTextNode($doc, $device, 'deviceProtocol', $config['device_protocol'] ?? 'SIP');
+        $this->appendDevicePool($doc, $device, $config);
+        $this->appendLegacySipProfile($doc, $device, $config, $phoneModel, $transport);
+        $this->appendCommonProfile($doc, $device, $config);
+        $this->appendNetworkLocale($doc, $device, $config);
+        $this->appendLoadInformation($doc, $device, $config, $phoneModel);
+
+        if ($userId !== null && $userId !== '') {
+            $this->appendTextNode($doc, $device, 'userId', $userId);
+        }
+
+        if ($password !== null && $password !== '') {
+            $this->appendTextNode($doc, $device, 'password', $password);
+        }
+
+        return $doc->saveXML();
+    }
+
+    private function appendLegacySipProfile(DOMDocument $doc, \DOMElement $device, array $config, string $phoneModel, string $transport): void
+    {
+        $sipProfile = $doc->createElement('sipProfile');
+
+        $this->appendTextNode($doc, $sipProfile, 'natEnabled', ($config['nat_enabled'] ?? false) ? 'true' : 'false');
+        $this->appendTextNode($doc, $sipProfile, 'userAgent', $phoneModel);
+        $this->appendTextNode($doc, $sipProfile, 'transportLayerProtocol', $transport);
+        $this->appendTextNode($doc, $sipProfile, 'timerRegisterExpires', (string) ($config['timer_register_expires'] ?? 3600));
+        $this->appendTextNode($doc, $sipProfile, 'timerRegisterDelta', (string) ($config['timer_register_delta'] ?? 5));
+        $this->appendTextNode($doc, $sipProfile, 'timerKeepAliveExpires', (string) ($config['timer_keep_alive_expires'] ?? 120));
+        $this->appendTextNode($doc, $sipProfile, 'startMediaPort', (string) ($config['start_media_port'] ?? 16384));
+        $this->appendTextNode($doc, $sipProfile, 'stopMediaPort', (string) ($config['stop_media_port'] ?? 32766));
+
+        if ($this->hasSipProxySettings($config)) {
+            $this->appendSipProxies($doc, $sipProfile, $config);
+        }
+
+        $this->appendSipAudioCodecSettings($doc, $sipProfile, $config, false);
+        $this->appendSipLines($doc, $sipProfile, $config);
+
+        $device->appendChild($sipProfile);
+    }
+
+    /**
+     * Profil default CP-7821 / 78xx / 88xx: register, multi-line, hold, transfer, call pickup & group, CNF join.
+     * Tanpa sipStack dan timer SIP lanjutan (cukup untuk fitur dasar sesuai dokumentasi Cisco).
+     */
+    private function generateStandardXml(array $config, string $phoneModel, ?string $userId, ?string $password): string
+    {
+        $transport = strtoupper($config['transport_layer_protocol'] ?? 'UDP');
+        if (!in_array($transport, ['UDP', 'TCP', 'TLS'], true)) {
+            $transport = 'UDP';
+        }
+
+        $doc = new DOMDocument('1.0', 'UTF-8');
+        $doc->formatOutput = true;
+
+        $device = $doc->createElement('device');
+        $doc->appendChild($device);
+
+        $this->appendTextNode($doc, $device, 'deviceProtocol', $config['device_protocol'] ?? 'SIP');
+        $this->appendDevicePool($doc, $device, $config);
+        $this->appendStandardSipProfile($doc, $device, $config, $phoneModel, $transport);
+        $this->appendCommonProfile($doc, $device, $config);
+        $this->appendNetworkLocale($doc, $device, $config);
+        $this->appendLoadInformation($doc, $device, $config, $phoneModel);
+
+        if ($userId !== null && $userId !== '') {
+            $this->appendTextNode($doc, $device, 'userId', $userId);
+        }
+
+        if ($password !== null && $password !== '') {
+            $this->appendTextNode($doc, $device, 'password', $password);
+        }
+
+        return $doc->saveXML();
+    }
+
+    private function appendStandardSipProfile(DOMDocument $doc, \DOMElement $device, array $config, string $phoneModel, string $transport): void
+    {
+        $sipProfile = $doc->createElement('sipProfile');
+
+        $this->appendTextNode($doc, $sipProfile, 'natEnabled', ($config['nat_enabled'] ?? false) ? 'true' : 'false');
+        $this->appendTextNode($doc, $sipProfile, 'userAgent', $phoneModel);
+        $this->appendTextNode($doc, $sipProfile, 'transportLayerProtocol', $transport);
+        $this->appendTextNode($doc, $sipProfile, 'timerRegisterExpires', (string) ($config['timer_register_expires'] ?? 3600));
+        $this->appendTextNode($doc, $sipProfile, 'timerRegisterDelta', (string) ($config['timer_register_delta'] ?? 5));
+        $this->appendTextNode($doc, $sipProfile, 'timerKeepAliveExpires', (string) ($config['timer_keep_alive_expires'] ?? 120));
+        $this->appendTextNode($doc, $sipProfile, 'startMediaPort', (string) ($config['start_media_port'] ?? 16384));
+        $this->appendTextNode($doc, $sipProfile, 'stopMediaPort', (string) ($config['stop_media_port'] ?? 32766));
+
+        if ($this->hasSipProxySettings($config)) {
+            $this->appendSipProxies($doc, $sipProfile, $config);
+        }
+
+        $this->appendEssentialSipCallFeatures($doc, $sipProfile, $config);
+        $this->appendSipAudioCodecSettings($doc, $sipProfile, $config, false);
+        $this->appendSipLines($doc, $sipProfile, $config);
+
+        $device->appendChild($sipProfile);
+    }
+
+    /** Hold, transfer, call pickup/group, conference join — mute & dial-in handled by SIP stack / UI. */
+    private function appendEssentialSipCallFeatures(DOMDocument $doc, \DOMElement $sipProfile, array $config): void
+    {
+        $sipCallFeatures = $doc->createElement('sipCallFeatures');
+        $this->appendTextNode($doc, $sipCallFeatures, 'cnfJoinEnabled', ($config['cnf_join_enabled'] ?? true) ? 'true' : 'false');
+        $this->appendUriNode($doc, $sipCallFeatures, 'callPickupUri', $config['call_pickup_url'] ?? '');
+        $this->appendUriNode($doc, $sipCallFeatures, 'callPickupListUri', '#');
+        $this->appendUriNode($doc, $sipCallFeatures, 'callPickupGroupUri', $config['call_pickup_group_uri'] ?? '');
+        $this->appendTextNode($doc, $sipCallFeatures, 'rfc2543Hold', ($config['rfc2543_hold'] ?? false) ? 'true' : 'false');
+        $this->appendTextNode($doc, $sipCallFeatures, 'callHoldRingback', $config['call_hold_ringback'] ?? '1');
+        $this->appendTextNode($doc, $sipCallFeatures, 'callHoldRingbackDuration', (string) ($config['call_hold_ringback_duration'] ?? 10));
+        $this->appendUriNode($doc, $sipCallFeatures, 'callTransferUri', $config['call_transfer_uri'] ?? '');
+        $this->appendUriNode($doc, $sipCallFeatures, 'callTransferBlindUri', $config['call_transfer_blind_uri'] ?? '');
+        $this->appendUriNode($doc, $sipCallFeatures, 'callTransferSemiAttendedUri', $config['call_transfer_semi_attended_uri'] ?? '');
+        $this->appendUriNode($doc, $sipCallFeatures, 'callTransferAttendedUri', $config['call_transfer_attended_uri'] ?? '');
+        $this->appendTextNode($doc, $sipCallFeatures, 'callPickupEnabled', ($config['call_pickup_enabled'] ?? true) ? 'true' : 'false');
+        $this->appendTextNode($doc, $sipCallFeatures, 'callPickupPolicy', $config['call_pickup_policy'] ?? 'Cisco Call Pickup');
+
+        if (!empty($config['meet_me_service_url'])) {
+            $this->appendUriNode($doc, $sipCallFeatures, 'meetMeServiceUri', $config['meet_me_service_url']);
+        }
+
+        if (!empty($config['call_forward_uri'])) {
+            $this->appendUriNode($doc, $sipCallFeatures, 'callForwardUri', $config['call_forward_uri']);
+        }
+
+        $sipProfile->appendChild($sipCallFeatures);
     }
 
     private function generateFullXml(array $config, string $phoneModel, ?string $userId, ?string $password): string
