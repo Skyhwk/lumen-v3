@@ -5,6 +5,7 @@ namespace App\Services\QuotationGenerate;
 use App\Models\QuotationNonKontrak;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 class QuotationGenerateAutoQtRunner
@@ -12,7 +13,7 @@ class QuotationGenerateAutoQtRunner
     /**
      * @param  array{month?:string,test?:bool,dry_run?:bool,limit?:int|null,customer?:string|null,batch?:int|null,item_pause?:int|null,chunk_pause?:int|null}  $options
      * @param  callable|null  $output
-     * @return array{success:bool,processed:int,success_count:int,failed_count:int,test:bool,dry_run:bool,month:string,logs:array<int,string>}
+     * @return array{success:bool,processed:int,built:int,rendered:int,emailed:int,success_count:int,failed_count:int,test:bool,dry_run:bool,month:string,logs:array<int,string>}
      */
     public function run(array $options = [], $output = null): array
     {
@@ -41,6 +42,13 @@ class QuotationGenerateAutoQtRunner
         $logs = [];
         $write = function ($line, $level = 'line') use ($output, &$logs) {
             $logs[] = $line;
+            if ($level === 'error') {
+                Log::error('[auto-qt] ' . $line);
+            } elseif ($level === 'warn') {
+                Log::warning('[auto-qt] ' . $line);
+            } else {
+                Log::info('[auto-qt] ' . $line);
+            }
             if (is_callable($output)) {
                 $output($line, $level);
             }
@@ -52,7 +60,7 @@ class QuotationGenerateAutoQtRunner
         $processor = new QuotationGenerateProcessingService();
 
         $batchSize = max(1, (int) ($options['batch'] ?? config('quotation_auto.generate.dispatch_chunk_size', 100)));
-        $itemPauseSeconds = max(0, (int) ($options['item_pause'] ?? config('quotation_auto.generate.dispatch_item_pause_seconds', 5)));
+        $emailPauseSeconds = max(0, (int) ($options['item_pause'] ?? config('quotation_auto.generate.email_item_pause_seconds', 1)));
         $chunkPauseSeconds = max(0, (int) ($options['chunk_pause'] ?? config('quotation_auto.generate.dispatch_chunk_pause_seconds', 0)));
         $customerFilter = isset($options['customer']) && $options['customer'] !== '' ? (string) $options['customer'] : null;
 
@@ -72,8 +80,9 @@ class QuotationGenerateAutoQtRunner
         $write('Syarat             : punya QT + tidak ada order di window 6 bulan');
         $write('Sampling           : dihitung ulang pakai nominal terbaru');
         $write('Diskon QT lama     : dihapus semua');
-        $write('Alur               : build semua → render semua → email semua');
+        $write('Alur               : build semua → render semua → email semua (delay email ' . $emailPauseSeconds . ' detik)');
 
+        $write('=== Mengumpulkan kandidat ===', 'info');
         $eligible = $discovery->fetchEligibleHasQuotationNoRecentOrder(
             $window->orderFrom(),
             $window->orderUntil(),
@@ -81,21 +90,14 @@ class QuotationGenerateAutoQtRunner
         );
         if ($customerFilter !== null) {
             $eligible = $eligible->where('customer_id', $customerFilter)->values();
+            $write('Filter customer    : ' . $customerFilter);
         }
+        $write('Kandidat terkumpul : ' . $eligible->count());
 
         if ($eligible->isEmpty()) {
             $write('Tidak ada kandidat ELIGIBLE untuk diproses.', 'warn');
 
-            return [
-                'success' => true,
-                'processed' => 0,
-                'success_count' => 0,
-                'failed_count' => 0,
-                'test' => $test,
-                'dry_run' => $dryRun,
-                'month' => $window->token(),
-                'logs' => $logs,
-            ];
+            return $this->summaryPayload($window, $test, $dryRun, $logs, 0, 0, 0, 0, 0);
         }
 
         $created = [];
@@ -104,9 +106,16 @@ class QuotationGenerateAutoQtRunner
         $renderFailed = 0;
         $emailFailed = 0;
         $emailSuccess = 0;
+        $emailSkipped = 0;
+        $buildIndex = 0;
+        $renderIndex = 0;
+        $emailIndex = 0;
+        $buildTotal = $eligible->count();
 
-        $write('=== Fase 1/3: build data (' . $eligible->count() . ' QT) ===', 'info');
-        $this->eachPaused($eligible, $batchSize, $itemPauseSeconds, $chunkPauseSeconds, $dryRun, function ($row) use ($processor, $dryRun, $write, &$created, &$createFailed) {
+        $write('=== Fase 1/3 BUILD (' . $buildTotal . ' QT) ===', 'info');
+        $this->eachPaused($eligible, $batchSize, 0, 0, $dryRun, function ($row) use ($processor, $dryRun, $write, &$created, &$createFailed, &$buildIndex, $buildTotal) {
+            $buildIndex++;
+            $prefix = '[BUILD ' . $buildIndex . '/' . $buildTotal . '] ' . $row->customer_id;
             try {
                 $result = $processor->createFromCandidate($row, $dryRun);
                 $created[] = [
@@ -115,67 +124,119 @@ class QuotationGenerateAutoQtRunner
                     'new_quotation_id' => $result['new_quotation_id'] ?? null,
                     'new_no_document' => $result['new_no_document'] ?? null,
                 ];
-                $write('[BUILD OK] ' . $row->customer_id . ' | ' . $result['message']);
+                $write($prefix . ' OK | ' . $result['message']);
             } catch (\Throwable $e) {
                 $createFailed++;
-                $write('[BUILD FAIL] ' . $row->customer_id . ' | ' . $e->getMessage(), 'error');
+                $write($prefix . ' ERROR | ' . $e->getMessage(), 'error');
             }
         });
+        $write('Build selesai      : ' . count($created) . ' OK, ' . $createFailed . ' error', 'info');
 
-        $write('=== Fase 2/3: render PDF (' . count($created) . ' QT) ===', 'info');
-        $this->eachPaused($created, $batchSize, $itemPauseSeconds, $chunkPauseSeconds, $dryRun, function ($item) use ($processor, $dryRun, $write, &$rendered, &$renderFailed) {
+        $renderTotal = count($created);
+        $write('=== Fase 2/3 RENDER (' . $renderTotal . ' QT) ===', 'info');
+        $this->eachPaused($created, $batchSize, 0, 0, $dryRun, function ($item) use ($processor, $dryRun, $write, &$rendered, &$renderFailed, &$renderIndex, $renderTotal) {
+            $renderIndex++;
+            $label = $item['new_no_document'] ?: $item['customer_id'];
+            $prefix = '[RENDER ' . $renderIndex . '/' . $renderTotal . '] ' . $label;
             try {
                 if ($dryRun) {
                     $rendered[] = $item;
-                    $write('[RENDER OK] ' . $item['customer_id'] . ' | DRY RUN: render PDF + link dari source ' . $item['source_quotation_id']);
+                    $write($prefix . ' OK | DRY RUN: render PDF + link dari source ' . $item['source_quotation_id']);
                     return;
                 }
 
                 $quotation = QuotationNonKontrak::findOrFail((int) $item['new_quotation_id']);
                 $result = $processor->renderQuotation($quotation, false, (int) $item['source_quotation_id']);
                 $rendered[] = $item;
-                $write('[RENDER OK] ' . $item['customer_id'] . ' | ' . $result['message']);
+                $write($prefix . ' OK | ' . $result['message']);
             } catch (\Throwable $e) {
                 $renderFailed++;
-                $write('[RENDER FAIL] ' . $item['customer_id'] . ' | ' . $e->getMessage(), 'error');
+                $write($prefix . ' ERROR | ' . $e->getMessage(), 'error');
             }
         });
+        $write('Render selesai     : ' . count($rendered) . ' OK, ' . $renderFailed . ' error', 'info');
 
-        $write('=== Fase 3/3: email (' . count($rendered) . ' QT) ===', 'info');
-        $this->eachPaused($rendered, $batchSize, $itemPauseSeconds, $chunkPauseSeconds, $dryRun, function ($item) use ($processor, $dryRun, $write, &$emailSuccess, &$emailFailed) {
+        $emailTotal = count($rendered);
+        $write('=== Fase 3/3 EMAIL (' . $emailTotal . ' QT, delay ' . $emailPauseSeconds . ' detik) ===', 'info');
+        $this->eachPaused($rendered, $batchSize, $emailPauseSeconds, $chunkPauseSeconds, $dryRun, function ($item) use ($processor, $dryRun, $write, &$emailSuccess, &$emailFailed, &$emailSkipped, &$emailIndex, $emailTotal) {
+            $emailIndex++;
+            $label = $item['new_no_document'] ?: $item['customer_id'];
+            $prefix = '[EMAIL ' . $emailIndex . '/' . $emailTotal . '] ' . $label;
             try {
                 if ($dryRun) {
                     $emailSuccess++;
-                    $write('[EMAIL OK] ' . $item['customer_id'] . ' | DRY RUN: email setelah semua PDF siap');
+                    $write($prefix . ' OK | DRY RUN: email setelah semua PDF siap');
                     return;
                 }
 
                 $quotation = QuotationNonKontrak::findOrFail((int) $item['new_quotation_id']);
                 $result = $processor->emailQuotation($quotation, false, (int) $item['source_quotation_id']);
+                if (!empty($result['skipped'])) {
+                    $emailSkipped++;
+                    $write($prefix . ' SKIP | ' . $result['message'], 'warn');
+                    return;
+                }
                 $emailSuccess++;
-                $write('[EMAIL OK] ' . $item['customer_id'] . ' | ' . $result['message']);
+                $write($prefix . ' OK | ' . $result['message']);
             } catch (\Throwable $e) {
                 $emailFailed++;
-                $write('[EMAIL FAIL] ' . $item['customer_id'] . ' | ' . $e->getMessage(), 'error');
+                $write($prefix . ' ERROR | ' . $e->getMessage(), 'error');
             }
         });
-
-        $failed = $createFailed + $renderFailed + $emailFailed;
-        $success = $emailSuccess;
         $write(
-            'Processed : ' . $eligible->count()
-            . ', built : ' . count($created)
-            . ', rendered : ' . count($rendered)
-            . ', emailed : ' . $emailSuccess
-            . ', failed : ' . $failed
-            . ' (build ' . $createFailed . ' / render ' . $renderFailed . ' / email ' . $emailFailed . ')',
+            'Email selesai      : ' . $emailSuccess . ' terkirim, ' . $emailSkipped . ' dilewati, ' . $emailFailed . ' error',
             'info'
         );
 
+        $failed = $createFailed + $renderFailed + $emailFailed;
+        $write('=== Ringkasan ===', 'info');
+        $write('Kandidat : ' . $eligible->count());
+        $write('Built    : ' . count($created));
+        $write('Rendered : ' . count($rendered));
+        $write('Emailed  : ' . $emailSuccess . ($emailSkipped > 0 ? ' (dilewati ' . $emailSkipped . ')' : ''));
+        $write(
+            'Error    : ' . $failed
+            . ' (build ' . $createFailed . ' / render ' . $renderFailed . ' / email ' . $emailFailed . ')'
+            . ($failed > 0 ? ' — proses tetap dilanjutkan' : ''),
+            $failed > 0 ? 'warn' : 'info'
+        );
+
+        return $this->summaryPayload(
+            $window,
+            $test,
+            $dryRun,
+            $logs,
+            $eligible->count(),
+            count($created),
+            count($rendered),
+            $emailSuccess,
+            $failed
+        );
+    }
+
+    /**
+     * Error per item tidak menggagalkan job — success tetap true.
+     *
+     * @return array{success:bool,processed:int,built:int,rendered:int,emailed:int,success_count:int,failed_count:int,test:bool,dry_run:bool,month:string,logs:array<int,string>}
+     */
+    private function summaryPayload(
+        QuotationAutoQtMonth $window,
+        bool $test,
+        bool $dryRun,
+        array $logs,
+        int $processed,
+        int $built,
+        int $rendered,
+        int $emailed,
+        int $failed
+    ): array {
         return [
-            'success' => $failed === 0,
-            'processed' => $eligible->count(),
-            'success_count' => $success,
+            'success' => true,
+            'processed' => $processed,
+            'built' => $built,
+            'rendered' => $rendered,
+            'emailed' => $emailed,
+            'success_count' => $emailed,
             'failed_count' => $failed,
             'test' => $test,
             'dry_run' => $dryRun,

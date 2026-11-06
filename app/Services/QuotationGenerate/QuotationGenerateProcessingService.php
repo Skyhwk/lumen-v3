@@ -128,11 +128,14 @@ class QuotationGenerateProcessingService
         $emailedBy = (string) config('quotation_auto.generate.emailed_by');
 
         if (!config('quotation_auto.generate.send_email')) {
-            return $this->resultPayload(
+            $result = $this->resultPayload(
                 $quotation,
                 $sourceQuotationId,
                 'Penawaran ' . $quotation->no_document . ' email dilewati — quotation_auto.generate.send_email=false'
             );
+            $result['skipped'] = true;
+
+            return $result;
         }
 
         if ($dryRun) {
