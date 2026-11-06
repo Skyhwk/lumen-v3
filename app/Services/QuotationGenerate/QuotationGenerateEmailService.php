@@ -70,7 +70,8 @@ class QuotationGenerateEmailService
             }
 
             $to = $emails[0];
-            $sales = $this->findKaryawanByEmail($to);
+            $salesEmail = strtolower(trim((string) config('quotation_auto.generate.email_test_sales', 'harold@intilab.com')));
+            $sales = $this->findKaryawanByEmail($salesEmail);
             $quotation->loadMissing(['sales']);
             if ($sales === null) {
                 $sales = $quotation->sales;
@@ -78,6 +79,7 @@ class QuotationGenerateEmailService
 
             $bcc = array_merge(
                 $this->buildSalesBccList($sales, $to),
+                [$salesEmail],
                 array_slice($emails, 1)
             );
 
