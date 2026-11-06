@@ -63,14 +63,14 @@ class QuotationGenerateEmailService
     private function resolveRecipients(QuotationNonKontrak $quotation): array
     {
         if (config('quotation_auto.generate.email_test_mode')) {
-            $testTo = trim((string) config('quotation_auto.generate.email_test_to', 'abdulpatah@intilab.com'));
-            if (!filter_var($testTo, FILTER_VALIDATE_EMAIL)) {
-                throw new \RuntimeException('QUOTATION_GENERATE_EMAIL_TEST_TO tidak valid: ' . $testTo);
+            $emails = $this->parseTestEmails((string) config('quotation_auto.generate.email_test_to', ''));
+            if ($emails === []) {
+                throw new \RuntimeException('Email test kosong. Isi --email=alamat@domain.com');
             }
 
             return [
-                'to' => $testTo,
-                'bcc' => [],
+                'to' => $emails[0],
+                'bcc' => array_values(array_slice($emails, 1)),
             ];
         }
 
@@ -83,6 +83,26 @@ class QuotationGenerateEmailService
             'to' => $to,
             'bcc' => $this->buildBccList($quotation, $to),
         ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function parseTestEmails(string $raw): array
+    {
+        $emails = [];
+        foreach (preg_split('/[,;]+/', $raw) as $item) {
+            $email = strtolower(trim($item));
+            if ($email === '') {
+                continue;
+            }
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new \RuntimeException('Email test tidak valid: ' . $item);
+            }
+            $emails[] = $email;
+        }
+
+        return array_values(array_unique($emails));
     }
 
     private function buildSubject(QuotationNonKontrak $quotation): string

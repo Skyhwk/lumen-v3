@@ -15,5 +15,6 @@ class DatabaseSeeder extends Seeder
     {
         // $this->call('UsersTableSeeder');
         // $this->call(WaMessageTemplateSeeder::class);
+        // $this->call(PromoPengujianAutoJanToJuneSeeder::class);
     }
 }
