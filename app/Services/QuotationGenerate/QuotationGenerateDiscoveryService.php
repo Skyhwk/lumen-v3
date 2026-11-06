@@ -113,6 +113,7 @@ INNER JOIN master_pelanggan mp
     AND mp.is_active = 1
 WHERE r.rn = 1
   AND (r.kode_promo IS NULL OR TRIM(r.kode_promo) = '')
+  {$this->sourceRequireDataPendukungSql('r')}
   AND NOT EXISTS (
       SELECT 1
       FROM order_header oh
@@ -359,6 +360,23 @@ SQL;
         return "AND ({$alias}.kode_promo IS NULL OR TRIM({$alias}.kode_promo) = '' OR ({$skipSql}))";
     }
 
+    /**
+     * QT terakhir kosong / {} / [] dilewati. Tidak mundur ke QT sebelumnya.
+     */
+    private function sourceRequireDataPendukungSql(string $alias): string
+    {
+        if (!config('quotation_auto.generate.require_source_data_pendukung')) {
+            return '';
+        }
+
+        return <<<SQL
+AND {$alias}.data_pendukung_sampling IS NOT NULL
+AND TRIM({$alias}.data_pendukung_sampling) <> ''
+AND JSON_VALID({$alias}.data_pendukung_sampling)
+AND JSON_LENGTH({$alias}.data_pendukung_sampling) > 0
+SQL;
+    }
+
     private function quotationRankedSubquerySql(): string
     {
         return $this->quotationLatestSubquerySql(true);
@@ -377,6 +395,7 @@ SELECT
     rq.no_document AS quotation_no,
     rq.created_at AS quotation_created_at,
     rq.kode_promo AS kode_promo,
+    rq.data_pendukung_sampling AS data_pendukung_sampling,
     ROW_NUMBER() OVER (
         PARTITION BY rq.pelanggan_ID
         ORDER BY rq.created_at DESC, rq.id DESC

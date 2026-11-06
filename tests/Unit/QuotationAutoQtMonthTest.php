@@ -36,15 +36,16 @@ class QuotationAutoQtMonthTest extends TestCase
     {
         $window = QuotationAutoQtMonth::parse('12-2026');
 
-        $this->assertSame('Auto_Desember-2026', $window->promoCode());
+        $this->assertSame('Auto_Desember_2026', $window->promoCode());
         $this->assertSame('Auto Desember 2026', $window->promoName());
         $this->assertLessThanOrEqual(20, strlen($window->promoCode()));
-        $this->assertSame('Auto_September-2026', QuotationAutoQtMonth::parse('09-2026')->promoCode());
+        $this->assertSame('Auto_September_2026', QuotationAutoQtMonth::parse('09-2026')->promoCode());
+        $this->assertSame('Auto_November_2026', QuotationAutoQtMonth::parse('11-2026')->promoCode());
     }
 
     public function testPromoCodeFallsBackToShortMonthWhenOverTwentyChars()
     {
-        $this->assertSame('Auto_Sep-202600', QuotationAutoQtMonth::formatPromoCode('September', 'Sep', 202600));
-        $this->assertSame('Auto_Des-9999999', QuotationAutoQtMonth::formatPromoCode('Desember', 'Des', 9999999));
+        $this->assertSame('Auto_Sep_202600', QuotationAutoQtMonth::formatPromoCode('September', 'Sep', 202600));
+        $this->assertSame('Auto_Des_9999999', QuotationAutoQtMonth::formatPromoCode('Desember', 'Des', 9999999));
     }
 }

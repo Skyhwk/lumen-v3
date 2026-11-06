@@ -82,9 +82,10 @@ class QuotationGenerateAutoQtRunner
         $write('Send email         : ' . ($sendEmail ? 'ON' : 'OFF'));
         if ($sendEmail && $emailTestMode) {
             $testEmails = $this->splitEmails((string) config('quotation_auto.generate.email_test_to'));
+            $testSales = (string) config('quotation_auto.generate.email_test_sales', 'harold@intilab.com');
             $write(
                 'Email test mode    : ON → To ' . ($testEmails[0] ?? '-')
-                . ' | BCC sales@intilab.com + sales PJ + atasan grade SUPERVISOR (manager tidak ikut)'
+                . ' | BCC sales@intilab.com + ' . $testSales . ' (anggap sales PJ) + atasan SUPERVISOR-nya (manager tidak ikut)'
             );
         } elseif (!$sendEmail) {
             $write('Email customer     : tidak dikirim (send_email=false)');
@@ -94,6 +95,7 @@ class QuotationGenerateAutoQtRunner
         }
         $write('Window order skip  : ' . $window->orderFrom()->toDateTimeString() . ' s/d ' . $window->orderUntil()->copy()->subSecond()->toDateTimeString());
         $write('Syarat             : punya QT + tidak ada order di window 6 bulan');
+        $write('Data pendukung     : QT terakhir wajib ada; kosong/{} langsung skip');
         $write('Sampling           : dihitung ulang pakai nominal terbaru');
         $write('Diskon QT lama     : dihapus semua');
         $write('Alur               : build semua → render semua → email semua (delay email ' . $emailPauseSeconds . ' detik)');
@@ -122,6 +124,7 @@ class QuotationGenerateAutoQtRunner
         $created = [];
         $rendered = [];
         $createFailed = 0;
+        $createSkipped = 0;
         $renderFailed = 0;
         $emailFailed = 0;
         $emailSuccess = 0;
@@ -132,7 +135,7 @@ class QuotationGenerateAutoQtRunner
         $buildTotal = $eligible->count();
 
         $write('=== Fase 1/3 BUILD (' . $buildTotal . ' QT) ===', 'info');
-        $this->eachPaused($eligible, $batchSize, 0, 0, $dryRun, function ($row) use ($processor, $dryRun, $write, &$created, &$createFailed, &$buildIndex, $buildTotal) {
+        $this->eachPaused($eligible, $batchSize, 0, 0, $dryRun, function ($row) use ($processor, $dryRun, $write, &$created, &$createFailed, &$createSkipped, &$buildIndex, $buildTotal) {
             $buildIndex++;
             $prefix = '[BUILD ' . $buildIndex . '/' . $buildTotal . '] ' . $row->customer_id;
             try {
@@ -144,12 +147,18 @@ class QuotationGenerateAutoQtRunner
                     'new_no_document' => $result['new_no_document'] ?? null,
                 ];
                 $write($prefix . ' OK | ' . $result['message']);
+            } catch (QuotationGenerateSkipException $e) {
+                $createSkipped++;
+                $write($prefix . ' SKIP | ' . $e->getMessage(), 'warn');
             } catch (\Throwable $e) {
                 $createFailed++;
                 $write($prefix . ' ERROR | ' . $e->getMessage(), 'error');
             }
         });
-        $write('Build selesai      : ' . count($created) . ' OK, ' . $createFailed . ' error', 'info');
+        $write(
+            'Build selesai      : ' . count($created) . ' OK, ' . $createSkipped . ' skip, ' . $createFailed . ' error',
+            'info'
+        );
 
         $renderTotal = count($created);
         $write('=== Fase 2/3 RENDER (' . $renderTotal . ' QT) ===', 'info');
