@@ -30,7 +30,8 @@ class GenerateAutoQtCommand extends Command
                             {--item-pause= : Jeda antar email detik (default 1)}
                             {--chunk-pause= : Jeda antar chunk detik (default 0)}
                             {--dry-run : Hanya simulasi, tanpa copy/generate/email}
-                            {--test : Tes 2 QT, email hanya ke harold@intilab.com (tanpa BCC)}
+                            {--test : Mode tes: email tidak ke customer}
+                            {--email= : Email test, bisa koma. Contoh: harold@intilab.com,atasan@intilab.com}
                             {--direct : Langsung PHP, skip Python}
                             {--customer= : Proses satu id_pelanggan saja}';
 
@@ -57,9 +58,12 @@ class GenerateAutoQtCommand extends Command
             return self::FAILURE;
         }
 
+        $email = trim((string) ($this->option('email') ?? ''));
+        $hasLimit = $this->option('limit') !== null && $this->option('limit') !== '';
         $needsLocalOptions = $this->option('dry-run')
             || ($this->option('customer') !== null && $this->option('customer') !== '')
-            || ($this->option('limit') !== null && !$this->option('test'));
+            || $hasLimit
+            || $email !== '';
         $usePython = !$this->option('direct') && !$needsLocalOptions;
 
         if ($usePython) {
@@ -67,7 +71,7 @@ class GenerateAutoQtCommand extends Command
         }
 
         if ($needsLocalOptions && !$this->option('direct')) {
-            $this->line('Opsi dry-run / customer / limit memakai PHP langsung.');
+            $this->line('Opsi dry-run / customer / limit / email memakai PHP langsung.');
         }
 
         return $this->runDirect($month);
@@ -90,7 +94,12 @@ class GenerateAutoQtCommand extends Command
 
     private function dispatchViaPython(string $month, bool $test): int
     {
-        QuotationAutoQtJobState::write($month, $test);
+        QuotationAutoQtJobState::write($month, $test, [
+            'email' => trim((string) ($this->option('email') ?? '')),
+            'limit' => $this->option('limit') !== null && $this->option('limit') !== ''
+                ? (int) $this->option('limit')
+                : null,
+        ]);
 
         $url = (string) config('quotation_auto.python_auto_qt.invoke_url', config('quotation_auto.python.invoke_url'));
         $timeout = (int) config('quotation_auto.python_auto_qt.invoke_timeout_seconds', config('quotation_auto.python.invoke_timeout_seconds', 1800));
@@ -120,7 +129,7 @@ class GenerateAutoQtCommand extends Command
             $response = $http->post($url, $payload);
         } catch (\Throwable $exception) {
             $this->error('Gagal memanggil Python: ' . $exception->getMessage());
-            $this->line('Coba lokal: php artisan generateAutoQt --' . $month . ' --direct' . ($test ? ' --test' : ''));
+            $this->line('Coba lokal: php artisan generateAutoQt --' . $month . ' --direct' . ($test ? ' --test' : '') . ' --email=harold@intilab.com');
 
             return self::FAILURE;
         }
@@ -159,7 +168,10 @@ class GenerateAutoQtCommand extends Command
             'month' => $month,
             'test' => (bool) $this->option('test'),
             'dry_run' => (bool) $this->option('dry-run'),
-            'limit' => $this->option('limit') !== null ? (int) $this->option('limit') : null,
+            'email' => trim((string) ($this->option('email') ?? '')) ?: null,
+            'limit' => $this->option('limit') !== null && $this->option('limit') !== ''
+                ? (int) $this->option('limit')
+                : null,
             'customer' => $this->option('customer'),
             'batch' => $this->option('batch') !== null ? (int) $this->option('batch') : null,
             'item_pause' => $this->option('item-pause') !== null && $this->option('item-pause') !== ''

@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
 class QuotationGenerateAutoQtRunner
 {
     /**
-     * @param  array{month?:string,test?:bool,dry_run?:bool,limit?:int|null,customer?:string|null,batch?:int|null,item_pause?:int|null,chunk_pause?:int|null}  $options
+     * @param  array{month?:string,test?:bool,dry_run?:bool,limit?:int|null,email?:string|null,customer?:string|null,batch?:int|null,item_pause?:int|null,chunk_pause?:int|null}  $options
      * @param  callable|null  $output
      * @return array{success:bool,processed:int,built:int,rendered:int,emailed:int,success_count:int,failed_count:int,test:bool,dry_run:bool,month:string,logs:array<int,string>}
      */
@@ -26,16 +26,24 @@ class QuotationGenerateAutoQtRunner
         $test = !empty($options['test']);
         $dryRun = !empty($options['dry_run']);
         $limit = array_key_exists('limit', $options) && $options['limit'] !== null ? (int) $options['limit'] : null;
+        $emailTo = trim((string) ($options['email'] ?? ''));
+        if ($emailTo !== '') {
+            $test = true;
+        }
         if ($test && $limit === null) {
             $limit = 2;
         }
 
         QuotationGenerateCampaign::apply('auto_qt');
         if ($test) {
+            if ($emailTo === '') {
+                $emailTo = 'harold@intilab.com';
+            }
+            $this->assertTestEmails($emailTo);
             config([
                 'quotation_auto.generate.send_email' => true,
                 'quotation_auto.generate.email_test_mode' => true,
-                'quotation_auto.generate.email_test_to' => 'harold@intilab.com',
+                'quotation_auto.generate.email_test_to' => $emailTo,
             ]);
         }
 
@@ -243,6 +251,24 @@ class QuotationGenerateAutoQtRunner
             'month' => $window->token(),
             'logs' => $logs,
         ];
+    }
+
+    private function assertTestEmails(string $raw): void
+    {
+        $emails = [];
+        foreach (preg_split('/[,;]+/', $raw) as $item) {
+            $email = strtolower(trim($item));
+            if ($email === '') {
+                continue;
+            }
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new \InvalidArgumentException('Email test tidak valid: ' . $item);
+            }
+            $emails[] = $email;
+        }
+        if ($emails === []) {
+            throw new \InvalidArgumentException('Email test wajib. Contoh: --email=harold@intilab.com,atasan@intilab.com');
+        }
     }
 
     private function ensurePromoPengujian(QuotationAutoQtMonth $window, $write): void

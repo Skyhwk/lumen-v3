@@ -19,7 +19,7 @@ class QuotationGenerateAutoQtController extends Controller
     }
 
     /**
-     * Mode tes: 2 QT, email hanya ke harold@intilab.com.
+     * Mode tes: limit kecil, email ke --email (default harold@intilab.com).
      */
     public function runTest(Request $request)
     {
@@ -35,6 +35,8 @@ class QuotationGenerateAutoQtController extends Controller
             $result = (new QuotationGenerateAutoQtRunner())->run([
                 'month' => $job['month'],
                 'test' => $test || !empty($job['test']),
+                'email' => $job['email'] ?? null,
+                'limit' => $job['limit'] ?? null,
             ]);
 
             return response()->json([

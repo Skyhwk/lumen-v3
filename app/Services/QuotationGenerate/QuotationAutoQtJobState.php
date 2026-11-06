@@ -9,7 +9,7 @@ class QuotationAutoQtJobState
         return storage_path('app/quotation_auto_qt_job.json');
     }
 
-    public static function write(string $month, bool $test = false): void
+    public static function write(string $month, bool $test = false, array $extra = []): void
     {
         $dir = dirname(self::path());
         if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
@@ -19,6 +19,8 @@ class QuotationAutoQtJobState
         $ok = file_put_contents(self::path(), json_encode([
             'month' => $month,
             'test' => $test,
+            'email' => trim((string) ($extra['email'] ?? '')) ?: null,
+            'limit' => array_key_exists('limit', $extra) && $extra['limit'] !== null ? (int) $extra['limit'] : null,
             'written_at' => date('c'),
         ], JSON_UNESCAPED_UNICODE));
 
@@ -28,7 +30,7 @@ class QuotationAutoQtJobState
     }
 
     /**
-     * @return array{month:string,test:bool}
+     * @return array{month:string,test:bool,email:?string,limit:?int}
      */
     public static function read(): array
     {
@@ -45,6 +47,12 @@ class QuotationAutoQtJobState
         return [
             'month' => (string) $payload['month'],
             'test' => !empty($payload['test']),
+            'email' => isset($payload['email']) && trim((string) $payload['email']) !== ''
+                ? trim((string) $payload['email'])
+                : null,
+            'limit' => isset($payload['limit']) && $payload['limit'] !== null && $payload['limit'] !== ''
+                ? (int) $payload['limit']
+                : null,
         ];
     }
 
