@@ -50,12 +50,13 @@ class QuotationGenerateAutoQtRunner
         $logs = [];
         $write = function ($line, $level = 'line') use ($output, &$logs) {
             $logs[] = $line;
+            $channel = Log::channel('auto_qt');
             if ($level === 'error') {
-                Log::error('[auto-qt] ' . $line);
+                $channel->error($line);
             } elseif ($level === 'warn') {
-                Log::warning('[auto-qt] ' . $line);
+                $channel->warning($line);
             } else {
-                Log::info('[auto-qt] ' . $line);
+                $channel->info($line);
             }
             if (is_callable($output)) {
                 $output($line, $level);

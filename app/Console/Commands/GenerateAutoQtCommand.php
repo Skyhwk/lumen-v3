@@ -58,12 +58,8 @@ class GenerateAutoQtCommand extends Command
             return self::FAILURE;
         }
 
-        $email = trim((string) ($this->option('email') ?? ''));
-        $hasLimit = $this->option('limit') !== null && $this->option('limit') !== '';
         $needsLocalOptions = $this->option('dry-run')
-            || ($this->option('customer') !== null && $this->option('customer') !== '')
-            || $hasLimit
-            || $email !== '';
+            || ($this->option('customer') !== null && $this->option('customer') !== '');
         $usePython = !$this->option('direct') && !$needsLocalOptions;
 
         if ($usePython) {
@@ -71,7 +67,7 @@ class GenerateAutoQtCommand extends Command
         }
 
         if ($needsLocalOptions && !$this->option('direct')) {
-            $this->line('Opsi dry-run / customer / limit / email memakai PHP langsung.');
+            $this->line('Opsi dry-run / customer memakai PHP langsung.');
         }
 
         return $this->runDirect($month);
