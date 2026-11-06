@@ -153,7 +153,13 @@ class DraftGelombangMikroController extends Controller
     public function handleMetodeParameter(Request $request)
     {
         $methode_parameter = Parameter::where('is_active', true)
-            ->where('nama_kategori', 'Udara')->pluck('method')->toArray();
+            ->where('nama_kategori', 'Udara')
+            ->whereNotNull('method')
+            ->where('method', '!=', '')
+            ->pluck('method')
+            ->unique()
+            ->values()
+            ->toArray();
 
         return response()->json([
             'status'  => true,
@@ -265,6 +271,7 @@ class DraftGelombangMikroController extends Controller
                     $parameterLab      = $parameterRow->nama_lab ?? null;
                     $parameterRegulasi = $parameterRow->nama_regulasi ?? null;
                     $parameterLhp      = $parameterRow->nama_lhp ?? null;
+                    $parameterMethod   = $parameterRow->method ?? null;
                     $ws                = $val->ws_udara;
                     $hasil             = $ws ? $ws->toArray() : [];
                     $dataLapangan      = DataLapanganMedanLM::where('no_sampel', $val->no_sampel)->where('is_approve', true)->first();
@@ -323,7 +330,11 @@ class DraftGelombangMikroController extends Controller
                         'nama_lab'             => $parameterLab ?? $paramName,
                         'bakumutu'             => $bakumutu ? $bakumutu->baku_mutu : '-',
                         'satuan'               => (! empty($bakumutu->satuan)) ? $bakumutu->satuan : '-',
-                        'methode'              => (! empty($bakumutu->method)) ? $bakumutu->method : (! empty($val->method) ? $val->method : '-'),
+                        'methode'              => (! empty($bakumutu->method))
+                            ? $bakumutu->method
+                            : (! empty($val->method)
+                                ? $val->method
+                                : (! empty($parameterMethod) ? $parameterMethod : '-')),
                         'hasil_uji'            => $hasil_uji ?? '-',
                         'medan_magnet'         => $medan_magnet ?? '-',
                         'rata_listrik'         => $rata_listrik ?? '-',
@@ -355,6 +366,15 @@ class DraftGelombangMikroController extends Controller
                     $magnet  = $items->first(fn($i) => $isMagnetParam($i['id_parameter'] ?? null, $i['nama_lab'] ?? $i['parameter'] ?? ''));
                     $isStatis = $magnet && $isStatisParam($magnet['id_parameter'] ?? null, $magnet['nama_lab'] ?? $magnet['parameter'] ?? '');
 
+                    $pickMethode = function ($row, $fallback) {
+                        $method = is_array($row) ? ($row['methode'] ?? null) : null;
+                        if (! empty($method) && $method !== '-') {
+                            return $method;
+                        }
+
+                        return $fallback;
+                    };
+
                     return [
                         [
                             'no_sampel' => $no_sampel,
@@ -362,7 +382,7 @@ class DraftGelombangMikroController extends Controller
                             'hasil_uji' => $power['hasil_uji'] ?? '-',
                             'nama_lab'  => $namaLabPowerDensity,
                             'satuan'    => 'mW/cm²',
-                            'methode'   => 'IKM/ISL/7.2.183 (Electromagnetic Field Meter)',
+                            'methode'   => $pickMethode($power, 'IKM/ISL/7.2.183 (Electromagnetic Field Meter)'),
                             'nab'       => $power['nab'] ?? '-',
                         ],
                         [
@@ -371,7 +391,7 @@ class DraftGelombangMikroController extends Controller
                             'hasil_uji' => $listrik['hasil_uji'] ?? '-',
                             'nama_lab'  => $namaLabMedanListrik,
                             'satuan'    => 'V/m',
-                            'methode'   => 'IKM/ISL/7.2.64 (Elektrometri)',
+                            'methode'   => $pickMethode($listrik, 'IKM/ISL/7.2.64 (Elektrometri)'),
                             'nab'       => $listrik['nab'] ?? '-',
                         ],
                         [
@@ -382,7 +402,7 @@ class DraftGelombangMikroController extends Controller
                             'satuan'    => $isStatis
                                 ? ((! empty($magnet['satuan']) && $magnet['satuan'] !== '-') ? $magnet['satuan'] : 'T')
                                 : 'A/m',
-                            'methode'   => 'IKM/ISL/7.2.62 (Elektrometri)',
+                            'methode'   => $pickMethode($magnet, $isStatis ? ($magnet['methode'] ?? '-') : 'IKM/ISL/7.2.62 (Elektrometri)'),
                             'nab'       => $magnet['nab'] ?? '-',
                         ],
                     ];
