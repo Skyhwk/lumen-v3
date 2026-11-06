@@ -84,4 +84,8 @@ return [
         'run_function' => 'run',
         'test_function' => 'runTest',
     ],
+    'link_tracking' => [
+        'portal_base' => rtrim((string) env('PORTALV4', 'https://portal.intilab.com'), '/'),
+        'portal_redirect_path' => env('QUOTATION_AUTO_PORTAL_REDIRECT_PATH', '/public/auth/redirect'),
+    ],
 ];
