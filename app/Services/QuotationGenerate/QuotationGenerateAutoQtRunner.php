@@ -33,6 +33,11 @@ class QuotationGenerateAutoQtRunner
         if ($test && $limit === null) {
             $limit = 2;
         }
+        $limitCapped = false;
+        if ($test && $limit !== null && $limit > 20) {
+            $limit = 20;
+            $limitCapped = true;
+        }
 
         QuotationGenerateCampaign::apply('auto_qt');
         if ($test) {
@@ -50,14 +55,7 @@ class QuotationGenerateAutoQtRunner
         $logs = [];
         $write = function ($line, $level = 'line') use ($output, &$logs) {
             $logs[] = $line;
-            $channel = Log::channel('auto_qt');
-            if ($level === 'error') {
-                $channel->error($line);
-            } elseif ($level === 'warn') {
-                $channel->warning($line);
-            } else {
-                $channel->info($line);
-            }
+            $this->writeChannel($line, $level);
             if (is_callable($output)) {
                 $output($line, $level);
             }
@@ -83,13 +81,28 @@ class QuotationGenerateAutoQtRunner
         $write('Sales              : master_pelanggan.sales_id, fallback id ' . $fallbackSalesId . ' (Asti Susilawati)');
         $write('Send email         : ' . ($sendEmail ? 'ON' : 'OFF'));
         if ($sendEmail && $emailTestMode) {
-            $write('Email test mode    : ON → To ' . config('quotation_auto.generate.email_test_to') . ', BCC kosong');
+            $testEmails = $this->splitEmails((string) config('quotation_auto.generate.email_test_to'));
+            $testBcc = $this->splitEmails(implode(',', (array) config('quotation_auto.generate.email_test_bcc', ['patah@intilab.com'])));
+            $extraBcc = array_slice($testEmails, 1);
+            $write(
+                'Email test mode    : ON → To ' . ($testEmails[0] ?? '-')
+                . ' | BCC ' . implode(', ', array_values(array_unique(array_merge($testBcc, $extraBcc))))
+                . ' + atasan Patah'
+            );
+        } elseif (!$sendEmail) {
+            $write('Email customer     : tidak dikirim (send_email=false)');
+        } else {
+            $write('Email customer     : ON ke email_pic_order');
+            $write('BCC produksi       : sales@intilab.com + sales PJ + atasan sales PJ');
         }
         $write('Window order skip  : ' . $window->orderFrom()->toDateTimeString() . ' s/d ' . $window->orderUntil()->copy()->subSecond()->toDateTimeString());
         $write('Syarat             : punya QT + tidak ada order di window 6 bulan');
         $write('Sampling           : dihitung ulang pakai nominal terbaru');
         $write('Diskon QT lama     : dihapus semua');
         $write('Alur               : build semua → render semua → email semua (delay email ' . $emailPauseSeconds . ' detik)');
+        if ($limitCapped) {
+            $write('Limit tes dipotong ke 20 supaya tidak kebablasan.', 'warn');
+        }
 
         $write('=== Mengumpulkan kandidat ===', 'info');
         $eligible = $discovery->fetchEligibleHasQuotationNoRecentOrder(
@@ -154,6 +167,9 @@ class QuotationGenerateAutoQtRunner
                     return;
                 }
 
+                if (empty($item['new_quotation_id'])) {
+                    throw new \RuntimeException('QT baru belum punya id, render dilewati');
+                }
                 $quotation = QuotationNonKontrak::findOrFail((int) $item['new_quotation_id']);
                 $result = $processor->renderQuotation($quotation, false, (int) $item['source_quotation_id']);
                 $rendered[] = $item;
@@ -178,6 +194,9 @@ class QuotationGenerateAutoQtRunner
                     return;
                 }
 
+                if (empty($item['new_quotation_id'])) {
+                    throw new \RuntimeException('QT baru belum punya id, email dilewati');
+                }
                 $quotation = QuotationNonKontrak::findOrFail((int) $item['new_quotation_id']);
                 $result = $processor->emailQuotation($quotation, false, (int) $item['source_quotation_id']);
                 if (!empty($result['skipped'])) {
@@ -254,7 +273,33 @@ class QuotationGenerateAutoQtRunner
         ];
     }
 
-    private function assertTestEmails(string $raw): void
+    private function writeChannel(string $line, string $level): void
+    {
+        try {
+            $dir = storage_path('logs/auto_qt');
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
+            $channel = Log::channel('auto_qt');
+            if ($level === 'error') {
+                $channel->error($line);
+            } elseif ($level === 'warn') {
+                $channel->warning($line);
+            } else {
+                $channel->info($line);
+            }
+        } catch (\Throwable $exception) {
+            try {
+                Log::info('[auto-qt] ' . $line);
+            } catch (\Throwable $ignored) {
+            }
+        }
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function splitEmails(string $raw): array
     {
         $emails = [];
         foreach (preg_split('/[,;]+/', $raw) as $item) {
@@ -262,10 +307,19 @@ class QuotationGenerateAutoQtRunner
             if ($email === '') {
                 continue;
             }
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                throw new \InvalidArgumentException('Email test tidak valid: ' . $item);
-            }
             $emails[] = $email;
+        }
+
+        return array_values(array_unique($emails));
+    }
+
+    private function assertTestEmails(string $raw): void
+    {
+        $emails = $this->splitEmails($raw);
+        foreach ($emails as $email) {
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new \InvalidArgumentException('Email test tidak valid: ' . $email);
+            }
         }
         if ($emails === []) {
             throw new \InvalidArgumentException('Email test wajib. Contoh: --email=harold@intilab.com,atasan@intilab.com');

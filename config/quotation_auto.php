@@ -24,9 +24,10 @@ return [
         'default_email_bcc' => ['sales@intilab.com'],
         // Email — nyalakan dengan QUOTATION_GENERATE_SEND_EMAIL=true
         'send_email' => filter_var(env('QUOTATION_GENERATE_SEND_EMAIL', false), FILTER_VALIDATE_BOOLEAN),
-        // Mode uji: To dipaksa ke email_test_to, BCC kosong (auto-generate tidak memakai CC). Produksi: To dari email_pic_order.
+        // Mode uji: To dipaksa ke email_test_to. Produksi: To dari email_pic_order.
         'email_test_mode' => filter_var(env('QUOTATION_GENERATE_EMAIL_TEST_MODE', false), FILTER_VALIDATE_BOOLEAN),
         'email_test_to' => env('QUOTATION_GENERATE_EMAIL_TEST_TO', ''),
+        'email_test_bcc' => array_values(array_filter(array_map('trim', explode(',', (string) env('QUOTATION_GENERATE_EMAIL_TEST_BCC', 'patah@intilab.com'))))),
         // Nama & jabatan di blok signature (hardcode — selaras template email penawaran).
         'signature_display_name' => env('QUOTATION_SIGNATURE_DISPLAY_NAME', 'Aisyah Wulandari'),
         'signature_display_jabatan' => env('QUOTATION_SIGNATURE_DISPLAY_JABATAN', 'Sales Admin Staff'),
