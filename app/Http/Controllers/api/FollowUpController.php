@@ -1056,7 +1056,9 @@ class FollowUpController extends Controller
         }
 
         $hierarchy = app(SalesTeamHierarchyService::class);
-        if (!$this->viewerBelongsToDfusDivision($viewer, $hierarchy)) {
+        $isDfusDivision = $this->viewerBelongsToDfusDivision($viewer, $hierarchy);
+        $isManagerGrade = $this->viewerIsManagerGrade($viewer);
+        if (!$isDfusDivision && !$isManagerGrade) {
             return $this->emptySummaryDfusResponse(
                 $startDate->toDateString(),
                 $endDate->toDateString()
@@ -1105,7 +1107,8 @@ class FollowUpController extends Controller
             }
         }
 
-        $canFilterSales = $hierarchy->viewerCanUseAllOption($viewer)
+        $canFilterSales = $isManagerGrade
+            || $hierarchy->viewerCanUseAllOption($viewer)
             || (
                 !$hierarchy->isSalesStaff($viewer)
                 && $hierarchy->getPool()->has((int) $viewer->id)
@@ -1445,6 +1448,13 @@ class FollowUpController extends Controller
         ], 200);
     }
 
+    private function viewerIsManagerGrade(MasterKaryawan $viewer): bool
+    {
+        $grade = strtoupper(trim((string) ($viewer->grade ?? '')));
+
+        return in_array($grade, ['MANAGER', 'SENIOR MANAGER'], true);
+    }
+
     private function viewerBelongsToDfusDivision(MasterKaryawan $viewer, ?SalesTeamHierarchyService $hierarchy = null): bool
     {
         $hierarchy = $hierarchy ?: app(SalesTeamHierarchyService::class);
@@ -1501,6 +1511,10 @@ class FollowUpController extends Controller
 
     private function canViewSummaryDfusSales(MasterKaryawan $viewer, int $karyawanId): bool
     {
+        if ($this->viewerIsManagerGrade($viewer)) {
+            return true;
+        }
+
         if (!$this->viewerBelongsToDfusDivision($viewer)) {
             return false;
         }
