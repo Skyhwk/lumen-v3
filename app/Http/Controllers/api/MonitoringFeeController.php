@@ -28,15 +28,15 @@ class MonitoringFeeController extends Controller
         return DataTables::of($data)
             ->addColumn('custom_status_info', function ($row) {
                 if ($row->transfer_date !== null) {
-                    return 'DONE';
+                    return 'Paid';
                 }
                 if ($row->is_reject_finance == 1) {
                     return 'Ditolak Finance';
                 }
                 if ($row->is_approve_finance == 1) {
-                    return 'Disetujui Finance';
+                    return 'Menunggu Payment';
                 }
-                return 'Menunggu Finance';
+                return 'Menunggu Approval Finance';
             })
             ->addColumn('jumlah_pengajuan', function ($row) {
                 return (int) ($row->jumlah_pengajuan ?? collect($row->detail_fee)->count());
@@ -46,6 +46,9 @@ class MonitoringFeeController extends Controller
             })
             ->editColumn('total_fee_request', function ($row) use ($isManager) {
                 return $isManager ? $row->total_fee_request : '******';
+            })
+            ->filterColumn('custom_status_info', function ($query, $keyword) {
+                $this->applyCustomStatusFilter($query, $keyword);
             })
             ->filterColumn('tgl_pengajuan', function ($query, $keyword) {
                 $keyword = trim($keyword);
@@ -103,6 +106,10 @@ class MonitoringFeeController extends Controller
         if ($request->filled('created_by')) {
             $keyword = strtolower(trim($request->created_by));
             $query->whereRaw('LOWER(created_by) LIKE ?', ["%{$keyword}%"]);
+        }
+
+        if ($request->filled('custom_status_info')) {
+            $this->applyCustomStatusFilter($query, $request->custom_status_info);
         }
 
         return response()->json([
@@ -163,5 +170,54 @@ class MonitoringFeeController extends Controller
             'success' => true,
             'data' => $data,
         ], 200);
+    }
+
+    private function applyCustomStatusFilter($query, $keyword): void
+    {
+        $keyword = strtolower(trim((string) $keyword));
+        if ($keyword === '') {
+            return;
+        }
+
+        $conditions = [
+            'paid' => function ($q) {
+                $q->whereNotNull('transfer_date');
+            },
+            'ditolak finance' => function ($q) {
+                $q->whereNull('transfer_date')->where('is_reject_finance', 1);
+            },
+            'menunggu payment' => function ($q) {
+                $q->whereNull('transfer_date')
+                    ->where('is_approve_finance', 1)
+                    ->where(function ($inner) {
+                        $inner->where('is_reject_finance', 0)->orWhereNull('is_reject_finance');
+                    });
+            },
+            'menunggu approval finance' => function ($q) {
+                $q->whereNull('transfer_date')
+                    ->where(function ($inner) {
+                        $inner->where('is_approve_finance', 0)->orWhereNull('is_approve_finance');
+                    })
+                    ->where(function ($inner) {
+                        $inner->where('is_reject_finance', 0)->orWhereNull('is_reject_finance');
+                    });
+            },
+        ];
+
+        $query->where(function ($outer) use ($keyword, $conditions) {
+            $matched = false;
+            foreach ($conditions as $label => $apply) {
+                if (strpos($label, $keyword) !== false) {
+                    $outer->orWhere(function ($inner) use ($apply) {
+                        $apply($inner);
+                    });
+                    $matched = true;
+                }
+            }
+
+            if (!$matched) {
+                $outer->whereRaw('1 = 0');
+            }
+        });
     }
 }
