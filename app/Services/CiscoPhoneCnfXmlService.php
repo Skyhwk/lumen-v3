@@ -41,7 +41,8 @@ class CiscoPhoneCnfXmlService
             'date_template' => 'D/M/Y',
             'time_zone' => 'SE Asia Standard Time',
             'ntp_servers' => [
-                ['name' => '0.id.pool.ntp.org', 'ntp_mode' => 'unicast'],
+                ['name' => '0.id.pool.ntp.org', 'ntp_mode' => 'unicast', 'priority' => 1],
+                ['name' => '1.id.pool.ntp.org', 'ntp_mode' => 'unicast', 'priority' => 2],
             ],
             'phone_password' => '',
             'background_image_access' => false,
@@ -154,6 +155,10 @@ class CiscoPhoneCnfXmlService
 
         $merged['preferred_codec'] = self::normalizePreferredCodec($merged['preferred_codec'] ?? 'g711ulaw');
         $merged['enable_vad'] = filter_var($merged['enable_vad'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $merged['date_template'] = self::normalizeDateTemplate($merged['date_template'] ?? 'D/M/Y');
+        $merged['time_zone'] = self::normalizeTimeZone($merged['time_zone'] ?? 'SE Asia Standard Time');
+        $merged['ntp_servers'] = self::normalizeNtpServers($merged['ntp_servers'] ?? []);
+        $merged = self::applyAutoAudioDefaults($merged);
 
         // CP-3905 / CP3905V01 sering gagal register jika pakai TCP — defaultkan UDP untuk model basic
         if (self::isBasicPhoneModel($merged['phone_model'])) {
@@ -170,6 +175,100 @@ class CiscoPhoneCnfXmlService
         }
 
         return $merged;
+    }
+
+    /**
+     * Default audio untuk UI wizard (field tidak ada di 54db tapi dikirim front-end saat ini).
+     */
+    public static function applyAutoAudioDefaults(array $config): array
+    {
+        $defaults = [
+            'enable_vad' => false,
+            'g711ulaw_codec_support' => 1,
+            'g711alaw_codec_support' => 0,
+            'g722_codec_support' => 0,
+            'g729_codec_support' => 0,
+            'dtmf_avt_payload' => 101,
+            'dtmf_db_level' => 3,
+            'dtmf_out_of_band' => 'avt',
+        ];
+
+        foreach ($defaults as $key => $value) {
+            if (!array_key_exists($key, $config)) {
+                $config[$key] = $value;
+            }
+        }
+
+        return $config;
+    }
+
+    public static function normalizeDateTemplate(string $template): string
+    {
+        $template = trim($template);
+        $allowed = ['D/M/Y', 'M/D/Y', 'Y-M-D', 'D.M.Y', 'D/M/YA', 'D/M/YY'];
+
+        return in_array($template, $allowed, true) ? $template : 'D/M/Y';
+    }
+
+    /**
+     * Zona waktu Windows-style untuk Cisco (WIB = SE Asia Standard Time, UTC+7).
+     */
+    public static function normalizeTimeZone(string $zone): string
+    {
+        $zone = trim($zone);
+        $aliases = [
+            'WIB' => 'SE Asia Standard Time',
+            'WITA' => 'Tokyo Standard Time',
+            'WIT' => 'Tokyo Standard Time',
+            'Asia/Jakarta' => 'SE Asia Standard Time',
+            'Asia/Singapore' => 'Singapore Standard Time',
+            'GMT+7' => 'SE Asia Standard Time',
+            'UTC+7' => 'SE Asia Standard Time',
+        ];
+
+        if (isset($aliases[$zone])) {
+            return $aliases[$zone];
+        }
+
+        return $zone !== '' ? $zone : 'SE Asia Standard Time';
+    }
+
+    public static function normalizeNtpMode(string $mode): string
+    {
+        $mode = strtolower(trim($mode));
+
+        $map = [
+            'unicast' => 'Unicast',
+            'anycast' => 'Anycast',
+            'multicast' => 'Multicast',
+            'directntp' => 'DirectNTP',
+        ];
+
+        return $map[$mode] ?? 'Unicast';
+    }
+
+    public static function normalizeNtpServers(array $servers): array
+    {
+        $normalized = [];
+        $priority = 1;
+
+        foreach ($servers as $ntp) {
+            if (!is_array($ntp) || empty($ntp['name'])) {
+                continue;
+            }
+            $normalized[] = [
+                'name' => trim($ntp['name']),
+                'ntp_mode' => $ntp['ntp_mode'] ?? 'unicast',
+                'priority' => (int) ($ntp['priority'] ?? $priority),
+            ];
+            $priority++;
+        }
+
+        if ($normalized === []) {
+            return self::defaultConfig()['ntp_servers'];
+        }
+
+        return $normalized;
     }
 
     /**
@@ -591,24 +690,27 @@ class CiscoPhoneCnfXmlService
         $callManagerGroup->appendChild($members);
         $devicePool->appendChild($callManagerGroup);
 
-        $dateTime = $doc->createElement('dateTime');
+        // Cisco SIP: dateTimeSetting langsung di devicePool (bukan wrapper <dateTime>)
         $dateTimeSetting = $doc->createElement('dateTimeSetting');
         $this->appendTextNode($doc, $dateTimeSetting, 'dateTemplate', $config['date_template'] ?? 'D/M/Y');
         $this->appendTextNode($doc, $dateTimeSetting, 'timeZone', $config['time_zone'] ?? 'SE Asia Standard Time');
 
         $ntps = $doc->createElement('ntps');
-        foreach ($config['ntp_servers'] ?? [] as $ntp) {
+        foreach ($config['ntp_servers'] ?? [] as $index => $ntp) {
             if (empty($ntp['name'])) {
                 continue;
             }
             $ntpEl = $doc->createElement('ntp');
-            $this->appendTextNode($doc, $ntpEl, 'name', $ntp['name']);
-            $this->appendTextNode($doc, $ntpEl, 'ntpMode', $ntp['ntp_mode'] ?? 'unicast');
+            $priority = (int) ($ntp['priority'] ?? ($index + 1));
+            if ($priority > 0) {
+                $ntpEl->setAttribute('priority', (string) $priority);
+            }
+            $this->appendTextNode($doc, $ntpEl, 'name', trim($ntp['name']));
+            $this->appendTextNode($doc, $ntpEl, 'ntpMode', self::normalizeNtpMode($ntp['ntp_mode'] ?? 'unicast'));
             $ntps->appendChild($ntpEl);
         }
         $dateTimeSetting->appendChild($ntps);
-        $dateTime->appendChild($dateTimeSetting);
-        $devicePool->appendChild($dateTime);
+        $devicePool->appendChild($dateTimeSetting);
 
         $device->appendChild($devicePool);
     }
