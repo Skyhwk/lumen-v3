@@ -11,7 +11,7 @@ class QuotationGenerateAutoQtController extends Controller
 {
     /**
      * Dipanggil Python /lumen/invoke → POST /api/route (body kosong).
-     * Bulan target diambil dari job file yang ditulis artisan generateAutoQt.
+     * Phase/bulan/promo diambil dari job file artisan.
      */
     public function run(Request $request)
     {
@@ -19,7 +19,7 @@ class QuotationGenerateAutoQtController extends Controller
     }
 
     /**
-     * Mode tes: limit kecil, email ke --email (default harold@intilab.com).
+     * Mode tes: limit kecil / email ke --email.
      */
     public function runTest(Request $request)
     {
@@ -32,17 +32,27 @@ class QuotationGenerateAutoQtController extends Controller
 
         try {
             $job = QuotationAutoQtJobState::read();
+            $phase = $job['phase'];
             $result = (new QuotationGenerateAutoQtRunner())->run([
+                'phase' => $phase,
                 'month' => $job['month'],
+                'promo_id' => $job['promo_id'],
                 'test' => $test || !empty($job['test']),
                 'email' => $job['email'] ?? null,
                 'limit' => $job['limit'] ?? null,
             ]);
 
+            $labels = [
+                QuotationAutoQtJobState::PHASE_BUILD => 'Generate data Auto QT',
+                QuotationAutoQtJobState::PHASE_RENDER => 'Render PDF Auto QT',
+                QuotationAutoQtJobState::PHASE_EMAIL => 'Email Auto QT',
+            ];
+            $label = $labels[$phase] ?? 'Auto QT';
+
             return response()->json([
                 'message' => $test
-                    ? 'Generate Auto QT (test) selesai.'
-                    : 'Generate Auto QT selesai.',
+                    ? $label . ' (test) selesai.'
+                    : $label . ' selesai.',
                 'data' => $result,
             ], $result['success'] ? 200 : 500);
         } catch (\Throwable $exception) {
