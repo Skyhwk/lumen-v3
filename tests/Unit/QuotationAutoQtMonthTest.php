@@ -14,6 +14,8 @@ class QuotationAutoQtMonthTest extends TestCase
         $this->assertSame('12-2026', $window->token());
         $this->assertSame('2026-06-01 00:00:00', $window->orderFrom()->toDateTimeString());
         $this->assertSame('2026-12-01 00:00:00', $window->orderUntil()->toDateTimeString());
+        $this->assertSame('2026-07-01 00:00:00', $window->sourceUntil()->toDateTimeString());
+        $this->assertSame('2026-06-30 23:59:59', $window->sourceJuneEnd()->toDateTimeString());
     }
 
     public function testExplicitMonthYearFlag()
@@ -23,6 +25,15 @@ class QuotationAutoQtMonthTest extends TestCase
         $this->assertSame(12, $window->month());
         $this->assertSame(2026, $window->year());
         $this->assertSame('2026-06-01 00:00:00', $window->orderFrom()->toDateTimeString());
+        $this->assertSame('2026-07-01 00:00:00', $window->sourceUntil()->toDateTimeString());
+    }
+
+    public function testMayCampaignLooksBackToPreviousJune()
+    {
+        $window = QuotationAutoQtMonth::parse('05-2026');
+
+        $this->assertSame('2025-07-01 00:00:00', $window->sourceUntil()->toDateTimeString());
+        $this->assertSame('2025-06-30 23:59:59', $window->sourceJuneEnd()->toDateTimeString());
     }
 
     public function testExtractFromArgvReadsEitherForm()
