@@ -190,12 +190,12 @@ class QuotationAutoQtMonth
 
     public static function formatPromoCode(string $fullMonth, string $shortMonth, int $year): string
     {
-        $full = 'Auto_' . $fullMonth . '-' . $year;
+        $full = 'Auto_' . $fullMonth . '_' . $year;
         if (strlen($full) <= self::PROMO_CODE_MAX) {
             return $full;
         }
 
-        return 'Auto_' . $shortMonth . '-' . $year;
+        return 'Auto_' . $shortMonth . '_' . $year;
     }
 
     public function promoName(): string
