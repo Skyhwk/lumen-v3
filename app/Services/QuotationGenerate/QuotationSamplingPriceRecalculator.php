@@ -20,6 +20,48 @@ class QuotationSamplingPriceRecalculator
         '9' => 'harga_pangan',
     ];
 
+    public function clearDiscounts(QuotationNonKontrak $quotation): QuotationNonKontrak
+    {
+        foreach ([
+            'discount_air',
+            'discount_non_air',
+            'discount_udara',
+            'discount_emisi',
+            'discount_transport',
+            'discount_perdiem',
+            'discount_perdiem_24jam',
+            'discount_gabungan',
+            'discount_group',
+            'discount_consultant',
+            'cash_discount_persen',
+            'discount_promo',
+            'custom_discount',
+        ] as $field) {
+            $quotation->{$field} = null;
+        }
+
+        foreach ([
+            'total_discount_air',
+            'total_discount_non_air',
+            'total_discount_udara',
+            'total_discount_emisi',
+            'total_discount_transport',
+            'total_discount_perdiem',
+            'total_discount_perdiem_24jam',
+            'total_discount_gabungan',
+            'total_discount_group',
+            'total_discount_consultant',
+            'total_cash_discount_persen',
+            'cash_discount',
+            'total_discount_promo',
+            'total_discount',
+        ] as $field) {
+            $quotation->{$field} = 0;
+        }
+
+        return $quotation;
+    }
+
     public function refresh(QuotationNonKontrak $quotation): QuotationNonKontrak
     {
         $rows = json_decode((string) $quotation->data_pendukung_sampling, true);

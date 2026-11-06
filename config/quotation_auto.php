@@ -41,6 +41,7 @@ return [
         'source_skip_kode_promo' => [],
         'source_skip_kode_promo_prefix' => [],
         'recalculate_sampling_prices' => false,
+        'clear_source_discounts' => false,
         'require_promo_id' => false,
     ],
     'campaigns' => [
@@ -64,6 +65,7 @@ return [
             'source_skip_kode_promo' => ['AUTO', 'Auto_Jan_to_June'],
             'source_skip_kode_promo_prefix' => ['Auto_'],
             'recalculate_sampling_prices' => true,
+            'clear_source_discounts' => true,
             'require_promo_id' => true,
         ],
     ],

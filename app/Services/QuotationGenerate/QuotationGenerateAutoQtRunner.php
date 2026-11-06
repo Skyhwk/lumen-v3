@@ -2,6 +2,7 @@
 
 namespace App\Services\QuotationGenerate;
 
+use App\Models\QuotationNonKontrak;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -70,6 +71,8 @@ class QuotationGenerateAutoQtRunner
         $write('Window order skip  : ' . $window->orderFrom()->toDateTimeString() . ' s/d ' . $window->orderUntil()->copy()->subSecond()->toDateTimeString());
         $write('Syarat             : punya QT + tidak ada order di window 6 bulan');
         $write('Sampling           : dihitung ulang pakai nominal terbaru');
+        $write('Diskon QT lama     : dihapus semua');
+        $write('Alur               : build semua → render semua → email semua');
 
         $eligible = $discovery->fetchEligibleHasQuotationNoRecentOrder(
             $window->orderFrom(),
@@ -95,37 +98,79 @@ class QuotationGenerateAutoQtRunner
             ];
         }
 
-        $success = 0;
-        $failed = 0;
-        $chunks = $eligible->chunk($batchSize)->values();
-        $totalChunks = $chunks->count();
-        $totalItems = $eligible->count();
-        $processedItems = 0;
+        $created = [];
+        $rendered = [];
+        $createFailed = 0;
+        $renderFailed = 0;
+        $emailFailed = 0;
+        $emailSuccess = 0;
 
-        foreach ($chunks as $chunkIndex => $chunk) {
-            $write('--- Chunk ' . ($chunkIndex + 1) . '/' . $totalChunks . ' (' . $chunk->count() . ' QT) ---');
-            foreach ($chunk as $row) {
-                try {
-                    $result = $processor->processEligibleCandidate($row, $dryRun);
-                    $success++;
-                    $write('[OK] ' . $row->customer_id . ' | ' . $result['message']);
-                } catch (\Throwable $e) {
-                    $failed++;
-                    $write('[FAIL] ' . $row->customer_id . ' | ' . $e->getMessage(), 'error');
+        $write('=== Fase 1/3: build data (' . $eligible->count() . ' QT) ===', 'info');
+        $this->eachPaused($eligible, $batchSize, $itemPauseSeconds, $chunkPauseSeconds, $dryRun, function ($row) use ($processor, $dryRun, $write, &$created, &$createFailed) {
+            try {
+                $result = $processor->createFromCandidate($row, $dryRun);
+                $created[] = [
+                    'customer_id' => $row->customer_id,
+                    'source_quotation_id' => (int) $result['source_quotation_id'],
+                    'new_quotation_id' => $result['new_quotation_id'] ?? null,
+                    'new_no_document' => $result['new_no_document'] ?? null,
+                ];
+                $write('[BUILD OK] ' . $row->customer_id . ' | ' . $result['message']);
+            } catch (\Throwable $e) {
+                $createFailed++;
+                $write('[BUILD FAIL] ' . $row->customer_id . ' | ' . $e->getMessage(), 'error');
+            }
+        });
+
+        $write('=== Fase 2/3: render PDF (' . count($created) . ' QT) ===', 'info');
+        $this->eachPaused($created, $batchSize, $itemPauseSeconds, $chunkPauseSeconds, $dryRun, function ($item) use ($processor, $dryRun, $write, &$rendered, &$renderFailed) {
+            try {
+                if ($dryRun) {
+                    $rendered[] = $item;
+                    $write('[RENDER OK] ' . $item['customer_id'] . ' | DRY RUN: render PDF + link dari source ' . $item['source_quotation_id']);
+                    return;
                 }
 
-                $processedItems++;
-                if (!$dryRun && $itemPauseSeconds > 0 && $processedItems < $totalItems) {
-                    sleep($itemPauseSeconds);
+                $quotation = QuotationNonKontrak::findOrFail((int) $item['new_quotation_id']);
+                $result = $processor->renderQuotation($quotation, false, (int) $item['source_quotation_id']);
+                $rendered[] = $item;
+                $write('[RENDER OK] ' . $item['customer_id'] . ' | ' . $result['message']);
+            } catch (\Throwable $e) {
+                $renderFailed++;
+                $write('[RENDER FAIL] ' . $item['customer_id'] . ' | ' . $e->getMessage(), 'error');
+            }
+        });
+
+        $write('=== Fase 3/3: email (' . count($rendered) . ' QT) ===', 'info');
+        $this->eachPaused($rendered, $batchSize, $itemPauseSeconds, $chunkPauseSeconds, $dryRun, function ($item) use ($processor, $dryRun, $write, &$emailSuccess, &$emailFailed) {
+            try {
+                if ($dryRun) {
+                    $emailSuccess++;
+                    $write('[EMAIL OK] ' . $item['customer_id'] . ' | DRY RUN: email setelah semua PDF siap');
+                    return;
                 }
-            }
 
-            if (!$dryRun && $chunkPauseSeconds > 0 && $chunkIndex < $totalChunks - 1) {
-                sleep($chunkPauseSeconds);
+                $quotation = QuotationNonKontrak::findOrFail((int) $item['new_quotation_id']);
+                $result = $processor->emailQuotation($quotation, false, (int) $item['source_quotation_id']);
+                $emailSuccess++;
+                $write('[EMAIL OK] ' . $item['customer_id'] . ' | ' . $result['message']);
+            } catch (\Throwable $e) {
+                $emailFailed++;
+                $write('[EMAIL FAIL] ' . $item['customer_id'] . ' | ' . $e->getMessage(), 'error');
             }
-        }
+        });
 
-        $write('Processed : ' . $eligible->count() . ', success : ' . $success . ', failed : ' . $failed, 'info');
+        $failed = $createFailed + $renderFailed + $emailFailed;
+        $success = $emailSuccess;
+        $write(
+            'Processed : ' . $eligible->count()
+            . ', built : ' . count($created)
+            . ', rendered : ' . count($rendered)
+            . ', emailed : ' . $emailSuccess
+            . ', failed : ' . $failed
+            . ' (build ' . $createFailed . ' / render ' . $renderFailed . ' / email ' . $emailFailed . ')',
+            'info'
+        );
 
         return [
             'success' => $failed === 0,
@@ -169,5 +214,31 @@ class QuotationGenerateAutoQtRunner
         ]);
 
         $write('Promo pengujian ' . $kodePromo . ' dibuat (id ' . $id . ', labeling).', 'info');
+    }
+
+    private function eachPaused($items, int $batchSize, int $itemPauseSeconds, int $chunkPauseSeconds, bool $dryRun, callable $handler): void
+    {
+        $collection = collect($items)->values();
+        if ($collection->isEmpty()) {
+            return;
+        }
+
+        $chunks = $collection->chunk($batchSize)->values();
+        $totalItems = $collection->count();
+        $processedItems = 0;
+
+        foreach ($chunks as $chunkIndex => $chunk) {
+            foreach ($chunk as $item) {
+                $handler($item);
+                $processedItems++;
+                if (!$dryRun && $itemPauseSeconds > 0 && $processedItems < $totalItems) {
+                    sleep($itemPauseSeconds);
+                }
+            }
+
+            if (!$dryRun && $chunkPauseSeconds > 0 && $chunkIndex < $chunks->count() - 1) {
+                sleep($chunkPauseSeconds);
+            }
+        }
     }
 }
