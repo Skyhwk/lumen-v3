@@ -63,7 +63,7 @@ class MedanMagnetStatis
             if($rataRataMagnet < 0.00000001){
                 $rataRataMagnet = '<0.00000001';
             } else {
-                $rataRataMagnet = number_format($rataRataMagnet, 4, '.', '');
+                $rataRataMagnet = rtrim(rtrim(number_format($rataRataMagnet, 8, '.', ''), '0'), '.');
             }
         } else {
             $rataRataMagnet = number_format($rataRataMagnet, 4, '.', '');
