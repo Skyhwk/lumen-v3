@@ -40,12 +40,14 @@ class QuotationGenerateAutoQtController extends Controller
                 'test' => $test || !empty($job['test']),
                 'email' => $job['email'] ?? null,
                 'limit' => $job['limit'] ?? null,
+                'tanggal_penawaran' => $job['tanggal_penawaran'] ?? null,
             ]);
 
             $labels = [
                 QuotationAutoQtJobState::PHASE_BUILD => 'Generate data Auto QT',
                 QuotationAutoQtJobState::PHASE_RENDER => 'Render PDF Auto QT',
                 QuotationAutoQtJobState::PHASE_EMAIL => 'Email Auto QT',
+                QuotationAutoQtJobState::PHASE_ALL => 'Generate + render + email Auto QT',
             ];
             $label = $labels[$phase] ?? 'Auto QT';
 

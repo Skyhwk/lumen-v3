@@ -47,6 +47,7 @@ return [
         'clear_source_discounts' => false,
         'require_promo_id' => false,
         'require_source_data_pendukung' => false,
+        'tanggal_penawaran' => null,
     ],
     'campaigns' => [
         'jan_to_june' => [

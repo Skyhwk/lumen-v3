@@ -23,11 +23,13 @@ class QuotationGenerateAutoQtRunner
             QuotationAutoQtJobState::PHASE_BUILD,
             QuotationAutoQtJobState::PHASE_RENDER,
             QuotationAutoQtJobState::PHASE_EMAIL,
+            QuotationAutoQtJobState::PHASE_ALL,
         ], true)) {
             throw new \InvalidArgumentException('Phase tidak dikenali: ' . $phase);
         }
 
         QuotationGenerateCampaign::apply('auto_qt');
+        $this->applyTanggalPenawaran($options);
 
         $logs = [];
         $write = function ($line, $level = 'line') use ($output, &$logs) {
@@ -37,6 +39,10 @@ class QuotationGenerateAutoQtRunner
                 $output($line, $level);
             }
         };
+
+        if ($phase === QuotationAutoQtJobState::PHASE_ALL) {
+            return $this->runAll($options, $write, $logs);
+        }
 
         if ($phase === QuotationAutoQtJobState::PHASE_BUILD) {
             return $this->runBuild($options, $write, $logs);
@@ -50,7 +56,50 @@ class QuotationGenerateAutoQtRunner
      * @param  callable  $write
      * @param  array<int, string>  $logs
      */
-    private function runBuild(array $options, $write, array $logs): array
+    private function runAll(array $options, $write, array &$logs): array
+    {
+        $write('Alur               : BUILD → RENDER → EMAIL (--all)', 'info');
+        $build = $this->runBuild($options, $write, $logs);
+        $promoId = (int) ($build['promo_id'] ?? 0);
+        if ($promoId < 1) {
+            throw new \RuntimeException('promo_id tidak terbentuk setelah generate data.');
+        }
+
+        $followUp = $options;
+        $followUp['promo_id'] = $promoId;
+        unset($followUp['limit']);
+
+        $render = $this->runByPromo(QuotationAutoQtJobState::PHASE_RENDER, $followUp, $write, $logs);
+        $email = $this->runByPromo(QuotationAutoQtJobState::PHASE_EMAIL, $followUp, $write, $logs);
+        $failed = (int) $build['failed_count'] + (int) $render['failed_count'] + (int) $email['failed_count'];
+
+        $write('=== Ringkasan --all ===', 'info');
+        $write('Built    : ' . $build['built']);
+        $write('Rendered : ' . $render['rendered']);
+        $write('Emailed  : ' . $email['emailed']);
+        $write('Error    : ' . $failed, $failed > 0 ? 'warn' : 'info');
+
+        return $this->summaryPayload(
+            QuotationAutoQtJobState::PHASE_ALL,
+            !empty($options['test']) || trim((string) ($options['email'] ?? '')) !== '',
+            !empty($options['dry_run']),
+            $logs,
+            $build['month'] ?? null,
+            $promoId,
+            (int) $build['processed'],
+            (int) $build['built'],
+            (int) $render['rendered'],
+            (int) $email['emailed'],
+            $failed
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     * @param  callable  $write
+     * @param  array<int, string>  $logs
+     */
+    private function runBuild(array $options, $write, array &$logs): array
     {
         $monthInput = (string) ($options['month'] ?? '');
         if ($monthInput === '') {
@@ -75,18 +124,20 @@ class QuotationGenerateAutoQtRunner
         $write('Generate Auto QT — BUILD DATA ' . $window->label() . ($dryRun ? ' (DRY RUN)' : '') . ($test ? ' (TEST)' : ''), 'info');
         $write('Kode promo         : ' . $marker . ' (promo_id ' . $promoId . ')');
         $write('Sales              : master_pelanggan.sales_id, fallback id ' . $fallbackSalesId);
-        $write('Window order skip  : ' . $window->orderFrom()->toDateTimeString() . ' s/d ' . $window->orderUntil()->copy()->subSecond()->toDateTimeString());
-        $write('Syarat             : punya QT + tidak ada order di window 6 bulan');
-        $write('Data pendukung     : QT terakhir wajib ada; kosong/{} langsung skip');
+        $write('QT sumber          : dari Juni ' . $window->sourceJuneEnd()->year . ' ke belakang (s/d ' . $window->sourceJuneEnd()->toDateString() . ')');
+        $write('Syarat             : punya QT di window itu + data pendukung sampling. Order tidak dicek.');
+        $write('Data pendukung     : QT terakhir di window wajib ada; kosong/{} langsung skip');
         $write('Sampling           : dihitung ulang pakai nominal terbaru');
         $write('Diskon QT lama     : dihapus semua');
+        $tanggalPenawaran = trim((string) config('quotation_auto.generate.tanggal_penawaran', ''));
+        $write('Tanggal penawaran  : ' . ($tanggalPenawaran !== '' ? $tanggalPenawaran : ('hari ini (' . Carbon::now()->toDateString() . ')')));
         $write('Alur               : copy data saja. Render: php artisan renderAutoQt --promo=' . $promoId);
         $write('                   Email : php artisan emailAutoQt --promo=' . $promoId);
+        $write('                   Semua : php artisan generateAutoQt --' . $window->token() . ' --all');
 
         $write('=== Mengumpulkan kandidat ===', 'info');
-        $eligible = $discovery->fetchEligibleHasQuotationNoRecentOrder(
-            $window->orderFrom(),
-            $window->orderUntil(),
+        $eligible = $discovery->fetchEligibleFromJuneBackwards(
+            $window->sourceUntil(),
             $limit
         );
         if ($customerFilter !== null) {
@@ -162,7 +213,7 @@ class QuotationGenerateAutoQtRunner
      * @param  callable  $write
      * @param  array<int, string>  $logs
      */
-    private function runByPromo(string $phase, array $options, $write, array $logs): array
+    private function runByPromo(string $phase, array $options, $write, array &$logs): array
     {
         $promoId = (int) ($options['promo_id'] ?? 0);
         if ($promoId < 1) {
@@ -269,7 +320,7 @@ class QuotationGenerateAutoQtRunner
         bool $test,
         int $batchSize,
         $write,
-        array $logs,
+        array &$logs,
         int $promoId
     ): array {
         $ok = 0;
@@ -317,7 +368,7 @@ class QuotationGenerateAutoQtRunner
         int $emailPauseSeconds,
         int $chunkPauseSeconds,
         $write,
-        array $logs,
+        array &$logs,
         int $promoId
     ): array {
         $ok = 0;
@@ -416,8 +467,45 @@ class QuotationGenerateAutoQtRunner
 
     /**
      * @param  array<string, mixed>  $options
-     * @param  callable  $write
      */
+    private function applyTanggalPenawaran(array $options): void
+    {
+        $tanggal = self::normalizeTanggalPenawaran($options['tanggal_penawaran'] ?? null);
+        if ($tanggal === null) {
+            return;
+        }
+
+        config(['quotation_auto.generate.tanggal_penawaran' => $tanggal]);
+    }
+
+    public static function normalizeTanggalPenawaran($raw): ?string
+    {
+        $raw = trim((string) $raw);
+        if ($raw === '') {
+            return null;
+        }
+
+        if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $raw, $match)) {
+            $year = (int) $match[1];
+            $month = (int) $match[2];
+            $day = (int) $match[3];
+        } elseif (preg_match('/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/', $raw, $match)) {
+            $day = (int) $match[1];
+            $month = (int) $match[2];
+            $year = (int) $match[3];
+        } else {
+            throw new \InvalidArgumentException(
+                'Format tanggal penawaran tidak dikenali: ' . $raw . '. Pakai --tanggal=2026-11-06 atau --tanggal=06-11-2026'
+            );
+        }
+
+        if (!checkdate($month, $day, $year)) {
+            throw new \InvalidArgumentException('Tanggal penawaran tidak valid: ' . $raw);
+        }
+
+        return sprintf('%04d-%02d-%02d', $year, $month, $day);
+    }
+
     private function resolveLimit(array $options, bool $test, $write): ?int
     {
         $limit = array_key_exists('limit', $options) && $options['limit'] !== null ? (int) $options['limit'] : null;

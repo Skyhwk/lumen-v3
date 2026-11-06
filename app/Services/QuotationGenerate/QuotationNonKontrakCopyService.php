@@ -42,6 +42,7 @@ class QuotationNonKontrakCopyService
         $newQuotation->updated_by = $approver;
         $newQuotation->updated_at = $now;
         $newQuotation->kode_promo = $marker;
+        $newQuotation->tanggal_penawaran = $this->resolveTanggalPenawaran();
         $this->attachPromoPengujian($newQuotation, $marker);
 
         if (config('quotation_auto.generate.resolve_sales_from_master')) {
@@ -63,6 +64,16 @@ class QuotationNonKontrakCopyService
         $newQuotation->save();
 
         return $newQuotation->fresh();
+    }
+
+    private function resolveTanggalPenawaran(): string
+    {
+        $override = trim((string) config('quotation_auto.generate.tanggal_penawaran', ''));
+        if ($override !== '') {
+            return $override;
+        }
+
+        return Carbon::now()->toDateString();
     }
 
     private function attachPromoPengujian(QuotationNonKontrak $quotation, string $marker): void
