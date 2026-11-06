@@ -7,6 +7,7 @@ class QuotationAutoQtJobState
     public const PHASE_BUILD = 'build';
     public const PHASE_RENDER = 'render';
     public const PHASE_EMAIL = 'email';
+    public const PHASE_ALL = 'all';
 
     public static function path(): string
     {
@@ -21,7 +22,7 @@ class QuotationAutoQtJobState
         }
 
         $phase = (string) ($payload['phase'] ?? self::PHASE_BUILD);
-        if (!in_array($phase, [self::PHASE_BUILD, self::PHASE_RENDER, self::PHASE_EMAIL], true)) {
+        if (!in_array($phase, [self::PHASE_BUILD, self::PHASE_RENDER, self::PHASE_EMAIL, self::PHASE_ALL], true)) {
             throw new \InvalidArgumentException('Phase auto QT tidak dikenali: ' . $phase);
         }
 
@@ -40,6 +41,9 @@ class QuotationAutoQtJobState
             'limit' => array_key_exists('limit', $payload) && $payload['limit'] !== null && $payload['limit'] !== ''
                 ? (int) $payload['limit']
                 : null,
+            'tanggal_penawaran' => isset($payload['tanggal_penawaran']) && trim((string) $payload['tanggal_penawaran']) !== ''
+                ? trim((string) $payload['tanggal_penawaran'])
+                : null,
             'written_at' => date('c'),
         ], JSON_UNESCAPED_UNICODE));
 
@@ -49,7 +53,7 @@ class QuotationAutoQtJobState
     }
 
     /**
-     * @return array{phase:string,month:?string,promo_id:?int,test:bool,email:?string,limit:?int}
+     * @return array{phase:string,month:?string,promo_id:?int,test:bool,email:?string,limit:?int,tanggal_penawaran:?string}
      */
     public static function read(): array
     {
@@ -64,7 +68,7 @@ class QuotationAutoQtJobState
         }
 
         $phase = (string) ($payload['phase'] ?? self::PHASE_BUILD);
-        if ($phase === self::PHASE_BUILD && empty($payload['month'])) {
+        if (($phase === self::PHASE_BUILD || $phase === self::PHASE_ALL) && empty($payload['month'])) {
             throw new \RuntimeException('Job generateAutoQt rusak: bulan kosong.');
         }
         if (($phase === self::PHASE_RENDER || $phase === self::PHASE_EMAIL) && empty($payload['promo_id'])) {
@@ -85,6 +89,9 @@ class QuotationAutoQtJobState
                 : null,
             'limit' => isset($payload['limit']) && $payload['limit'] !== null && $payload['limit'] !== ''
                 ? (int) $payload['limit']
+                : null,
+            'tanggal_penawaran' => isset($payload['tanggal_penawaran']) && trim((string) $payload['tanggal_penawaran']) !== ''
+                ? trim((string) $payload['tanggal_penawaran'])
                 : null,
         ];
     }
