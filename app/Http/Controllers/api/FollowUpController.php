@@ -1056,6 +1056,13 @@ class FollowUpController extends Controller
         }
 
         $hierarchy = app(SalesTeamHierarchyService::class);
+        if (!$this->viewerBelongsToDfusDivision($viewer, $hierarchy)) {
+            return $this->emptySummaryDfusResponse(
+                $startDate->toDateString(),
+                $endDate->toDateString()
+            );
+        }
+
         // Atasan (SPV/Manager) melihat timnya; sales staff hanya dirinya sendiri.
         $memberIds = $hierarchy->resolveViewerScopeMemberIds($viewer);
         $activeNames = DFUS::query()
@@ -1090,13 +1097,30 @@ class FollowUpController extends Controller
                 : 0,
         ];
 
+        $nameToId = [];
+        foreach ($rows as $row) {
+            $name = trim((string) ($row['nama_lengkap'] ?? ''));
+            if ($name !== '') {
+                $nameToId[$name] = (int) ($row['karyawan_id'] ?? 0);
+            }
+        }
+
+        $canFilterSales = $hierarchy->viewerCanUseAllOption($viewer)
+            || (
+                !$hierarchy->isSalesStaff($viewer)
+                && $hierarchy->getPool()->has((int) $viewer->id)
+            );
+
         return response()->json([
             'success' => true,
             'period' => [
                 'start_date' => $startDate->toDateString(),
                 'end_date' => $endDate->toDateString(),
             ],
+            'allowed' => true,
+            'can_filter_sales' => $canFilterSales,
             'data' => $rows,
+            'hourly' => $this->summaryDfusHourly($nameToId, $startDate->toDateString(), $endDate->toDateString()),
             'totals' => $totals,
             'averages' => $averages,
         ], 200);
@@ -1182,12 +1206,53 @@ class FollowUpController extends Controller
             return array_merge($row, [
                 'total_call' => $totalCalls,
                 'pic_contacted' => $picContacted,
+                'tidak_terhubung' => max(0, $totalCalls - $picContacted),
                 'avg_call_minutes' => $durationCount > 0 ? round($durationSeconds / $durationCount / 60, 1) : 0,
+                'avg_call_seconds' => $durationCount > 0 ? (int) round($durationSeconds / $durationCount) : 0,
                 'duration_call_count' => $durationCount,
                 'total_call_seconds' => $durationSeconds,
                 'success_rate' => $totalCalls > 0 ? round(($picContacted / $totalCalls) * 100, 1) : 0,
             ]);
         }, $hierarchyRows);
+    }
+
+    private function summaryDfusHourly(array $nameToId, string $start, string $end): array
+    {
+        $names = array_values(array_filter(array_keys($nameToId)));
+        if (empty($names)) {
+            return [];
+        }
+
+        return DFUS::query()
+            ->whereIn('sales_penanggung_jawab', $names)
+            ->whereBetween('tanggal', [$start, $end])
+            ->whereNotNull('keterangan')
+            ->whereRaw("TRIM(keterangan) <> ''")
+            ->selectRaw("
+                sales_penanggung_jawab as sales_name,
+                HOUR(jam) as hour,
+                COUNT(*) as calls,
+                SUM(CASE WHEN UPPER(TRIM(keterangan)) = 'PIC' THEN 1 ELSE 0 END) as connected
+            ")
+            ->groupBy('sales_penanggung_jawab')
+            ->groupByRaw('HOUR(jam)')
+            ->get()
+            ->map(function ($row) use ($nameToId) {
+                $karyawanId = (int) ($nameToId[$row->sales_name] ?? 0);
+                if ($karyawanId <= 0) {
+                    return null;
+                }
+
+                return [
+                    'karyawan_id' => $karyawanId,
+                    'hour' => (int) $row->hour,
+                    'calls' => (int) $row->calls,
+                    'connected' => (int) $row->connected,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
     }
 
     private function summaryDfusDurationsBySales(array $salesIds, Carbon $startDate, Carbon $endDate)
@@ -1242,7 +1307,7 @@ class FollowUpController extends Controller
             return response()->json(['message' => $e->getMessage(), 'success' => false], 422);
         }
 
-        $viewer = MasterKaryawan::select('id', 'id_jabatan', 'nama_lengkap')->find($this->user_id);
+        $viewer = MasterKaryawan::select('id', 'id_jabatan', 'id_department', 'grade', 'nama_lengkap')->find($this->user_id);
         if (!$viewer) {
             return response()->json(['message' => 'Data karyawan tidak ditemukan.', 'success' => false], 404);
         }
@@ -1294,6 +1359,7 @@ class FollowUpController extends Controller
                     ->orWhere('dfus.id_pelanggan', 'like', $like)
                     ->orWhere('dfus.pic_pelanggan', 'like', $like)
                     ->orWhere('dfus.keterangan', 'like', $like)
+                    ->orWhere('dfus.keterangan_sales', 'like', $like)
                     ->orWhere('dfus.tanggal', 'like', $like);
             });
         }
@@ -1320,6 +1386,7 @@ class FollowUpController extends Controller
                     'dfus.no_pic',
                     'dfus.pic_pelanggan',
                     'dfus.keterangan',
+                    'dfus.keterangan_sales',
                     'p.nama_pelanggan as nama_perusahaan',
                 ]);
 
@@ -1344,6 +1411,9 @@ class FollowUpController extends Controller
                 'pic_contacted' => $status === 'PIC',
                 'lama_panggilan' => $this->formatCallDuration($durationTime),
                 'lama_panggilan_seconds' => $this->webphoneTimeToSeconds($durationTime),
+                'catatan' => trim((string) ($row->keterangan_sales ?? '')) !== ''
+                    ? trim((string) $row->keterangan_sales)
+                    : '-',
             ];
         })->values();
 
@@ -1375,8 +1445,66 @@ class FollowUpController extends Controller
         ], 200);
     }
 
+    private function viewerBelongsToDfusDivision(MasterKaryawan $viewer, ?SalesTeamHierarchyService $hierarchy = null): bool
+    {
+        $hierarchy = $hierarchy ?: app(SalesTeamHierarchyService::class);
+
+        if (in_array((int) $viewer->id, $hierarchy->salesExecutiveIds(), true)) {
+            return true;
+        }
+
+        if ($hierarchy->isSalesStaff($viewer)) {
+            return true;
+        }
+
+        if ((int) $viewer->id_jabatan === 21) {
+            return true;
+        }
+
+        $viewer->loadMissing('divisi');
+        $divisiName = strtoupper(trim((string) optional($viewer->divisi)->nama_divisi));
+        if ($divisiName === '') {
+            return false;
+        }
+
+        return str_contains($divisiName, 'SALES')
+            || str_contains($divisiName, 'PENJUALAN')
+            || str_contains($divisiName, 'MARKETING SALES');
+    }
+
+    private function emptySummaryDfusResponse(string $start, string $end)
+    {
+        return response()->json([
+            'success' => true,
+            'allowed' => false,
+            'period' => [
+                'start_date' => $start,
+                'end_date' => $end,
+            ],
+            'can_filter_sales' => false,
+            'data' => [],
+            'hourly' => [],
+            'totals' => [
+                'total_call' => 0,
+                'pic_contacted' => 0,
+                'avg_call_minutes' => 0,
+                'success_rate' => 0,
+            ],
+            'averages' => [
+                'total_call' => 0,
+                'pic_contacted' => 0,
+                'avg_call_minutes' => 0,
+                'success_rate' => 0,
+            ],
+        ], 200);
+    }
+
     private function canViewSummaryDfusSales(MasterKaryawan $viewer, int $karyawanId): bool
     {
+        if (!$this->viewerBelongsToDfusDivision($viewer)) {
+            return false;
+        }
+
         if ((int) $viewer->id === $karyawanId) {
             return true;
         }
