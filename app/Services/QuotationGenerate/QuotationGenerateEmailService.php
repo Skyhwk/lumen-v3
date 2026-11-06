@@ -35,7 +35,7 @@ class QuotationGenerateEmailService
         $to = $recipients['to'];
         $bcc = $recipients['bcc'];
 
-        $portalLink = $this->linkService->portalLink($quotation);
+        $portalLink = $this->linkService->portalTrackingLink($quotation);
         $subject = $this->buildSubject($quotation);
         $body = $this->buildBody($quotation, $portalLink);
         $attachments = $this->buildAttachments($quotation);

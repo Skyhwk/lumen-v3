@@ -85,7 +85,10 @@ return [
         'test_function' => 'runTest',
     ],
     'link_tracking' => [
-        'portal_base' => rtrim((string) env('PORTALV4', 'https://portal.intilab.com'), '/'),
+        // Base portal customer (link tracking di email), mis. http://localhost:8000
+        'portal_base' => rtrim((string) env('PORTALV4', ''), '/'),
+        // Base halaman auth penawaran setelah redirect (token ditempel), mis. http://localhost:8000/public/auth/
+        'portal_auth_base' => rtrim((string) env('PORTALV3_LINK', env('PORTAL_API', '')), '/'),
         'portal_redirect_path' => env('QUOTATION_AUTO_PORTAL_REDIRECT_PATH', '/public/auth/redirect'),
     ],
 ];
