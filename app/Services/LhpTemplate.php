@@ -465,7 +465,6 @@ class LhpTemplate
                     ]
                 );
             })) {
-                dd($dataDecode);
                 if (collect($dataDecode)->contains(fn($item) => in_array($item, ['324;Sinar UV']))) {
                     $header = LhpsSinarUVHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
                     $detail = LhpsSinarUVDetail::where('id_header', $header->id)->get();
