@@ -27,6 +27,8 @@ return [
         // Mode uji: To dipaksa ke email_test_to. Produksi: To dari email_pic_order.
         'email_test_mode' => filter_var(env('QUOTATION_GENERATE_EMAIL_TEST_MODE', false), FILTER_VALIDATE_BOOLEAN),
         'email_test_to' => env('QUOTATION_GENERATE_EMAIL_TEST_TO', ''),
+        // Mode tes: anggap sales PJ-nya orang ini (BCC dia + atasan SUPERVISOR-nya).
+        'email_test_sales' => env('QUOTATION_GENERATE_EMAIL_TEST_SALES', 'harold@intilab.com'),
         // Nama & jabatan di blok signature (hardcode — selaras template email penawaran).
         'signature_display_name' => env('QUOTATION_SIGNATURE_DISPLAY_NAME', 'Aisyah Wulandari'),
         'signature_display_jabatan' => env('QUOTATION_SIGNATURE_DISPLAY_JABATAN', 'Sales Admin Staff'),
@@ -44,6 +46,8 @@ return [
         'recalculate_sampling_prices' => false,
         'clear_source_discounts' => false,
         'require_promo_id' => false,
+        'require_source_data_pendukung' => false,
+        'tanggal_penawaran' => null,
     ],
     'campaigns' => [
         'jan_to_june' => [
@@ -68,6 +72,7 @@ return [
             'recalculate_sampling_prices' => true,
             'clear_source_discounts' => true,
             'require_promo_id' => true,
+            'require_source_data_pendukung' => true,
         ],
     ],
     'python' => [

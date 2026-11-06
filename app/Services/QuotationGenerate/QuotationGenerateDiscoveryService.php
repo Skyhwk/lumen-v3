@@ -85,13 +85,14 @@ SQL,
     }
 
     /**
-     * PT yang punya QT (kapan pun) dan tidak ada order di window [from, until).
+     * PT yang punya QT sumber dari Juni ke belakang + data pendukung sampling.
+     * Tidak peduli ada order atau tidak. QT terakhir di window itu kosong/{} dilewati.
      *
      * @return Collection<int, object>
      */
-    public function fetchEligibleHasQuotationNoRecentOrder(Carbon $orderFrom, Carbon $orderUntil, ?int $limit = null): Collection
+    public function fetchEligibleFromJuneBackwards(Carbon $sourceUntil, ?int $limit = null): Collection
     {
-        $ranked = $this->quotationLatestSubquerySql();
+        $ranked = $this->quotationJuneBackwardsSubquerySql();
         $limitSql = $limit !== null && $limit > 0 ? ' LIMIT '.(int) $limit : '';
 
         $rows = DB::select(
@@ -99,7 +100,7 @@ SQL,
 SELECT
     r.customer_id,
     mp.nama_pelanggan AS customer_name,
-    'QT_NO_ORDER' AS customer_type,
+    'JUNE_BACK' AS customer_type,
     NULL AS reference_order_id,
     NULL AS reference_order_no,
     NULL AS order_created_at,
@@ -113,21 +114,13 @@ INNER JOIN master_pelanggan mp
     AND mp.is_active = 1
 WHERE r.rn = 1
   AND (r.kode_promo IS NULL OR TRIM(r.kode_promo) = '')
-  AND NOT EXISTS (
-      SELECT 1
-      FROM order_header oh
-      WHERE oh.id_pelanggan = r.customer_id
-        AND oh.is_active = 1
-        AND oh.created_at >= ?
-        AND oh.created_at < ?
-  )
+  {$this->sourceRequireDataPendukungSql('r')}
 {$this->newAutoDuplicateGuardSql()}
 ORDER BY r.quotation_created_at DESC, r.customer_id
 {$limitSql}
 SQL,
             [
-                $orderFrom->toDateTimeString(),
-                $orderUntil->toDateTimeString(),
+                $sourceUntil->toDateString(),
                 (string) config('quotation_auto.generate.created_by', 'Quotation Auto Generate'),
                 (string) config('quotation_auto.generate.kode_promo_marker', 'AUTO'),
                 (string) config('quotation_auto.generate.created_by', 'Quotation Auto Generate'),
@@ -359,9 +352,59 @@ SQL;
         return "AND ({$alias}.kode_promo IS NULL OR TRIM({$alias}.kode_promo) = '' OR ({$skipSql}))";
     }
 
+    /**
+     * QT terakhir kosong / {} / [] dilewati. Tidak mundur ke QT sebelumnya.
+     */
+    private function sourceRequireDataPendukungSql(string $alias): string
+    {
+        if (!config('quotation_auto.generate.require_source_data_pendukung')) {
+            return '';
+        }
+
+        return <<<SQL
+AND {$alias}.data_pendukung_sampling IS NOT NULL
+AND TRIM({$alias}.data_pendukung_sampling) <> ''
+AND JSON_VALID({$alias}.data_pendukung_sampling)
+AND JSON_LENGTH({$alias}.data_pendukung_sampling) > 0
+SQL;
+    }
+
     private function quotationRankedSubquerySql(): string
     {
         return $this->quotationLatestSubquerySql(true);
+    }
+
+    private function quotationJuneBackwardsSubquerySql(): string
+    {
+        $konsultan = self::KONSULTAN_EMPTY;
+        $skipSql = $this->sourceSkipKodePromoSql('rq');
+        $sourceDateSql = $this->quotationSourceDateSql('rq');
+
+        return <<<SQL
+SELECT
+    rq.pelanggan_ID AS customer_id,
+    rq.id AS quotation_id,
+    rq.no_document AS quotation_no,
+    rq.created_at AS quotation_created_at,
+    rq.kode_promo AS kode_promo,
+    rq.data_pendukung_sampling AS data_pendukung_sampling,
+    ROW_NUMBER() OVER (
+        PARTITION BY rq.pelanggan_ID
+        ORDER BY {$sourceDateSql} DESC, rq.id DESC
+    ) AS rn
+FROM request_quotation rq
+WHERE rq.is_active = 1
+  AND rq.pelanggan_ID IS NOT NULL
+  AND rq.pelanggan_ID != ''
+  AND {$konsultan}
+  {$skipSql}
+  AND {$sourceDateSql} < ?
+SQL;
+    }
+
+    private function quotationSourceDateSql(string $alias): string
+    {
+        return "COALESCE(IF({$alias}.tanggal_penawaran IS NULL OR {$alias}.tanggal_penawaran IN ('', '0000-00-00'), NULL, DATE({$alias}.tanggal_penawaran)), DATE({$alias}.created_at))";
     }
 
     private function quotationLatestSubquerySql(bool $requireSince = false): string
@@ -377,6 +420,7 @@ SELECT
     rq.no_document AS quotation_no,
     rq.created_at AS quotation_created_at,
     rq.kode_promo AS kode_promo,
+    rq.data_pendukung_sampling AS data_pendukung_sampling,
     ROW_NUMBER() OVER (
         PARTITION BY rq.pelanggan_ID
         ORDER BY rq.created_at DESC, rq.id DESC

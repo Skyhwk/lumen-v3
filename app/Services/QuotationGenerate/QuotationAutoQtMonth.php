@@ -153,6 +153,25 @@ class QuotationAutoQtMonth
         return $this->orderUntil->copy();
     }
 
+    /**
+     * Batas eksklusif pencarian QT sumber: 1 Juli setelah Juni target.
+     * November 2026 → QT s/d 30 Juni 2026. Mei 2026 → QT s/d 30 Juni 2025.
+     */
+    public function sourceUntil(): Carbon
+    {
+        $year = $this->year();
+        if ($this->month() <= 6) {
+            $year--;
+        }
+
+        return Carbon::create($year, 7, 1, 0, 0, 0, self::timezone());
+    }
+
+    public function sourceJuneEnd(): Carbon
+    {
+        return $this->sourceUntil()->copy()->subSecond();
+    }
+
     public function month(): int
     {
         return (int) $this->targetStart->month;
@@ -190,12 +209,12 @@ class QuotationAutoQtMonth
 
     public static function formatPromoCode(string $fullMonth, string $shortMonth, int $year): string
     {
-        $full = 'Auto_' . $fullMonth . '-' . $year;
+        $full = 'Auto_' . $fullMonth . '_' . $year;
         if (strlen($full) <= self::PROMO_CODE_MAX) {
             return $full;
         }
 
-        return 'Auto_' . $shortMonth . '-' . $year;
+        return 'Auto_' . $shortMonth . '_' . $year;
     }
 
     public function promoName(): string
