@@ -8,6 +8,7 @@ use Carbon\Carbon;
 Carbon::setLocale('id');
 
 use App\Models\OrderDetail;
+use App\Models\OrderHeader;
 use App\Models\QuotationKontrakD;
 use Illuminate\Http\Request;
 use Yajra\Datatables\Datatables;
@@ -44,6 +45,7 @@ use App\Models\DetailMicrobiologi;
 use App\Models\DataLapanganErgonomi;
 use App\Models\DataLapanganPsikologi;
 use App\Models\MasterKaryawan;
+use App\Models\QrDocument;
 use Illuminate\Support\Str; // Pastikan sudah di-import
 
 class DokumenFdlController extends Controller
@@ -195,8 +197,17 @@ class DokumenFdlController extends Controller
                 return $item->no_order . '|' . $item->tanggal_sampling;
             });
 
+        $uniqueOrderNos = array_values(array_unique(array_filter($orderNos)));
+        $orderHeadersByNoOrder = OrderHeader::with([
+            'orderDetail',
+            'samplingPlan.jadwal' => function ($query) {
+                $query->where('is_active', true);
+            },
+        ])
+            ->whereIn('no_order', $uniqueOrderNos)
+            ->get()
+            ->keyBy('no_order');
 
-        
         foreach ($arrayFinal as &$item) {
             $key = $item['no_order'] . '|' . $item['jadwal'];
             if (isset($persiapanHeaders[$key])) {
@@ -228,6 +239,19 @@ class DokumenFdlController extends Controller
             } else {
                 $item['detail_cs_documents'] = [];
             }
+
+            $orderHeader = $orderHeadersByNoOrder[$item['no_order']] ?? null;
+            $csDocs = is_array($item['detail_cs_documents'] ?? null) ? $item['detail_cs_documents'] : [];
+            $teamDoc = $this->pickCsDocumentForJadwal(
+                $csDocs,
+                $item['jadwal'],
+                $item['kategori'] ?? null,
+                $orderHeader,
+                $this->karyawan,
+                $isProgrammer
+            );
+            $item['cs_selesai'] = ! empty($teamDoc['filename_cs']);
+            $item['filename_cs_team'] = $teamDoc['filename_cs'] ?? null;
         }
         unset($item);
 
@@ -432,53 +456,46 @@ class DokumenFdlController extends Controller
             ->get();
 
             $flatData = [];
+            $jadwalKategoriLabel = $request->filled('kategori') ? trim((string) $request->kategori) : null;
 
-            // 3. Proses Filter Hak Akses per Baris Data
+            $referenceDetail = $data->first(function ($row) {
+                return $row->orderHeader && $row->orderHeader->samplingPlan;
+            });
+            $referenceHeader = $referenceDetail ? $referenceDetail->orderHeader : null;
+
+            $titikMilikSampler = $referenceHeader
+                ? $this->collectUserTitikForSamplingDate(
+                    $referenceHeader,
+                    $loggedInUser,
+                    $tanggalSampling,
+                    $jadwalKategoriLabel ?: null,
+                    $isProgrammer
+                )
+                : [];
+
+            $samplerTerpilih = $this->resolveSamplerForCsTeam(
+                $referenceHeader,
+                $loggedInUser,
+                $tanggalSampling,
+                $jadwalKategoriLabel,
+                $isProgrammer
+            );
+
+            // 3. Proses Filter Hak Akses per Baris Data (scoped per tim/jadwal kategori)
             foreach ($data as $orderDetail) {
                 if (!$orderDetail->orderHeader || !$orderDetail->orderHeader->samplingPlan) {
                     continue; 
                 }
 
-                $allowPush = false;
-                $samplerTerpilih = $loggedInUser;
-                $titikMilikSampler = [];
-
-                if ($isProgrammer) {
-                    // LOGIKA PROGRAMMER: Loloskan, dan ambil sampler pertama sebagai display
-                    $allowPush = true;
-                    foreach ($orderDetail->orderHeader->samplingPlan as $samplingPlan) {
-                        $jadwal = $samplingPlan->jadwal->first();
-                        if ($jadwal && !empty($jadwal->sampler)) {
-                            $samplerList = array_map('trim', explode(',', $jadwal->sampler));
-                            $samplerTerpilih = $samplerList[0]; 
-                            break; 
-                        }
-                    }
-                } else {
-                    // Sampler biasa: nama harus ada di jadwal, titik harus ada di jadwal.kategori
-                    foreach ($orderDetail->orderHeader->samplingPlan as $samplingPlan) {
-                        foreach ($samplingPlan->jadwal ?? [] as $jadwal) {
-                            if ($jadwal->tanggal == $orderDetail->tanggal_sampling) {
-                                $samplerList = array_map('trim', explode(',', $jadwal->sampler));
-                                if (in_array($loggedInUser, $samplerList)) {
-                                    $allowPush = true;
-                                    $titikMilikSampler = array_merge(
-                                        $titikMilikSampler,
-                                        $this->extractTitikFromKategoriJadwal($jadwal->kategori)
-                                    );
-                                }
-                            }
-                        }
-                    }
-                    $titikMilikSampler = array_values(array_unique($titikMilikSampler));
+                $allowPush = $isProgrammer || !empty($titikMilikSampler);
+                if (!$allowPush) {
+                    continue;
                 }
 
-                // Jika diizinkan melihat
                 if ($allowPush) {
                     $titikSampel = $this->extractTitikFromNoSampel($orderDetail->no_sampel);
                     if (
-                        !$isProgrammer
-                        && !empty($titikMilikSampler)
+                        !empty($titikMilikSampler)
                         && ($titikSampel === null || !in_array($titikSampel, $titikMilikSampler, true))
                     ) {
                         continue;
@@ -514,6 +531,13 @@ class DokumenFdlController extends Controller
                     
                     if (is_array($csDocuments)) {
                         foreach ($csDocuments as $doc) {
+                            if (
+                                $jadwalKategoriLabel
+                                && !empty($doc['jadwal_kategori'])
+                                && $doc['jadwal_kategori'] !== $jadwalKategoriLabel
+                            ) {
+                                continue;
+                            }
                             if (isset($doc['no_sampel']) && is_array($doc['no_sampel'])) {
                                 if (in_array($rowSample, $doc['no_sampel'])) {
                                     $matchingDocs[] = $doc;
@@ -542,12 +566,14 @@ class DokumenFdlController extends Controller
                         $row['nama_pic']     = $selectedDoc['nama_pic_cs'] ?? null;
                         $row['ttd_pic']      = $selectedDoc['ttd_pic_cs'] ?? null;
                         $row['filename_cs']  = $selectedDoc['filename_cs'] ?? null;
+                        $row['tanda_tangan_cs'] = $this->normalizeCsTandaTanganDoc($selectedDoc);
                     } else {
                         $row['nama_sampler'] = null;
                         $row['ttd_sampler']  = null;
                         $row['nama_pic']     = null;
                         $row['ttd_pic']      = null;
                         $row['filename_cs']  = null;
+                        $row['tanda_tangan_cs'] = [];
                     }
                 }
                 unset($row); // Keamanan pass-by-reference. Very good!
@@ -571,6 +597,110 @@ class DokumenFdlController extends Controller
         }
     }
 
+    /**
+     * Semua titik CS pada quotation (read-only overview).
+     * Kontrak (QTC): filter periode jadwal. Non-kontrak: seluruh titik pada tanggal sampling.
+     */
+    public function detailsDataFull(Request $request)
+    {
+        try {
+            $loggedInUser = $this->karyawan;
+            $tanggalSampling = $request->tanggal_sampling ?? $request->tangal_sampling;
+            $noQuotation = $request->no_quotation;
+
+            if (!$noQuotation || !$tanggalSampling) {
+                return response()->json(['message' => 'Nomor quotation dan tanggal sampling wajib diisi'], 400);
+            }
+
+            $isKontrak = Str::contains(strtoupper($noQuotation), 'QTC');
+
+            $query = OrderDetail::with([
+                'orderHeader:id,tanggal_order,nama_perusahaan,konsultan,no_document,alamat_sampling,nama_pic_order,nama_pic_sampling,no_tlp_pic_sampling,jabatan_pic_sampling,jabatan_pic_order,is_revisi',
+                'orderHeader.samplingPlan',
+                'orderHeader.samplingPlan.jadwal' => function ($q) {
+                    $q->where('is_active', true);
+                },
+            ])
+                ->where('is_active', true)
+                ->where(function ($q) use ($noQuotation) {
+                    $q->where('no_quotation', $noQuotation)
+                        ->orWhereHas('orderHeader', function ($header) use ($noQuotation) {
+                            $header->where('no_document', $noQuotation);
+                        });
+                });
+
+            // Kontrak: semua titik CS pada periode jadwal. Non-kontrak: seluruh titik pada quotation.
+            if ($isKontrak) {
+                if ($request->filled('periode')) {
+                    $query->where('periode', $request->periode);
+                } elseif ($tanggalSampling) {
+                    $query->where('tanggal_sampling', $tanggalSampling);
+                }
+            }
+
+            $orderDetails = $query->orderBy('no_sampel')->get();
+            $flatData = [];
+
+            foreach ($orderDetails as $orderDetail) {
+                if (empty(trim((string) $orderDetail->no_sampel))) {
+                    continue;
+                }
+
+                $titikSaya = [];
+                if ($orderDetail->orderHeader && $tanggalSampling) {
+                    $titikSaya = $this->collectUserTitikForSamplingDate(
+                        $orderDetail->orderHeader,
+                        $loggedInUser,
+                        $tanggalSampling
+                    );
+                }
+                $titikSampel = $this->extractTitikFromNoSampel($orderDetail->no_sampel);
+                $isBagianSaya = $titikSampel !== null && in_array($titikSampel, $titikSaya, true);
+
+                $crf = explode('-', $orderDetail->kategori_3);
+                $namaKategori = explode('/', $orderDetail->no_sampel ?? '');
+
+                $flatData[] = [
+                    'nomor_quotation' => $orderDetail->no_quotation,
+                    'kategori' => implode(' - ', [($crf[1] ?? ''), ($namaKategori[1] ?? '')]),
+                    'no_order' => $orderDetail->no_order,
+                    'deskripsi' => $orderDetail->keterangan_1,
+                    'no_sampel' => $orderDetail->no_sampel,
+                    'tanggal_sampling' => $orderDetail->tanggal_sampling,
+                    'periode' => $orderDetail->periode,
+                    'is_bagian_saya' => $isBagianSaya,
+                ];
+            }
+
+            $sorted = collect($flatData)
+                ->unique(function ($row) {
+                    return ($row['no_sampel'] ?? '') . '|' . ($row['tanggal_sampling'] ?? '');
+                })
+                ->sortBy(function ($row) {
+                    return ($row['tanggal_sampling'] ?? '') . '|' . ($row['no_sampel'] ?? '');
+                })
+                ->values()
+                ->toArray();
+
+            return response()->json([
+                'data' => $sorted,
+                'recordsTotal' => count($sorted),
+                'recordsFiltered' => count($sorted),
+            ]);
+        } catch (\Throwable $th) {
+            \Log::error('Gagal memuat detail data coding sampel full', [
+                'error' => $th->getMessage(),
+                'line' => $th->getLine(),
+            ]);
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan saat memproses data.',
+                'error' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
     public function updateData(Request $request)
     {
     
@@ -578,6 +708,15 @@ class DokumenFdlController extends Controller
         if ($request->has('data') && !empty($request->data)) {
             DB::beginTransaction();
             try {
+                $isPartialKeterangan = filter_var($request->input('partial', false), FILTER_VALIDATE_BOOLEAN);
+
+                try {
+                    $this->validateCsSubmitItemsForTeam($request->data, $request->input('kategori'));
+                } catch (\InvalidArgumentException $ex) {
+                    DB::rollBack();
+                    return response()->json(['message' => $ex->getMessage()], 403);
+                }
+
                 // Update keterangan and collect no_sampel
                 $noSampel = [];
                 foreach ($request->data as $item) {
@@ -697,6 +836,16 @@ class DokumenFdlController extends Controller
                     $noSampel[] = $item['no_sampel'];
                 }
 
+                if ($isPartialKeterangan) {
+                    if (empty($noSampel)) {
+                        DB::rollBack();
+                        return response()->json(['message' => 'Tidak ada deskripsi yang valid untuk disimpan'], 400);
+                    }
+
+                    DB::commit();
+                    return response()->json(['message' => 'Deskripsi berhasil disimpan'], 200);
+                }
+
                 // Quotation number and sampling date
                 $nomorQuotation  = $request->data[0]['nomor_quotation'] ?? null;
                 $tanggalSampling = $request->data[0]['tanggal_sampling'] ?? date('Y-m-d');
@@ -714,73 +863,41 @@ class DokumenFdlController extends Controller
                     // $persiapanSampel->detail_cs_documents = json_encode([]);
                 }
 
-                // Sampler
-                if ($request->ttd_sampler) {
-                    if ($request->filled('ttd_sampler_old')) {
-                        $oldSamplerPath = public_path('dokumen/cs/signatures/' . $request->ttd_sampler_old);
-                        if (file_exists($oldSamplerPath)) {
-                            unlink($oldSamplerPath);
-                        }
-                    }
-                    $ttd_sampler = $this->convertBase64ToImage($request->ttd_sampler);
-                    if ($ttd_sampler->status === 'error') {
-                        return response()->json(['message' => $ttd_sampler->message], 400);
-                    }
-                } else {
-                    $ttd_sampler = null;
-                }
-
-                // PIC
-                if ($request->ttd_pic) {
-                    if ($request->filled('ttd_pic_old')) {
-                        $oldPicPath = public_path('dokumen/cs/signatures/' . $request->ttd_pic_old);
-                        if (file_exists($oldPicPath)) {
-                            unlink($oldPicPath);
-                        }
-                    }
-                    $ttd_pic = $this->convertBase64ToImage($request->ttd_pic);
-                    if ($ttd_pic->status === 'error') {
-                        return response()->json(['message' => $ttd_pic->message], 400);
-                    }
-                } else {
-                    $ttd_pic = null;
-                }
-
                 // Update detail_cs_documents JSON
-                //===== perbaikan gagal render =====
                 $csDocuments = $persiapanSampel->detail_cs_documents
                     ? json_decode($persiapanSampel->detail_cs_documents, true)
                     : [];
-                $old_ttd_sampler_cs = null;
-                $old_ttd_pic_cs     = null;
-                $old_filename_cs    = null;
-                
+
+                $existingDoc = null;
                 foreach ($csDocuments as $doc) {
-                    if (isset($doc['no_sampel']) && $doc['no_sampel'] == $request->no_sampel) {
-                        $old_ttd_sampler_cs = $doc['ttd_sampler_cs'] ?? null;
-                        $old_ttd_pic_cs     = $doc['ttd_pic_cs'] ?? null;
-                        $old_filename_cs    = $doc['filename_cs'] ?? null;
+                    if ($this->csDocumentNoSampelMatches($doc['no_sampel'] ?? null, $request->no_sampel)) {
+                        $existingDoc = $doc;
                         break;
                     }
                 }
-                $final_ttd_sampler = $ttd_sampler ? $ttd_sampler->filename : $old_ttd_sampler_cs;
-                $final_ttd_pic     = $ttd_pic ? $ttd_pic->filename : $old_ttd_pic_cs;
-                $final_filename    = $request->filename_cs ?? $old_filename_cs;
 
+                try {
+                    $signatureBundle = $this->processCsTandaTanganRequest($request, $existingDoc);
+                } catch (\InvalidArgumentException $ex) {
+                    return response()->json(['message' => $ex->getMessage()], 400);
+                }
+
+                $final_filename = $request->filename_cs ?? ($existingDoc['filename_cs'] ?? null);
 
                 $newDocument = [
-                    'tanggal'         => $tanggalSampling,
-                    'nama_sampler_cs' => $request->nama_sampler,
-                    'ttd_sampler_cs'  => $final_ttd_sampler, // <-- Gunakan TTD Final
-                    'nama_pic_cs'     => $request->nama_pic,
-                    'ttd_pic_cs'      => $final_ttd_pic,     // <-- Gunakan TTD Final
-                    'filename_cs'     => $final_filename,
-                    'no_sampel'       => $request->no_sampel,
+                    'tanggal'           => $tanggalSampling,
+                    'nama_sampler_cs'   => $signatureBundle['nama_sampler'],
+                    'ttd_sampler_cs'    => $signatureBundle['ttd_sampler'],
+                    'nama_pic_cs'       => $signatureBundle['nama_pic'],
+                    'ttd_pic_cs'        => $signatureBundle['ttd_pic'],
+                    'tanda_tangan_cs'   => $signatureBundle['tanda_tangan_cs'],
+                    'filename_cs'       => $final_filename,
+                    'no_sampel'         => $request->no_sampel,
+                    'jadwal_kategori'   => $request->input('kategori'),
                 ];
-                //===== penutup perbaikan gagal render =====
                 $found = false;
                 foreach ($csDocuments as $idx => $doc) {
-                    if (isset($doc['no_sampel']) && $doc['no_sampel'] == $request->no_sampel) {
+                    if ($this->csDocumentNoSampelMatches($doc['no_sampel'] ?? null, $request->no_sampel)) {
                         $csDocuments[$idx] = $newDocument;
                         $found = true;
                         break;
@@ -848,12 +965,13 @@ class DokumenFdlController extends Controller
                     // dd('masuk');
                     // Siapkan data signature untuk PDF
                     $signatureData = (object) [
-                        'ttd_sampler' => $final_ttd_sampler, // <-- GUNAKAN VARIABEL FINAL
-                        'ttd_pic'     => $final_ttd_pic,     // <-- GUNAKAN VARIABEL FINAL
-                        'nama_pic'    => $request->nama_pic,
-                        'nama_sampler'=> $request->nama_sampler,
-                        'filename_cs' => $final_filename,    // <-- (Opsional) Biar sekalian konsisten pakai final
-                        'no_sampel'   => $request->no_sampel,
+                        'ttd_sampler'      => $signatureBundle['ttd_sampler'],
+                        'ttd_pic'          => $signatureBundle['ttd_pic'],
+                        'nama_pic'         => $signatureBundle['nama_pic'],
+                        'nama_sampler'     => $signatureBundle['nama_sampler'],
+                        'tanda_tangan_cs'  => $signatureBundle['tanda_tangan_cs'],
+                        'filename_cs'      => $final_filename,
+                        'no_sampel'        => $request->no_sampel,
                     ];
 
                     // Hapus PDF lama
@@ -873,7 +991,7 @@ class DokumenFdlController extends Controller
 
                     // Update CS document filename di JSON
                     foreach ($csDocuments as $idx => $doc) {
-                        if (isset($doc['no_sampel']) && $doc['no_sampel'] == $request->no_sampel) {
+                        if ($this->csDocumentNoSampelMatches($doc['no_sampel'] ?? null, $request->no_sampel)) {
                             $csDocuments[$idx]['filename_cs'] = $newFilename;
                             break;
                         }
@@ -900,27 +1018,21 @@ class DokumenFdlController extends Controller
     {
         // dd($orderDetails);
         try {
+            $firstRow = $orderDetail->first();
+            $konsultan = $firstRow->konsultan ? ' (' . $firstRow->konsultan . ')' : '';
+            $filename = $signatureData->filename_cs;
+            $qrFooterHtml = $this->resolveCsPdfQrFooterHtml($firstRow);
+
             $pdf = new Mpdf([
                 'mode' => 'utf-8',
                 'format' => 'A4',
+                'orientation' => 'P',
                 'margin_header' => 3,
                 'margin_bottom' => 3,
                 'margin_footer' => 3,
                 'setAutoTopMargin' => 'stretch',
                 'setAutoBottomMargin' => 'stretch',
-                'orientation' => 'P'
             ]);
-
-            $konsultan = '';
-            if ($orderDetail->first()->konsultan)
-                $konsultan = ' (' . $orderDetail->first()->konsultan . ')';
-
-            //Nama PDF Gunakan NoSampel
-            // $noSampelString = is_array($signatureData->no_sampel) ? implode('', $signatureData->no_sampel) : '';
-            // $filename = 'DOC_CS_' . ($orderDetail->first()->no_order ?? 'NO_ORDER') . '_' . $noSampelString . '.pdf';
-
-            $filename = $signatureData->filename_cs;
-            // dd($filename);
 
             $pdf->setFooter([
                 'odd' => [
@@ -929,158 +1041,78 @@ class DokumenFdlController extends Controller
                         'font-size' => 6,
                         'font-style' => 'I',
                         'font-family' => 'serif',
-                        'color' => '#606060'
+                        'color' => '#606060',
                     ],
                     'R' => [
                         'content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}',
                         'font-size' => 5,
                         'font-style' => 'I',
                         'font-family' => 'serif',
-                        'color' => '#000000'
+                        'color' => '#000000',
                     ],
                     'L' => [
+                        'content' => $qrFooterHtml,
                         'font-size' => 4,
                         'font-style' => 'I',
                         'font-family' => 'serif',
-                        'color' => '#000000'
+                        'color' => '#000000',
                     ],
                     'line' => -1,
-                ]
+                ],
             ]);
-                
-            $pdf->WriteHTML('
-                <!DOCTYPE html>
-                    <html>
-                        <head>
-                            <style>
-                                .custom1 { font-size: 12px; font-weight: bold; }
-                                .custom2 { font-size: 15px; font-weight: bold; text-align: center; padding: 5px; }
-                                .custom3 { font-size: 12px; font-weight: bold; text-align: center; border: 1px solid #000000; padding: 5px;}
-                                .custom4 { font-size: 12px; font-weight: bold; border: 1px solid #000000;padding: 5px;}
-                                .custom5 { font-size: 10px; border: 1px solid #000000; padding: 5px;}
-                                .custom6 { font-size: 10px; font-weight: bold; text-align: center; border: 1px solid #000000; padding: 5px;}
-                            </style>
-                        </head>
-                        <body>
-                        <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
-                            <tr>
-                                <td class="custom1" width="200">PT INTI SURYA LABORATORIUM</td>
-                                <td class="custom2" width="320">CODING SAMPLE</td>
-                                <td class="custom3">' . Carbon::parse($orderDetail->first()->tanggal_sampling)->translatedFormat('d F Y') . '</td>
-                            </tr>
-                            <tr><td colspan="3" style="padding: 2px;"></td></tr>
-                            <tr>
-                                <td class="custom4">
-                                    <table width="100%">
-                                        <tr><td style="font-size: 9px;">NO QUOTE :</td></tr>
-                                        <tr><td style="text-align: center;">' . $orderDetail->first()->no_quotation . '</td></tr>
-                                    </table>
-                                </td>
-                                <td width="120" class="custom4" style="text-align: center;">' . $orderDetail->first()->nama_perusahaan . $konsultan . '</td>
-                                <td class="custom3">' . $orderDetail->first()->no_order . '</td>
-                            </tr>
-                            <tr><td colspan="3" style="padding: 2px;"></td></tr>
-                        </table>
-            ');
 
+            $csPdfCss = $this->buildCsPdfStyles();
+            $csPdfHeader = $this->buildCsPdfHeaderHtml($firstRow, $konsultan);
+
+            $pdf->WriteHTML($csPdfCss, \Mpdf\HTMLParserMode::HEADER_CSS);
             $pdf->defaultheaderline = 0;
-            $pdf->SetHeader('
-                        <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
-                            <tr>
-                                <td class="custom1" width="200">PT INTI SURYA LABORATORIUM</td>
-                                <td class="custom2" width="320">CODING SAMPLING</td>
-                                <td class="custom3">' . Carbon::parse($orderDetail->first()->tanggal_sampling)->translatedFormat('d F Y') . '</td>
-                            </tr>
-                            <tr><td colspan="3" style="padding: 2px;"></td></tr>
-                            <tr>
-                                <td class="custom4">
-                                    <table width="100%">
-                                        <tr><td style="font-size: 9px;">NO QUOTE :</td></tr>
-                                        <tr><td style="text-align: center;">' . $orderDetail->first()->no_quotation . '</td></tr>
-                                    </table>
-                                </td>
-                                <td width="120" class="custom4">' . $orderDetail->first()->nama_perusahaan . $konsultan . '</td>
-                                <td class="custom3">' . $orderDetail->first()->no_order . '</td>
-                            </tr>
-                            
-                            <tr><td colspan="3" style="padding: 2px;"></td></tr>
-                        </table>
-            ');
+            $pdf->SetHTMLHeader($csPdfHeader);
 
-            $pdf->WriteHTML('
-                        <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
-                            <tr>
-                                <th class="custom6" width="90">CS</th>
-                                <th class="custom6" width="70">KATEGORI</th>
-                                <th class="custom6">DESKRIPSI</th>
-                                <th class="custom6" width="128">QRCODE</th>
-                                <th class="custom6" width="28">CS</t>
-                                <th class="custom6" width="28">C-1</th>
-                                <th class="custom6" width="28">C-2</t>
-                                <th class="custom6" width="28">C-3</th>
-                            </tr>
-            ');
+            $pdf->WriteHTML('<!DOCTYPE html><html><head><style>' . $csPdfCss . '</style></head><body>');
+            $pdf->WriteHTML('<table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; margin-top: 8px;">
+                <thead>
+                    <tr>
+                        <th class="custom6" width="90">CS</th>
+                        <th class="custom6" width="70">KATEGORI</th>
+                        <th class="custom6">DESKRIPSI</th>
+                        <th class="custom6" width="128">QRCODE</th>
+                        <th class="custom6" width="28">CS</th>
+                        <th class="custom6" width="28">C-1</th>
+                        <th class="custom6" width="28">C-2</th>
+                        <th class="custom6" width="28">C-3</th>
+                    </tr>
+                </thead>
+                <tbody>');
 
             foreach ($orderDetails as $item) {
-                // <td class="custom5" width="28" style="text-align: center;">' . ($signatureData->ttd_sampler ? '✔' : '') . '</td>
+                $kategoriParts = explode('-', (string) $item->kategori_3);
+                $kategoriLabel = htmlspecialchars((string) ($kategoriParts[1] ?? ''), ENT_QUOTES, 'UTF-8');
+                $deskripsi = htmlspecialchars((string) $item->keterangan_1, ENT_QUOTES, 'UTF-8');
+                $noSampel = htmlspecialchars((string) $item->no_sampel, ENT_QUOTES, 'UTF-8');
+                $barcodeFile = $item->file_koding_sampel ?? '';
+                $barcodePath = public_path('barcode/sample/' . $barcodeFile);
+                $barcodeCell = $barcodeFile && is_file($barcodePath)
+                    ? '<img src="' . $barcodePath . '" style="height: 28px; max-width: 118px; width: auto;" />'
+                    : '&nbsp;';
+
                 $pdf->WriteHTML('
                     <tr>
-                        <td class="custom5" width="90">' . $item->no_sampel . '</td>
-                        <td class="custom5" width="70">' . explode("-", $item->kategori_3)[1] . '</td>
-                        <td class="custom5" height="60">' . $item->keterangan_1 . '</td>
-                        <td class="custom5" width="128"><img src="' . public_path() . '/barcode/sample/' . $item->file_koding_sampel . '" style="height: 30px; width:180px;"></td>
-                        <td class="custom5" width="28">' . $item->jumlah_botol . '</td>
+                        <td class="custom5" width="90">' . $noSampel . '</td>
+                        <td class="custom5" width="70">' . $kategoriLabel . '</td>
+                        <td class="custom5">' . $deskripsi . '</td>
+                        <td class="custom5" width="128" style="text-align:center;">' . $barcodeCell . '</td>
+                        <td class="custom5" width="28" style="text-align:center;">' . htmlspecialchars((string) $item->jumlah_botol, ENT_QUOTES, 'UTF-8') . '</td>
                         <td class="custom5" width="28" style="text-align: center;">' . ($item->status_c1 == 1 ? '✔' : '') . '</td>
                         <td class="custom5" width="28"></td>
                         <td class="custom5" width="28"></td>
-                    </tr>
-                ');
-            }
-            // ==== perbaikan gagal decode ttd ====
-            $sign_sampler = null;
-            if (!empty($signatureData->ttd_sampler)) {
-                $sign_sampler = $this->decodeImageToBase64($signatureData->ttd_sampler);
+                    </tr>');
             }
 
-            $sign_pic = null;
-            if (!empty($signatureData->ttd_pic)) {
-                $sign_pic = $this->decodeImageToBase64($signatureData->ttd_pic);
-            }
-            if (
-                (isset($sign_sampler->status) && $sign_sampler->status === 'error') || 
-                (isset($sign_pic->status) && $sign_pic->status === 'error')
-            ) {
-                // Lempar exception, JANGAN return JSON
-                throw new \Exception($sign_pic->message ?? $sign_sampler->message ?? 'Gagal decode TTD');
-            }
-            $ttd_sampler = (!empty($signatureData->ttd_sampler) && $sign_sampler) ? '<img src="' . $sign_sampler->base64 . '" style="height: 60px; max-width: 150px;">' : '';
-            $ttd_pic = (!empty($signatureData->ttd_pic) && $sign_pic) ? '<img src="' . $sign_pic->base64 . '" style="height: 60px; max-width: 150px;">' : '';
-            // ==== penutup perbaikan gagal decode ttd ====
-            $pdf->WriteHTML('</table>
-                            <table class="table" width="100%" style="border: none;margin-top: 20px">
-                                <tr>
-                                    <td style="border: none;width: 30%; text-align: center;height: 80px;">' . $ttd_sampler . '</td>
-                                    <td style="border: none;width: 20%; text-align: center;height: 80px;"></td>
-                                    <td style="border: none;width: 20%; text-align: center;height: 80px;"></td>
-                                    <td style="border: none;width: 30%; text-align: center;height: 80px;">' . $ttd_pic . '</td>
-                                </tr>
-                                <tr>
-                                    <td style="border: none;width: 30%;text-align: center;"><p><strong>' . strtoupper($signatureData->nama_sampler) . '</strong></p></td>
-                                    <td style="border: none;width: 20%;text-align: center;"></td>
-                                    <td style="border: none;width: 20%;text-align: center;"></td>
-                                    <td style="border: none;width: 30%;text-align: center;"><p><strong>' . strtoupper($signatureData->nama_pic) . '</strong></p></td>
-                                </tr>
-                                <tr>
-                                    <td style="border: none;width: 30%; text-align: center;"><p><strong>Sampler</strong></p></td>
-                                    <td style="border: none;width: 20%; text-align: center;"></td>
-                                    <td style="border: none;width: 20%; text-align: center;"></td>
-                                    <td style="border: none;width: 30%; text-align: center;"><p><strong>Penanggung Jawab</strong></p></td>
-                                </tr>
-                            </table>');
-
-
+            $pdf->WriteHTML('</tbody></table>');
+            $pdf->WriteHTML($this->buildCsPdfSignatureFooterHtml($signatureData));
             $pdf->WriteHTML('</body></html>');
-            
+
+            $this->trimCsPdfTrailingBlankPage($pdf, $orderDetails);
 
             $pdf->Output(public_path() . '/dokumen/' . '/cs/' . $filename);
 
@@ -1425,6 +1457,255 @@ class DokumenFdlController extends Controller
         return $map[$parameter] ?? 1;
     }
 
+    private function formatJadwalKategoriLabel($kategoriRaw): string
+    {
+        $decoded = json_decode(html_entity_decode((string) $kategoriRaw), true);
+        if (!is_array($decoded)) {
+            return trim((string) $kategoriRaw);
+        }
+
+        return implode(', ', $decoded);
+    }
+
+    private function collectUserTitikForSamplingDate(
+        $orderHeader,
+        string $loggedInUser,
+        $tanggalSampling,
+        ?string $jadwalKategoriLabel = null,
+        bool $isProgrammer = false
+    ): array {
+        $titik = [];
+
+        foreach ($orderHeader->samplingPlan ?? [] as $samplingPlan) {
+            foreach ($samplingPlan->jadwal ?? [] as $jadwal) {
+                if ($jadwal->tanggal != $tanggalSampling) {
+                    continue;
+                }
+
+                if ($jadwalKategoriLabel !== null && $jadwalKategoriLabel !== '') {
+                    if ($this->formatJadwalKategoriLabel($jadwal->kategori) !== $jadwalKategoriLabel) {
+                        continue;
+                    }
+                }
+
+                if (!$isProgrammer) {
+                    $samplerList = array_map('trim', explode(',', (string) ($jadwal->sampler ?? '')));
+                    if (!in_array($loggedInUser, $samplerList, true)) {
+                        continue;
+                    }
+                }
+
+                $titik = array_merge($titik, $this->extractTitikFromKategoriJadwal($jadwal->kategori));
+            }
+        }
+
+        return array_values(array_unique($titik));
+    }
+
+    private function resolveSamplerForCsTeam(
+        $orderHeader,
+        string $loggedInUser,
+        $tanggalSampling,
+        ?string $jadwalKategoriLabel,
+        bool $isProgrammer
+    ): string {
+        if (!$orderHeader) {
+            return $loggedInUser;
+        }
+
+        foreach ($orderHeader->samplingPlan ?? [] as $samplingPlan) {
+            foreach ($samplingPlan->jadwal ?? [] as $jadwal) {
+                if ($jadwal->tanggal != $tanggalSampling) {
+                    continue;
+                }
+                if ($jadwalKategoriLabel !== null && $jadwalKategoriLabel !== '') {
+                    if ($this->formatJadwalKategoriLabel($jadwal->kategori) !== $jadwalKategoriLabel) {
+                        continue;
+                    }
+                }
+
+                $samplerList = array_values(array_filter(array_map('trim', explode(',', (string) ($jadwal->sampler ?? '')))));
+                if (empty($samplerList)) {
+                    continue;
+                }
+
+                if (!$isProgrammer && in_array($loggedInUser, $samplerList, true)) {
+                    return $loggedInUser;
+                }
+
+                return $samplerList[0];
+            }
+        }
+
+        return $loggedInUser;
+    }
+
+    private function validateCsSubmitItemsForTeam(array $items, ?string $jadwalKategoriLabel): void
+    {
+        if (empty($items)) {
+            throw new \InvalidArgumentException('Data submit kosong');
+        }
+
+        $loggedInUser = $this->karyawan;
+        $isProgrammer = MasterKaryawan::where('nama_lengkap', $loggedInUser)
+            ->whereIn('id_jabatan', [41, 42])
+            ->exists();
+
+        $jadwalKategoriLabel = $jadwalKategoriLabel !== null ? trim($jadwalKategoriLabel) : null;
+
+        foreach ($items as $item) {
+            if (empty($item['no_sampel']) || empty($item['no_order']) || empty($item['tanggal_sampling'])) {
+                throw new \InvalidArgumentException('Data sampel tidak lengkap');
+            }
+
+            $orderDetail = OrderDetail::with([
+                'orderHeader.samplingPlan',
+                'orderHeader.samplingPlan.jadwal' => function ($q) {
+                    $q->where('is_active', true);
+                },
+            ])
+                ->where('no_sampel', $item['no_sampel'])
+                ->where('no_order', $item['no_order'])
+                ->where('tanggal_sampling', $item['tanggal_sampling'])
+                ->where('is_active', 1)
+                ->first();
+
+            if (!$orderDetail || !$orderDetail->orderHeader) {
+                throw new \InvalidArgumentException('Sampel tidak ditemukan');
+            }
+
+            if ($isProgrammer && ($jadwalKategoriLabel === null || $jadwalKategoriLabel === '')) {
+                continue;
+            }
+
+            $allowedTitik = $this->collectUserTitikForSamplingDate(
+                $orderDetail->orderHeader,
+                $loggedInUser,
+                $item['tanggal_sampling'],
+                $jadwalKategoriLabel ?: null,
+                $isProgrammer
+            );
+
+            if (empty($allowedTitik)) {
+                throw new \InvalidArgumentException('Titik tidak termasuk tim/jadwal Anda');
+            }
+
+            $titikSampel = $this->extractTitikFromNoSampel($item['no_sampel']);
+            if ($titikSampel === null || !in_array($titikSampel, $allowedTitik, true)) {
+                throw new \InvalidArgumentException('Titik CS tidak sesuai tim/jadwal sampling');
+            }
+        }
+    }
+
+    private function buildTeamSampleCodesForCs(
+        $orderHeader,
+        $tanggalSampling,
+        ?string $jadwalKategoriLabel,
+        string $loggedInUser,
+        bool $isProgrammer
+    ): array {
+        if (! $orderHeader || $jadwalKategoriLabel === null || $jadwalKategoriLabel === '') {
+            return [];
+        }
+
+        $allowedTitik = $this->collectUserTitikForSamplingDate(
+            $orderHeader,
+            $loggedInUser,
+            $tanggalSampling,
+            $jadwalKategoriLabel,
+            $isProgrammer
+        );
+
+        if (empty($allowedTitik)) {
+            return [];
+        }
+
+        $codes = [];
+        foreach ($orderHeader->orderDetail ?? [] as $orderDetail) {
+            if ($orderDetail->tanggal_sampling != $tanggalSampling) {
+                continue;
+            }
+            $titik = $this->extractTitikFromNoSampel($orderDetail->no_sampel);
+            if ($titik === null || ! in_array($titik, $allowedTitik, true)) {
+                continue;
+            }
+            $parts = explode('/', (string) $orderDetail->no_sampel);
+            $code = trim((string) ($parts[1] ?? ''));
+            if ($code !== '') {
+                $codes[] = $code;
+            }
+        }
+
+        return array_values(array_unique($codes));
+    }
+
+    private function pickCsDocumentForJadwal(
+        array $csDocuments,
+        $tanggalSampling,
+        ?string $jadwalKategoriLabel,
+        $orderHeader,
+        string $loggedInUser,
+        bool $isProgrammer
+    ): ?array {
+        if (empty($csDocuments)) {
+            return null;
+        }
+
+        $jadwalKategoriLabel = $jadwalKategoriLabel !== null ? trim($jadwalKategoriLabel) : null;
+
+        foreach ($csDocuments as $doc) {
+            if (empty($doc['filename_cs'])) {
+                continue;
+            }
+            if ($jadwalKategoriLabel && ! empty($doc['jadwal_kategori'])) {
+                if ($doc['jadwal_kategori'] === $jadwalKategoriLabel) {
+                    return $doc;
+                }
+            }
+        }
+
+        $teamSampleCodes = $this->buildTeamSampleCodesForCs(
+            $orderHeader,
+            $tanggalSampling,
+            $jadwalKategoriLabel,
+            $loggedInUser,
+            $isProgrammer
+        );
+
+        if (empty($teamSampleCodes)) {
+            return null;
+        }
+
+        foreach ($csDocuments as $doc) {
+            if (empty($doc['filename_cs']) || ! empty($doc['jadwal_kategori'])) {
+                continue;
+            }
+            if ($this->csDocumentNoSampelMatches($doc['no_sampel'] ?? null, $teamSampleCodes)) {
+                return $doc;
+            }
+        }
+
+        return null;
+    }
+
+    private function csDocumentNoSampelMatches($docNoSampel, $requestNoSampel): bool
+    {
+        if (!is_array($docNoSampel) || !is_array($requestNoSampel)) {
+            return false;
+        }
+
+        $normalize = function (array $values): array {
+            $out = array_map(function ($v) {
+                return str_pad(trim((string) $v), 3, '0', STR_PAD_LEFT);
+            }, $values);
+            sort($out);
+
+            return $out;
+        };
+
+        return $normalize($docNoSampel) === $normalize($requestNoSampel);
+    }
+
     private function extractTitikFromKategoriJadwal($kategoriRaw)
     {
         $decoded = json_decode(html_entity_decode((string) $kategoriRaw), true);
@@ -1452,6 +1733,332 @@ class DokumenFdlController extends Controller
 
         return str_pad($code, 3, '0', STR_PAD_LEFT);
     }
+
+    private function normalizeCsTandaTanganDoc(?array $doc): array
+    {
+        if (!$doc) {
+            return [];
+        }
+
+        if (!empty($doc['tanda_tangan_cs']) && is_array($doc['tanda_tangan_cs'])) {
+            return $doc['tanda_tangan_cs'];
+        }
+
+        $out = [];
+        if (!empty($doc['nama_sampler_cs']) || !empty($doc['ttd_sampler_cs'])) {
+            $out[] = [
+                'role' => 'sampler',
+                'nama' => $doc['nama_sampler_cs'] ?? '',
+                'tanda_tangan' => $doc['ttd_sampler_cs'] ?? '',
+            ];
+        }
+        if (!empty($doc['nama_pic_cs']) || !empty($doc['ttd_pic_cs'])) {
+            $out[] = [
+                'role' => 'pic',
+                'nama' => $doc['nama_pic_cs'] ?? '',
+                'tanda_tangan' => $doc['ttd_pic_cs'] ?? '',
+            ];
+        }
+
+        return $out;
+    }
+
+    private function processCsTandaTanganRequest(Request $request, ?array $existingDoc): array
+    {
+        $items = $request->input('tanda_tangan_cs');
+        if (!is_array($items) || count($items) === 0) {
+            $ttd_sampler = null;
+            $ttd_pic = null;
+
+            if ($request->ttd_sampler) {
+                $ttd_sampler = $this->convertBase64ToImage($request->ttd_sampler);
+                if ($ttd_sampler->status === 'error') {
+                    throw new \InvalidArgumentException($ttd_sampler->message);
+                }
+            }
+            if ($request->ttd_pic) {
+                $ttd_pic = $this->convertBase64ToImage($request->ttd_pic);
+                if ($ttd_pic->status === 'error') {
+                    throw new \InvalidArgumentException($ttd_pic->message);
+                }
+            }
+
+            $stored = $this->normalizeCsTandaTanganDoc([
+                'nama_sampler_cs' => $request->nama_sampler,
+                'ttd_sampler_cs' => $ttd_sampler ? $ttd_sampler->filename : ($existingDoc['ttd_sampler_cs'] ?? null),
+                'nama_pic_cs' => $request->nama_pic,
+                'ttd_pic_cs' => $ttd_pic ? $ttd_pic->filename : ($existingDoc['ttd_pic_cs'] ?? null),
+            ]);
+
+            return $this->signatureBundleFromStored($stored);
+        }
+
+        $stored = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $role = $item['role'] ?? '';
+            $nama = trim((string) ($item['nama'] ?? ''));
+            $ttdFile = null;
+
+            $rawTtd = $item['tanda_tangan'] ?? '';
+            if (is_string($rawTtd) && $rawTtd !== '' && str_contains($rawTtd, 'base64')) {
+                $converted = $this->convertBase64ToImage($rawTtd);
+                if ($converted->status === 'error') {
+                    throw new \InvalidArgumentException($converted->message);
+                }
+                $ttdFile = $converted->filename;
+            } elseif (!empty($item['tanda_tangan_lama'])) {
+                $ttdFile = basename((string) $item['tanda_tangan_lama']);
+            }
+
+            if ($nama === '' && empty($ttdFile)) {
+                continue;
+            }
+
+            $stored[] = [
+                'role' => $role,
+                'nama' => $nama,
+                'tanda_tangan' => $ttdFile,
+            ];
+        }
+
+        if (count($stored) === 0) {
+            throw new \InvalidArgumentException('Data tanda tangan tidak valid');
+        }
+
+        return $this->signatureBundleFromStored($stored);
+    }
+
+    private function signatureBundleFromStored(array $stored): array
+    {
+        $firstSampler = collect($stored)->firstWhere('role', 'sampler');
+        $firstPic = collect($stored)->firstWhere('role', 'pic');
+
+        return [
+            'tanda_tangan_cs' => $stored,
+            'nama_sampler' => $firstSampler['nama'] ?? null,
+            'ttd_sampler' => $firstSampler['tanda_tangan'] ?? null,
+            'nama_pic' => $firstPic['nama'] ?? null,
+            'ttd_pic' => $firstPic['tanda_tangan'] ?? null,
+        ];
+    }
+
+    private function buildCsPdfStyles(): string
+    {
+        return '
+            .custom1 { font-size: 12px; font-weight: bold; }
+            .custom2 { font-size: 15px; font-weight: bold; text-align: center; padding: 5px; }
+            .custom3 { font-size: 12px; font-weight: bold; text-align: center; border: 1px solid #000000; padding: 5px;}
+            .custom4 { font-size: 12px; font-weight: bold; border: 1px solid #000000;padding: 5px;}
+            .custom5 { font-size: 10px; border: 1px solid #000000; padding: 4px; vertical-align: middle; }
+            .custom6 { font-size: 10px; font-weight: bold; text-align: center; border: 1px solid #000000; padding: 5px;}
+            thead { display: table-header-group; }
+            tbody { display: table-row-group; }
+        ';
+    }
+
+    private function resolveCsPdfQrFooterHtml($orderDetailRow): string
+    {
+        $psHeader = PersiapanSampelHeader::where('is_active', 1)
+            ->when($orderDetailRow->no_quotation ?? null, function ($q) use ($orderDetailRow) {
+                $q->where('no_quotation', $orderDetailRow->no_quotation);
+            })
+            ->when($orderDetailRow->tanggal_sampling ?? null, function ($q) use ($orderDetailRow) {
+                $q->where('tanggal_sampling', $orderDetailRow->tanggal_sampling);
+            })
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$psHeader || empty($psHeader->no_document)) {
+            return '';
+        }
+
+        $noDocumentParts = explode('/', $psHeader->no_document);
+        if (count($noDocumentParts) < 2) {
+            return '';
+        }
+        $noDocumentParts[1] = 'CS';
+        $noDocumentCs = implode('/', $noDocumentParts);
+
+        $qr = QrDocument::where('id_document', $psHeader->id)
+            ->where('type_document', 'coding_sample')
+            ->whereJsonContains('data->no_document', $noDocumentCs)
+            ->first();
+
+        if (!$qr) {
+            return '';
+        }
+
+        $qrData = json_decode($qr->data, true);
+        if (!is_array($qrData) || ($qrData['no_document'] ?? '') !== $noDocumentCs) {
+            return '';
+        }
+
+        $svgPath = public_path('qr_documents/' . $qr->file . '.svg');
+        if (!is_file($svgPath)) {
+            return htmlspecialchars((string) ($qr->kode_qr ?? ''), ENT_QUOTES, 'UTF-8');
+        }
+
+        return '<img src="' . $svgPath . '" width="50" height="50" /><br>' . htmlspecialchars((string) ($qr->kode_qr ?? ''), ENT_QUOTES, 'UTF-8');
+    }
+
+    private function buildCsPdfHeaderHtml($orderDetailRow, string $konsultan): string
+    {
+        $tanggalSampling = Carbon::parse($orderDetailRow->tanggal_sampling)->translatedFormat('d F Y');
+        $noQuotation = htmlspecialchars((string) $orderDetailRow->no_quotation, ENT_QUOTES, 'UTF-8');
+        $namaPerusahaan = htmlspecialchars((string) $orderDetailRow->nama_perusahaan . $konsultan, ENT_QUOTES, 'UTF-8');
+        $noOrder = htmlspecialchars((string) $orderDetailRow->no_order, ENT_QUOTES, 'UTF-8');
+
+        return '
+            <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
+                <tr>
+                    <td class="custom1" width="200">PT INTI SURYA LABORATORIUM</td>
+                    <td class="custom2" width="320">CODING SAMPLING</td>
+                    <td class="custom3">' . $tanggalSampling . '</td>
+                </tr>
+                <tr><td colspan="3" style="padding: 2px;"></td></tr>
+                <tr>
+                    <td class="custom4">
+                        <table width="100%">
+                            <tr><td style="font-size: 9px;">NO QUOTE :</td></tr>
+                            <tr><td style="text-align: center;">' . $noQuotation . '</td></tr>
+                        </table>
+                    </td>
+                    <td width="120" class="custom4">' . $namaPerusahaan . '</td>
+                    <td class="custom3">' . $noOrder . '</td>
+                </tr>
+                <tr><td colspan="3" style="padding: 2px;"></td></tr>
+            </table>
+        ';
+    }
+
+    private function buildCsPdfSignatureFooterHtml($signatureData): string
+    {
+        $entries = [];
+        if (!empty($signatureData->tanda_tangan_cs) && is_array($signatureData->tanda_tangan_cs)) {
+            $entries = $signatureData->tanda_tangan_cs;
+        } elseif (!empty($signatureData->ttd_sampler) || !empty($signatureData->ttd_pic)) {
+            $entries = $this->normalizeCsTandaTanganDoc([
+                'nama_sampler_cs' => $signatureData->nama_sampler ?? '',
+                'ttd_sampler_cs' => $signatureData->ttd_sampler ?? '',
+                'nama_pic_cs' => $signatureData->nama_pic ?? '',
+                'ttd_pic_cs' => $signatureData->ttd_pic ?? '',
+            ]);
+        }
+
+        $samplers = array_values(array_filter($entries, fn ($row) => ($row['role'] ?? '') === 'sampler'));
+        $pics = array_values(array_filter($entries, fn ($row) => ($row['role'] ?? '') === 'pic'));
+
+        $samplerRows = $this->buildCsBasSignatureRows($samplers);
+        $picRows = $this->buildCsBasSignatureRows($pics);
+
+        if ($samplerRows === '') {
+            $samplerRows = $this->buildCsBasSignaturePlaceholderRow();
+        }
+        if ($picRows === '') {
+            $picRows = $this->buildCsBasSignaturePlaceholderRow();
+        }
+
+        $samplerBlock = $this->buildCsSignatureSideBlock('(Sampler)', $samplerRows);
+        $picBlock = $this->buildCsSignatureSideBlock('(PIC Lapangan)', $picRows);
+
+        return '
+            <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; margin-top: 12px;">
+                <tr>
+                    <td style="border: none; vertical-align: top; width: 49%;">' . $samplerBlock . '</td>
+                    <td style="border: none; width: 8px; padding: 0;"></td>
+                    <td style="border: none; vertical-align: top; width: 49%;">' . $picBlock . '</td>
+                </tr>
+            </table>';
+    }
+
+    private function buildCsSignatureSideBlock(string $roleLabel, string $rowsHtml): string
+    {
+        return '
+            <table width="100%" style="border-collapse: collapse; border: none; padding-top: 8px; padding-bottom: 8px;">
+                <tr>
+                    <td colspan="2" style="text-align: center; font-weight: bold; font-size: 12px; border: none; padding-bottom: 6px;">
+                        <span>Pihak Yang Menjalankan Kegiatan</span><br/>
+                        <span style="font-style: italic;">' . htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8') . '</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td width="115" style="text-align: left; font-weight: bold; font-size: 11px; border: none; padding: 4px 6px 4px 0;">Nama Lengkap</td>
+                    <td width="115" style="text-align: center; font-weight: bold; font-size: 11px; border: none; padding: 4px 0;">Tanda Tangan</td>
+                </tr>
+                ' . $rowsHtml . '
+            </table>';
+    }
+
+    /** Baris tanda tangan (tanpa border sel, layout BAS) */
+    private function buildCsBasSignatureRows(array $entries): string
+    {
+        if (empty($entries)) {
+            return '';
+        }
+
+        $html = '';
+        foreach ($entries as $index => $entry) {
+            $number = $index + 1;
+            $nama = htmlspecialchars((string) ($entry['nama'] ?? ''), ENT_QUOTES, 'UTF-8');
+            $ttdCell = '&nbsp;';
+
+            if (!empty($entry['tanda_tangan'])) {
+                $sign = $this->decodeImageToBase64($entry['tanda_tangan']);
+                if ($sign && (!isset($sign->status) || $sign->status !== 'error')) {
+                    $ttdCell = '<img src="' . $sign->base64 . '" alt="" style="display: block; margin: 0 auto; max-width: 100px; max-height: 50px;" />';
+                }
+            }
+
+            $html .= '
+                <tr>
+                    <td width="115" style="font-size: 11px; border: none; padding: 6px 6px 6px 0; text-align: left; vertical-align: middle;">'
+                        . $number . '. ' . $nama .
+                    '</td>
+                    <td width="115" style="border: none; padding: 6px 0; text-align: center; vertical-align: middle;">' . $ttdCell . '</td>
+                </tr>';
+        }
+
+        return $html;
+    }
+
+    private function buildCsBasSignaturePlaceholderRow(): string
+    {
+        return '
+            <tr>
+                <td width="115" style="font-size: 11px; border: none; padding: 6px 6px 6px 0; text-align: left;">1. ......................</td>
+                <td width="115" style="border: none; padding: 6px 0; text-align: center;">&nbsp;</td>
+            </tr>';
+    }
+
+    /**
+     * Hapus halaman terakhir jika kosong (efek samping margin mPDF / blok tanda tangan).
+     * Tidak dijalankan jika titik banyak sehingga memang perlu multi-halaman.
+     */
+    private function trimCsPdfTrailingBlankPage($pdf, $orderDetails): void
+    {
+        $pageCount = is_array($pdf->pages ?? null) ? count($pdf->pages) : (int) ($pdf->page ?? 0);
+        if ($pageCount <= 1) {
+            return;
+        }
+
+        $rowCount = is_countable($orderDetails) ? count($orderDetails) : $orderDetails->count();
+        if ($rowCount > 14) {
+            return;
+        }
+
+        $lastPage = $pageCount;
+        $lastPageContent = (string) ($pdf->pages[$lastPage] ?? '');
+        $stripped = trim(strip_tags(str_replace([' ', "\n", "\r", "\t"], '', $lastPageContent)));
+
+        if ($stripped === '' || strlen($stripped) < 80) {
+            $pdf->DeletePages($lastPage, $lastPage);
+        }
+    }
+
 }
 
 
