@@ -18,7 +18,7 @@ class MonitoringFeeController extends Controller
         if ($processed) {
             $data->whereNotNull('transfer_date');
         } else {
-            $data->whereNull('transfer_date');
+            $data->whereNull('transfer_date')->where('is_reject_finance', 0);
         }
 
         $data->select('pengajuan_fee_sampling.*')->selectRaw(
