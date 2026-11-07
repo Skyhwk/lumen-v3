@@ -127,7 +127,7 @@ class Controller extends BaseController
             ?: ($orderDetail->tanggal_sampling ?: date('Y-m-d'));
 
         $samplerName = $this->karyawan;
-        $hasCheckin = \App\Models\SamplerTrackingSession::where('is_active', true)
+        $checkedInSessionIds = \App\Models\SamplerTrackingSession::where('is_active', true)
             ->whereDate('tanggal_sampling', $date)
             ->where(function ($query) use ($orderDetail) {
                 if ($orderDetail->no_order) {
@@ -144,14 +144,27 @@ class Controller extends BaseController
                         $eventQuery->where('event_type', 'checkin');
                     });
             })
-            ->exists();
+            ->pluck('id');
 
-        if ($hasCheckin) {
+        if ($checkedInSessionIds->isEmpty()) {
+            return response()->json([
+                'message' => 'Kamu belum check in di lokasi sampling untuk nomor sampel ' . $sample . '. Silakan check in terlebih dahulu sebelum cek/input nomor sampel.',
+            ], 401);
+        }
+
+        $hasPic = \App\Models\SamplerTrackingEvent::whereIn('sampler_tracking_session_id', $checkedInSessionIds)
+            ->where('event_type', 'meet_pic')
+            ->get()
+            ->contains(function ($event) {
+                return \App\Services\SamplerTrackingPicContacts::isFilled($event->pic_contacts ?? null);
+            });
+
+        if ($hasPic) {
             return null;
         }
 
         return response()->json([
-            'message' => 'Kamu belum check in di lokasi sampling untuk nomor sampel ' . $sample . '. Silakan check in terlebih dahulu sebelum cek/input nomor sampel.',
+            'message' => 'Isi data PIC yang ditemui di lokasi dulu sebelum cek/input nomor sampel ' . $sample . '.',
         ], 401);
     }
 
