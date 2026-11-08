@@ -73,7 +73,7 @@ class RenderInvoiceTitik
                 if ($noDoc[1] == 'QTC') {
                     if ($value->periode != "all") {
                     
-                    $dataDetail = Invoice::select('invoice.*', 'invoice.nama_perusahaan as perusahaan', 'order_header.*', 'quot_h.no_document', 'quot_h.wilayah', 'quot_d.data_pendukung_sampling', 'quot_d.transportasi', 'quot_d.harga_transportasi_total', 'quot_d.harga_transportasi', 'quot_d.jumlah_orang_24jam AS jam_jumlah_orang_24', 'quot_d.harga_24jam_personil_total', 'quot_d.perdiem_jumlah_orang', 'quot_d.harga_perdiem_personil_total', 'quot_d.biaya_lain', 'quot_d.grand_total', 'quot_d.discount_air', 'quot_d.total_discount_air', 'quot_d.discount_non_air', 'quot_d.total_discount_non_air', 'quot_d.discount_udara', 'quot_d.total_discount_udara', 'quot_d.discount_emisi', 'quot_d.total_discount_emisi', 'quot_d.discount_transport', 'quot_d.total_discount_transport', 'quot_d.discount_perdiem', 'quot_d.total_discount_perdiem', 'quot_d.discount_perdiem_24jam', 'quot_d.total_discount_perdiem_24jam', 'quot_d.discount_gabungan', 'quot_d.total_discount_gabungan', 'quot_d.discount_consultant', 'quot_d.total_discount_consultant', 'quot_d.discount_group', 'quot_d.total_discount_group', 'quot_d.cash_discount_persen', 'quot_d.total_cash_discount_persen', 'quot_d.cash_discount', 'quot_d.custom_discount', 'quot_h.syarat_ketentuan', 'quot_h.keterangan_tambahan', 'quot_d.total_dpp', 'quot_d.total_ppn', 'quot_d.total_pph', 'quot_d.pph', 'quot_d.total_biaya_di_luar_pajak', 'quot_d.piutang', 'quot_d.biaya_akhir', 'quot_h.is_active', 'quot_h.id_cabang', 'quot_d.biaya_preparasi', 'quot_d.total_biaya_preparasi')
+                    $dataDetail = Invoice::select('invoice.*', 'invoice.nama_perusahaan as perusahaan', 'order_header.*', 'quot_h.no_document', 'quot_h.wilayah', 'quot_d.data_pendukung_sampling', 'quot_d.transportasi', 'quot_d.harga_transportasi_total', 'quot_d.harga_transportasi', 'quot_d.jumlah_orang_24jam AS jam_jumlah_orang_24', 'quot_d.harga_24jam_personil_total', 'quot_d.perdiem_jumlah_orang', 'quot_d.harga_perdiem_personil_total', 'quot_d.biaya_lain', 'quot_d.grand_total', 'quot_d.discount_air', 'quot_d.total_discount_air', 'quot_d.discount_non_air', 'quot_d.total_discount_non_air', 'quot_d.discount_udara', 'quot_d.total_discount_udara', 'quot_d.discount_emisi', 'quot_d.total_discount_emisi', 'quot_d.discount_transport', 'quot_d.total_discount_transport', 'quot_d.discount_perdiem', 'quot_d.total_discount_perdiem', 'quot_d.discount_perdiem_24jam', 'quot_d.total_discount_perdiem_24jam', 'quot_d.discount_gabungan', 'quot_d.total_discount_gabungan', 'quot_d.discount_consultant', 'quot_d.total_discount_consultant', 'quot_d.discount_group', 'quot_d.total_discount_group', 'quot_d.cash_discount_persen', 'quot_d.total_cash_discount_persen', 'quot_d.cash_discount', 'quot_d.custom_discount', 'quot_h.syarat_ketentuan', 'quot_h.keterangan_tambahan', 'quot_d.total_dpp', 'quot_d.total_ppn', 'quot_d.total_pph', 'quot_d.pph', 'quot_d.total_biaya_di_luar_pajak', 'quot_d.piutang', 'quot_d.biaya_akhir', 'quot_h.is_active', 'quot_h.id_cabang', 'quot_d.biaya_preparasi', 'quot_d.total_biaya_preparasi', 'quot_d.promo_id', 'quot_d.discount_promo')
                         ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
                         ->leftJoin('request_quotation_kontrak_H AS quot_h', 'invoice.no_quotation', '=', 'quot_h.no_document')
                         ->leftJoin('request_quotation_kontrak_D AS quot_d', 'quot_h.id', '=', 'quot_d.id_request_quotation_kontrak_h')
@@ -100,7 +100,7 @@ class RenderInvoiceTitik
                 } else {
                     $dataDetail = Invoice::select('invoice.*', 'invoice.nama_perusahaan as perusahaan', 'order_header.*', 'quot.*')
                         ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
-                        ->leftJoin(DB::raw('(SELECT no_document, wilayah, data_pendukung_sampling, transportasi, harga_transportasi_total, harga_transportasi, jumlah_orang_24jam AS jam_jumlah_orang_24, harga_24jam_personil_total, perdiem_jumlah_orang, harga_perdiem_personil_total, total_biaya_lain AS biaya_lain, total_biaya_preparasi AS biaya_preparasi_padatan, grand_total, discount_air, total_discount_air, discount_non_air, total_discount_non_air, discount_udara, total_discount_udara, discount_emisi, total_discount_emisi, discount_transport, total_discount_transport, discount_perdiem, total_discount_perdiem, discount_perdiem_24jam, total_discount_perdiem_24jam, discount_gabungan, total_discount_gabungan, discount_consultant, total_discount_consultant, discount_group, total_discount_group, cash_discount_persen, total_cash_discount_persen, cash_discount, custom_discount, syarat_ketentuan, keterangan_tambahan, total_dpp, total_ppn, total_pph, pph, total_biaya_di_luar_pajak, piutang, biaya_akhir, is_active, total_biaya_preparasi AS biaya_preparasi FROM request_quotation_kontrak_H) AS quot'), 'invoice.no_quotation', '=', 'quot.no_document')
+                        ->leftJoin(DB::raw('(SELECT no_document, wilayah, data_pendukung_sampling, transportasi, harga_transportasi_total, harga_transportasi, jumlah_orang_24jam AS jam_jumlah_orang_24, harga_24jam_personil_total, perdiem_jumlah_orang, harga_perdiem_personil_total, total_biaya_lain AS biaya_lain, total_biaya_preparasi AS biaya_preparasi_padatan, grand_total, discount_air, total_discount_air, discount_non_air, total_discount_non_air, discount_udara, total_discount_udara, discount_emisi, total_discount_emisi, discount_transport, total_discount_transport, discount_perdiem, total_discount_perdiem, discount_perdiem_24jam, total_discount_perdiem_24jam, discount_gabungan, total_discount_gabungan, discount_consultant, total_discount_consultant, discount_group, total_discount_group, cash_discount_persen, total_cash_discount_persen, cash_discount, custom_discount, syarat_ketentuan, keterangan_tambahan, total_dpp, total_ppn, total_pph, pph, total_biaya_di_luar_pajak, piutang, biaya_akhir, promo_id, discount_promo, is_active, total_biaya_preparasi AS biaya_preparasi FROM request_quotation_kontrak_H) AS quot'), 'invoice.no_quotation', '=', 'quot.no_document')
                         ->where('no_invoice', $noInvoice)
                         ->where('quot.is_active', true)
                         ->where('invoice.is_active', true)
@@ -125,7 +125,7 @@ class RenderInvoiceTitik
                 } else {
                     $dataDetail = Invoice::select('invoice.*', 'invoice.nama_perusahaan as perusahaan', 'order_header.*', 'quot.*')
                     ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
-                    ->leftJoin(DB::raw('(SELECT no_document, wilayah, data_pendukung_sampling, transportasi, harga_transportasi_total, harga_transportasi, jumlah_orang_24jam AS jam_jumlah_orang_24, harga_24jam_personil_total, perdiem_jumlah_orang, harga_perdiem_personil_total, total_biaya_lain AS biaya_lain, biaya_lain AS keterangan_biaya, biaya_preparasi_padatan, grand_total, discount_air, total_discount_air, discount_non_air, total_discount_non_air, discount_udara, total_discount_udara, discount_emisi, total_discount_emisi, discount_transport, total_discount_transport, discount_perdiem, total_discount_perdiem, discount_perdiem_24jam, total_discount_perdiem_24jam, discount_gabungan, total_discount_gabungan, discount_consultant, total_discount_consultant, discount_group, total_discount_group, cash_discount_persen, total_cash_discount_persen, cash_discount, custom_discount, syarat_ketentuan, keterangan_tambahan, total_dpp, total_ppn, total_pph, pph, biaya_di_luar_pajak, total_biaya_di_luar_pajak, piutang, biaya_akhir, is_active, id_cabang, biaya_preparasi_padatan AS biaya_preparasi FROM request_quotation) AS quot'), 'invoice.no_quotation', '=', 'quot.no_document')
+                    ->leftJoin(DB::raw('(SELECT no_document, wilayah, data_pendukung_sampling, transportasi, harga_transportasi_total, harga_transportasi, jumlah_orang_24jam AS jam_jumlah_orang_24, harga_24jam_personil_total, perdiem_jumlah_orang, harga_perdiem_personil_total, total_biaya_lain AS biaya_lain, biaya_lain AS keterangan_biaya, biaya_preparasi_padatan, grand_total, discount_air, total_discount_air, discount_non_air, total_discount_non_air, discount_udara, total_discount_udara, discount_emisi, total_discount_emisi, discount_transport, total_discount_transport, discount_perdiem, total_discount_perdiem, discount_perdiem_24jam, total_discount_perdiem_24jam, discount_gabungan, total_discount_gabungan, discount_consultant, total_discount_consultant, discount_group, total_discount_group, cash_discount_persen, total_cash_discount_persen, cash_discount, custom_discount, syarat_ketentuan, keterangan_tambahan, total_dpp, total_ppn, total_pph, pph, biaya_di_luar_pajak, total_biaya_di_luar_pajak, piutang, biaya_akhir, promo_id, discount_promo, is_active, id_cabang, biaya_preparasi_padatan AS biaya_preparasi FROM request_quotation) AS quot'), 'invoice.no_quotation', '=', 'quot.no_document')
                     ->where('no_invoice', $noInvoice)
                     ->where('invoice.no_quotation', $value->no_quotation)
                     ->where('quot.is_active', true)
@@ -331,6 +331,10 @@ class RenderInvoiceTitik
                         $tambah = $tambah + 1;
                     }
 
+                    if (QuotationPromoPresentation::sukaSukaInvoiceLine($values)) {
+                        $tambah++;
+                    }
+
                     if (isset($values->keterangan_lainnya)) {
                         $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
                     }
@@ -363,6 +367,8 @@ class RenderInvoiceTitik
                             <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
                             <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document .'<br/>' . ($periode ? $periode : '') . '</b></span></td>'
                     );
+
+                    QuotationPromoPresentation::writeSukaSukaInvoiceRow($pdf, $values);
 
                     if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
 
@@ -408,7 +414,7 @@ class RenderInvoiceTitik
                             </tr>
                         ');
                     }
-                    
+
                     if (isset($values->keterangan_lainnya)) {
                         foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
                             
@@ -476,6 +482,10 @@ class RenderInvoiceTitik
 
                         if ($values->harga_perdiem_personil_total > 0 && $values->harga_perdiem_personil_total != null) {
                             $tambah = $tambah + 1;
+                        }
+
+                        if (QuotationPromoPresentation::sukaSukaInvoiceLine($values)) {
+                            $tambah++;
                         }
 
                         if ($values->biaya_lain != null && $values->biaya_lain > 0) {
@@ -622,6 +632,7 @@ class RenderInvoiceTitik
                             $isLastElement = $i == count(array_chunk($cekArray, 15)) - 1;
 
                             if ($isLastElement) {
+                                QuotationPromoPresentation::writeSukaSukaInvoiceRow($pdf, $values);
 
                                 if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
 
@@ -739,6 +750,10 @@ class RenderInvoiceTitik
                                 $tambah = $tambah + 1;
                             }
 
+                            if (QuotationPromoPresentation::sukaSukaInvoiceLine($values)) {
+                                $tambah++;
+                            }
+
                             if ($values->biaya_lain != null) {
                                 $tambah = $tambah + count(json_decode($values->biaya_lain));
                             }
@@ -847,6 +862,7 @@ class RenderInvoiceTitik
                                 $isLastElement = $i == count(array_chunk($dataSampling->data_sampling, 15)) - 1;
 
                                 if ($isLastElement) {
+                                    QuotationPromoPresentation::writeSukaSukaInvoiceRow($pdf, $values);
 
                                     if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
 
@@ -975,9 +991,13 @@ class RenderInvoiceTitik
             $sisa_tagihan = 0;
             $pajak = 0;
             
-            foreach ($harga1 as $detailHargaInvo) {
+            foreach ($harga1 as $idx => $detailHargaInvo) {
 
                 $el = json_decode(json_encode($detailHargaInvo));
+                $quoted = $data1[$idx] ?? null;
+                $rowSub = $quoted
+                    ? (int) round(QuotationPromoPresentation::displayedSubTotal($quoted, $el->sub_total, true))
+                    : (int) round($el->sub_total);
 
                 
                 //cek apakah ada biaya diluar pajak
@@ -993,7 +1013,7 @@ class RenderInvoiceTitik
                         $pajak = 1;
                     }
 
-                    $sub_total += (int) round($el->sub_total);
+                    $sub_total += $rowSub;
                     $diskon += $totDisk;
                     $ppn += $el->ppn == null ? 0 : round($el->ppn);
                     $pph += $el->pph == null ? 0 : round($el->pph);
@@ -1004,7 +1024,7 @@ class RenderInvoiceTitik
 
                 } else {
 
-                    $sub_total += (int) round($el->sub_total);
+                    $sub_total += $rowSub;
                     $diskon += $el->diskon == null ? 0 : round($el->diskon);
                     $ppn += $el->ppn == null ? 0 : round($el->ppn);
                     $pph += $el->pph == null ? 0 : round($el->pph);
