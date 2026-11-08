@@ -332,7 +332,7 @@ class RenderData
                             <td style="text-align:center;padding:5px;">
                                 <b>SUB TOTAL</b>
                             </td>
-                            <td style="text-align:right;padding:5px;">' . $this->rupiah($data->grand_total) . '</td>
+                            <td style="text-align:right;padding:5px;">' . $this->rupiah(QuotationPromoPresentation::displayedSubTotal($data)) . '</td>
                         </tr> '
             );
             if ($data->total_discount_air > 0) {
@@ -442,7 +442,7 @@ class RenderData
                     );
                 }
             }
-            if ($data->total_dpp != $data->grand_total && $data->total_ppn != null && $data->total_ppn != '0.00') {
+            if (QuotationPromoPresentation::showAfterDiscount($data) && $data->total_ppn != null && $data->total_ppn != '0.00') {
                 $pdf->WriteHTML(
                     ' <tr>
                         <td style="text-align:center;padding:5px;">
@@ -952,7 +952,7 @@ class RenderData
                             <td style="text-align:center;padding:5px;">
                                 <b>SUB TOTAL</b>
                             </td>
-                            <td style="text-align:right;padding:5px;">' . $this->rupiah($data->grand_total) . '</td>
+                            <td style="text-align:right;padding:5px;">' . $this->rupiah(QuotationPromoPresentation::displayedSubTotal($data)) . '</td>
                         </tr> '
             );
             if ($data->total_discount_air > 0) {
@@ -1062,7 +1062,7 @@ class RenderData
                     </tr> '
                 );
             }
-            if ($data->total_dpp != $data->grand_total) {
+            if (QuotationPromoPresentation::showAfterDiscount($data)) {
                 $pdf->WriteHTML(
                     ' <tr>
                         <td style="text-align:center;padding:5px;">
@@ -1502,7 +1502,7 @@ class RenderData
                                 <td style="text-align:center;padding:5px;">
                                     <b>SUB TOTAL</b>
                                 </td>
-                                <td style="text-align:right;padding:5px;" width="39%">' . $this->rupiah($v->grand_total) . '</td>
+                                <td style="text-align:right;padding:5px;" width="39%">' . $this->rupiah(QuotationPromoPresentation::displayedSubTotal($v)) . '</td>
                             </tr> '
                 );
 
@@ -1658,7 +1658,7 @@ class RenderData
                     }
                 }
 
-                if ($v->total_dpp != $v->grand_total) {
+                if (QuotationPromoPresentation::showAfterDiscount($v)) {
                     $pdf->WriteHTML(
                         ' <tr>
                             <td style="text-align:center;padding:5px;">
@@ -2161,10 +2161,10 @@ class RenderData
             $total_harga_pengujian = 0;
             foreach ($detail as $key => $value) {
                 $pdf->WriteHTML(
-                    '<td style="font-size: 8px; text-align:right; padding: 5px;"><b>' . self::rupiah($value->grand_total) . "</b></td>"
+                    '<td style="font-size: 8px; text-align:right; padding: 5px;"><b>' . self::rupiah(QuotationPromoPresentation::displayedSubTotal($value)) . "</b></td>"
                 );
                 $total_harga_pengujian =
-                    $total_harga_pengujian + $value->grand_total;
+                    $total_harga_pengujian + QuotationPromoPresentation::displayedSubTotal($value);
             }
             $pdf->WriteHTML(
                 '<td style="font-size: 8px; text-align:right; padding: 5px;"><b>' . self::rupiah($total_harga_pengujian) . "</b></td></tr>"
@@ -2471,7 +2471,7 @@ class RenderData
             }
 
             // TOTAL HARGA SETELAH DISCOUNT
-            if ($data->total_dpp != $data->grand_total) {
+            if (QuotationPromoPresentation::showAfterDiscount($data)) {
                 $pdf->WriteHTML(
                     '<tr><td style="text-align:center;font-size: 8px;"><b>TOTAL HARGA SETELAH DISCOUNT</b></td>'
                 );
@@ -2909,7 +2909,7 @@ class RenderData
                             <td style="text-align:center;padding:5px;">
                                 <b>SUB TOTAL</b>
                             </td>
-                            <td style="text-align:right;padding:5px;">' . $this->rupiah($data->grand_total) . '</td>
+                            <td style="text-align:right;padding:5px;">' . $this->rupiah(QuotationPromoPresentation::displayedSubTotal($data)) . '</td>
                         </tr>'
             );
             if ($data->total_discount_air > 0) {
@@ -3026,7 +3026,7 @@ class RenderData
                     );
                 }
             }
-            if ($data->total_dpp != $data->grand_total && $data->total_ppn != null && $data->total_ppn != '0.00') {
+            if (QuotationPromoPresentation::showAfterDiscount($data) && $data->total_ppn != null && $data->total_ppn != '0.00') {
                 $pdf->WriteHTML(
                     ' <tr>
                         <td style="text-align:center;padding:5px;">
@@ -3498,7 +3498,7 @@ class RenderData
                             <td style="text-align:center;padding:5px;">
                                 <b>SUB TOTAL</b>
                             </td>
-                            <td style="text-align:right;padding:5px;">' . $this->rupiah($data->grand_total) . '</td>
+                            <td style="text-align:right;padding:5px;">' . $this->rupiah(QuotationPromoPresentation::displayedSubTotal($data)) . '</td>
                         </tr> '
             );
             if ($data->total_discount_air > 0) {
@@ -3598,7 +3598,7 @@ class RenderData
                     </tr> '
                 );
             }
-            if ($data->total_dpp != $data->grand_total) {
+            if (QuotationPromoPresentation::showAfterDiscount($data)) {
                 $pdf->WriteHTML(
                     ' <tr>
                         <td style="text-align:center;padding:5px;">
@@ -3963,7 +3963,7 @@ class RenderData
                                 <td style="text-align:center;padding:5px;">
                                     <b>SUB TOTAL</b>
                                 </td>
-                                <td style="text-align:right;padding:5px;" width="39%">' . $this->rupiah($v->grand_total) . '</td>
+                                <td style="text-align:right;padding:5px;" width="39%">' . $this->rupiah(QuotationPromoPresentation::displayedSubTotal($v)) . '</td>
                             </tr> '
                 );
                 if (
@@ -4081,7 +4081,7 @@ class RenderData
                     );
                 }
 
-                if ($v->total_dpp != $v->grand_total) {
+                if (QuotationPromoPresentation::showAfterDiscount($v)) {
                     $pdf->WriteHTML(
                         ' <tr>
                             <td style="text-align:center;padding:5px;">
@@ -4466,10 +4466,10 @@ class RenderData
             $total_harga_pengujian = 0;
             foreach ($detail as $key => $value) {
                 $pdf->WriteHTML(
-                    '<td style="font-size: 8px; text-align:right; padding: 5px;"><b>' . $this->rupiah($value->grand_total) . "</b></td>"
+                    '<td style="font-size: 8px; text-align:right; padding: 5px;"><b>' . $this->rupiah(QuotationPromoPresentation::displayedSubTotal($value)) . "</b></td>"
                 );
                 $total_harga_pengujian =
-                    $total_harga_pengujian + $value->grand_total;
+                    $total_harga_pengujian + QuotationPromoPresentation::displayedSubTotal($value);
             }
             $pdf->WriteHTML(
                 '<td style="font-size: 8px; text-align:right; padding: 5px;"><b>' . $this->rupiah($total_harga_pengujian) . "</b></td></tr>"
@@ -4707,7 +4707,7 @@ class RenderData
             }
 
             // TOTAL HARGA SETELAH DISCOUNT
-            if ($data->total_dpp != $data->grand_total) {
+            if (QuotationPromoPresentation::showAfterDiscount($data)) {
                 $pdf->WriteHTML(
                     '<tr><td style="text-align:center;font-size: 8px;"><b>TOTAL HARGA SETELAH DISCOUNT</b></td>'
                 );

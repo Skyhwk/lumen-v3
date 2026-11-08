@@ -1,6 +1,7 @@
 <?php
 
 use App\Services\QuotationPromo;
+use App\Services\QuotationPromoPresentation;
 use PHPUnit\Framework\TestCase;
 
 class QuotationPromoTest extends TestCase
@@ -220,5 +221,125 @@ class QuotationPromoTest extends TestCase
         $row = $this->row(); $row->is_promo = true; $used = false;
         $this->assertEquals(400000, QuotationPromo::rowPrice($promo, $row, 200000, [], $used)[1]);
         $this->assertEquals(0, QuotationPromo::rowPrice($promo, $row, 200000, [], $used)[1]);
+    }
+
+    public function testSukaSukaZerosEveryTestPriceAndAddsFixedNominal()
+    {
+        $promo = (object) [
+            'id' => 9,
+            'metode' => 'suka_suka',
+            'kode_promo' => 'SUKA01',
+            'nama_diskon' => 'PAKET HEMAT SAMPLING',
+            'konfigurasi' => ['nominal' => 1500000],
+        ];
+        $used = false;
+        $this->assertEquals([0, 0], QuotationPromo::rowPrice($promo, $this->row(8), 200000, [100000, 50000], $used));
+        QuotationPromo::validateRows($promo, [$this->row(8), $this->row(2, '4-Udara')]);
+
+        $model = new stdClass();
+        $hargaTotal = 0;
+        $this->assertEquals(1500000, QuotationPromo::applySukaSuka($promo, $model, $hargaTotal));
+        $this->assertEquals(1500000, $hargaTotal);
+        $this->assertEquals('SUKA01', $model->kode_promo);
+        $payload = json_decode($model->discount_promo);
+        $this->assertEquals('PAKET HEMAT SAMPLING', $payload->deskripsi_promo_discount);
+        $this->assertEquals(1500000, $payload->jumlah_promo_discount);
+        $this->assertEquals('suka_suka', $payload->tipe);
+    }
+
+    public function testSukaSukaRejectsMarkedPromoRows()
+    {
+        $promo = (object) ['metode' => 'suka_suka', 'konfigurasi' => ['nominal' => 1000]];
+        $row = $this->row();
+        $row->is_promo = true;
+        $this->expectException(InvalidArgumentException::class);
+        QuotationPromo::validateRows($promo, [$row]);
+    }
+
+    public function testSukaSukaInvoiceLineUsesPromoNameAndSkipsNonSukaSuka()
+    {
+        $source = (object) [
+            'discount_promo' => json_encode([
+                'deskripsi_promo_discount' => 'PAKET ENAK',
+                'jumlah_promo_discount' => 8500000,
+                'tipe' => 'suka_suka',
+            ]),
+            'periode' => null,
+        ];
+        $line = QuotationPromoPresentation::sukaSukaInvoiceLine($source);
+        $this->assertEquals('PAKET ENAK', $line['nama']);
+        $this->assertEquals(8500000, $line['nominal']);
+        $this->assertEquals(8500000, QuotationPromoPresentation::addSukaSukaAmount($source));
+
+        $other = (object) [
+            'discount_promo' => json_encode([
+                'deskripsi_promo_discount' => 'Disc 10',
+                'jumlah_promo_discount' => 10,
+            ]),
+        ];
+        $this->assertNull(QuotationPromoPresentation::sukaSukaInvoiceLine($other));
+        $this->assertEquals(0, QuotationPromoPresentation::addSukaSukaAmount($other));
+    }
+
+    public function testSukaSukaSubTotalIncludesNominalAndSkipsAfterDiscountRow()
+    {
+        $source = (object) [
+            'grand_total' => 275000,
+            'total_dpp' => 8775000,
+            'discount_promo' => json_encode([
+                'deskripsi_promo_discount' => 'PAKET ENAK',
+                'jumlah_promo_discount' => 8500000,
+                'tipe' => 'suka_suka',
+            ]),
+        ];
+        $this->assertEquals(8775000, QuotationPromoPresentation::displayedSubTotal($source));
+        $this->assertFalse(QuotationPromoPresentation::showAfterDiscount($source));
+
+        $alreadyIncluded = clone $source;
+        $alreadyIncluded->grand_total = 8775000;
+        $this->assertEquals(8775000, QuotationPromoPresentation::displayedSubTotal($alreadyIncluded));
+        $this->assertFalse(QuotationPromoPresentation::showAfterDiscount($alreadyIncluded));
+
+        $withCashDiscount = clone $source;
+        $withCashDiscount->total_dpp = 8675000;
+        $this->assertEquals(8775000, QuotationPromoPresentation::displayedSubTotal($withCashDiscount));
+        $this->assertTrue(QuotationPromoPresentation::showAfterDiscount($withCashDiscount));
+    }
+
+    public function testSukaSukaSummaryQtyFollowsContractPeriodsAndDetailStaysOne()
+    {
+        $discount = json_encode([
+            'deskripsi_promo_discount' => 'PAKET PENGUJIAN MURAH',
+            'jumlah_promo_discount' => 550000,
+            'tipe' => 'suka_suka',
+        ]);
+        $header = (object) [
+            'discount_promo' => $discount,
+            'data_pendukung_sampling' => json_encode([
+                (object) [
+                    'kategori_1' => '1-Air',
+                    'periode' => ['2026-11', '2026-12', '2027-01', '2027-02'],
+                ],
+            ]),
+        ];
+        $summary = QuotationPromoPresentation::sukaSukaItemLine($header);
+        $this->assertEquals(4, $summary['qty']);
+        $this->assertEquals(550000, $summary['nominal']);
+        $this->assertEquals(2200000, $summary['total']);
+
+        $detail = (object) [
+            'discount_promo' => $discount,
+            'periode_kontrak' => '2026-11',
+            'data_pendukung_sampling' => json_encode([
+                (object) [
+                    'periode_kontrak' => '2026-11',
+                    'data_sampling' => [],
+                ],
+            ]),
+        ];
+        $detailLine = QuotationPromoPresentation::sukaSukaItemLine($detail);
+        $this->assertEquals(1, $detailLine['qty']);
+        $this->assertEquals(550000, $detailLine['nominal']);
+        $this->assertEquals(550000, $detailLine['total']);
     }
 }
