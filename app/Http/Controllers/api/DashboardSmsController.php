@@ -336,6 +336,7 @@ class DashboardSmsController extends Controller
                 [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRows($periode, null, $scopeIds);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
                 $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $scopeIds, $cek);
+                $return                        = $this->applyLiveQuoteHeading($return, $periode, $scopeIds);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 $years = [
@@ -504,6 +505,7 @@ class DashboardSmsController extends Controller
                 [$hierarchyRows, $hierarchyIds] = $this->prepareHierarchyRowsForKaryawanScope($periode, $teamRootId);
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
                 $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $bawahanIds, $cek);
+                $return                        = $this->applyLiveQuoteHeading($return, $periode, $bawahanIds);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 return response()->json([
@@ -631,6 +633,7 @@ class DashboardSmsController extends Controller
                 $return                        = $this->applyForecastHeading($return, $periode, $hierarchyIds, $cek);
                 $samplingScopeIds              = ($isSalesStaff || $isExecutive) ? [$karyawanId] : $scopeIds;
                 $return                        = $this->enrichRevenueHeadingWithSampling($return, $periode, $samplingScopeIds, $cek);
+                $return                        = $this->applyLiveQuoteHeading($return, $periode, $samplingScopeIds);
                 $table                         = $this->mergeHierarchyWithKpi($periode, $hierarchyRows);
 
                 return response()->json([
@@ -920,6 +923,37 @@ class DashboardSmsController extends Controller
         );
     }
 
+    private function applyLiveQuoteHeading(array $heading, ?string $periode, ?array $salesIds): array
+    {
+        if (!$periode) {
+            return $heading;
+        }
+
+        try {
+            $startDate = Carbon::createFromFormat('Y-m', $periode)->startOfMonth();
+            $endDate = $startDate->copy()->endOfMonth();
+        } catch (\Throwable $exception) {
+            return $heading;
+        }
+
+        $totals = DashboardQuotationQuery::headingTotals($salesIds, $startDate, $endDate);
+
+        foreach ($heading as &$item) {
+            if (($item['title'] ?? '') === 'Total Quote') {
+                $item['value'] = ($totals['quote_total'] ?? 0) . ' Quotes';
+                $item['info'] = 'Exist : ' . ($totals['quote_exist'] ?? 0) . " \nNew : " . ($totals['quote_new'] ?? 0);
+            }
+
+            if (($item['title'] ?? '') === 'Quote Ordered') {
+                $item['value'] = ($totals['order_total'] ?? 0) . ' QS';
+                $item['info'] = 'Exist : ' . ($totals['order_exist'] ?? 0) . " \nNew : " . ($totals['order_new'] ?? 0);
+            }
+        }
+        unset($item);
+
+        return $heading;
+    }
+
     private function applyForecastHeading(array $heading, string $periode, array $salesIds, $cek): array
     {
         $forecast = ForecastSpAggregate::totalsForPeriode(
@@ -1026,50 +1060,7 @@ class DashboardSmsController extends Controller
             [$startDate, $endDate] = $this->resolveQuotationAnalyticsDateRange($request);
             $salesIds = $this->resolveDashboardSalesIds($request);
 
-            $quotes = collect([QuotationNonKontrak::class, QuotationKontrakH::class])
-                ->flatMap(function ($model) use ($salesIds, $startDate, $endDate) {
-                    $query = $model::query()
-                        ->where('is_active', 1)
-                        ->whereBetween('created_at', [$startDate, $endDate])
-                        ->when($salesIds !== null, fn($query) => $query->whereIn('sales_id', $salesIds));
-                    DashboardQuotationQuery::excludeAutoPromo($query);
-
-                    return $query->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'kode_promo', 'promo_id', 'total_discount_promo', 'biaya_akhir', 'tanggal_penawaran']);
-                })
-                ->map(function ($quote) {
-                    $flag = strtolower(trim((string) $quote->flag_status));
-                    $status = strtolower(trim((string) $quote->status_quotation));
-                    $category = $flag === 'ordered' ? 'ordered'
-                        : ($flag === 'void' ? 'void' : (in_array($status, ['cold', 'warm', 'hot'], true) ? $status : 'no_status'));
-
-                    return [
-                        'no_document' => $quote->no_document,
-                        'pelanggan_id' => $quote->pelanggan_ID,
-                        'flag_status' => $flag,
-                        'category' => $category,
-                        'amount' => (float) ($quote->biaya_akhir ?? 0),
-                        'has_promo' => filled($quote->kode_promo) || filled($quote->promo_id) || (float) ($quote->total_discount_promo ?? 0) > 0,
-                        'is_revisi' => (bool) preg_match('/R\d+$/i', (string) $quote->no_document),
-                        'tanggal_penawaran' => $quote->tanggal_penawaran,
-                    ];
-                })
-                ->values();
-
-            $customerIds = $quotes->pluck('pelanggan_id')->filter()->unique()->values();
-            $firstOrders = $customerIds->isEmpty() ? collect() : \DB::table('order_header')
-                ->where('is_active', 1)
-                ->whereIn('id_pelanggan', $customerIds)
-                ->selectRaw('id_pelanggan, MIN(tanggal_order) as first_order_date')
-                ->groupBy('id_pelanggan')
-                ->pluck('first_order_date', 'id_pelanggan');
-
-            $quotes = $quotes->map(function ($quote) use ($firstOrders) {
-                $firstOrder = $firstOrders->get($quote['pelanggan_id']);
-                $quote['customer_type'] = $firstOrder && Carbon::parse($firstOrder)->lt(Carbon::parse($quote['tanggal_penawaran']))
-                    ? 'repeat'
-                    : 'new';
-                return $quote;
-            });
+            $quotes = DashboardQuotationQuery::collectQuotes($salesIds, $startDate, $endDate);
 
             $summarize = fn($items) => ['qty' => $items->count(), 'amount' => round((float) $items->sum('amount'), 2)];
             $statusKeys = ['cold', 'warm', 'hot', 'ordered', 'void', 'no_status'];
