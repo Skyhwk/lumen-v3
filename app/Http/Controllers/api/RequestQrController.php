@@ -30,24 +30,27 @@ class RequestQrController extends Controller
             $id_jabatan = [21,24]; // Can't View All
             $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
 
-            $data = RequestQR::where('is_active', true)
-                ->where('tipe', $request->mode);
+            $data = RequestQR::query()
+                ->leftJoin('promo_pengujian', 'promo_pengujian.id', '=', 'request_qr.promo_id')
+                ->select('request_qr.*', 'promo_pengujian.kode_promo as kode_promo')
+                ->where('request_qr.is_active', true)
+                ->where('request_qr.tipe', $request->mode);
 
             $year = $request->input('year');
             if (is_numeric($year) && (int) $year >= 2000 && (int) $year <= 2100) {
                 $year = (int) $year;
-                $data->where('created_at', '>=', $year . '-01-01 00:00:00')
-                    ->where('created_at', '<', ($year + 1) . '-01-01 00:00:00');
+                $data->where('request_qr.created_at', '>=', $year . '-01-01 00:00:00')
+                    ->where('request_qr.created_at', '<', ($year + 1) . '-01-01 00:00:00');
             }
 
             if($jabatan == 21){
-                $data->whereIn('created_by', $getBawahan);
+                $data->whereIn('request_qr.created_by', $getBawahan);
             }else if($jabatan == 24){
-                $data->where('created_by', $this->karyawan);
+                $data->where('request_qr.created_by', $this->karyawan);
             }else {
                 $data->where(function ($query) {
-                    $query->where('is_rejected', false)
-                        ->where('is_processed', false);
+                    $query->where('request_qr.is_rejected', false)
+                        ->where('request_qr.is_processed', false);
                 });
             }
 
@@ -97,6 +100,20 @@ class RequestQrController extends Controller
                     })->first();
                     return $exist !== null ? $exist->sales_id : null;
                     // return $item['pelanggan_info'] !== null ? $item['pelanggan_info']->sales_id : null;
+                })
+                ->filterColumn('created_at', function ($query, $keyword) {
+                    $keyword = trim((string) $keyword);
+                    if ($keyword === '') {
+                        return;
+                    }
+
+                    $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
+                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                        $query->whereDate('request_qr.created_at', $date);
+                        return;
+                    }
+
+                    $query->where('request_qr.created_at', 'like', '%' . $keyword . '%');
                 })
                 ->make(true);
         }catch(\Exception $e){
@@ -164,7 +181,11 @@ class RequestQrController extends Controller
 
     private function applyRequestPromo($data, $payload, $contract)
     {
-        $promo = \App\Services\QuotationPromo::resolve($payload->promo_id);
+        $payload = $this->promoPayload($payload);
+        $promo = \App\Services\QuotationPromo::resolve(
+            $payload->promo_id ?? null,
+            \App\Services\PromoPengujianAvailability::contextFromPayload($payload, null, 'request_qr')
+        );
         $rows = json_decode($data->data_pendukung_sampling) ?: [];
         if (!$promo) {
             \App\Services\QuotationPromo::validateRows(null, $rows);
@@ -175,6 +196,15 @@ class RequestQrController extends Controller
         $data->promo_id = $promo->id;
         $data->data_pendukung_sampling = json_encode($rows);
         $data->grand_total = $total;
+    }
+
+    private function promoPayload($payload)
+    {
+        if ($payload instanceof Request) {
+            $payload = $payload->all();
+        }
+
+        return is_array($payload) ? (object) $payload : $payload;
     }
 
     public function submit(Request $request){
@@ -303,6 +333,7 @@ class RequestQrController extends Controller
         }
 
         try {
+            $payload['source'] = 'request_qr';
             // Jalankan job secara sinkron agar tidak terjadi error serialisasi closure
             $job = new ForwardNonKontrakJob((object)$payload, $this->idcabang, $this->karyawan, $sales_id);
             $this->dispatch($job);
@@ -338,6 +369,7 @@ class RequestQrController extends Controller
         }
 
         try {
+            $payload['source'] = 'request_qr';
             $job = new ForwardKontrakJob((object)$payload, $this->idcabang, $this->karyawan, $this->user_id);
             $this->dispatch($job);
 

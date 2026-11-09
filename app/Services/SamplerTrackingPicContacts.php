@@ -49,8 +49,8 @@ class SamplerTrackingPicContacts
                 continue;
             }
 
-            if ($nama === '' || $jabatan === '' || $telepon === '') {
-                throw new \InvalidArgumentException('Setiap PIC wajib diisi nama, jabatan, dan nomor telepon.');
+            if ($nama === '' || $jabatan === '') {
+                throw new \InvalidArgumentException('Setiap PIC wajib diisi nama dan jabatan.');
             }
 
             $contacts[] = [

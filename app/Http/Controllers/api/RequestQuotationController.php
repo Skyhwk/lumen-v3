@@ -87,6 +87,20 @@ class RequestQuotationController extends Controller
         }
 
         return Datatables::of($data)
+            ->filterColumn('created_at', function ($query, $keyword) {
+                $keyword = trim((string) $keyword);
+                if ($keyword === '') {
+                    return;
+                }
+
+                $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
+                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                    $query->whereDate('created_at', $date);
+                    return;
+                }
+
+                $query->where('created_at', 'like', '%' . $keyword . '%');
+            })
             ->editColumn('email_cc', function ($item) {
                 $emailCC = json_decode($item['email_cc']) ?? null;
                 if ($item->sales_id == 19 && $emailCC != null) {
@@ -448,7 +462,10 @@ class RequestQuotationController extends Controller
     {
         $payload = json_decode(json_encode($request->all(), JSON_OBJECT_AS_ARRAY));
         try {
-            $payload->_promo = \App\Services\QuotationPromo::resolve($payload->promo_id ?? null);
+            $payload->_promo = \App\Services\QuotationPromo::resolve(
+                $payload->promo_id ?? null,
+                \App\Services\PromoPengujianAvailability::contextFromPayload($payload)
+            );
             $periods = $payload->informasi_pelanggan->modeQt === 'kontrak'
                 ? array_map(fn($period) => $period->data_sampling ?? [], $payload->data_pendukung ?? [])
                 : [$payload->data_pendukung ?? []];
@@ -1063,6 +1080,7 @@ class RequestQuotationController extends Controller
             }
             //Penambahan untuk harga pangan
             $harga_total += $harga_pangan;
+            $grand_total += \App\Services\QuotationPromo::applySukaSuka($payload->_promo ?? null, $data, $harga_total);
             $transport_ = 0;
             $perdiem_ = 0;
             $jam_ = 0;
@@ -2011,6 +2029,7 @@ class RequestQuotationController extends Controller
             }
             //Penambahan untuk harga pangan
             $harga_total += $harga_pangan;
+            $grand_total += \App\Services\QuotationPromo::applySukaSuka($payload->_promo ?? null, $data, $harga_total);
             $transport_ = 0;
             $perdiem_ = 0;
             $jam_ = 0;
@@ -3497,6 +3516,7 @@ class RequestQuotationController extends Controller
                     // ========================================================END DISKON ANALISA========================================================================
                     // ====================================================DISKON TRANSPORTASI========================================================================================
                     $harga_total += $harga_pangan;
+                    $grand_total += \App\Services\QuotationPromo::applySukaSuka($payload->_promo ?? null, $dataD, $harga_total);
                     $transport_ = 0;
                     $perdiem_ = 0;
                     $jam_ = 0;
@@ -5014,6 +5034,7 @@ class RequestQuotationController extends Controller
                     // ========================================================END DISKON ANALISA========================================================================
                     // ====================================================DISKON TRANSPORTASI========================================================================================
                     $harga_total += $harga_pangan;
+                    $grand_total += \App\Services\QuotationPromo::applySukaSuka($payload->_promo ?? null, $dataD, $harga_total);
                     $transport_ = 0;
                     $perdiem_ = 0;
                     $jam_ = 0;
