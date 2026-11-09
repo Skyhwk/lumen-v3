@@ -14,7 +14,7 @@ class FollowUpQuoatationAutoController extends Controller
 {
     public function index(Request $request)
     {
-        $isSales = $this->isSales();
+        $isSalesOrCRO = $this->isSalesOrCRO();
         $data = QuotationAutoLinkOpens::query()
             ->select('quotation_auto_link_opens.*')
             ->with(['quotation.sales']);
@@ -22,8 +22,8 @@ class FollowUpQuoatationAutoController extends Controller
         $processed = (int) $request->input('processed', 0);
         $data->where('quotation_auto_link_opens.is_processed', $processed);
 
-        if ($isSales) {
-            $data->with(['quotation.sales']);
+        if ($isSalesOrCRO) {
+            $this->limitToViewerSales($data);
         }
 
         return DataTables::of($data)
@@ -65,7 +65,9 @@ class FollowUpQuoatationAutoController extends Controller
     public function update(Request $request, $id)
     {
         $data = QuotationAutoLinkOpens::query()->whereKey($id);
-        $this->limitToViewerSales($data);
+        if ($this->isSalesOrCRO()) {
+            $this->limitToViewerSales($data);
+        }
         $data = $data->first();
 
         if (!$data) {
@@ -122,11 +124,21 @@ class FollowUpQuoatationAutoController extends Controller
     private function isAtasanGrade(): bool
     {
         $grade = strtoupper(trim((string) $this->grade));
+        if (in_array($grade, ['SUPERVISOR', 'MANAGER', 'SENIOR MANAGER', 'SPV'], true)) {
+            return true;
+        }
 
-        return in_array($grade, ['SUPERVISOR', 'MANAGER', 'SENIOR MANAGER', 'SPV'], true);
+        $userId = (int) $this->user_id;
+        if ($userId <= 0) {
+            return false;
+        }
+
+        $jabatanId = (int) MasterKaryawan::query()->whereKey($userId)->value('id_jabatan');
+
+        return in_array($jabatanId, [15, 21, 154, 157], true);
     }
 
-    private function isSales(): bool
+    private function isSalesOrCRO(): bool
     {
         $userId = (int) $this->user_id;
         if ($userId <= 0) {
@@ -134,10 +146,13 @@ class FollowUpQuoatationAutoController extends Controller
         }
 
         $employee = MasterKaryawan::query()->find($userId);
+
+        $jabatanId = (int) optional($employee)->id_jabatan;
+
         if (!$employee) {
             return false;
         }
 
-        return app(SalesTeamHierarchyService::class)->isSalesDivisionMember($employee);
+        return app(SalesTeamHierarchyService::class)->isSalesDivisionMember($employee) || $jabatanId === 148 || $jabatanId === 157;
     }
 }
