@@ -56,6 +56,18 @@ class NeedApproveController extends Controller
         }
 
         return Datatables::of($data)
+            ->filterColumn('created_at', function ($query, $keyword) use ($request) {
+                $keyword = trim((string) $keyword);
+                $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                    return;
+                }
+
+                $column = $request->mode == 'kontrak'
+                    ? 'request_quotation_kontrak_H.created_at'
+                    : 'request_quotation.created_at';
+                $query->whereRaw('DATE(DATE_ADD(' . $column . ', INTERVAL 7 HOUR)) = ?', [$date]);
+            })
             ->orderColumn('nama_sales', function ($query, $order) {
                 $query->orderBy('sales_id', $order);
             })->make(true);
