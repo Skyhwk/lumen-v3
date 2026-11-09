@@ -14,7 +14,9 @@ class FollowUpQuoatationAutoController extends Controller
 {
     public function index(Request $request)
     {
-        $isSalesOrCRO = $this->isSalesOrCRO();
+        $isSales = $this->isSales();
+        $isCRO = $this->isCRO();
+
         $data = QuotationAutoLinkOpens::query()
             ->select('quotation_auto_link_opens.*')
             ->with(['quotation.sales']);
@@ -22,7 +24,9 @@ class FollowUpQuoatationAutoController extends Controller
         $processed = (int) $request->input('processed', 0);
         $data->where('quotation_auto_link_opens.is_processed', $processed);
 
-        if ($isSalesOrCRO) {
+        if ($isCRO) {
+            $this->limitToCroDivision($data);
+        } elseif ($isSales) {
             $this->limitToViewerSales($data);
         }
 
@@ -65,7 +69,9 @@ class FollowUpQuoatationAutoController extends Controller
     public function update(Request $request, $id)
     {
         $data = QuotationAutoLinkOpens::query()->whereKey($id);
-        if ($this->isSalesOrCRO()) {
+        if ($this->isCRO()) {
+            $this->limitToCroDivision($data);
+        } elseif ($this->isSales()) {
             $this->limitToViewerSales($data);
         }
         $data = $data->first();
@@ -83,6 +89,13 @@ class FollowUpQuoatationAutoController extends Controller
             'success' => true,
             'message' => 'Data updated successfully',
         ], 200);
+    }
+
+    private function limitToCroDivision($query): void
+    {
+        $query->whereHas('quotation.sales', function ($sales) {
+            $sales->whereIn('id_jabatan', [148, 157]);
+        });
     }
 
     private function limitToViewerSales($query): void
@@ -138,7 +151,7 @@ class FollowUpQuoatationAutoController extends Controller
         return in_array($jabatanId, [15, 21, 154, 157], true);
     }
 
-    private function isSalesOrCRO(): bool
+    private function isSales(): bool
     {
         $userId = (int) $this->user_id;
         if ($userId <= 0) {
@@ -147,12 +160,21 @@ class FollowUpQuoatationAutoController extends Controller
 
         $employee = MasterKaryawan::query()->find($userId);
 
-        $jabatanId = (int) optional($employee)->id_jabatan;
-
         if (!$employee) {
             return false;
         }
 
-        return app(SalesTeamHierarchyService::class)->isSalesDivisionMember($employee) || $jabatanId === 148 || $jabatanId === 157;
+        return app(SalesTeamHierarchyService::class)->isSalesDivisionMember($employee);
+    }
+
+    private function isCRO(): bool
+    {
+        $userId = (int) $this->user_id;
+        if ($userId <= 0) {
+            return false;
+        }
+
+        $jabatanId = (int) MasterKaryawan::query()->whereKey($userId)->value('id_jabatan');
+        return $jabatanId === 148 || $jabatanId === 157;
     }
 }
