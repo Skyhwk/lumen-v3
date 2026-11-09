@@ -433,6 +433,250 @@ def count_json_fix_rows(conn, scanner) -> int:
     return sum(1 for _ in scanner(conn))
 
 
+def _print_field_diff(label: str, before: str | None, after: str | None) -> None:
+    if before == after:
+        return
+    print(f"    {label}:", flush=True)
+    print(f"      BEFORE: {before!r}", flush=True)
+    print(f"      AFTER:  {after!r}", flush=True)
+
+
+def preview_parameter_rows(
+    conn,
+    *,
+    only_ids: set[int] | None,
+    limit: int,
+) -> int:
+    cond = parameter_needs_trim_cond()
+    if only_ids:
+        placeholders = ",".join(["%s"] * len(only_ids))
+        sql = (
+            f"SELECT id, nama_lab, nama_regulasi, nama_lhp FROM `parameter` "
+            f"WHERE id IN ({placeholders}) AND {active_where()} ORDER BY id"
+        )
+        params: tuple = tuple(only_ids)
+    else:
+        sql = (
+            f"SELECT id, nama_lab, nama_regulasi, nama_lhp FROM `parameter` "
+            f"WHERE {active_where()} AND ({cond}) ORDER BY id"
+        )
+        params = ()
+
+    shown = 0
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        for row in cur.fetchall():
+            if shown >= limit:
+                break
+            pid = int(row["id"])
+            nl = (
+                normalize_ws(row["nama_lab"])
+                if row.get("nama_lab") is not None
+                else None
+            )
+            nr = (
+                normalize_ws(row["nama_regulasi"])
+                if row.get("nama_regulasi") is not None
+                else None
+            )
+            nh = (
+                normalize_ws(row["nama_lhp"])
+                if row.get("nama_lhp") is not None
+                else None
+            )
+            if (nl, nr, nh) == (
+                row.get("nama_lab"),
+                row.get("nama_regulasi"),
+                row.get("nama_lhp"),
+            ):
+                continue
+            print(f"\n[parameter] id={pid}", flush=True)
+            _print_field_diff("nama_lab", row.get("nama_lab"), nl)
+            _print_field_diff("nama_regulasi", row.get("nama_regulasi"), nr)
+            _print_field_diff("nama_lhp", row.get("nama_lhp"), nh)
+            shown += 1
+    return shown
+
+
+def preview_scalar_table(conn, table: str, column: str, *, limit: int) -> int:
+    edge = whitespace_edge_sql(f"`{column}`")
+    sql = (
+        f"SELECT id, `{column}` AS v FROM `{table}` "
+        f"WHERE {active_where()} AND {edge} ORDER BY id"
+    )
+    shown = 0
+    with conn.cursor() as cur:
+        cur.execute(sql)
+        for row in cur.fetchall():
+            if shown >= limit:
+                return shown
+            v = row["v"]
+            nv = normalize_ws(v) if v is not None else v
+            if nv == v:
+                continue
+            print(f"\n[{table}] id={row['id']} kolom={column}", flush=True)
+            _print_field_diff(column, v, nv)
+            shown += 1
+    return shown
+
+
+def preview_order_detail_json(
+    conn, *, row_id: int | None, limit: int
+) -> int:
+    sql = (
+        f"SELECT id, `parameter` AS payload FROM `order_detail` "
+        f"WHERE {active_where()} AND `parameter` IS NOT NULL AND `parameter` <> ''"
+    )
+    params: tuple = ()
+    if row_id is not None:
+        sql += " AND id = %s"
+        params = (row_id,)
+    sql += " ORDER BY id"
+
+    shown = 0
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        for row in cur.fetchall():
+            if shown >= limit:
+                break
+            raw = row["payload"]
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(data, list):
+                continue
+            row_had = False
+            for i, token in enumerate(data):
+                if isinstance(token, str) and token_needs_fix(token):
+                    if not row_had:
+                        print(f"\n[order_detail] id={row['id']}", flush=True)
+                        row_had = True
+                    fixed = fix_id_nama_token(token)
+                    print(f"  parameter[{i}]:", flush=True)
+                    print(f"    BEFORE: {token!r}", flush=True)
+                    print(f"    AFTER:  {fixed!r}", flush=True)
+                    shown += 1
+                    if shown >= limit:
+                        return shown
+    return shown
+
+
+def preview_request_quotation_json(
+    conn, *, row_id: int | None, limit: int
+) -> int:
+    sql = (
+        f"SELECT id, `data_pendukung_sampling` AS payload FROM `request_quotation` "
+        f"WHERE {active_where()} AND `data_pendukung_sampling` IS NOT NULL "
+        f"AND `data_pendukung_sampling` <> ''"
+    )
+    params: tuple = ()
+    if row_id is not None:
+        sql += " AND id = %s"
+        params = (row_id,)
+    sql += " ORDER BY id"
+
+    shown = 0
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        for row in cur.fetchall():
+            if shown >= limit:
+                break
+            raw = row["payload"]
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(data, list):
+                continue
+            row_had = False
+            for si, sample in enumerate(data):
+                if not isinstance(sample, dict):
+                    continue
+                plist = sample.get("parameter")
+                if not isinstance(plist, list):
+                    continue
+                for pi, token in enumerate(plist):
+                    if isinstance(token, str) and token_needs_fix(token):
+                        if not row_had:
+                            print(
+                                f"\n[request_quotation] id={row['id']} "
+                                f"(data_pendukung_sampling)",
+                                flush=True,
+                            )
+                            row_had = True
+                        fixed = fix_id_nama_token(token)
+                        path = f"sampling[{si}].parameter[{pi}]"
+                        print(f"  {path}:", flush=True)
+                        print(f"    BEFORE: {token!r}", flush=True)
+                        print(f"    AFTER:  {fixed!r}", flush=True)
+                        shown += 1
+                        if shown >= limit:
+                            return shown
+    return shown
+
+
+def run_preview(conn, args) -> int:
+    limit = args.preview_limit
+    only_ids: set[int] | None = None
+    if args.id is not None:
+        only_ids = {args.id}
+    elif args.ids.strip():
+        only_ids = parse_skip_ids(args.ids)
+
+    print(
+        "=== PREVIEW before → after (read-only, tidak UPDATE) ===\n",
+        flush=True,
+    )
+    total = 0
+
+    show_parameter = not args.json_only
+    show_scalar_tables = args.scalar_only or (
+        not args.json_only and not args.parameter_only and only_ids is None
+    )
+    show_json = args.json_only or (
+        not args.scalar_only and not args.parameter_only and only_ids is None
+    )
+
+    if show_parameter and limit > 0:
+        n = preview_parameter_rows(conn, only_ids=only_ids, limit=limit)
+        total += n
+        limit = max(0, limit - n)
+
+    if show_scalar_tables and only_ids is None and limit > 0:
+        for table, col in SCALAR_TARGETS:
+            if limit <= 0:
+                break
+            n = preview_scalar_table(conn, table, col, limit=limit)
+            total += n
+            limit -= n
+
+    if show_json and limit > 0:
+        n = preview_order_detail_json(
+            conn, row_id=args.order_detail_id, limit=limit
+        )
+        total += n
+        limit = max(0, limit - n)
+    if show_json and limit > 0:
+        n = preview_request_quotation_json(
+            conn, row_id=args.quotation_id, limit=limit
+        )
+        total += n
+
+    if total == 0:
+        print(
+            "Tidak ada perubahan yang akan dilakukan (sudah bersih atau filter/id salah).",
+            flush=True,
+        )
+    else:
+        print(
+            f"\n--- {total} contoh perubahan ditampilkan "
+            f"(batas --preview-limit={args.preview_limit}) ---",
+            flush=True,
+        )
+    return 0
+
+
 def count_remaining_whitespace(
     conn, *, include_scalar: bool = True, include_json: bool = True
 ) -> dict[str, int]:
@@ -508,6 +752,30 @@ def main() -> int:
         default="",
         help="Hanya id tertentu (koma), contoh: 671,650,74",
     )
+    parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="Tampilkan before → after (read-only, tidak UPDATE)",
+    )
+    parser.add_argument(
+        "--preview-limit",
+        type=int,
+        default=30,
+        metavar="N",
+        help="Maks contoh perubahan untuk --preview (default: 30)",
+    )
+    parser.add_argument(
+        "--quotation-id",
+        type=int,
+        metavar="ID",
+        help="--preview: satu baris request_quotation by id",
+    )
+    parser.add_argument(
+        "--order-detail-id",
+        type=int,
+        metavar="ID",
+        help="--preview: satu baris order_detail by id",
+    )
     args = parser.parse_args()
     skip_ids = parse_skip_ids(args.skip_ids or None)
     only_ids: set[int] | None = None
@@ -520,6 +788,8 @@ def main() -> int:
         parser.error("Pilih salah satu: --json-only atau --scalar-only, bukan keduanya.")
     if args.parameter_only and args.json_only:
         parser.error("--parameter-only tidak boleh digabung --json-only.")
+    if args.preview and args.apply:
+        parser.error("--preview tidak boleh digabung --apply.")
 
     mode = "APPLY" if args.apply else "DRY-RUN"
     if only_ids:
@@ -544,6 +814,9 @@ def main() -> int:
     summary: dict[str, int] = {}
 
     try:
+        if args.preview:
+            return run_preview(conn, args)
+
         if args.show_locks:
             with conn.cursor() as cur:
                 cur.execute("SHOW FULL PROCESSLIST")
