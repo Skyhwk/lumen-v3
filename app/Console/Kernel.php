@@ -105,6 +105,7 @@ class Kernel extends ConsoleKernel
         Commands\BackfillRekapHariKerjaCommand::class,
         Commands\ImportNearHo::class,
         Commands\BackupMasterPelangganDediWibowoCommand::class,
+        Commands\AssignBankDataOrderedCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,
