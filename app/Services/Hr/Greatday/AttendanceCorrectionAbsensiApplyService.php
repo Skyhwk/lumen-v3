@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
  */
 class AttendanceCorrectionAbsensiApplyService
 {
-    private const OVERNIGHT_SHIFTS = ['shsecurity2', '24jam', 'shob2'];
+    private const OVERNIGHT_SHIFTS = ['shsecurity2', '24jam'];
 
     public function isAlreadyApplied(int $employeeId, string $correctionDate, string $type, string $time): bool
     {
