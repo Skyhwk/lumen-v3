@@ -109,7 +109,7 @@ class RequestQrController extends Controller
 
                     $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
                     if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-                        $query->whereRaw('DATE(DATE_ADD(request_qr.created_at, INTERVAL 7 HOUR)) = ?', [$date]);
+                        $query->whereDate('request_qr.created_at', $date);
                         return;
                     }
 

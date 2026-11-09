@@ -194,7 +194,7 @@ class QtOrderedController extends Controller
                     $column = $request->mode == 'kontrak'
                         ? 'request_quotation_kontrak_H.created_at'
                         : 'request_quotation.created_at';
-                    $query->whereRaw('DATE(DATE_ADD(' . $column . ', INTERVAL 7 HOUR)) = ?', [$date]);
+                    $query->whereDate($column, $date);
                 })
                 ->filterColumn('order.no_order', function ($query, $keyword) {
                     $query->whereHas('order', function ($query) use ($keyword) {

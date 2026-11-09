@@ -106,7 +106,7 @@ class ReadyOrderController extends Controller
                     $column = $request->mode == 'kontrak'
                         ? 'request_quotation_kontrak_H.created_at'
                         : 'request_quotation.created_at';
-                    $query->whereRaw('DATE(DATE_ADD(' . $column . ', INTERVAL 7 HOUR)) = ?', [$date]);
+                    $query->whereDate($column, $date);
                 })
                 ->addColumn('count_jadwal', function ($row) {
                     return $row->sampling ? $row->sampling->sum(function ($sampling) {
