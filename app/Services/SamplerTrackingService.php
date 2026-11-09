@@ -2737,6 +2737,9 @@ public function buildTrackingRows($sessions)
             if ($eventType === 'meet_pic') {
                 return collect([$this->storeMeetPicEvent($member, $session, $payload)]);
             }
+            if ($eventType === 'start_sampling') {
+                $this->assertStartSamplingAllowed($member, $session);
+            }
             $this->ensureEventSequence($member, $eventType);
             $movementGroup = $member->current_movement_group ?: $this->makeMovementGroupCode($member->session);
 
@@ -2945,6 +2948,53 @@ public function buildTrackingRows($sessions)
         }
 
         return $sessions;
+    }
+
+    protected function assertStartSamplingAllowed(SamplerTrackingMember $member, SamplerTrackingSession $session): void
+    {
+        $hasCheckin = SamplerTrackingActivity::hasEvent($member, 'checkin')
+            || SamplerTrackingEvent::where('sampler_tracking_session_id', $session->id)
+                ->where('event_type', 'checkin')
+                ->exists();
+
+        if (!$hasCheckin) {
+            throw ValidationException::withMessages([
+                'event_type' => ['Check in dulu sebelum start sampling di lokasi ini.'],
+            ]);
+        }
+
+        $relatedSessionIds = collect([$session->id]);
+        if ($session->no_order || !empty($session->no_quotation)) {
+            $relatedSessionIds = SamplerTrackingSession::where('is_active', true)
+                ->whereDate('tanggal_sampling', $session->tanggal_sampling)
+                ->where(function ($query) use ($session) {
+                    if ($session->no_order) {
+                        $query->where('no_order', $session->no_order);
+                    }
+
+                    if (!empty($session->no_quotation)) {
+                        $query->orWhere('no_quotation', $session->no_quotation);
+                    }
+                })
+                ->pluck('id');
+
+            if ($relatedSessionIds->isEmpty()) {
+                $relatedSessionIds = collect([$session->id]);
+            }
+        }
+
+        $hasPic = SamplerTrackingEvent::whereIn('sampler_tracking_session_id', $relatedSessionIds)
+            ->where('event_type', 'meet_pic')
+            ->get()
+            ->contains(function ($event) {
+                return SamplerTrackingPicContacts::isFilled($event->pic_contacts ?? null);
+            });
+
+        if (!$hasPic) {
+            throw ValidationException::withMessages([
+                'event_type' => ['Isi data PIC dulu sebelum start sampling di lokasi ini.'],
+            ]);
+        }
     }
 
     public function createMissingReturn($sessionId, $samplerId, $eventAt, $reason, $actorId, $actorName)

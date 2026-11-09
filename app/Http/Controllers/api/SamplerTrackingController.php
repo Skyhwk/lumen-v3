@@ -177,7 +177,7 @@ class SamplerTrackingController extends Controller
         (new \App\Services\SamplerTrackingTroubleService())->assertAllowed($member->sampler_id, $member->session->tanggal_sampling, $member->sampler_tracking_session_id);
         $this->validate($request, [
             'member_id' => 'required',
-            'event_type' => 'required|in:departure,checkin,checkout,return,meet_pic',
+            'event_type' => 'required|in:departure,checkin,checkout,return,meet_pic,start_sampling',
             'latitude' => 'nullable',
             'longitude' => 'nullable',
             'photo' => 'nullable',
