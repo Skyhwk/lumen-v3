@@ -1,0 +1,153 @@
+================================================================================
+  PANDUAN JALANKAN AUDIT & FIX WHITESPACE NAMA PARAMETER (Lumen v3)
+  Script: audit_trailing_space_parameter.py | fix_parameter_whitespace.py
+  Koneksi DB: dari file D:\lumen-v3\.env
+================================================================================
+
+PRASYARAT (sekali)
+------------------
+  pip install pymysql
+
+  cd D:\lumen-v3
+
+  Pastikan .env berisi DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD yang benar.
+
+  Saat menjalankan --apply: tutup transaksi DBeaver / disconnect sebentar
+  agar tidak lock (error 1205).
+
+  Script TIDAK memakai SELECT ... FOR UPDATE.
+
+
+================================================================================
+1. AUDIT (READ-ONLY — tidak mengubah database)
+================================================================================
+
+Ringkasan master (nama_lab, nama_regulasi, nama_lhp) + tabel turunan + JSON:
+
+  python D:\lumen-v3\scripts\audit_trailing_space_parameter.py
+
+Detail semua baris terdampak:
+
+  python D:\lumen-v3\scripts\audit_trailing_space_parameter.py --all
+
+Cek khusus JSON (lihat order_detail & request_quotation di ringkasan audit),
+atau dry-run fix JSON:
+
+  python D:\lumen-v3\scripts\fix_parameter_whitespace.py --json-only
+
+
+================================================================================
+2. FIX — DRY-RUN (hanya hitung, TIDAK UPDATE)
+================================================================================
+
+Semua scope (scalar + JSON):
+
+  python D:\lumen-v3\scripts\fix_parameter_whitespace.py
+
+Hanya master + tabel analisa (parameter, master_harga_parameter,
+colorimetri, titrimetri, gravimetri, subkontrak):
+
+  python D:\lumen-v3\scripts\fix_parameter_whitespace.py --scalar-only
+
+Hanya JSON (order_detail.parameter, request_quotation.data_pendukung_sampling):
+
+  python D:\lumen-v3\scripts\fix_parameter_whitespace.py --json-only
+
+Hanya tabel parameter (3 kolom nama):
+
+  python D:\lumen-v3\scripts\fix_parameter_whitespace.py --parameter-only
+
+Satu id parameter:
+
+  python D:\lumen-v3\scripts\fix_parameter_whitespace.py --id 671
+
+Beberapa id (koma):
+
+  python D:\lumen-v3\scripts\fix_parameter_whitespace.py --ids 650,671,674
+
+
+================================================================================
+3. FIX — APPLY (UPDATE database — wajib --apply --yes)
+================================================================================
+
+Disarankan pakai -u agar log langsung muncul di terminal.
+
+Urutan aman:
+  (1) Scalar dulu  →  (2) Audit  →  (3) JSON jika masih ada  →  (4) Audit lagi
+
+--- Scalar (master + analisa) ---
+
+  python -u D:\lumen-v3\scripts\fix_parameter_whitespace.py --apply --yes --scalar-only
+
+--- JSON (jika audit / dry-run JSON masih > 0) ---
+
+  python -u D:\lumen-v3\scripts\fix_parameter_whitespace.py --apply --yes --json-only
+
+--- Hanya parameter (semua id bermasalah) ---
+
+  python -u D:\lumen-v3\scripts\fix_parameter_whitespace.py --apply --yes --parameter-only
+
+--- Satu id (minim lock) ---
+
+  python -u D:\lumen-v3\scripts\fix_parameter_whitespace.py --apply --yes --id 671
+
+--- Lewati id tertentu ---
+
+  python -u D:\lumen-v3\scripts\fix_parameter_whitespace.py --apply --yes --parameter-only --skip-ids 32
+
+--- Semua sekaligus (scalar + JSON) ---
+
+  python -u D:\lumen-v3\scripts\fix_parameter_whitespace.py --apply --yes
+
+
+================================================================================
+4. VERIFIKASI SETELAH FIX
+================================================================================
+
+  python D:\lumen-v3\scripts\audit_trailing_space_parameter.py
+
+Target: angka 0 di ringkasan untuk kolom/tabel yang sudah diperbaiki.
+(JSON 0 = tidak ada whitespace di tepi token; scalar tidak otomatis mengubah JSON.)
+
+
+================================================================================
+5. DIAGNOSA LOCK (error 1205)
+================================================================================
+
+  python D:\lumen-v3\scripts\fix_parameter_whitespace.py --show-locks
+
+Matikan transaksi zombie jika ada (thread Id dari output), mis. di DBeaver:
+
+  KILL <Id>;
+
+
+================================================================================
+6. SCRIPT LAMA (opsional — hanya parameter + master_harga_parameter)
+================================================================================
+
+  python D:\lumen-v3\scripts\check_trailing_space_nama_parameter.py
+  python D:\lumen-v3\scripts\check_trailing_space_nama_parameter.py --all
+
+
+================================================================================
+7. JIKA PERINTAH python TIDAK DITEMUKAN
+================================================================================
+
+  py -3.12 D:\lumen-v3\scripts\audit_trailing_space_parameter.py
+
+
+================================================================================
+SCOPE TABEL (disetujui)
+================================================================================
+
+  Master:     parameter (nama_lab, nama_regulasi, nama_lhp)
+              master_harga_parameter (nama_parameter)
+
+  Analisa:    colorimetri, titrimetri, gravimetri, subkontrak (kolom parameter)
+
+  JSON:       order_detail.parameter
+              request_quotation.data_pendukung_sampling
+
+  (sub_kontrak di aplikasi = tabel subkontrak di DB)
+
+================================================================================
