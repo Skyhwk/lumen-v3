@@ -9,6 +9,7 @@ use App\Models\QuotationNonKontrak;
 use App\Models\SalesKpi;
 use App\Models\TargetSales;
 use App\Models\SamplingPlan;
+use App\Services\DashboardQuotationQuery;
 use App\Services\ForecastSpAggregate;
 use App\Services\SalesTeamHierarchyService;
 use Carbon\Carbon;
@@ -1027,11 +1028,13 @@ class DashboardSmsController extends Controller
 
             $quotes = collect([QuotationNonKontrak::class, QuotationKontrakH::class])
                 ->flatMap(function ($model) use ($salesIds, $startDate, $endDate) {
-                    return $model::query()
+                    $query = $model::query()
                         ->where('is_active', 1)
                         ->whereBetween('created_at', [$startDate, $endDate])
-                        ->when($salesIds !== null, fn($query) => $query->whereIn('sales_id', $salesIds))
-                        ->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'kode_promo', 'promo_id', 'total_discount_promo', 'biaya_akhir', 'tanggal_penawaran']);
+                        ->when($salesIds !== null, fn($query) => $query->whereIn('sales_id', $salesIds));
+                    DashboardQuotationQuery::excludeAutoPromo($query);
+
+                    return $query->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'kode_promo', 'promo_id', 'total_discount_promo', 'biaya_akhir', 'tanggal_penawaran']);
                 })
                 ->map(function ($quote) {
                     $flag = strtolower(trim((string) $quote->flag_status));

@@ -159,12 +159,22 @@ class Controller extends BaseController
                 return \App\Services\SamplerTrackingPicContacts::isFilled($event->pic_contacts ?? null);
             });
 
-        if ($hasPic) {
+        if (!$hasPic) {
+            return response()->json([
+                'message' => 'Isi data PIC yang ditemui di lokasi dulu sebelum cek/input nomor sampel ' . $sample . '.',
+            ], 401);
+        }
+
+        $hasStartSampling = \App\Models\SamplerTrackingEvent::whereIn('sampler_tracking_session_id', $checkedInSessionIds)
+            ->where('event_type', 'start_sampling')
+            ->exists();
+
+        if ($hasStartSampling) {
             return null;
         }
 
         return response()->json([
-            'message' => 'Isi data PIC yang ditemui di lokasi dulu sebelum cek/input nomor sampel ' . $sample . '.',
+            'message' => 'Tekan Start Sampling dulu sebelum cek/input nomor sampel ' . $sample . '.',
         ], 401);
     }
 

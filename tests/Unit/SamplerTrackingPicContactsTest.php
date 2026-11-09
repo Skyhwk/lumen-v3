@@ -31,11 +31,23 @@ class SamplerTrackingPicContactsTest extends TestCase
         ]));
     }
 
-    public function testIncompleteRowIsRejected()
+    public function testIncompleteRowIsRejectedWhenJabatanMissing()
     {
         $this->expectException(\InvalidArgumentException::class);
         SamplerTrackingPicContacts::normalize([
             ['nama' => 'Budi', 'jabatan' => '', 'telepon' => '0812'],
         ]);
+    }
+
+    public function testTeleponIsOptional()
+    {
+        $contacts = SamplerTrackingPicContacts::normalize([
+            ['nama' => 'Budi', 'jabatan' => 'HSSE', 'telepon' => ''],
+        ]);
+
+        $this->assertSame([
+            ['nama' => 'Budi', 'jabatan' => 'HSSE', 'telepon' => ''],
+        ], $contacts);
+        $this->assertTrue(SamplerTrackingPicContacts::isFilled($contacts));
     }
 }

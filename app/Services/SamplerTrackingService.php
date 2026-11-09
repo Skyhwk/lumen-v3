@@ -1799,7 +1799,7 @@ class SamplerTrackingService
         }
 
         // Consolidate first so shorter orders at the same stop are not dropped during multi-day work.
-        return $this->attachSessionPicContacts(
+        return $this->attachSessionStartSampling($this->attachSessionPicContacts(
             $this->consolidateActivities($this->applyRouteOverrides($sessions, $date, $samplerId, $samplerName))
                 ->filter(function ($session) use ($date, $samplerId, $samplerName) {
                     if ($session->tanggal_sampling === $date) return true;
@@ -1809,7 +1809,7 @@ class SamplerTrackingService
                             && Carbon::parse($session->tanggal_sampling)->addDays(max(0, SamplerTrackingActivity::duration($member) - 1))->toDateString() >= $date;
                     });
                 })->values()
-        );
+        ));
     }
     public function departureForMember($member, $date)
     {
@@ -2737,6 +2737,9 @@ public function buildTrackingRows($sessions)
             if ($eventType === 'meet_pic') {
                 return collect([$this->storeMeetPicEvent($member, $session, $payload)]);
             }
+            if ($eventType === 'start_sampling') {
+                return $this->storeStartSamplingEvent($member, $session, $payload);
+            }
             $this->ensureEventSequence($member, $eventType);
             $movementGroup = $member->current_movement_group ?: $this->makeMovementGroupCode($member->session);
 
@@ -2917,6 +2920,123 @@ public function buildTrackingRows($sessions)
         return $event;
     }
 
+    protected function storeStartSamplingEvent(SamplerTrackingMember $member, SamplerTrackingSession $session, array $payload)
+    {
+        $this->assertStartSamplingAllowed($member, $session);
+
+        if ($this->memberHasTrackingEvent($member->id, 'start_sampling')) {
+            throw ValidationException::withMessages([
+                'event_type' => ['Start sampling sudah tercatat untuk lokasi ini.'],
+            ]);
+        }
+
+        $latitude = $this->normalizeCoordinate($payload['latitude'] ?? $payload['lat'] ?? null);
+        $longitude = $this->normalizeCoordinate($payload['longitude'] ?? $payload['longi'] ?? $payload['long'] ?? null);
+        if ($latitude === null || $longitude === null) {
+            throw ValidationException::withMessages([
+                'latitude' => ['Koordinat GPS wajib tercatat. Aktifkan lokasi perangkat lalu coba lagi.'],
+            ]);
+        }
+
+        $startedByName = trim((string) ($payload['started_by_name'] ?? $member->sampler_name ?? ''));
+        if ($startedByName === '') {
+            $startedByName = 'Sampler';
+        }
+
+        $eventAt = $payload['event_at'] ?? $this->now();
+        $note = trim((string) ($payload['note'] ?? ''));
+        if ($note === '') {
+            $note = 'Start sampling oleh ' . $startedByName;
+        }
+
+        $activities = $this->eventActivities($member);
+        $activity = $activities->first(function ($item) use ($member) {
+            return in_array((int) $member->sampler_tracking_session_id, array_map('intval', $item->activity_session_ids ?? [$item->id]), true);
+        });
+
+        $targets = SamplerTrackingMember::whereIn(
+            'sampler_tracking_session_id',
+            $activity->activity_session_ids ?? [$session->id]
+        )
+            ->where('is_active', true)
+            ->get()
+            ->filter(function ($target) {
+                return !$this->memberHasTrackingEvent($target->id, 'start_sampling');
+            })
+            ->values();
+
+        if ($targets->isEmpty() || !$targets->contains(function ($target) use ($member) {
+            return (string) $target->id === (string) $member->id;
+        })) {
+            throw ValidationException::withMessages([
+                'event_type' => ['Start sampling sudah tercatat untuk lokasi ini.'],
+            ]);
+        }
+
+        $movementGroup = $member->current_movement_group ?: $this->makeMovementGroupCode($session);
+        $troubleService = new SamplerTrackingTroubleService();
+        $eventModel = new SamplerTrackingEvent();
+        $events = [];
+
+        foreach ($targets as $targetMember) {
+            if ((string) $targetMember->id !== (string) $member->id
+                && $troubleService->isRecordingBlocked(
+                    $targetMember->sampler_id,
+                    $member->session->tanggal_sampling,
+                    $targetMember->sampler_tracking_session_id
+                )) {
+                continue;
+            }
+
+            $events[] = SamplerTrackingEvent::create($this->onlyExistingColumns($eventModel->getTable(), [
+                'sampler_tracking_session_id' => $targetMember->sampler_tracking_session_id,
+                'sampler_tracking_member_id' => $targetMember->id,
+                'triggered_by_member_id' => $member->id,
+                'event_type' => 'start_sampling',
+                'movement_group' => $movementGroup,
+                'latitude' => $latitude,
+                'longitude' => $longitude,
+                'note' => $note,
+                'is_auto' => (string) $targetMember->id !== (string) $member->id,
+                'sequence_no' => $this->nextSequence($targetMember->id),
+                'event_at' => $eventAt,
+            ]));
+        }
+
+        if ($events === []) {
+            throw ValidationException::withMessages([
+                'event_type' => ['Start sampling tidak dapat disimpan. Muat ulang activity lalu coba lagi.'],
+            ]);
+        }
+
+        foreach (collect($events)->groupBy('sampler_tracking_session_id') as $sessionId => $sessionEvents) {
+            SamplerTrackingHistory::append((int) $sessionId, 'activity_recorded', [
+                'event_type' => 'start_sampling',
+                'event_at' => (string) ($sessionEvents->first()->event_at ?? $this->now()),
+                'triggered_by' => [
+                    'member_id' => (int) $member->id,
+                    'sampler_id' => $member->sampler_id,
+                    'name' => $member->sampler_name,
+                ],
+                'latitude' => $latitude,
+                'longitude' => $longitude,
+                'state' => SamplerTrackingHistory::snapshot(SamplerTrackingSession::findOrFail($sessionId)),
+                'affected' => $sessionEvents->map(function ($event) {
+                    $target = SamplerTrackingMember::find($event->sampler_tracking_member_id);
+                    return [
+                        'event_id' => (int) $event->id,
+                        'member_id' => (int) $event->sampler_tracking_member_id,
+                        'sampler_id' => $target ? $target->sampler_id : null,
+                        'name' => $target ? $target->sampler_name : null,
+                        'automatic' => (bool) $event->is_auto,
+                    ];
+                })->values()->all(),
+            ]);
+        }
+
+        return collect($events);
+    }
+
     protected function attachSessionPicContacts($sessions)
     {
         $sessionIds = collect($sessions)->flatMap(function ($session) {
@@ -2945,6 +3065,94 @@ public function buildTrackingRows($sessions)
         }
 
         return $sessions;
+    }
+
+    protected function attachSessionStartSampling($sessions)
+    {
+        $sessionIds = collect($sessions)->flatMap(function ($session) {
+            return $session->activity_session_ids ?? [$session->id];
+        })->filter()->unique()->values();
+
+        $events = $sessionIds->isEmpty()
+            ? collect()
+            : SamplerTrackingEvent::with('triggeredBy', 'member')
+                ->whereIn('sampler_tracking_session_id', $sessionIds)
+                ->where('event_type', 'start_sampling')
+                ->orderByDesc('event_at')
+                ->orderByDesc('id')
+                ->get()
+                ->groupBy('sampler_tracking_session_id');
+
+        foreach ($sessions as $session) {
+            $ids = $session->activity_session_ids ?? [$session->id];
+            $event = collect($ids)->map(function ($id) use ($events) {
+                return optional($events->get($id))->first();
+            })->filter()->sortByDesc(function ($item) {
+                return (string) ($item->event_at ?? '') . ':' . $item->id;
+            })->first();
+
+            $starter = null;
+            if ($event) {
+                $starter = $event->triggeredBy ?: $event->member;
+            }
+
+            $session->setAttribute('has_start_sampling', $event !== null);
+            $session->setAttribute('start_sampling_event_id', $event ? $event->id : null);
+            $session->setAttribute('start_sampling_at', $event ? (string) $event->event_at : null);
+            $session->setAttribute('start_sampling_latitude', $event ? $event->latitude : null);
+            $session->setAttribute('start_sampling_longitude', $event ? $event->longitude : null);
+            $session->setAttribute('start_sampling_by_name', $starter ? $starter->sampler_name : null);
+            $session->setAttribute('start_sampling_by_sampler_id', $starter ? $starter->sampler_id : null);
+        }
+
+        return $sessions;
+    }
+
+    protected function assertStartSamplingAllowed(SamplerTrackingMember $member, SamplerTrackingSession $session): void
+    {
+        $hasCheckin = SamplerTrackingActivity::hasEvent($member, 'checkin')
+            || SamplerTrackingEvent::where('sampler_tracking_session_id', $session->id)
+                ->where('event_type', 'checkin')
+                ->exists();
+
+        if (!$hasCheckin) {
+            throw ValidationException::withMessages([
+                'event_type' => ['Check in dulu sebelum start sampling di lokasi ini.'],
+            ]);
+        }
+
+        $relatedSessionIds = collect([$session->id]);
+        if ($session->no_order || !empty($session->no_quotation)) {
+            $relatedSessionIds = SamplerTrackingSession::where('is_active', true)
+                ->whereDate('tanggal_sampling', $session->tanggal_sampling)
+                ->where(function ($query) use ($session) {
+                    if ($session->no_order) {
+                        $query->where('no_order', $session->no_order);
+                    }
+
+                    if (!empty($session->no_quotation)) {
+                        $query->orWhere('no_quotation', $session->no_quotation);
+                    }
+                })
+                ->pluck('id');
+
+            if ($relatedSessionIds->isEmpty()) {
+                $relatedSessionIds = collect([$session->id]);
+            }
+        }
+
+        $hasPic = SamplerTrackingEvent::whereIn('sampler_tracking_session_id', $relatedSessionIds)
+            ->where('event_type', 'meet_pic')
+            ->get()
+            ->contains(function ($event) {
+                return SamplerTrackingPicContacts::isFilled($event->pic_contacts ?? null);
+            });
+
+        if (!$hasPic) {
+            throw ValidationException::withMessages([
+                'event_type' => ['Isi data PIC dulu sebelum start sampling di lokasi ini.'],
+            ]);
+        }
     }
 
     public function createMissingReturn($sessionId, $samplerId, $eventAt, $reason, $actorId, $actorName)

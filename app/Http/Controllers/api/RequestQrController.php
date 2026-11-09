@@ -101,6 +101,20 @@ class RequestQrController extends Controller
                     return $exist !== null ? $exist->sales_id : null;
                     // return $item['pelanggan_info'] !== null ? $item['pelanggan_info']->sales_id : null;
                 })
+                ->filterColumn('created_at', function ($query, $keyword) {
+                    $keyword = trim((string) $keyword);
+                    if ($keyword === '') {
+                        return;
+                    }
+
+                    $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
+                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                        $query->whereDate('request_qr.created_at', $date);
+                        return;
+                    }
+
+                    $query->where('request_qr.created_at', 'like', '%' . $keyword . '%');
+                })
                 ->make(true);
         }catch(\Exception $e){
             return response()->json(['message' => $e->getMessage(), 'line' => $e->getLine(), 'file' => $e->getFile()], 500);

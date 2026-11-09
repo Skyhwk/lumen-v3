@@ -369,48 +369,6 @@ class AbsensiController extends Controller
                     'shift' => 'SHSECURITY2'
                 ];
             }
-        } else if ($shift == 'SHOB2') {
-            $plus = DATE('Y-m-d', strtotime($tanggal . '+1day'));
-
-            $gen = DB::select("select master_karyawan.nik_karyawan, master_karyawan.nama_lengkap, absensi.tanggal, MIN(jam) as masuk, CASE WHEN (SELECT min(jam) from absensi WHERE absensi.tanggal = '$plus' AND absensi.karyawan_id = '$id' group by absensi.tanggal) < '14:00:00' THEN (SELECT min(jam) from absensi WHERE absensi.tanggal = '$plus' AND absensi.karyawan_id = '$id' group by absensi.tanggal) ELSE '' END as keluar FROM absensi LEFT JOIN master_karyawan ON absensi.karyawan_id = master_karyawan.id WHERE absensi.tanggal = '$tanggal' AND absensi.karyawan_id = '$id' GROUP BY absensi.tanggal;");
-
-            if ($gen != null) {
-                $gen = $gen[0];
-                if ($gen->masuk < DATE('H:i:s', strtotime($checkin))) {
-                    $selisih_masuk = \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' ' . DATE('H:i:s', strtotime($checkin))));
-                    $masuk = '+' . (int) ((($selisih_masuk->h * 3600) + ($selisih_masuk->i * 60) + $selisih_masuk->s) / 60) . 'm';
-                } else {
-                    $selisih_masuk = \date_diff(date_create($gen->tanggal . ' ' . DATE('H:i:s', strtotime($checkin))), date_create($gen->tanggal . ' ' . $gen->masuk));
-                    $masuk = '-' . (int) ((($selisih_masuk->h * 3600) + ($selisih_masuk->i * 60) + $selisih_masuk->s) / 60) . 'm';
-                }
-
-                $total_jam_kerja = '';
-                if ($gen->keluar != '') {
-                    $kerja = \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' ' . $gen->keluar));
-                    $total_jam_kerja = $kerja->h . 'h ' . $kerja->i . 'm';
-                }
-                $data = [
-                    'nama' => $gen->nik_karyawan . ' - ' . $gen->nama_lengkap,
-                    'tanggal' => $gen->tanggal,
-                    'hari' => self::hari($gen->tanggal),
-                    'masuk' => $gen->masuk,
-                    'keluar' => $gen->keluar,
-                    'selisih' => $masuk,
-                    'jam_kerja' => $total_jam_kerja,
-                    'shift' => 'SHOB2'
-                ];
-            } else {
-                $data = [
-                    'nama' => $nik_karyawan . ' - ' . $nama_lengkap,
-                    'tanggal' => $tanggal,
-                    'hari' => self::hari($tanggal),
-                    'masuk' => '',
-                    'keluar' => '',
-                    'selisih' => '',
-                    'jam_kerja' => '',
-                    'shift' => 'SHOB2'
-                ];
-            }
         } else if (MonthlyAbsensiDataBuilder::isRestDayShift($shift)) {
             $shiftLabel = strtoupper(trim((string) $shift));
             $data = [
@@ -869,7 +827,7 @@ class AbsensiController extends Controller
     {
         $masukTanggal = date('Y-m-d', strtotime($tanggal));
         $shift = strtoupper(trim((string) ($row['shift'] ?? '')));
-        $keluarTanggal = in_array($shift, ['24JAM', 'SHSECURITY2', 'SHOB2'], true)
+        $keluarTanggal = in_array($shift, ['24JAM', 'SHSECURITY2'], true)
             ? date('Y-m-d', strtotime($masukTanggal . ' +1 day'))
             : $masukTanggal;
 
@@ -1126,16 +1084,6 @@ class AbsensiController extends Controller
             }
 
             return $attach(self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, 'SHSECURITY2', $checkin), $tanggal, $nextDate);
-        }
-
-        if ($shiftRow && $shiftRow->shift === 'SHOB2') {
-            $masuk = ($punch && $punch->min_jam) ? $punch->min_jam : '';
-            $keluar = ($nextPunch && $nextPunch->min_jam && $nextPunch->min_jam < '14:00:00') ? $nextPunch->min_jam : '';
-            if ($masuk === '' && $keluar === '') {
-                return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'SHOB2'), $tanggal, $nextDate);
-            }
-
-            return $attach(self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, 'SHOB2', $checkin), $tanggal, $nextDate);
         }
 
         if ($shiftRow) {

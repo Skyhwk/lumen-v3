@@ -116,13 +116,6 @@ class MonthlyAbsensiDataBuilder
                     $excuseLabels,
                     $tanggal
                 );
-            } elseif ($shift === 'SHOB2') {
-                [$masukRow, $keluarRow] = $this->resolveShob2Punches($rowsToday, $rowsNext);
-                $data[] = $this->mergeExcuseLabel(
-                    $this->composeDayRow($namaLabel, $karyawanId, $tanggal, $masukRow, $keluarRow, 'SHOB2'),
-                    $excuseLabels,
-                    $tanggal
-                );
             } else {
                 $shiftLabel = $shift ?: 'SHREGULAR';
                 $checkin = $this->shiftCheckinTime($shiftRow);
@@ -213,23 +206,6 @@ class MonthlyAbsensiDataBuilder
         }
 
         return '08:00:00';
-    }
-
-    /**
-     * @param \Illuminate\Support\Collection $rowsToday
-     * @param \Illuminate\Support\Collection $rowsNext
-     * @return array{0: object|null, 1: object|null}
-     */
-    private function resolveShob2Punches($rowsToday, $rowsNext): array
-    {
-        $masuk = $rowsToday->sortBy('jam')->first();
-        $keluar = null;
-        $minNext = $rowsNext->min('jam');
-        if ($minNext !== null && (string) $minNext < '14:00:00') {
-            $keluar = $rowsNext->first(fn ($row) => (string) $row->jam === (string) $minNext);
-        }
-
-        return [$masuk, $keluar];
     }
 
     /**

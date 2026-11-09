@@ -87,6 +87,20 @@ class RequestQuotationController extends Controller
         }
 
         return Datatables::of($data)
+            ->filterColumn('created_at', function ($query, $keyword) {
+                $keyword = trim((string) $keyword);
+                if ($keyword === '') {
+                    return;
+                }
+
+                $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
+                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                    $query->whereDate('created_at', $date);
+                    return;
+                }
+
+                $query->where('created_at', 'like', '%' . $keyword . '%');
+            })
             ->editColumn('email_cc', function ($item) {
                 $emailCC = json_decode($item['email_cc']) ?? null;
                 if ($item->sales_id == 19 && $emailCC != null) {
