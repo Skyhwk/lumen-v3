@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Models\MasterKaryawan;
 use App\Models\QuotationAutoLinkOpens;
 use App\Services\GetBawahan;
+use App\Services\SalesTeamHierarchyService;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -12,13 +14,17 @@ class FollowUpQuoatationAutoController extends Controller
 {
     public function index(Request $request)
     {
+        $isSales = $this->isSales();
         $data = QuotationAutoLinkOpens::query()
             ->select('quotation_auto_link_opens.*')
-            ->with('quotation');
+            ->with(['quotation.sales']);
 
         $processed = (int) $request->input('processed', 0);
         $data->where('quotation_auto_link_opens.is_processed', $processed);
-        $this->limitToViewerSales($data);
+
+        if ($isSales) {
+            $data->with(['quotation.sales']);
+        }
 
         return DataTables::of($data)
             ->filterColumn('last_opened_at', function ($query, $keyword) {
@@ -33,6 +39,25 @@ class FollowUpQuoatationAutoController extends Controller
                 }
 
                 $query->whereDate('quotation_auto_link_opens.last_opened_at', $date);
+            })
+            ->addColumn('nama_sales', function ($row) {
+                return $row->quotation->sales->nama_lengkap ?? null;
+            })
+            ->filterColumn('nama_sales', function ($query, $keyword) {
+                $keyword = trim((string) $keyword);
+                if ($keyword === '') {
+                    return;
+                }
+
+                $query->whereHas('quotation.sales', function ($sales) use ($keyword) {
+                    $sales->where('nama_lengkap', 'like', '%' . $keyword . '%');
+                });
+            })
+            ->orderColumn('nama_sales', function ($query, $order) {
+                $direction = strtolower((string) $order) === 'desc' ? 'desc' : 'asc';
+                $query->orderByRaw(
+                    '(select master_karyawan.nama_lengkap from request_quotation inner join master_karyawan on master_karyawan.id = request_quotation.sales_id where request_quotation.id = quotation_auto_link_opens.quotation_id limit 1) ' . $direction
+                );
             })
             ->make(true);
     }
@@ -99,5 +124,20 @@ class FollowUpQuoatationAutoController extends Controller
         $grade = strtoupper(trim((string) $this->grade));
 
         return in_array($grade, ['SUPERVISOR', 'MANAGER', 'SENIOR MANAGER', 'SPV'], true);
+    }
+
+    private function isSales(): bool
+    {
+        $userId = (int) $this->user_id;
+        if ($userId <= 0) {
+            return false;
+        }
+
+        $employee = MasterKaryawan::query()->find($userId);
+        if (!$employee) {
+            return false;
+        }
+
+        return app(SalesTeamHierarchyService::class)->isSalesDivisionMember($employee);
     }
 }
