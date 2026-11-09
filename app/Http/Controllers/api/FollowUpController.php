@@ -274,6 +274,39 @@ class FollowUpController extends Controller
             ->orderColumn('pelanggan.nama_pelanggan', 'p.nama_pelanggan $1')
             ->orderColumn('tanggal', 'dfus.tanggal $1')
             ->orderColumn('jam', 'dfus.jam $1')
+            ->filterColumn('forecast', function ($query, $keyword) {
+                $keyword = trim((string) $keyword);
+                if ($keyword === '') {
+                    return;
+                }
+                $query->whereDate('dfus.forecast', $keyword);
+            })
+            ->filterColumn('forecast_po', function ($query, $keyword) {
+                $keyword = trim((string) $keyword);
+                if ($keyword === '') {
+                    return;
+                }
+                $query->whereDate('dfus.forecast_po', $keyword);
+            })
+            ->filterColumn('keterangan', function ($query, $keyword) {
+                $keyword = strtoupper(trim((string) $keyword));
+                if ($keyword === '') {
+                    return;
+                }
+                if ($keyword === 'PIC') {
+                    $query->where('dfus.keterangan', 'PIC');
+                    return;
+                }
+                if ($keyword === 'UNREACHABLE') {
+                    $query->whereIn('dfus.keterangan', ['FO', 'NA', 'D']);
+                    return;
+                }
+                if ($keyword === 'UNQUALIFIED') {
+                    $query->where('dfus.keterangan', 'NI');
+                    return;
+                }
+                $query->where('dfus.keterangan', $keyword);
+            })
             ->filterColumn('keterangan_activity', function ($query, $keyword) use ($keteranganColumns) {
                 $keyword = trim((string) $keyword);
                 if ($keyword === '') {
@@ -293,6 +326,13 @@ class FollowUpController extends Controller
                             });
                         });
                 });
+            })
+            ->filterColumn('keterangan_sales', function ($query, $keyword) {
+                $keyword = trim((string) $keyword);
+                if ($keyword === '') {
+                    return;
+                }
+                $query->where('dfus.keterangan_sales', 'like', '%' . $keyword . '%');
             })
             ->filterColumn('status_quotation', function ($query, $keyword) {
                 $keyword = trim((string) $keyword);
@@ -513,7 +553,7 @@ class FollowUpController extends Controller
                         ], 500);
                     }
 
-                    // aman semua → insert
+                    // aman semua â†’ insert
                     if (!empty($data)) {
                         // dd(DFUS::insert($data));
                         DFUS::insert($data);
@@ -625,7 +665,7 @@ class FollowUpController extends Controller
             ],
         ]);
 
-        // ✅ Build query langsung tanpa batch
+        // âœ… Build query langsung tanpa batch
         $baseQuery = DFUS::with(['pelanggan', 'keteranganTambahan']);
 
         if ($type === 'bulanan') {
@@ -649,7 +689,7 @@ class FollowUpController extends Controller
                 break;
         }
 
-        // 🚀 Ambil semua data langsung
+        // ðŸš€ Ambil semua data langsung
         $dfusData = $baseQuery
             ->orderBy('tanggal', 'desc')
             ->orderBy('jam')
@@ -929,7 +969,7 @@ class FollowUpController extends Controller
                 $label = $allowed;
                 break;
             }
-            // FE kadang kirim full text — cocokkan label di dalamnya
+            // FE kadang kirim full text â€” cocokkan label di dalamnya
             if (stripos($raw, $allowed) !== false) {
                 $label = $allowed;
                 break;
@@ -955,6 +995,52 @@ class FollowUpController extends Controller
             ],
         ], 200);
     }
+
+    public function saveKeteranganSales(Request $request)
+    {
+        $dfus = DFUS::where('id', $request->id)->first();
+        if (!$dfus) {
+            return response()->json(['message' => 'Data DFUS tidak ditemukan.', 'success' => false], 404);
+        }
+
+        $text = $this->htmlToPlainText((string) $request->input('keterangan_sales', ''));
+        if (mb_strlen($text) > 5000) {
+            return response()->json([
+                'message' => 'Keterangan sales maksimal 5.000 karakter.',
+                'success' => false,
+            ], 422);
+        }
+
+        $dfus->keterangan_sales = $text === '' ? null : $text;
+        $dfus->keterangan_by = $this->karyawan;
+        $dfus->keterangan_at = Carbon::now();
+        $dfus->updated_by = $this->karyawan;
+        $dfus->save();
+
+        return response()->json([
+            'message' => 'Keterangan Sales berhasil disimpan.',
+            'success' => true,
+            'data' => [
+                'keterangan_sales' => $dfus->keterangan_sales,
+                'keterangan_by' => $dfus->keterangan_by,
+                'keterangan_at' => $dfus->keterangan_at,
+            ],
+        ], 200);
+    }
+
+    private function htmlToPlainText(string $html): string
+    {
+        $raw = preg_replace('/<\s*br\s*\/?\s*>/i', "\n", $html) ?? $html;
+        $raw = preg_replace('/<\s*\/(p|div|li|h[1-6])\s*>/i', "\n", $raw) ?? $raw;
+        $text = html_entity_decode(strip_tags($raw), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = str_replace("\xc2\xa0", ' ', $text);
+        $text = preg_replace("/[ \t]+/", ' ', $text) ?? $text;
+        $text = preg_replace("/\n[ \t]+/", "\n", $text) ?? $text;
+        $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
+
+        return trim($text);
+    }
+
 
     /** Cek no_quotation mana saja yang sudah ada di order_header (aktif) */
     public function checkQuotationsOrdered(Request $request)
@@ -1042,12 +1128,12 @@ class FollowUpController extends Controller
 
             foreach ($normalized as $row) {
                 if ($row['type'] === 'kontrak') {
-                    // QTC → request_quotation_kontrak_H.status_quotation
+                    // QTC â†’ request_quotation_kontrak_H.status_quotation
                     QuotationKontrakH::where('id', $row['id_quotation'])->update([
                         'status_quotation' => $row['status'],
                     ]);
                 } else {
-                    // QT → request_quotation.status_quotation
+                    // QT â†’ request_quotation.status_quotation
                     QuotationNonKontrak::where('id', $row['id_quotation'])->update([
                         'status_quotation' => $row['status'],
                     ]);

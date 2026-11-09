@@ -6,6 +6,7 @@ class MedanMagnetStatis
 {
     public function index($data, $id_parameter, $mdl)
     {
+
         $magnet_3 = json_decode($data->data_lapangan['magnet_3']);
         $magnet_30 = json_decode($data->data_lapangan['magnet_30']);
         $magnet_100 = json_decode($data->data_lapangan['magnet_100']);
@@ -56,7 +57,17 @@ class MedanMagnetStatis
         // Menghitung rata-rata
         $rataRataMagnet = $totalNilaiMagnet / $jumlahNilai;
 
-        $rataRataMagnet = number_format($rataRataMagnet, 4);
+        if($data->data_lapangan['parameter'] == 'Medan Magnet Statis'){
+            $rataRataMagnet = $rataRataMagnet / 1000000;
+
+            if($rataRataMagnet < 0.00000001){
+                $rataRataMagnet = '<0.00000001';
+            } else {
+                $rataRataMagnet = rtrim(rtrim(number_format($rataRataMagnet, 8, '.', ''), '0'), '.');
+            }
+        } else {
+            $rataRataMagnet = number_format($rataRataMagnet, 4, '.', '');
+        }
 
         // $hasil = json_encode(["Magnet_3" => $nilmagnet_3_, "Magnet_30" => $nilmagnet_30_, "Magnet_100" =>$nilmagnet_100_]);
         return [

@@ -85,8 +85,51 @@ SQL,
     }
 
     /**
+     * PT yang punya QT sumber dari Juni ke belakang + data pendukung sampling.
+     * Tidak peduli ada order atau tidak. QT terakhir di window itu kosong/{} dilewati.
+     *
      * @return Collection<int, object>
      */
+    public function fetchEligibleFromJuneBackwards(Carbon $sourceUntil, ?int $limit = null): Collection
+    {
+        $ranked = $this->quotationJuneBackwardsSubquerySql();
+        $limitSql = $limit !== null && $limit > 0 ? ' LIMIT '.(int) $limit : '';
+
+        $rows = DB::select(
+            <<<SQL
+SELECT
+    r.customer_id,
+    mp.nama_pelanggan AS customer_name,
+    'JUNE_BACK' AS customer_type,
+    NULL AS reference_order_id,
+    NULL AS reference_order_no,
+    NULL AS order_created_at,
+    r.quotation_id AS reference_quotation_id,
+    r.quotation_no AS reference_quotation_no,
+    r.quotation_created_at,
+    'ELIGIBLE' AS status
+FROM ({$ranked}) AS r
+INNER JOIN master_pelanggan mp
+    ON mp.id_pelanggan = r.customer_id
+    AND mp.is_active = 1
+WHERE r.rn = 1
+  AND (r.kode_promo IS NULL OR TRIM(r.kode_promo) = '')
+  {$this->sourceRequireDataPendukungSql('r')}
+{$this->newAutoDuplicateGuardSql()}
+ORDER BY r.quotation_created_at DESC, r.customer_id
+{$limitSql}
+SQL,
+            [
+                $sourceUntil->toDateString(),
+                (string) config('quotation_auto.generate.created_by', 'Quotation Auto Generate'),
+                (string) config('quotation_auto.generate.kode_promo_marker', 'AUTO'),
+                (string) config('quotation_auto.generate.created_by', 'Quotation Auto Generate'),
+            ]
+        );
+
+        return collect($rows);
+    }
+
     public function fetchEligibleExisting(Carbon $since, ?int $limit = null): Collection
     {
         $ranked = $this->orderRankedSubquerySql();
@@ -284,9 +327,58 @@ SQL;
         ];
     }
 
+    private function sourceSkipKodePromoSql(string $alias): string
+    {
+        $markers = array_values(array_filter(array_map('strval', (array) config('quotation_auto.generate.source_skip_kode_promo', []))));
+        $prefixes = array_values(array_filter(array_map('strval', (array) config('quotation_auto.generate.source_skip_kode_promo_prefix', []))));
+        if ($markers === [] && $prefixes === []) {
+            return '';
+        }
+
+        $skipParts = [];
+        if ($markers !== []) {
+            $escaped = implode(',', array_map(function ($marker) {
+                return "'" . str_replace("'", "''", $marker) . "'";
+            }, $markers));
+            $skipParts[] = "{$alias}.kode_promo NOT IN ({$escaped})";
+        }
+        foreach ($prefixes as $prefix) {
+            $like = str_replace(['\\', '%', '_', "'"], ['\\\\', '\\%', '\\_', "''"], $prefix) . '%';
+            $skipParts[] = "{$alias}.kode_promo NOT LIKE '{$like}'";
+        }
+
+        $skipSql = implode(' AND ', $skipParts);
+
+        return "AND ({$alias}.kode_promo IS NULL OR TRIM({$alias}.kode_promo) = '' OR ({$skipSql}))";
+    }
+
+    /**
+     * QT terakhir kosong / {} / [] dilewati. Tidak mundur ke QT sebelumnya.
+     */
+    private function sourceRequireDataPendukungSql(string $alias): string
+    {
+        if (!config('quotation_auto.generate.require_source_data_pendukung')) {
+            return '';
+        }
+
+        return <<<SQL
+AND {$alias}.data_pendukung_sampling IS NOT NULL
+AND TRIM({$alias}.data_pendukung_sampling) <> ''
+AND JSON_VALID({$alias}.data_pendukung_sampling)
+AND JSON_LENGTH({$alias}.data_pendukung_sampling) > 0
+SQL;
+    }
+
     private function quotationRankedSubquerySql(): string
     {
+        return $this->quotationLatestSubquerySql(true);
+    }
+
+    private function quotationJuneBackwardsSubquerySql(): string
+    {
         $konsultan = self::KONSULTAN_EMPTY;
+        $skipSql = $this->sourceSkipKodePromoSql('rq');
+        $sourceDateSql = $this->quotationSourceDateSql('rq');
 
         return <<<SQL
 SELECT
@@ -295,16 +387,51 @@ SELECT
     rq.no_document AS quotation_no,
     rq.created_at AS quotation_created_at,
     rq.kode_promo AS kode_promo,
+    rq.data_pendukung_sampling AS data_pendukung_sampling,
+    ROW_NUMBER() OVER (
+        PARTITION BY rq.pelanggan_ID
+        ORDER BY {$sourceDateSql} DESC, rq.id DESC
+    ) AS rn
+FROM request_quotation rq
+WHERE rq.is_active = 1
+  AND rq.pelanggan_ID IS NOT NULL
+  AND rq.pelanggan_ID != ''
+  AND {$konsultan}
+  {$skipSql}
+  AND {$sourceDateSql} < ?
+SQL;
+    }
+
+    private function quotationSourceDateSql(string $alias): string
+    {
+        return "COALESCE(IF({$alias}.tanggal_penawaran IS NULL OR {$alias}.tanggal_penawaran IN ('', '0000-00-00'), NULL, DATE({$alias}.tanggal_penawaran)), DATE({$alias}.created_at))";
+    }
+
+    private function quotationLatestSubquerySql(bool $requireSince = false): string
+    {
+        $konsultan = self::KONSULTAN_EMPTY;
+        $skipSql = $this->sourceSkipKodePromoSql('rq');
+        $sinceSql = $requireSince ? 'AND rq.created_at >= ?' : '';
+
+        return <<<SQL
+SELECT
+    rq.pelanggan_ID AS customer_id,
+    rq.id AS quotation_id,
+    rq.no_document AS quotation_no,
+    rq.created_at AS quotation_created_at,
+    rq.kode_promo AS kode_promo,
+    rq.data_pendukung_sampling AS data_pendukung_sampling,
     ROW_NUMBER() OVER (
         PARTITION BY rq.pelanggan_ID
         ORDER BY rq.created_at DESC, rq.id DESC
     ) AS rn
 FROM request_quotation rq
-WHERE rq.created_at >= ?
-  AND rq.is_active = 1
+WHERE rq.is_active = 1
   AND rq.pelanggan_ID IS NOT NULL
   AND rq.pelanggan_ID != ''
   AND {$konsultan}
+  {$skipSql}
+  {$sinceSql}
 SQL;
     }
 
