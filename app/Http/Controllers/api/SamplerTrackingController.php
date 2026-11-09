@@ -185,6 +185,10 @@ class SamplerTrackingController extends Controller
             'note' => 'nullable',
             'vehicle_plate' => 'nullable',
             'event_at' => 'nullable',
+            'pic_contacts' => 'nullable|array',
+            'started_by_name' => 'nullable|string|max:150',
+            'started_by_sampler_id' => 'nullable',
+            'started_at' => 'nullable|string',
         ]);
 
         if ($request->event_type === 'checkout') {
