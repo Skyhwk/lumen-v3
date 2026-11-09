@@ -448,7 +448,10 @@ class RequestQuotationController extends Controller
     {
         $payload = json_decode(json_encode($request->all(), JSON_OBJECT_AS_ARRAY));
         try {
-            $payload->_promo = \App\Services\QuotationPromo::resolve($payload->promo_id ?? null);
+            $payload->_promo = \App\Services\QuotationPromo::resolve(
+                $payload->promo_id ?? null,
+                \App\Services\PromoPengujianAvailability::contextFromPayload($payload)
+            );
             $periods = $payload->informasi_pelanggan->modeQt === 'kontrak'
                 ? array_map(fn($period) => $period->data_sampling ?? [], $payload->data_pendukung ?? [])
                 : [$payload->data_pendukung ?? []];
@@ -1063,6 +1066,7 @@ class RequestQuotationController extends Controller
             }
             //Penambahan untuk harga pangan
             $harga_total += $harga_pangan;
+            $grand_total += \App\Services\QuotationPromo::applySukaSuka($payload->_promo ?? null, $data, $harga_total);
             $transport_ = 0;
             $perdiem_ = 0;
             $jam_ = 0;
@@ -2011,6 +2015,7 @@ class RequestQuotationController extends Controller
             }
             //Penambahan untuk harga pangan
             $harga_total += $harga_pangan;
+            $grand_total += \App\Services\QuotationPromo::applySukaSuka($payload->_promo ?? null, $data, $harga_total);
             $transport_ = 0;
             $perdiem_ = 0;
             $jam_ = 0;
@@ -3497,6 +3502,7 @@ class RequestQuotationController extends Controller
                     // ========================================================END DISKON ANALISA========================================================================
                     // ====================================================DISKON TRANSPORTASI========================================================================================
                     $harga_total += $harga_pangan;
+                    $grand_total += \App\Services\QuotationPromo::applySukaSuka($payload->_promo ?? null, $dataD, $harga_total);
                     $transport_ = 0;
                     $perdiem_ = 0;
                     $jam_ = 0;
@@ -5014,6 +5020,7 @@ class RequestQuotationController extends Controller
                     // ========================================================END DISKON ANALISA========================================================================
                     // ====================================================DISKON TRANSPORTASI========================================================================================
                     $harga_total += $harga_pangan;
+                    $grand_total += \App\Services\QuotationPromo::applySukaSuka($payload->_promo ?? null, $dataD, $harga_total);
                     $transport_ = 0;
                     $perdiem_ = 0;
                     $jam_ = 0;

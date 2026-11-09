@@ -261,7 +261,18 @@ class DraftAirController extends Controller
                     $header->file_qr = $path;
                     $header->save();
                 }
-            }
+            } else {
+                // Update QR Document jika ada
+                $qr = QrDocument::where('file', $header->file_qr)->first();
+                if ($qr) {
+                    $dataQr = json_decode($qr->data, true);
+                    $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                    $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                    $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                    $qr->data = json_encode($dataQr);
+                    $qr->save();
+                }
+            }   
             $groupedByPage = collect(LhpsAirCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();

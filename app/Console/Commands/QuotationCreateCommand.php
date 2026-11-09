@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Services\QuotationGenerate\QuotationGenerateDiscoveryService;
 use App\Services\QuotationGenerate\QuotationGenerateEligibleCollector;
 use App\Services\QuotationGenerate\QuotationGenerateProcessingService;
+use App\Services\QuotationGenerate\QuotationGenerateSkipException;
 use App\Services\QuotationGenerate\SelectionTimeWindow;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
@@ -82,6 +83,8 @@ class QuotationCreateCommand extends Command
                     $result = $processor->createFromCandidate($row, $dryRun);
                     $success++;
                     $this->line('[OK] ' . $row->customer_id . ' | ' . $result['message']);
+                } catch (QuotationGenerateSkipException $e) {
+                    $this->warn('[SKIP] ' . $row->customer_id . ' | ' . $e->getMessage());
                 } catch (\Throwable $e) {
                     $failed++;
                     $this->error('[FAIL] ' . $row->customer_id . ' | ' . $e->getMessage());

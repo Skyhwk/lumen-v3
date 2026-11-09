@@ -4,11 +4,152 @@ namespace App\Services;
 
 class QuotationPromoPresentation
 {
+    public static function sukaSukaLine($source)
+    {
+        $discount = json_decode($source->discount_promo ?? '{}');
+        if (is_object($discount) && ($discount->tipe ?? '') === 'suka_suka') {
+            $nama = trim((string) ($discount->deskripsi_promo_discount ?? ''));
+            $nominal = (float) ($discount->jumlah_promo_discount ?? 0);
+            if ($nama !== '' && $nominal > 0) {
+                return ['nama' => $nama, 'nominal' => $nominal];
+            }
+        }
+        if (empty($source->promo_id)) {
+            return null;
+        }
+        $promo = \Illuminate\Support\Facades\DB::table('promo_pengujian')->where('id', $source->promo_id)->first();
+        if (!$promo || $promo->metode !== 'suka_suka') {
+            return null;
+        }
+        $config = json_decode($promo->konfigurasi, true) ?: [];
+        $nominal = (float) ($config['nominal'] ?? 0);
+        $nama = trim((string) ($promo->nama_diskon ?? ''));
+        if ($nama === '' || $nominal <= 0) {
+            return null;
+        }
+
+        return ['nama' => $nama, 'nominal' => $nominal];
+    }
+
+    public static function sukaSukaItemLine($source)
+    {
+        $line = self::sukaSukaLine($source);
+        if (!$line) {
+            return null;
+        }
+        $qty = self::sukaSukaQuotationQty($source);
+        $line['qty'] = $qty;
+        $line['total'] = $line['nominal'] * $qty;
+
+        return $line;
+    }
+
+    public static function writeSukaSukaItemRow($pdf, $source, &$i, callable $rupiah, $fontSize = '13px', $nextNumberAlready = true)
+    {
+        $line = self::sukaSukaItemLine($source);
+        if (!$line) {
+            return false;
+        }
+        if (!$nextNumberAlready) {
+            $i++;
+        }
+        $pdf->WriteHTML(
+            ' <tr>
+                <td style="vertical-align: middle; text-align:center;font-size: ' . $fontSize . ';">' . $i . '</td>
+                <td style="font-size: ' . $fontSize . ';padding: 5px;">' . htmlspecialchars($line['nama'], ENT_QUOTES, 'UTF-8') . '</td>
+                <td style="font-size: ' . $fontSize . '; text-align:center;">' . $line['qty'] . '</td>
+                <td style="font-size: ' . $fontSize . '; text-align:right; padding: 5px;">' . $rupiah($line['nominal']) . '</td>
+                <td style="font-size: ' . $fontSize . '; text-align:right; padding: 5px;">' . $rupiah($line['total']) . '</td>
+            </tr>'
+        );
+        if ($nextNumberAlready) {
+            $i++;
+        }
+
+        return true;
+    }
+
+    public static function sukaSukaInvoiceLine($source)
+    {
+        $line = self::sukaSukaLine($source);
+        if (!$line) {
+            return null;
+        }
+        $line['nominal'] *= self::sukaSukaPeriodMultiplier($source);
+
+        return $line;
+    }
+
+    public static function addSukaSukaAmount($source)
+    {
+        $line = self::sukaSukaInvoiceLine($source);
+
+        return $line ? $line['nominal'] : 0;
+    }
+
+    public static function writeSukaSukaInvoiceRow($pdf, $source)
+    {
+        $line = self::sukaSukaInvoiceLine($source);
+        if (!$line) {
+            return false;
+        }
+        $nama = htmlspecialchars($line['nama'], ENT_QUOTES, 'UTF-8');
+        $nominal = 'Rp ' . number_format($line['nominal'], 0, '.', ',');
+        $pdf->writeHTML(
+            '<tr>
+                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $nama . '</td>
+                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
+                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $nominal . '</td>
+                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $nominal . '</td>
+            </tr>'
+        );
+
+        return true;
+    }
+
+    public static function sukaSukaQuotationQty($source)
+    {
+        if (!empty($source->periode_kontrak)) {
+            return 1;
+        }
+
+        return self::countSukaSukaPeriods($source);
+    }
+
+    public static function sukaSukaPeriodMultiplier($source)
+    {
+        if (($source->periode ?? '') !== 'all') {
+            return 1;
+        }
+
+        return self::countSukaSukaPeriods($source);
+    }
+
+    private static function countSukaSukaPeriods($source)
+    {
+        $rows = json_decode($source->data_pendukung_sampling ?? '[]');
+        if (!is_array($rows) || !$rows) {
+            return 1;
+        }
+        $first = reset($rows);
+        if (is_object($first) && isset($first->periode_kontrak)) {
+            return max(1, count($rows));
+        }
+        $periods = [];
+        foreach ($rows as $row) {
+            foreach ((array) ($row->periode ?? []) as $period) {
+                $periods[(string) $period] = true;
+            }
+        }
+
+        return max(1, count($periods) ?: 1);
+    }
+
     public static function forContractPdf($source, $details, $promo = null)
     {
         if (empty($source->promo_id)) return [$source, $details];
         $promo = $promo ?? \Illuminate\Support\Facades\DB::table('promo_pengujian')->where('id', $source->promo_id)->first();
-        if (!$promo || in_array($promo->metode, ['labeling', 'parameter_khusus', 'harga_parameter'], true)) return [$source, $details];
+        if (!$promo || in_array($promo->metode, ['labeling', 'parameter_khusus', 'harga_parameter', 'suka_suka'], true)) return [$source, $details];
         $header = clone $source;
         $views = [];
         $headerRows = [];
@@ -53,8 +194,41 @@ class QuotationPromoPresentation
         return [$header, collect($views)];
     }
 
+    public static function displayedSubTotal($source, $grandTotal = null, $invoice = false)
+    {
+        $grand = (float) ($grandTotal ?? $source->grand_total ?? $source->sub_total ?? 0);
+        $suka = $invoice
+            ? self::addSukaSukaAmount($source)
+            : (float) (self::sukaSukaLine($source)['nominal'] ?? 0);
+        if ($suka <= 0) {
+            return $grand;
+        }
+        $dpp = (float) ($source->total_dpp ?? $grand);
+        $withSuka = $grand + $suka;
+
+        return abs($withSuka - $dpp) <= abs($grand - $dpp) ? $withSuka : $grand;
+    }
+
+    public static function showAfterDiscount($source, $subTotal = null)
+    {
+        $subTotal = $subTotal ?? self::displayedSubTotal($source);
+
+        return abs((float) ($source->total_dpp ?? $subTotal) - (float) $subTotal) > 0.5;
+    }
+
+    public static function isSukaSukaDiscount($discountPromo)
+    {
+        $discount = is_string($discountPromo) || $discountPromo === null
+            ? json_decode($discountPromo ?? '{}')
+            : $discountPromo;
+        return is_object($discount) && ($discount->tipe ?? '') === 'suka_suka';
+    }
+
     public static function discountLabel($model)
     {
+        if (self::isSukaSukaDiscount($model->discount_promo ?? null)) {
+            return '';
+        }
         $discount = json_decode($model->discount_promo ?? '{}');
         $rate = $discount->jumlah_promo_discount ?? '';
         return ($discount->deskripsi_promo_discount ?? '') . ($rate !== '' && $rate !== null ? ' ' . $rate . '%' : '');
@@ -62,6 +236,7 @@ class QuotationPromoPresentation
 
     public static function contractDiscountRow($pdf, $model, $details = null)
     {
+        if (self::isSukaSukaDiscount($model->discount_promo ?? null)) return;
         if ((float) ($model->total_discount_promo ?? 0) <= 0) return;
         $html = '<tr><td style="text-align:center;padding:5px;">' . self::discountLabel($model) . '</td>';
         if ($details !== null) {
@@ -115,6 +290,7 @@ class QuotationPromoPresentation
             $data->total_discount_promo = 0;
             return $data;
         }
+        if ($promo->metode === 'suka_suka') return $source;
         if ($promo->metode !== 'free_parameter') return $source;
         $rows = json_decode($source->data_pendukung_sampling);
         if (!is_array($rows)) return $source;
