@@ -40,15 +40,17 @@ class DashboardQuotationNoStatusService
 
         return collect([QuotationNonKontrak::class, QuotationKontrakH::class])
             ->flatMap(function ($model) use ($salesIds, $startDate, $endDate) {
-                return $model::query()
+                $query = $model::query()
                     ->with([
                         'pelanggan:id_pelanggan,nama_pelanggan',
                         'sales:id,nama_lengkap',
                     ])
                     ->where('is_active', 1)
                     ->whereBetween('created_at', [$startDate, $endDate])
-                    ->when($salesIds !== null, fn ($query) => $query->whereIn('sales_id', $salesIds))
-                    ->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'sales_id']);
+                    ->when($salesIds !== null, fn ($query) => $query->whereIn('sales_id', $salesIds));
+                DashboardQuotationQuery::excludeAutoPromo($query);
+
+                return $query->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'sales_id']);
             })
             ->filter(fn ($quote) => $this->resolveStatus($quote) === $status)
             ->unique('no_document')
