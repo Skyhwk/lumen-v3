@@ -45,7 +45,7 @@ class QtRevisiController extends Controller
                     return;
                 }
 
-                $query->whereRaw('DATE(DATE_ADD(order_header.created_at, INTERVAL 7 HOUR)) = ?', [$date]);
+                $query->whereDate('order_header.created_at', $date);
             })
             ->filterColumn('status_quotation', function ($query, $keyword) {
                 $keyword = trim((string) $keyword);

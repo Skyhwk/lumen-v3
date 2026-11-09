@@ -87,7 +87,7 @@ class RekapQuotationController extends Controller
                         return;
                     }
 
-                    $query->whereRaw('DATE(DATE_ADD(' . $tableName . '.created_at, INTERVAL 7 HOUR)) = ?', [$date]);
+                    $query->whereDate($tableName . '.created_at', $date);
                 })
                 ->filterColumn('status_quotation', function ($query, $keyword) use ($tableName) {
                     $keyword = trim((string) $keyword);

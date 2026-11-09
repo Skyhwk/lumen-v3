@@ -95,7 +95,7 @@ class RequestQuotationController extends Controller
 
                 $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
                 if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-                    $query->whereRaw('DATE(DATE_ADD(created_at, INTERVAL 7 HOUR)) = ?', [$date]);
+                    $query->whereDate('created_at', $date);
                     return;
                 }
 
