@@ -1799,18 +1799,104 @@ class SamplerTrackingService
         }
 
         // Consolidate first so shorter orders at the same stop are not dropped during multi-day work.
-        return $this->attachSessionStartSampling($this->attachSessionPicContacts(
-            $this->consolidateActivities($this->applyRouteOverrides($sessions, $date, $samplerId, $samplerName))
-                ->filter(function ($session) use ($date, $samplerId, $samplerName) {
-                    if ($session->tanggal_sampling === $date) return true;
-                    return $session->activeMembers->contains(function ($member) use ($session, $date, $samplerId, $samplerName) {
-                        $own = $samplerId ? (string) $member->sampler_id === (string) $samplerId : $member->sampler_name === $samplerName;
-                        return $own && !SamplerTrackingActivity::hasEvent($member, 'return')
-                            && Carbon::parse($session->tanggal_sampling)->addDays(max(0, SamplerTrackingActivity::duration($member) - 1))->toDateString() >= $date;
-                    });
-                })->values()
-        ));
+        return $this->attachSessionActivityOpenFlags(
+            $this->attachSessionStartSampling($this->attachSessionPicContacts(
+                $this->consolidateActivities($this->applyRouteOverrides($sessions, $date, $samplerId, $samplerName))
+                    ->filter(function ($session) use ($date, $samplerId, $samplerName) {
+                        if ($session->tanggal_sampling === $date) return true;
+                        return $session->activeMembers->contains(function ($member) use ($session, $date, $samplerId, $samplerName) {
+                            $own = $samplerId ? (string) $member->sampler_id === (string) $samplerId : $member->sampler_name === $samplerName;
+                            return $own && !SamplerTrackingActivity::hasEvent($member, 'return')
+                                && Carbon::parse($session->tanggal_sampling)->addDays(max(0, SamplerTrackingActivity::duration($member) - 1))->toDateString() >= $date;
+                        });
+                    })->values()
+            )),
+            $samplerId,
+            $samplerName
+        );
     }
+
+    public function applyActivityOpenToMember($session, $member, SamplerTrackingActivityOpenService $openService = null): bool
+    {
+        if (!$member || !$member->sampler_id) {
+            return false;
+        }
+
+        $openService = $openService ?: new SamplerTrackingActivityOpenService();
+        $sessionIds = array_map('intval', $session->activity_session_ids ?? [$session->id]);
+        $memberGrant = $openService->activeGrantForMember(
+            $member->sampler_id,
+            (int) $member->id,
+            $sessionIds,
+            (int) $member->sampler_tracking_session_id,
+            SamplerTrackingActivity::grantMemberIds($member)
+        );
+        $memberPayload = $openService->payload($memberGrant);
+        $memberOpen = $memberPayload !== null;
+        $member->setAttribute('activity_parallel_open', $memberOpen);
+        $member->setAttribute('activity_open', $memberPayload);
+
+        return $memberOpen;
+    }
+
+    public function syncSessionActivityOpenFlags($session, SamplerTrackingActivityOpenService $openService = null): void
+    {
+        $openService = $openService ?: new SamplerTrackingActivityOpenService();
+        $grant = null;
+        $sessionOpen = false;
+
+        foreach ($session->activeMembers as $member) {
+            if ($this->applyActivityOpenToMember($session, $member, $openService)) {
+                $sessionOpen = true;
+                $grant = $openService->activeGrantForMember(
+                    $member->sampler_id,
+                    (int) $member->id,
+                    array_map('intval', $session->activity_session_ids ?? [$session->id]),
+                    (int) $member->sampler_tracking_session_id,
+                    SamplerTrackingActivity::grantMemberIds($member)
+                );
+            }
+        }
+
+        $session->setAttribute('activity_parallel_open', $sessionOpen);
+        $session->setAttribute('activity_open', $openService->payload($grant));
+    }
+
+    public function attachSessionActivityOpenFlags($sessions, $samplerId = null, $samplerName = null)
+    {
+        $openService = new SamplerTrackingActivityOpenService();
+
+        return collect($sessions)->map(function ($session) use ($openService, $samplerId, $samplerName) {
+            foreach ($session->activeMembers as $member) {
+                $own = $samplerId
+                    ? (string) $member->sampler_id === (string) $samplerId
+                    : ($samplerName === null || $samplerName === ''
+                        ? true
+                        : mb_strtolower(trim((string) $member->sampler_name)) === mb_strtolower(trim((string) $samplerName)));
+                if (!$own || !$member->sampler_id) {
+                    continue;
+                }
+
+                $this->applyActivityOpenToMember($session, $member, $openService);
+            }
+
+            $sessionOpen = $session->activeMembers->contains(function ($member) {
+                return $member->getAttribute('activity_parallel_open') === true;
+            });
+            $session->setAttribute('activity_parallel_open', $sessionOpen);
+            if ($sessionOpen) {
+                $openMember = $session->activeMembers->first(function ($member) {
+                    return $member->getAttribute('activity_parallel_open') === true;
+                });
+                $session->setAttribute('activity_open', $openMember ? $openMember->getAttribute('activity_open') : null);
+            } else {
+                $session->setAttribute('activity_open', null);
+            }
+
+            return $session;
+        });
+    }
+
     public function departureForMember($member, $date)
     {
         $own = $member->events->firstWhere('event_type', 'departure');
@@ -1848,8 +1934,13 @@ class SamplerTrackingService
     {
         $date = $request->input('tanggal') ?: $this->today();
         $this->pruneEmptyShellSessions($date);
+        $sessions = $this->listByDate($date, $samplerId, $samplerName);
         $rows = $this->releaseUnblockedOverdueRows(
-            $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName))
+            $this->attachParallelCheckinMeta(
+                $this->buildTrackingRows($sessions),
+                $sessions,
+                $date
+            )
         );
         $trackingStatusCounts = $this->trackingStatusCounts($rows);
 
@@ -1872,12 +1963,18 @@ class SamplerTrackingService
             'recordsFiltered' => $recordsFiltered,
             'tracking_status_counts' => $trackingStatusCounts,
             'data' => $rows->values(),
+            'open_activity_access' => null,
         ];
     }
 
     public function listTrackingRows($date = null, $samplerId = null, $samplerName = null, $trackingStatus = null, $sessionIds = null)
     {
-        $rows = $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName, $sessionIds));
+        $sessions = $this->listByDate($date, $samplerId, $samplerName, $sessionIds);
+        $rows = $this->attachParallelCheckinMeta(
+            $this->buildTrackingRows($sessions),
+            $sessions,
+            $date
+        );
         $trackingStatusCounts = $this->trackingStatusCounts($rows);
         $rows = $this->filterForMonitorTab($rows, $trackingStatus);
 
@@ -2851,6 +2948,10 @@ public function buildTrackingRows($sessions)
                 ]);
             }
 
+            if ($eventType === 'checkout') {
+                (new SamplerTrackingActivityOpenService())->clearActiveGrantForMember($member);
+            }
+
             return collect($events);
         });
 
@@ -3275,11 +3376,143 @@ public function buildTrackingRows($sessions)
 
     protected function hasOpenCheckin($sessions, SamplerTrackingMember $member, $targetSession = null): bool
     {
-        return $sessions->contains(function ($session) use ($member, $targetSession) {
+        if (!$this->wouldBlockParallelCheckin($sessions, $member, $targetSession)) {
+            return false;
+        }
+
+        $activitySessionIds = array_map('intval', $targetSession->activity_session_ids ?? [$targetSession->id]);
+        $openService = new SamplerTrackingActivityOpenService();
+        if ($openService->hasActiveGrantForMember(
+            $member->sampler_id,
+            (int) $member->id,
+            $activitySessionIds,
+            (int) $member->sampler_tracking_session_id,
+            SamplerTrackingActivity::grantMemberIds($member)
+        )) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function samplerHasNonSesaatAssignment($sessions, $samplerId = null, $samplerName = null): bool
+    {
+        return collect($sessions)->contains(function ($session) use ($samplerId, $samplerName) {
+            return $session->activeMembers->contains(function ($member) use ($samplerId, $samplerName) {
+                if (!$member->sampler_id) {
+                    return false;
+                }
+
+                $own = $samplerId
+                    ? (string) $member->sampler_id === (string) $samplerId
+                    : ($samplerName === null || $samplerName === ''
+                        ? true
+                        : mb_strtolower(trim((string) $member->sampler_name)) === mb_strtolower(trim((string) $samplerName)));
+
+                return $own && !SamplerTrackingActivity::isSesaat($member);
+            });
+        });
+    }
+
+    protected function wouldBlockParallelCheckin($sessions, SamplerTrackingMember $member, $targetSession = null): bool
+    {
+        return collect($sessions)->contains(function ($session) use ($member, $targetSession) {
             $sessionMember = $this->sessionMemberForSampler($session, $member);
+            if (!$sessionMember) {
+                return false;
+            }
+
             return SamplerTrackingActivity::hasEvent($sessionMember, 'checkin')
                 && !SamplerTrackingActivity::hasEvent($sessionMember, 'checkout')
                 && !SamplerTrackingActivity::sameCustomer($session, $targetSession);
+        });
+    }
+
+    protected function parallelCheckinTargetSessionId($targetSession): ?int
+    {
+        if (!$targetSession) {
+            return null;
+        }
+
+        $ids = $targetSession->activity_session_ids ?? [$targetSession->id];
+
+        return (int) (is_array($ids) ? ($ids[0] ?? $targetSession->id) : $targetSession->id);
+    }
+
+    protected function resolveParallelCheckinTargetSession($row, $sessions)
+    {
+        $member = $row['member'] ?? null;
+        $session = $row['session'] ?? null;
+        if (!$member || !$session) {
+            return $session;
+        }
+
+        $memberSessionId = (int) ($member->sampler_tracking_session_id ?? $member['sampler_tracking_session_id'] ?? 0);
+        if ($memberSessionId > 0) {
+            $match = collect($sessions)->first(function ($item) use ($memberSessionId) {
+                $ids = array_map('intval', $item->activity_session_ids ?? [$item->id]);
+
+                return in_array($memberSessionId, $ids, true);
+            });
+            if ($match) {
+                return $match;
+            }
+        }
+
+        return $session;
+    }
+
+    protected function attachParallelCheckinMeta($rows, $sessions, $date = null)
+    {
+        $rows = collect($rows);
+        if ($rows->isEmpty()) {
+            return $rows;
+        }
+
+        $allSessions = collect($sessions)->values();
+        if ($allSessions->isEmpty()) {
+            return $rows;
+        }
+
+        $openService = new SamplerTrackingActivityOpenService();
+
+        return $rows->map(function ($row) use ($allSessions, $openService) {
+            $member = $row['member'] ?? null;
+            if (!$member) {
+                return $row;
+            }
+
+            $targetSession = $this->resolveParallelCheckinTargetSession($row, $allSessions);
+            if (!$targetSession) {
+                return $row;
+            }
+
+            $activitySessionIds = array_map('intval', $targetSession->activity_session_ids ?? [$targetSession->id]);
+            $grant = $openService->activeGrantForMember(
+                $member->sampler_id,
+                (int) $member->id,
+                $activitySessionIds,
+                (int) ($member->sampler_tracking_session_id ?? $targetSession->id),
+                SamplerTrackingActivity::grantMemberIds($member)
+            );
+            $row['activity_open'] = $openService->payload($grant);
+
+            if (SamplerTrackingActivity::hasEvent($member, 'checkin')) {
+                $row['parallel_checkin_blocked'] = false;
+
+                return $row;
+            }
+
+            $state = $openService->parallelCheckinState($member, $targetSession, $allSessions);
+            $wouldBlock = $this->wouldBlockParallelCheckin($allSessions, $member, $targetSession);
+            $row['parallel_checkin_blocked'] = $grant ? false : ($wouldBlock || (bool) $state['blocked']);
+            $row['parallel_blocking_session_id'] = $state['blocking_session_id'];
+            $row['can_open_parallel_activity'] = $row['parallel_checkin_blocked']
+                && empty($grant)
+                && SamplerTrackingActivity::isSesaat($member)
+                && $this->samplerHasNonSesaatAssignment($allSessions, $member->sampler_id, $member->sampler_name);
+
+            return $row;
         });
     }
 
@@ -3325,7 +3558,16 @@ public function buildTrackingRows($sessions)
 
             $previousSession = $sessions->get($currentIndex - 1);
             $previousMember = $this->sessionMemberForSampler($previousSession, $member);
-            if (!SamplerTrackingActivity::hasEvent($previousMember, 'checkout')
+            $activitySessionIds = array_map('intval', $currentSession->activity_session_ids ?? [$currentSession->id]);
+            $parallelOpen = (new SamplerTrackingActivityOpenService())->hasActiveGrantForMember(
+                $member->sampler_id,
+                (int) $member->id,
+                $activitySessionIds,
+                (int) $member->sampler_tracking_session_id,
+                SamplerTrackingActivity::grantMemberIds($member)
+            );
+            if (!$parallelOpen
+                && !SamplerTrackingActivity::hasEvent($previousMember, 'checkout')
                 && !SamplerTrackingActivity::sameCustomer($previousSession, $currentSession)) {
                 throw ValidationException::withMessages([
                     'event_type' => ['Selesaikan check out lokasi sebelumnya terlebih dahulu sebelum check in lokasi ini.'],
