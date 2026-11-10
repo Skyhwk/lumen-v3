@@ -545,11 +545,22 @@ class HandleFileInstrument extends BaseController
                                     'created_at' => $now
                                 ];
                                 
+                                // if($order_detail->kategori_2 == "5-Emisi") {
+                                //     if(isset($payload->vl)) unset($payload->vl);
+                                //     $payload->vs = 50;
+                                //     $payload->ks = $avg_param;
+                                //     $kbEmisi = $blankoParam < 0 ? 0 : $blankoParam;
+                                //     $payload->kb = $kbEmisi;
+                                //     $icpData['blanko'] = $kbEmisi;
+                                // }
+
                                 if($order_detail->kategori_2 == "5-Emisi") {
                                     if(isset($payload->vl)) unset($payload->vl);
                                     $payload->vs = 50;
                                     $payload->ks = $avg_param;
-                                    $payload->kb = $blankoParam;
+                                    $kbEmisi = $blankoParam < 0 ? 0 : $blankoParam;
+                                    $payload->kb = $kbEmisi;
+                                    $icpData['blanko'] = $kbEmisi;
                                 }
                                 
                                 // Siapkan data untuk batch insert
