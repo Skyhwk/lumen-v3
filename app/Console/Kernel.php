@@ -101,6 +101,7 @@ class Kernel extends ConsoleKernel
         Commands\GenerateAutoQtCommand::class,
         Commands\RenderAutoQtCommand::class,
         Commands\EmailAutoQtCommand::class,
+        Commands\NotifySamplingH14Command::class,
         Commands\UpdateQuotationStatusFromExcelCommand::class,
         Commands\GenerateMonthlyAbsensiCommand::class,
         Commands\BackfillRekapHariKerjaCommand::class,

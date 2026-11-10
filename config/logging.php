@@ -71,6 +71,12 @@ return [
             'path' => storage_path('logs/sampling/log.log'),
             'level' => 'info',
         ],
+        'sampling_h14' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/sampling_h14/log.log'),
+            'level' => 'info',
+            'days' => 60,
+        ],
         'assessment_rejection' => [
             'driver' => 'daily',
             'path' => storage_path('logs/assessment_rejection/log.log'),
