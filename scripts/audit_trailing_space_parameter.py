@@ -7,7 +7,8 @@ Scope disetujui:
   - master_harga_parameter (nama_parameter)
   - order_detail (parameter JSON: "id;nama")
   - colorimetri, titrimetri, gravimetri, subkontrak (parameter)
-  - request_quotation (data_pendukung_sampling JSON → field parameter)
+  - request_quotation + request_quotation_kontrak_H/D (data_pendukung_sampling JSON)
+  - master_bakumutu (parameter)
 
 Tabel sub_kontrak → subkontrak (nama di DB).
 """
@@ -17,8 +18,18 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass, field
 from pathlib import Path
+
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from parameter_whitespace_scope import (
+    ANALISA_JOIN_TARGETS,
+    JSON_QUOTATION_SAMPLING,
+    SCALAR_TARGETS,
+)
+from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 try:
@@ -216,11 +227,15 @@ def summarize_lab_regulasi_lhp_alignment(master_rows: list[dict]) -> tuple[int, 
     return lab_trail, reg_trail, lhp_trail, all_three
 
 
-def iter_json_rows(conn, table: str, column: str, batch: int = 2000):
-    sql = (
-        f"SELECT id, `{column}` AS payload FROM `{table}` "
-        f"WHERE {active_where()} AND `{column}` IS NOT NULL AND `{column}` <> ''"
+def iter_json_rows(
+    conn, table: str, column: str, batch: int = 2000, *, filter_is_active: bool = True
+):
+    where = (
+        f"{active_where()} AND `{column}` IS NOT NULL AND `{column}` <> ''"
+        if filter_is_active
+        else f"`{column}` IS NOT NULL AND `{column}` <> ''"
     )
+    sql = f"SELECT id, `{column}` AS payload FROM `{table}` WHERE {where}"
     with conn.cursor() as cur:
         cur.execute(sql)
         while True:
@@ -265,11 +280,15 @@ def scan_order_detail_parameter(conn) -> tuple[int, int, list[JsonHit]]:
     return rows_hit, tokens, hits
 
 
-def scan_request_quotation_sampling(conn) -> tuple[int, int, list[JsonHit]]:
+def scan_quotation_sampling_json(
+    conn, table: str, column: str, *, filter_is_active: bool = True
+) -> tuple[int, int, list[JsonHit]]:
     rows_hit = 0
     tokens = 0
     hits: list[JsonHit] = []
-    for row_id, raw in iter_json_rows(conn, "request_quotation", "data_pendukung_sampling"):
+    for row_id, raw in iter_json_rows(
+        conn, table, column, filter_is_active=filter_is_active
+    ):
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
@@ -292,8 +311,8 @@ def scan_request_quotation_sampling(conn) -> tuple[int, int, list[JsonHit]]:
                     tokens += 1
                     hits.append(
                         JsonHit(
-                            "request_quotation",
-                            "data_pendukung_sampling",
+                            table,
+                            column,
                             row_id,
                             token,
                             nama,
@@ -427,18 +446,26 @@ def main() -> int:
             extra_cols=("id_parameter",),
         )
 
-        analisa_tables = [
-            ("colorimetri", "parameter"),
-            ("titrimetri", "parameter"),
-            ("gravimetri", "parameter"),
-            ("subkontrak", "parameter"),
+        analisa_tables = list(ANALISA_JOIN_TARGETS)
+        scalar_extra = [
+            (t, c) for t, c in SCALAR_TARGETS if (t, c) not in analisa_tables
         ]
         analisa_results: dict[str, tuple[int, list[ScalarHit]]] = {}
+        scalar_ex_results: dict[str, tuple[int, list[ScalarHit]]] = {}
         for tbl, col in analisa_tables:
             analisa_results[tbl] = audit_scalar_table(conn, tbl, col)
+        for tbl, col in scalar_extra:
+            scalar_ex_results[tbl] = audit_scalar_table(conn, tbl, col)
 
         od_rows, od_tokens, od_hits = scan_order_detail_parameter(conn)
-        rq_rows, rq_tokens, rq_hits = scan_request_quotation_sampling(conn)
+        quotation_scans: dict[str, tuple[int, int, list[JsonHit]]] = {}
+        for table, column, active in JSON_QUOTATION_SAMPLING:
+            quotation_scans[table] = scan_quotation_sampling_json(
+                conn, table, column, filter_is_active=active
+            )
+        rq_rows, rq_tokens, rq_hits = quotation_scans.get(
+            "request_quotation", (0, 0, [])
+        )
 
         print("\n=== RINGKASAN AUDIT (scope disetujui) ===")
         print(f"{'Tabel':<28} {'Baris':>8}  {'Token/alt':>10}  Catatan")
@@ -459,13 +486,17 @@ def main() -> int:
         for tbl, col in analisa_tables:
             cnt, _ = analisa_results[tbl]
             print(f"{tbl:<28} {cnt:>8}  {'-':>10}  kolom {col}")
+        for tbl, col in scalar_extra:
+            cnt, _ = scalar_ex_results[tbl]
+            print(f"{tbl:<28} {cnt:>8}  {'-':>10}  kolom {col}")
         print(
             f"{'order_detail':<28} {od_rows:>8}  {od_tokens:>10}  JSON parameter"
         )
-        print(
-            f"{'request_quotation':<28} {rq_rows:>8}  {rq_tokens:>10}  "
-            "JSON data_pendukung_sampling"
-        )
+        for table, column, _active in JSON_QUOTATION_SAMPLING:
+            q_rows, q_tokens, _ = quotation_scans[table]
+            print(
+                f"{table:<28} {q_rows:>8}  {q_tokens:>10}  JSON {column}"
+            )
 
         print("\n--- Terhubung master bermasalah (join TRIM nama_lab) ---")
         for tbl, col in analisa_tables:
@@ -501,6 +532,9 @@ def main() -> int:
             mhp_hits,
             args.all,
         )
+        for tbl, col in scalar_extra:
+            cnt, hits = scalar_ex_results[tbl]
+            print_scalar_hits(f"{tbl}.{col}", cnt, hits, args.all)
         for tbl, col in analisa_tables:
             cnt, hits = analisa_results[tbl]
             print_scalar_hits(f"{tbl}.{col}", cnt, hits, args.all)
@@ -516,17 +550,21 @@ def main() -> int:
             f"  Token JSON order_detail terhubung master (subset trailing scan): {od_linked}"
         )
 
-        print_json_hits(
-            "request_quotation.data_pendukung_sampling (JSON)",
-            rq_rows,
-            rq_tokens,
-            rq_hits,
-            args.all,
-        )
-        rq_linked = json_linked_to_master(rq_hits) if rq_hits else 0
-        print(
-            f"  Token JSON quotation terhubung master (subset trailing scan): {rq_linked}"
-        )
+        for table, column, _active in JSON_QUOTATION_SAMPLING:
+            q_rows, q_tokens, q_hits = quotation_scans[table]
+            print_json_hits(
+                f"{table}.{column} (JSON)",
+                q_rows,
+                q_tokens,
+                q_hits,
+                args.all,
+            )
+            if table == "request_quotation" and q_hits:
+                rq_linked = json_linked_to_master(q_hits)
+                print(
+                    f"  Token JSON {table} terhubung master "
+                    f"(subset trailing scan): {rq_linked}"
+                )
 
         print("\nLangkah berikutnya: script perbaikan terpisah dengan --dry-run default.")
     finally:

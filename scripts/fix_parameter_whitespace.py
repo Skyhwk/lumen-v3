@@ -15,6 +15,18 @@ import json
 import sys
 from pathlib import Path
 
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from parameter_whitespace_scope import (
+    EXTENSION_JSON_QUOTATION,
+    EXTENSION_SCALAR,
+    JSON_ORDER_DETAIL,
+    JSON_QUOTATION_SAMPLING,
+    SCALAR_TARGETS,
+)
+
 try:
     import pymysql
 except ImportError:
@@ -38,13 +50,11 @@ JSON_WHITESPACE_PREFILTER = (
     "`{col}` REGEXP '[[:space:]]\"' OR `{col}` REGEXP '\"[[:space:]]'"
 )
 
-SCALAR_TARGETS = [
-    ("master_harga_parameter", "nama_parameter"),
-    ("colorimetri", "parameter"),
-    ("titrimetri", "parameter"),
-    ("gravimetri", "parameter"),
-    ("subkontrak", "parameter"),
-]
+def json_row_filter(column: str, *, filter_is_active: bool) -> str:
+    base = f"`{column}` IS NOT NULL AND `{column}` <> ''"
+    if filter_is_active:
+        return f"{active_where()} AND {base}"
+    return base
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -394,39 +404,52 @@ def scan_order_detail_fixes(conn):
                     yield row["id"], json.dumps(new_list, ensure_ascii=False)
 
 
-def scan_request_quotation_fixes(conn):
-    sql = (
-        f"SELECT id, `data_pendukung_sampling` AS payload FROM `request_quotation` "
-        f"WHERE {active_where()} AND `data_pendukung_sampling` IS NOT NULL "
-        f"AND `data_pendukung_sampling` <> ''"
-    )
-    with conn.cursor() as cur:
-        cur.execute(sql)
-        while True:
-            chunk = cur.fetchmany(500)
-            if not chunk:
-                break
-            for row in chunk:
-                raw = row["payload"]
-                try:
-                    data = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(data, list):
-                    continue
-                changed = False
-                for sample in data:
-                    if not isinstance(sample, dict):
+def make_scan_quotation_sampling_fixes(
+    table: str, column: str, filter_is_active: bool
+):
+    where = json_row_filter(column, filter_is_active=filter_is_active)
+
+    def scanner(conn):
+        sql = f"SELECT id, `{column}` AS payload FROM `{table}` WHERE {where}"
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            while True:
+                chunk = cur.fetchmany(500)
+                if not chunk:
+                    break
+                for row in chunk:
+                    raw = row["payload"]
+                    try:
+                        data = json.loads(raw)
+                    except json.JSONDecodeError:
                         continue
-                    plist = sample.get("parameter")
-                    if not isinstance(plist, list):
+                    if not isinstance(data, list):
                         continue
-                    for i, token in enumerate(plist):
-                        if isinstance(token, str) and token_needs_fix(token):
-                            changed = True
-                            plist[i] = fix_id_nama_token(token)
-                if changed:
-                    yield row["id"], json.dumps(data, ensure_ascii=False)
+                    changed = False
+                    for sample in data:
+                        if not isinstance(sample, dict):
+                            continue
+                        plist = sample.get("parameter")
+                        if not isinstance(plist, list):
+                            continue
+                        for i, token in enumerate(plist):
+                            if isinstance(token, str) and token_needs_fix(token):
+                                changed = True
+                                plist[i] = fix_id_nama_token(token)
+                    if changed:
+                        yield row["id"], json.dumps(data, ensure_ascii=False)
+
+    scanner.table = table  # type: ignore[attr-defined]
+    scanner.column = column  # type: ignore[attr-defined]
+    return scanner
+
+
+def quotation_json_scanners(
+    targets: list[tuple[str, str, bool]],
+) -> list:
+    return [
+        make_scan_quotation_sampling_fixes(t, c, a) for t, c, a in targets
+    ]
 
 
 def count_json_fix_rows(conn, scanner) -> int:
@@ -447,9 +470,9 @@ def count_remaining_whitespace(
         out["order_detail.parameter (JSON)"] = count_json_fix_rows(
             conn, scan_order_detail_fixes
         )
-        out["request_quotation.data_pendukung_sampling (JSON)"] = count_json_fix_rows(
-            conn, scan_request_quotation_fixes
-        )
+        for table, column, active in JSON_QUOTATION_SAMPLING:
+            scanner = make_scan_quotation_sampling_fixes(table, column, active)
+            out[f"{table}.{column} (JSON)"] = count_json_fix_rows(conn, scanner)
     return out
 
 
@@ -486,6 +509,11 @@ def main() -> int:
         help="Hanya tabel parameter (3 kolom nama); paling aman saat banyak lock",
     )
     parser.add_argument(
+        "--extension-only",
+        action="store_true",
+        help="Hanya scope perpanjangan: master_bakumutu + quotation kontrak H/D",
+    )
+    parser.add_argument(
         "--show-locks",
         action="store_true",
         help="Tampilkan query aktif di MySQL lalu keluar (bantu cek siapa yang lock)",
@@ -520,10 +548,16 @@ def main() -> int:
         parser.error("Pilih salah satu: --json-only atau --scalar-only, bukan keduanya.")
     if args.parameter_only and args.json_only:
         parser.error("--parameter-only tidak boleh digabung --json-only.")
+    if args.extension_only and args.json_only:
+        parser.error("--extension-only sudah cakup JSON kontrak; jangan gabung --json-only.")
+    if args.extension_only and (args.scalar_only or args.parameter_only):
+        parser.error("--extension-only tidak boleh digabung --scalar-only/--parameter-only.")
 
     mode = "APPLY" if args.apply else "DRY-RUN"
     if only_ids:
         scope = f"parameter id={sorted(only_ids)}"
+    elif args.extension_only:
+        scope = "extension-only"
     elif args.parameter_only:
         scope = "parameter-only"
     elif args.scalar_only:
@@ -572,6 +606,13 @@ def main() -> int:
             return 0
 
         param_single = only_ids is not None
+        run_master_parameter = not args.json_only and not args.extension_only
+        scalar_tables = (
+            EXTENSION_SCALAR
+            if args.extension_only
+            else ([] if args.parameter_only or param_single else SCALAR_TARGETS)
+        )
+
         if not args.json_only:
             if args.apply:
                 with conn.cursor() as cur:
@@ -579,32 +620,32 @@ def main() -> int:
                     cur.execute(
                         "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED"
                     )
-            par = update_parameter_table(
-                conn, args.apply, env, skip_ids, only_ids=only_ids
-            )
-            summary.update(par)
-            print(f"parameter: {par}", flush=True)
+            if run_master_parameter:
+                par = update_parameter_table(
+                    conn, args.apply, env, skip_ids, only_ids=only_ids
+                )
+                summary.update(par)
+                print(f"parameter: {par}", flush=True)
 
-            if param_single:
-                if not args.apply:
-                    print(
-                        "\nDry-run. Jalankan dengan --apply --yes",
-                        flush=True,
-                    )
-                elif par.get("parameter (baris)", 0) == 0:
-                    print(
-                        "\nTidak ada perubahan (id tidak ada, tidak aktif, "
-                        "atau sudah bersih).",
-                        flush=True,
-                    )
+                if param_single:
+                    if not args.apply:
+                        print(
+                            "\nDry-run. Jalankan dengan --apply --yes",
+                            flush=True,
+                        )
+                    elif par.get("parameter (baris)", 0) == 0:
+                        print(
+                            "\nTidak ada perubahan (id tidak ada, tidak aktif, "
+                            "atau sudah bersih).",
+                            flush=True,
+                        )
 
-            if not args.parameter_only and not param_single:
-                for table, col in SCALAR_TARGETS:
-                    print(f"  -> {table}.{col}...", flush=True)
-                    n = update_scalar_column(conn, table, col, args.apply)
-                    summary[f"{table}.{col}"] = n
-                    print(f"     {n} baris", flush=True)
-            if args.apply:
+            for table, col in scalar_tables:
+                print(f"  -> {table}.{col}...", flush=True)
+                n = update_scalar_column(conn, table, col, args.apply)
+                summary[f"{table}.{col}"] = n
+                print(f"     {n} baris", flush=True)
+            if args.apply and (run_master_parameter or scalar_tables):
                 print("Scalar selesai (COMMIT per baris).", flush=True)
 
         def apply_json_scan(label: str, scanner):
@@ -629,15 +670,27 @@ def main() -> int:
         # Wrapper objects for table/column names
         scan_order_detail_fixes.table = "order_detail"  # type: ignore[attr-defined]
         scan_order_detail_fixes.column = "parameter"  # type: ignore[attr-defined]
-        scan_request_quotation_fixes.table = "request_quotation"  # type: ignore[attr-defined]
-        scan_request_quotation_fixes.column = "data_pendukung_sampling"  # type: ignore[attr-defined]
+        if args.extension_only:
+            run_order_detail = False
+            run_quotation_targets = EXTENSION_JSON_QUOTATION
+        elif args.json_only:
+            run_order_detail = True
+            run_quotation_targets = JSON_QUOTATION_SAMPLING
+        elif args.scalar_only or args.parameter_only or param_single:
+            run_order_detail = False
+            run_quotation_targets = []
+        else:
+            run_order_detail = True
+            run_quotation_targets = JSON_QUOTATION_SAMPLING
 
-        if not args.scalar_only and not args.parameter_only and only_ids is None:
+        if run_order_detail:
             apply_json_scan("order_detail JSON", scan_order_detail_fixes)
-            apply_json_scan("request_quotation JSON", scan_request_quotation_fixes)
-            if args.apply:
-                conn.commit()
-                print("\nCOMMIT JSON berhasil.", flush=True)
+        for scanner in quotation_json_scanners(run_quotation_targets):
+            apply_json_scan(f"{scanner.table} JSON", scanner)
+
+        if args.apply and (run_order_detail or run_quotation_targets):
+            conn.commit()
+            print("\nCOMMIT JSON berhasil.", flush=True)
 
         if not args.apply:
             conn.rollback()
@@ -647,17 +700,29 @@ def main() -> int:
             print(f"  {k}: {v} baris")
 
         if args.apply:
-            include_json = (
-                not args.scalar_only
-                and not args.parameter_only
-                and only_ids is None
-            )
-            include_scalar = not args.json_only
-            after = count_remaining_whitespace(
-                conn,
-                include_scalar=include_scalar,
-                include_json=include_json,
-            )
+            if args.extension_only:
+                after = {}
+                for table, col in EXTENSION_SCALAR:
+                    after[f"{table}.{col}"] = count_needs_trim(conn, table, col)
+                for table, column, active in EXTENSION_JSON_QUOTATION:
+                    scanner = make_scan_quotation_sampling_fixes(
+                        table, column, active
+                    )
+                    after[f"{table}.{column} (JSON)"] = count_json_fix_rows(
+                        conn, scanner
+                    )
+            else:
+                include_json = (
+                    not args.scalar_only
+                    and not args.parameter_only
+                    and only_ids is None
+                ) or args.json_only
+                include_scalar = not args.json_only
+                after = count_remaining_whitespace(
+                    conn,
+                    include_scalar=include_scalar,
+                    include_json=include_json,
+                )
             print("\nSesudah (sisa bermasalah, harus 0):")
             all_clear = True
             for k, v in after.items():

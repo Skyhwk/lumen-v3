@@ -142,12 +142,34 @@ SCOPE TABEL (disetujui)
 
   Master:     parameter (nama_lab, nama_regulasi, nama_lhp)
               master_harga_parameter (nama_parameter)
+              master_bakumutu (parameter)
 
   Analisa:    colorimetri, titrimetri, gravimetri, subkontrak (kolom parameter)
 
   JSON:       order_detail.parameter
               request_quotation.data_pendukung_sampling
+              request_quotation_kontrak_H.data_pendukung_sampling
+              request_quotation_kontrak_D.data_pendukung_sampling
+              (kontrak_D tanpa filter is_active — tidak ada kolom itu)
 
   (sub_kontrak di aplikasi = tabel subkontrak di DB)
+
+================================================================================
+8. SCOPE PERPANJANGAN (3 tabel baru) — pisahkan dari run lama
+================================================================================
+
+  Audit & hitung (termasuk dalam audit lengkap):
+
+    python D:\lumen-v3\scripts\audit_trailing_space_parameter.py
+
+  Dry-run / apply HANYA 3 tabel baru:
+
+    python D:\lumen-v3\scripts\fix_parameter_whitespace.py --extension-only
+    python -u D:\lumen-v3\scripts\fix_parameter_whitespace.py --apply --yes --extension-only
+
+  Cakupan --extension-only:
+    - master_bakumutu.parameter
+    - request_quotation_kontrak_H.data_pendukung_sampling
+    - request_quotation_kontrak_D.data_pendukung_sampling
 
 ================================================================================
