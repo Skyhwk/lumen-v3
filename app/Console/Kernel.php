@@ -14,6 +14,7 @@ class Kernel extends ConsoleKernel
      */
     protected $commands = [
         Commands\SyncSamplerTracking::class,
+        Commands\SeedSamplerTrackingPicTestCommand::class,
         Commands\CollectSamplerTrackingTroubles::class,
         Commands\BackfillSamplerTrackingHistory::class,
         Commands\CleanOldRequestLogs::class,
@@ -105,6 +106,7 @@ class Kernel extends ConsoleKernel
         Commands\BackfillRekapHariKerjaCommand::class,
         Commands\ImportNearHo::class,
         Commands\BackupMasterPelangganDediWibowoCommand::class,
+        Commands\AssignBankDataOrderedCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,
