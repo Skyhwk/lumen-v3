@@ -107,6 +107,24 @@ class QuotationPromoPresentation
         return true;
     }
 
+    public static function writeSukaSukaInvoiceRowIv($pdf, $source)
+    {
+        $line = self::sukaSukaInvoiceLine($source);
+        if (!$line) {
+            return false;
+        }
+        $nama = htmlspecialchars($line['nama'], ENT_QUOTES, 'UTF-8');
+        $nominal = 'Rp ' . number_format($line['nominal'], 0, '.', ',');
+        $pdf->writeHTML(
+            '<tr>
+                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="5">' . $nama . '</td>
+                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $nominal . '</td>
+            </tr>'
+        );
+
+        return true;
+    }
+
     public static function sukaSukaQuotationQty($source)
     {
         if (!empty($source->periode_kontrak)) {
