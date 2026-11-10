@@ -80,6 +80,15 @@ class RekapQuotationController extends Controller
                 ->addColumn('count_detail', function ($row) {
                     return $row->detail ? $row->detail->count() : 0;
                 })
+                ->filterColumn('created_at', function ($query, $keyword) use ($tableName) {
+                    $keyword = trim((string) $keyword);
+                    $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
+                    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                        return;
+                    }
+
+                    $query->whereDate($tableName . '.created_at', $date);
+                })
                 ->filterColumn('status_quotation', function ($query, $keyword) use ($tableName) {
                     $keyword = trim((string) $keyword);
                     if ($keyword === '') {
