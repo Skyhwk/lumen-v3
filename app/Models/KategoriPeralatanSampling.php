@@ -10,6 +10,7 @@ class KategoriPeralatanSampling extends Sector
 
     protected $casts = [
         'id_cabang' => 'integer',
+        'jumlah_alat_tersedia' => 'integer',
         'is_active' => 'boolean',
     ];
 

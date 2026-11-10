@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Yajra\Datatables\Datatables;
 
-class KategoriPeralatanSamplingController extends Controller
+class PeralatanController extends Controller
 {
     public function index()
     {
@@ -26,6 +26,8 @@ class KategoriPeralatanSamplingController extends Controller
                 'nama_kategori_pengujian',
                 'id_cabang',
                 'lokasi_penempatan_alat',
+                'status_alat',
+                'jumlah_alat_tersedia'
             ]);
 
         return Datatables::of($data)->make(true);
@@ -152,6 +154,8 @@ class KategoriPeralatanSamplingController extends Controller
                 'warna' => 'required|in:Merah,Biru,Hitam',
                 'nama_kategori_pengujian' => 'required|string|max:70',
                 'id_cabang' => 'required|integer',
+                'status_alat' => 'required|string',
+                'jumlah_alat_tersedia' => 'required|integer|min:0',
             ]
         );
 
@@ -164,10 +168,12 @@ class KategoriPeralatanSamplingController extends Controller
 
         $jenisPeralatan = trim((string) $request->jenis_peralatan);
         $namaKategori = trim((string) $request->nama_kategori_pengujian);
-        if (empty($namaAlatList) || $jenisPeralatan === '' || $namaKategori === '') {
+        $statusAlat = trim((string) $request->status_alat);
+        $jumlahAlatTersedia = intval($request->jumlah_alat_tersedia);
+        if (empty($namaAlatList) || $jenisPeralatan === '' || $namaKategori === '' || $statusAlat === '' || $jumlahAlatTersedia < 0) {
             return response()->json([
                 'success' => false,
-                'message' => 'Nama alat, jenis peralatan, dan kategori pengujian wajib diisi',
+                'message' => 'Nama alat, jenis peralatan, kategori pengujian, status alat, dan jumlah alat tersedia wajib diisi',
             ], 422);
         }
 
@@ -227,6 +233,8 @@ class KategoriPeralatanSamplingController extends Controller
                 $row->nama_kategori_pengujian = $namaKategori;
                 $row->id_cabang = $cabang->id;
                 $row->lokasi_penempatan_alat = $cabang->nama_cabang;
+                $row->status_alat = $statusAlat;
+                $row->jumlah_alat_tersedia = $jumlahAlatTersedia;
                 $row->updated_by = $this->karyawan;
                 $row->updated_at = $now;
                 $row->save();
@@ -239,6 +247,8 @@ class KategoriPeralatanSamplingController extends Controller
                     $extraRow->nama_kategori_pengujian = $namaKategori;
                     $extraRow->id_cabang = $cabang->id;
                     $extraRow->lokasi_penempatan_alat = $cabang->nama_cabang;
+                    $extraRow->status_alat = $statusAlat;
+                    $extraRow->jumlah_alat_tersedia = $jumlahAlatTersedia;
                     $extraRow->created_by = $this->karyawan;
                     $extraRow->created_at = $now;
                     $extraRow->is_active = true;
@@ -255,6 +265,8 @@ class KategoriPeralatanSamplingController extends Controller
                     $row->nama_kategori_pengujian = $namaKategori;
                     $row->id_cabang = $cabang->id;
                     $row->lokasi_penempatan_alat = $cabang->nama_cabang;
+                    $row->status_alat = $statusAlat;
+                    $row->jumlah_alat_tersedia = $jumlahAlatTersedia;
                     $row->created_by = $this->karyawan;
                     $row->created_at = $now;
                     $row->is_active = true;
