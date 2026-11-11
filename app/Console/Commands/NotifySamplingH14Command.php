@@ -740,10 +740,10 @@ class NotifySamplingH14Command extends Command
             'picRows' => $picRows,
             'salesName' => $payload['sales']['nama'] ?: '-',
             'salesKontak' => $payload['sales']['kontak'] ?: '-',
-            'portal' => 'https://portal.intilab.com/customer',
+            'portal' => 'https://portal.intilab.com/customers',
             'playstore' => env(
                 'CUSTOMER_APP_PLAYSTORE_URL',
-                'https://play.google.com/store/apps/details?id=com.intilab.customer'
+                'https://play.google.com/store/apps/details?id=com.intilab.mobileppi&hl=id'
             ),
         ])->render();
     }
