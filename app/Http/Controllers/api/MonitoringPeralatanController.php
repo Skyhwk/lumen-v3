@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\GaAsset;
-use App\Models\KategoriPeralatanSampling;
+use App\Models\MonitoringPeralatan;
 use App\Models\MasterCabang;
 use App\Models\MasterKategori;
 use Illuminate\Http\Request;
@@ -12,11 +12,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Yajra\Datatables\Datatables;
 
-class MonitoringAlatController extends Controller
+class MonitoringPeralatanController extends Controller
 {
     public function index(Request $request)
     {
-        $data = KategoriPeralatanSampling::query()
+        $data = MonitoringPeralatan::query()
             ->where('is_active', true)
             ->select([
                 'id',
@@ -28,7 +28,8 @@ class MonitoringAlatController extends Controller
                 'lokasi_penempatan_alat',
                 'status_alat',
                 'jumlah_alat_tersedia',
-                'keterangan'
+                'keterangan',
+                'kode_aset'
             ]);
 
         $idCabang = $request->input('id_cabang');
@@ -73,7 +74,7 @@ class MonitoringAlatController extends Controller
             ->whereRaw("TRIM(nama_kategori) <> ''")
             ->pluck('nama_kategori');
 
-        $fromSampling = KategoriPeralatanSampling::query()
+        $fromSampling = MonitoringPeralatan::query()
             ->where('is_active', true)
             ->whereNotNull('nama_kategori_pengujian')
             ->whereRaw("TRIM(nama_kategori_pengujian) <> ''")
@@ -105,7 +106,7 @@ class MonitoringAlatController extends Controller
 
     public function getJenis()
     {
-        $data = KategoriPeralatanSampling::query()
+        $data = MonitoringPeralatan::query()
             ->where('is_active', true)
             ->whereNotNull('jenis_peralatan')
             ->whereRaw("TRIM(jenis_peralatan) <> ''")
@@ -123,7 +124,7 @@ class MonitoringAlatController extends Controller
 
     public function getCabang()
     {
-        $counts = KategoriPeralatanSampling::query()
+        $counts = MonitoringPeralatan::query()
             ->where('is_active', true)
             ->select('id_cabang', DB::raw('COUNT(*) as total'))
             ->groupBy('id_cabang')
@@ -177,6 +178,7 @@ class MonitoringAlatController extends Controller
                 'status_alat' => 'required|string',
                 'jumlah_alat_tersedia' => 'required|integer|min:0',
                 'keterangan' => 'nullable|string',
+                'kode_aset' => 'required|string|max:255',
             ]
         );
 
@@ -193,10 +195,12 @@ class MonitoringAlatController extends Controller
         $jumlahAlatTersedia = intval($request->jumlah_alat_tersedia);
         $keterangan = trim((string) $request->input('keterangan', ''));
         $keterangan = $keterangan === '' ? null : $keterangan;
+        $kodeAset = trim((string) $request->input('kode_aset', ''));
+        $kodeAset = $kodeAset === '' ? null : $kodeAset;
         if (empty($namaAlatList) || $jenisPeralatan === '' || $namaKategori === '' || $statusAlat === '' || $jumlahAlatTersedia < 0) {
             return response()->json([
                 'success' => false,
-                'message' => 'Nama alat, jenis peralatan, kategori pengujian, status alat, dan jumlah alat tersedia wajib diisi',
+                'message' => 'Nama alat, jenis peralatan, kategori pengujian, status alat, jumlah alat tersedia, dan kode aset wajib diisi',
             ], 422);
         }
 
@@ -212,13 +216,14 @@ class MonitoringAlatController extends Controller
             ], 404);
         }
 
-        $duplicateNames = KategoriPeralatanSampling::query()
+        $duplicateNames = MonitoringPeralatan::query()
             ->where('is_active', true)
             ->whereIn('nama_alat', $namaAlatList)
             ->where('jenis_peralatan', $jenisPeralatan)
             ->where('warna', $request->warna)
             ->where('nama_kategori_pengujian', $namaKategori)
             ->where('id_cabang', $cabang->id)
+            ->where('kode_aset', $kodeAset)
             ->when($request->filled('id'), function ($query) use ($request) {
                 $query->where('id', '!=', $request->id);
             })
@@ -237,7 +242,7 @@ class MonitoringAlatController extends Controller
             $now = date('Y-m-d H:i:s');
 
             if ($request->filled('id')) {
-                $row = KategoriPeralatanSampling::query()
+                $row = MonitoringPeralatan::query()
                     ->where('is_active', true)
                     ->find($request->id);
 
@@ -259,12 +264,13 @@ class MonitoringAlatController extends Controller
                 $row->status_alat = $statusAlat;
                 $row->jumlah_alat_tersedia = $jumlahAlatTersedia;
                 $row->keterangan = $keterangan;
+                $row->kode_aset = $kodeAset;
                 $row->updated_by = $this->karyawan;
                 $row->updated_at = $now;
                 $row->save();
 
                 foreach ($namaAlatList as $extraNamaAlat) {
-                    $extraRow = new KategoriPeralatanSampling();
+                    $extraRow = new MonitoringPeralatan();
                     $extraRow->nama_alat = $extraNamaAlat;
                     $extraRow->jenis_peralatan = $jenisPeralatan;
                     $extraRow->warna = $request->warna;
@@ -274,16 +280,17 @@ class MonitoringAlatController extends Controller
                     $extraRow->status_alat = $statusAlat;
                     $extraRow->jumlah_alat_tersedia = $jumlahAlatTersedia;
                     $extraRow->keterangan = $keterangan;
+                    $extraRow->kode_aset = $kodeAset;
                     $extraRow->created_by = $this->karyawan;
                     $extraRow->created_at = $now;
                     $extraRow->is_active = true;
                     $extraRow->save();
                 }
 
-                $message = 'Data kategori peralatan sampling berhasil diubah';
+                $message = 'Data monitoring peralatan berhasil diubah';
             } else {
                 foreach ($namaAlatList as $namaAlat) {
-                    $row = new KategoriPeralatanSampling();
+                    $row = new MonitoringPeralatan();
                     $row->nama_alat = $namaAlat;
                     $row->jenis_peralatan = $jenisPeralatan;
                     $row->warna = $request->warna;
@@ -293,13 +300,14 @@ class MonitoringAlatController extends Controller
                     $row->status_alat = $statusAlat;
                     $row->jumlah_alat_tersedia = $jumlahAlatTersedia;
                     $row->keterangan = $keterangan;
+                    $row->kode_aset = $kodeAset;
                     $row->created_by = $this->karyawan;
                     $row->created_at = $now;
                     $row->is_active = true;
                     $row->save();
                 }
 
-                $message = 'Data kategori peralatan sampling berhasil disimpan';
+                $message = 'Data monitoring peralatan berhasil disimpan';
             }
 
             DB::commit();
@@ -320,14 +328,14 @@ class MonitoringAlatController extends Controller
 
     public function delete(Request $request)
     {
-        $row = KategoriPeralatanSampling::query()
+        $row = MonitoringPeralatan::query()
             ->where('is_active', true)
             ->find($request->id);
 
         if (!$row) {
             return response()->json([
                 'success' => false,
-                'message' => 'Data kategori peralatan sampling tidak ditemukan',
+                'message' => 'Data monitoring peralatan tidak ditemukan',
             ], 404);
         }
 
