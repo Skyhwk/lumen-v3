@@ -71,7 +71,7 @@ class LogTransactionQsdController extends Controller
 
         $tahun = substr($periode, 0, 4); // Menghasilkan "2026"
         $bulan = substr($periode, 5, 2); // Menghasilkan "06"
-        
+
         // Query Utama untuk Datatables (Menampilkan SEMUA jejak log)
         $data = DB::table('qsd_revenue_transaction_log as log')
             ->leftJoin('order_header as oh', 'oh.no_order', '=', 'log.no_order')
@@ -93,22 +93,22 @@ class LogTransactionQsdController extends Controller
             ->value('total_bersih') ?? 0; // Kasih default 0 jika null
 
         return Datatables::of($data)
-            ->orderColumn('created_at', fn ($query, $order) => $query->orderBy('log.id', $order))
-            ->filterColumn('created_at', fn ($query, $keyword) => $this->filterDateColumn($query, 'log.created_at', $keyword))
-            ->filterColumn('no_order', fn ($query, $keyword) => $this->filterLike($query, 'log.no_order', $keyword))
-            ->filterColumn('nama_perusahaan', fn ($query, $keyword) => $this->filterLike($query, 'mp.nama_pelanggan', $keyword))
-            ->filterColumn('sales_penanggung_jawab', fn ($query, $keyword) => $this->filterLike($query, 'mp.sales_penanggung_jawab', $keyword))
-            ->filterColumn('periode', fn ($query, $keyword) => $this->filterPeriodeColumn($query, $keyword, 'log.periode'))
-            ->filterColumn('revenue', fn ($query, $keyword) => $this->filterNumericColumn($query, 'log.revenue', $keyword))
-            ->filterColumn('total', fn ($query, $keyword) => $this->filterNumericColumn($query, 'log.total', $keyword))
-            ->filterColumn('status', fn ($query, $keyword) => $this->filterStatusColumn($query, $keyword, 'log.status'))
-            ->editColumn('periode', fn ($row) => $this->formatPeriodeLabel($row->periode))
-            ->editColumn('nama_perusahaan', fn ($row) => $row->nama_perusahaan ?: '-')
-            ->editColumn('sales_penanggung_jawab', fn ($row) => $row->sales_penanggung_jawab ?: '-')
-            ->editColumn('revenue', fn ($row) => (float) $row->revenue)
-            ->editColumn('total', fn ($row) => (float) $row->total)
+            ->orderColumn('created_at', fn($query, $order) => $query->orderBy('log.id', $order))
+            ->filterColumn('created_at', fn($query, $keyword) => $this->filterDateColumn($query, 'log.created_at', $keyword))
+            ->filterColumn('no_order', fn($query, $keyword) => $this->filterLike($query, 'log.no_order', $keyword))
+            ->filterColumn('nama_perusahaan', fn($query, $keyword) => $this->filterLike($query, 'mp.nama_pelanggan', $keyword))
+            ->filterColumn('sales_penanggung_jawab', fn($query, $keyword) => $this->filterLike($query, 'mp.sales_penanggung_jawab', $keyword))
+            ->filterColumn('periode', fn($query, $keyword) => $this->filterPeriodeColumn($query, $keyword, 'log.periode'))
+            ->filterColumn('revenue', fn($query, $keyword) => $this->filterNumericColumn($query, 'log.revenue', $keyword))
+            ->filterColumn('total', fn($query, $keyword) => $this->filterNumericColumn($query, 'log.total', $keyword))
+            ->filterColumn('status', fn($query, $keyword) => $this->filterStatusColumn($query, $keyword, 'log.status'))
+            ->editColumn('periode', fn($row) => $this->formatPeriodeLabel($row->periode))
+            ->editColumn('nama_perusahaan', fn($row) => $row->nama_perusahaan ?: '-')
+            ->editColumn('sales_penanggung_jawab', fn($row) => $row->sales_penanggung_jawab ?: '-')
+            ->editColumn('revenue', fn($row) => (float) $row->revenue)
+            ->editColumn('total', fn($row) => (float) $row->total)
             // Opsional: Bikin UI lebih jelas, pengurangan dikasih tanda minus di view
-            ->editColumn('status', fn ($row) => ucfirst($row->status)) 
+            ->editColumn('status', fn($row) => ucfirst($row->status))
             ->with('grand_total', (float) $grandTotal)
             ->make(true);
     }
@@ -117,7 +117,7 @@ class LogTransactionQsdController extends Controller
     {
         try {
             $periode = $this->resolvePeriode($request->input('periode')); // "2026-06"
-            
+
             // 1. Pecah periode menjadi tahun dan bulan
             $tahun = substr($periode, 0, 4); // Menghasilkan "2026"
             $bulan = substr($periode, 5, 2); // Menghasilkan "06"
@@ -138,9 +138,19 @@ class LogTransactionQsdController extends Controller
                 ->leftJoinSub($forecastPelanggan, 'fs', 'fs.no_quotation', '=', 'log.no_penawaran')
                 ->leftJoin('master_pelanggan as mp_oh', 'mp_oh.id_pelanggan', '=', 'oh.id_pelanggan')
                 ->leftJoin('master_pelanggan as mp_fs', 'mp_fs.id_pelanggan', '=', 'fs.pelanggan_ID')
+                ->leftJoin('request_quotation as rq', function ($join) {
+                    $join->on('rq.no_document', '=', 'log.no_penawaran')
+                        ->where('rq.is_active', 1)
+                        ->whereRaw("log.no_penawaran NOT LIKE '%QTC%'");
+                })
+                ->leftJoin('request_quotation_kontrak_H as rqk', function ($join) {
+                    $join->on('rqk.no_document', '=', 'log.no_penawaran')
+                        ->where('rqk.is_active', 1)
+                        ->whereRaw("log.no_penawaran LIKE '%QTC%'");
+                })
                 ->select(
                     'log.*',
-                    DB::raw('COALESCE(mp_oh.nama_pelanggan, mp_fs.nama_pelanggan) as nama_perusahaan'),
+                    DB::raw('COALESCE(mp_oh.nama_pelanggan, mp_fs.nama_pelanggan, rq.nama_perusahaan, rqk.nama_perusahaan) as nama_perusahaan'),
                     DB::raw('COALESCE(mp_oh.sales_penanggung_jawab, mp_fs.sales_penanggung_jawab) as sales_penanggung_jawab')
                 )
                 ->whereNotNull('log.tanggal_sampling_min')
@@ -154,9 +164,9 @@ class LogTransactionQsdController extends Controller
                 ->value('total_bersih') ?? 0;
 
             return Datatables::of($data)
-                ->orderColumn('created_at', fn ($query, $order) => $query->orderBy('log.id', $order))
-                ->filterColumn('created_at', fn ($query, $keyword) => $this->filterDateColumn($query, 'log.created_at', $keyword))
-                ->filterColumn('no_penawaran', fn ($query, $keyword) => $this->filterLike($query, 'log.no_penawaran', $keyword))
+                ->orderColumn('created_at', fn($query, $order) => $query->orderBy('log.id', $order))
+                ->filterColumn('created_at', fn($query, $keyword) => $this->filterDateColumn($query, 'log.created_at', $keyword))
+                ->filterColumn('no_penawaran', fn($query, $keyword) => $this->filterLike($query, 'log.no_penawaran', $keyword))
                 ->filterColumn('nama_perusahaan', function ($query, $keyword) {
                     $keyword = trim((string) $keyword);
                     if ($keyword === '') {
@@ -179,19 +189,18 @@ class LogTransactionQsdController extends Controller
                             ->orWhere('mp_fs.sales_penanggung_jawab', 'like', $like);
                     });
                 })
-                ->filterColumn('periode', fn ($query, $keyword) => $this->filterPeriodeColumn($query, $keyword, 'log.periode'))
-                ->filterColumn('revenue_forecast', fn ($query, $keyword) => $this->filterNumericColumn($query, 'log.revenue_forecast', $keyword))
-                ->filterColumn('total', fn ($query, $keyword) => $this->filterNumericColumn($query, 'log.total', $keyword))
-                ->filterColumn('status', fn ($query, $keyword) => $this->filterStatusColumn($query, $keyword, 'log.status'))
-                ->editColumn('periode', fn ($row) => $this->formatPeriodeLabel($row->periode))
-                ->editColumn('nama_perusahaan', fn ($row) => $row->nama_perusahaan ?: '-')
-                ->editColumn('sales_penanggung_jawab', fn ($row) => $row->sales_penanggung_jawab ?: '-')
-                ->editColumn('revenue_forecast', fn ($row) => (float) $row->revenue_forecast)
-                ->editColumn('total', fn ($row) => (float) $row->total)
-                ->editColumn('status', fn ($row) => ucfirst($row->status))
+                ->filterColumn('periode', fn($query, $keyword) => $this->filterPeriodeColumn($query, $keyword, 'log.periode'))
+                ->filterColumn('revenue_forecast', fn($query, $keyword) => $this->filterNumericColumn($query, 'log.revenue_forecast', $keyword))
+                ->filterColumn('total', fn($query, $keyword) => $this->filterNumericColumn($query, 'log.total', $keyword))
+                ->filterColumn('status', fn($query, $keyword) => $this->filterStatusColumn($query, $keyword, 'log.status'))
+                ->editColumn('periode', fn($row) => $this->formatPeriodeLabel($row->periode))
+                ->editColumn('nama_perusahaan', fn($row) => $row->nama_perusahaan ?: '-')
+                ->editColumn('sales_penanggung_jawab', fn($row) => $row->sales_penanggung_jawab ?: '-')
+                ->editColumn('revenue_forecast', fn($row) => (float) $row->revenue_forecast)
+                ->editColumn('total', fn($row) => (float) $row->total)
+                ->editColumn('status', fn($row) => ucfirst($row->status))
                 ->with('grand_total', (float) $grandTotal)
                 ->make(true);
-
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
