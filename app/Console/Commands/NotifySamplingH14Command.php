@@ -564,6 +564,7 @@ class NotifySamplingH14Command extends Command
 
     private function resolveRecipients(array $payload, array $testEmails): array
     {
+        // Mode test: arahkan ke email custom.
         if ($testEmails !== []) {
             return [
                 'to' => $testEmails,
@@ -571,16 +572,13 @@ class NotifySamplingH14Command extends Command
             ];
         }
 
-        $to = [];
-        foreach ([$payload['pic_order']['email'], $payload['pic_sampling']['email']] as $email) {
-            $email = strtolower(trim((string) $email));
-            if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $to[] = $email;
-            }
-        }
+        // Produksi: kirim HANYA ke PIC Order.
+        // Visual email tetap bisa menampilkan PIC Sampling + PIC Order jika berbeda.
+        $email = strtolower(trim((string) ($payload['pic_order']['email'] ?? '')));
+        $to = ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) ? [$email] : [];
 
         return [
-            'to' => array_values(array_unique($to)),
+            'to' => $to,
             'cc' => [],
         ];
     }

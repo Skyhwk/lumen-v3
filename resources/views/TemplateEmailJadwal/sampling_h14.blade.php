@@ -140,9 +140,9 @@
             <td class="pad dm-white" bgcolor="#ffffff" style="padding:26px 28px 30px;background-color:#ffffff;color:#1f2937;">
 
               <p class="dm-text" style="margin:0 0 12px;font-size:16px;color:#1f2937;">Yth. Bapak/Ibu PIC,</p>
+              <p class="dm-text" style="margin:0 0 12px;font-size:16px;color:#1f2937;">Dengan Hormat,</p>
               <p class="dm-text" style="margin:0 0 20px;font-size:16px;color:#1f2937;">
-                Kami mengingatkan bahwa sampling di perusahaan Anda akan dilaksanakan sesuai jadwal di bawah ini.
-                Mohon periksa kembali kesiapan lokasi dan PIC.
+              Melalui email ini, kami ingin menginformasikan kembali bahwa kegiatan pengambilan sampel (sampling) di perusahaan Bapak/Ibu akan dilaksanakan sesuai dengan jadwal yang tercantum di bawah ini.
               </p>
 
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0;">
@@ -196,16 +196,8 @@
                       <td class="dm-text" bgcolor="#ffffff" style="{{ $val }}border-top:0;">{{ $row['pic']['nama'] ?: '-' }}</td>
                     </tr>
                     <tr>
-                      <td class="dm-label" bgcolor="#F5F6FF" style="{{ $lbl }}">Jabatan</td>
-                      <td class="dm-text" bgcolor="#ffffff" style="{{ $val }}">{{ $row['pic']['jabatan'] ?: '-' }}</td>
-                    </tr>
-                    <tr>
                       <td class="dm-label" bgcolor="#F5F6FF" style="{{ $lbl }}">Kontak</td>
                       <td class="dm-text" bgcolor="#ffffff" style="{{ $val }}">{{ $row['pic']['no'] ?: '-' }}</td>
-                    </tr>
-                    <tr>
-                      <td class="dm-label" bgcolor="#F5F6FF" style="{{ $lbl }}">Email</td>
-                      <td class="dm-text" bgcolor="#ffffff" style="{{ $val }}">{{ $row['pic']['email'] ?: '-' }}</td>
                     </tr>
                   </table>
                 @endforeach
@@ -262,11 +254,11 @@
 
               <h3 class="dm-title" style="{{ $sectionTitle }}">Ada pertanyaan?</h3>
               <p class="dm-text" style="margin:0 0 12px;font-size:15px;color:#1f2937;">
-                Apabila ada pertanyaan, silakan hubungi sales kami:<br>
+              Apabila terdapat pertanyaan, konfirmasi penjadwalan, atau hal lain yang ingin didiskusikan, Bapak/Ibu dapat menghubungi kami melalui:<br>
                 <strong>{{ $salesName }}</strong> ({{ $salesKontak }})
               </p>
               <p class="dm-text" style="margin:0 0 14px;font-size:15px;color:#1f2937;">
-                Anda juga dapat menghubungi kami melalui portal pelanggan, atau mengunduh aplikasi kami melalui Play Store.
+              Bapak/Ibu juga dapat melihat informasi jadwal sampling secara langsung melalui Portal Pelanggan kami. Untuk kemudahan akses, Bapak/Ibu dapat mengunduh aplikasi kami melalui Google Play Store dengan mengklik tautan yang tersedia di bawah ini
               </p>
 
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0;">
