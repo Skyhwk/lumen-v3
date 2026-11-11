@@ -62,7 +62,10 @@ class GenerateQrPsikologiController extends Controller
                     MAX(CASE WHEN qp.type = "audiens" THEN qp.file END) as audiens_file,
                     MAX(CASE WHEN qp.type = "administrator" THEN qp.file END) as admin_file,
                     MAX(CASE WHEN qp.type = "audiens" THEN qp.expired END) as audiens_expired,
-                    MAX(qp.created_at) as created_at')
+                    MAX(qp.created_at) as created_at,
+                    MAX(COALESCE(qp.download_count, 0)) as download_count,
+                    MAX(COALESCE(qp.print_count, 0)) as print_count,
+                    MAX(COALESCE(qp.email_count, 0)) as email_count')
                 ->leftJoin('jadwal as j', function ($join) {
                     $join->on('j.no_quotation', '=', 'od.no_quotation')
                         ->where('j.is_active', 1)
@@ -101,14 +104,7 @@ class GenerateQrPsikologiController extends Controller
             // return Datatables::of($groupedData)->make(true);
             return Datatables::of($data)
                 ->addColumn('print', function ($data) {
-                // Now get the print count in PHP after the main query is done
-                    $filename = 'QR_' . str_replace('/', '_', $data->no_document) . ($data->periode ? '_' . $data->periode : '') . '.pdf';
-                    $print = DB::table('histori_printing')
-                        ->where('filename', $filename)
-                        ->where('status', 'done')
-                        ->count();
-
-                    return $print;
+                    return (int) ($data->print_count ?? 0);
                 })
                 ->addColumn('filename', function ($data) {
                     $filename = 'QR_' . str_replace('/', '_', $data->no_document) . ($data->periode ? '_' . $data->periode : '') . '.pdf';
@@ -121,9 +117,9 @@ class GenerateQrPsikologiController extends Controller
                     return $email_pic_order;
                 })
                 ->addColumn('sales_id', function ($data) {
-                    if(!is_null($data->periode)){
+                    if (!is_null($data->periode)) {
                         $model = new QuotationKontrakH();
-                    }else{
+                    } else {
                         $model = new QuotationNonKontrak();
                     }
 
@@ -136,10 +132,10 @@ class GenerateQrPsikologiController extends Controller
                 })
                 ->editColumn('sampler', function ($data) {
                     $decode = json_decode($data->sampler);
-                    if(is_array($decode)){
+                    if (is_array($decode)) {
                         $total = count($decode);
                         return $total > 0 ? implode(',', $decode) : '-';
-                    }else{
+                    } else {
                         return $data->sampler;
                     }
                     return json_decode($data->sampler);
@@ -147,7 +143,7 @@ class GenerateQrPsikologiController extends Controller
                 ->filterColumn('no_document', function ($query, $keyword) {
                     $query->where('od.no_quotation', 'like', '%' . $keyword . '%');
                 })
-                
+
                 ->filterColumn('nama_perusahaan', function ($query, $keyword) {
                     $query->where('od.nama_perusahaan', 'like', '%' . $keyword . '%');
                 })
@@ -165,6 +161,27 @@ class GenerateQrPsikologiController extends Controller
                 })
                 ->filterColumn('kategori', function ($query, $keyword) {
                     $query->where('j.kategori', 'like', '%' . $keyword . '%');
+                })
+                ->filterColumn('download_count', function ($query, $keyword) {
+                    $query->havingRaw('MAX(COALESCE(qp.download_count, 0)) like ?', ['%' . $keyword . '%']);
+                })
+                ->filterColumn('print', function ($query, $keyword) {
+                    $query->havingRaw('MAX(COALESCE(qp.print_count, 0)) like ?', ['%' . $keyword . '%']);
+                })
+                ->filterColumn('print_count', function ($query, $keyword) {
+                    $query->havingRaw('MAX(COALESCE(qp.print_count, 0)) like ?', ['%' . $keyword . '%']);
+                })
+                ->filterColumn('email_count', function ($query, $keyword) {
+                    $query->havingRaw('MAX(COALESCE(qp.email_count, 0)) like ?', ['%' . $keyword . '%']);
+                })
+                ->editColumn('download_count', function ($data) {
+                    return (int) ($data->download_count ?? 0);
+                })
+                ->editColumn('print_count', function ($data) {
+                    return (int) ($data->print_count ?? 0);
+                })
+                ->editColumn('email_count', function ($data) {
+                    return (int) ($data->email_count ?? 0);
                 })
                 ->make(true);
         } catch (Exception $e) {
@@ -194,7 +211,13 @@ class GenerateQrPsikologiController extends Controller
             $path = public_path() . "/qr_psikologi/documents/QR_" . $filename . '.pdf';
             // dd($path);
             if (file_exists($path)) {
-                return response()->json(['link' => env('APP_URL') . '/public/qr_psikologi/documents/QR_' . $filename . '.pdf'], 200);
+                $this->incrementQrMetric($request->id_quotation, $request->periode, 'download_count');
+
+                $downloadName = 'QR_' . $filename . '.pdf';
+
+                return response()->download($path, $downloadName, [
+                    'Content-Type' => 'application/pdf',
+                ]);
             } else {
                 return response()->json(['message' => 'File not found'], 404);
             }
@@ -203,6 +226,36 @@ class GenerateQrPsikologiController extends Controller
                 'error' => $e->getMessage(),
                 'line' => $e->getLine(),
                 'file' => $e->getFile()
+            ], 500);
+        }
+    }
+
+    public function recordPrint(Request $request)
+    {
+        try {
+            if (!$request->filled('id_quotation')) {
+                return response()->json(['message' => 'id_quotation wajib diisi'], 422);
+            }
+
+            $updated = $this->incrementQrMetric(
+                $request->id_quotation,
+                $request->periode,
+                'print_count'
+            );
+
+            if ($updated < 1) {
+                return response()->json(['message' => 'Data QR tidak ditemukan'], 404);
+            }
+
+            return response()->json([
+                'message' => 'Print count updated',
+                'print_count_incremented' => (int) $updated,
+            ], 200);
+        } catch (Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
             ], 500);
         }
     }
@@ -364,10 +417,10 @@ class GenerateQrPsikologiController extends Controller
             $bbkual = 0;
             $pk = 0;
             $tjo = 0;
-            
+
             $existingData = DataLapanganPsikologi::where('no_sampel', $request->no_sampel)->first();
-            
-            if(isset($existingData)){
+
+            if (isset($existingData)) {
                 $existingDate = Carbon::parse($existingData->created_at)->format('Y-m-d H:i:s');
                 return response()->json([
                     'message' => "Data dengan nomor sample $request->no_sampel sudah diisi pada tanggal  $existingDate",
@@ -466,7 +519,7 @@ class GenerateQrPsikologiController extends Controller
                 ->update([
                     'expired' => Carbon::now()->addDays(10)->format('Y-m-d H:i:s')
                 ]);
-            
+
             if (!$data) {
                 return response()->json(['message' => 'Data Lapangan tidak ditemukan.'], 403);
             }
@@ -474,7 +527,7 @@ class GenerateQrPsikologiController extends Controller
 
             if (!$header) {
                 $orderParameter = $orderDetail->parameter;
-                $clean = str_replace(['[', ']'], '', $orderParameter); 
+                $clean = str_replace(['[', ']'], '', $orderParameter);
                 $parts = explode(';', $clean);
 
                 $header = new PsikologiHeader;
@@ -488,8 +541,7 @@ class GenerateQrPsikologiController extends Controller
                 $header->created_by = 'SYTEM';
                 $header->created_at = Carbon::now()->format('Y-m-d H:i:s');
                 $header->save();
-
-            }else{
+            } else {
                 $header->tanggal_terima = $orderDetail->tanggal_terima;
                 $header->is_reject = false;
                 $header->is_approve = true;
@@ -668,13 +720,13 @@ class GenerateQrPsikologiController extends Controller
             $getKaryawan = $request->attributes->get('user');
 
             $getToken = DB::table('qr_psikologi')->whereRaw("JSON_EXTRACT(data, '$.no_document') = ?", [$request->no_document]);
-            if($request->periode){
+            if ($request->periode) {
                 $getToken = $getToken->where('periode', $request->periode);
             }
             $getToken = $getToken->get();
-            
+
             return response()->json([
-                'quotation' =>$quotation,
+                'quotation' => $quotation,
                 'sales' => $sales->nama_lengkap,
                 'email_sales' => $sales->email,
                 'no_sales' => $sales ? (!empty($sales->no_telpon_perusahaan) ? $sales->no_telpon_perusahaan : $sales->no_telpon) : null,
@@ -697,7 +749,7 @@ class GenerateQrPsikologiController extends Controller
             if (is_array($request->bcc)) {
                 $bcc = $request->bcc;
             } else {
-                if(empty($request->bcc)){
+                if (empty($request->bcc)) {
                     $bcc = $request->bcc;
                 } else if (str_contains($request->bcc, ',')) {
                     $bcc = explode(',', $request->bcc);
@@ -737,12 +789,43 @@ class GenerateQrPsikologiController extends Controller
                 ->fromAdmsales()
                 ->send();
 
-            if ($email)
+            if ($email) {
+                $idQuotation = $request->id_quotation;
+                $periode = $request->periode;
+
+                if (!$idQuotation && $request->filled('no_document')) {
+                    $idQuotation = OrderHeader::where('no_document', $request->no_document)
+                        ->where('is_active', true)
+                        ->value('id');
+                }
+
+                if ($idQuotation) {
+                    $this->incrementQrMetric($idQuotation, $periode, 'email_count');
+                }
+
                 return response()->json(['message' => 'Email berhasil dikirim'], 200);
+            }
 
             return response()->json(['message' => 'Email gagal dikirim'], 400);
         } catch (\Throwable $th) {
             return response()->json(['message' => $th->getMessage(), 'line' => $th->getLine()], 500);
         }
+    }
+
+    private function incrementQrMetric($idQuotation, $periode, $column)
+    {
+        $allowed = ['download_count', 'print_count', 'email_count'];
+        if (!$idQuotation || !in_array($column, $allowed, true)) {
+            return 0;
+        }
+
+        return QrPsikologi::where('id_quotation', $idQuotation)
+            ->where('is_active', 1)
+            ->when(!empty($periode), function ($q) use ($periode) {
+                $q->where('periode', $periode);
+            }, function ($q) {
+                $q->whereNull('periode');
+            })
+            ->increment($column);
     }
 }
