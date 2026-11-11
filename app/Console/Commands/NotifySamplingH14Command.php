@@ -5,6 +5,8 @@ namespace App\Console\Commands;
 use App\Models\MasterKaryawan;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
+use App\Models\customer\Users as PortalUsers;
+use App\Services\PortalNotificationService;
 use App\Services\SendEmail;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -18,8 +20,11 @@ use Illuminate\Support\Facades\View;
  * Contoh:
  *  php artisan sampling:notify-h14 --dry-run
  *  php artisan sampling:notify-h14 --dry-run --email=dev@intilab.com
- *  php artisan sampling:notify-h14 --email=dev1@intilab.com,dev2@intilab.com --limit=2
+ *  php artisan sampling:notify-h14 --email=dev1@intilab.com,dev2@intilab.com --limit=1
  *  php artisan sampling:notify-h14 --date=2026-11-24 --dry-run
+ *
+ * --email = mode test: email + notifikasi portal diarahkan ke akun portal
+ * dengan email tersebut (bukan PIC quotation).
  *
  * Cron terpisah (contoh jam 15:00 WIB):
  *  0 15 * * * cd /path/lumen-v3 && php artisan sampling:notify-h14 >> /dev/null 2>&1
@@ -27,14 +32,14 @@ use Illuminate\Support\Facades\View;
 class NotifySamplingH14Command extends Command
 {
     protected $signature = 'sampling:notify-h14
-                            {--dry-run : Simulasi saja, tidak kirim email}
-                            {--email= : Email tujuan custom (koma). Mode test, tidak ke PIC}
+                            {--dry-run : Simulasi saja, tidak kirim email/portal}
+                            {--email= : Email tujuan custom (koma). Mode test ke akun portal + email itu}
                             {--date= : Override tanggal target Y-m-d (default CURDATE+14)}
                             {--limit= : Batasi jumlah tim yang diproses}
                             {--days=14 : Offset hari ke depan (default 14)}
                             {--debug : Tampilkan DB connection + daftar batch_id tim}';
 
-    protected $description = 'Kirim email reminder sampling H-14 (Sen-Min) ke PIC, dengan log & snapshot perubahan';
+    protected $description = 'Kirim email + notifikasi portal reminder sampling H-14 (Sen-Min)';
 
     private $logger;
 
@@ -142,11 +147,13 @@ class NotifySamplingH14Command extends Command
             $subject = $this->buildSubject($payload);
             $body = $this->buildBody($payload);
             $recipients = $this->resolveRecipients($payload, $testEmails);
+            $portalUsers = $this->resolvePortalUsers($recipients['to']);
 
             $this->line("[{$no}] {$payload['no_quotation']} | {$payload['no_order']} | {$payload['nama_perusahaan']}");
             $this->line('     TO: ' . implode(', ', $recipients['to']));
+            $this->printPortalTargets($portalUsers, $recipients['to']);
 
-            $this->logger->info('PREPARE_EMAIL', [
+            $this->logger->info('PREPARE_NOTIFY', [
                 'run_id' => $runId,
                 'no_quotation' => $payload['no_quotation'],
                 'no_order' => $payload['no_order'],
@@ -158,10 +165,13 @@ class NotifySamplingH14Command extends Command
                 'cc' => $recipients['cc'],
                 'subject' => $subject,
                 'fingerprint' => $payload['fingerprint'],
+                'portal_users' => array_map(function ($u) {
+                    return ['id' => $u->id, 'email' => $u->email];
+                }, $portalUsers),
             ]);
 
             if ($dryRun) {
-                $this->line('     DRY-RUN: email tidak dikirim');
+                $this->line('     DRY-RUN: email & portal tidak dikirim');
                 $sent++;
                 continue;
             }
@@ -176,6 +186,7 @@ class NotifySamplingH14Command extends Command
                 continue;
             }
 
+            $emailOk = false;
             try {
                 $ok = SendEmail::where('to', $recipients['to'][0])
                     ->where('cc', array_slice($recipients['to'], 1))
@@ -187,29 +198,35 @@ class NotifySamplingH14Command extends Command
                     ->send();
 
                 if ($ok) {
-                    $sent++;
-                    $this->info('     SENT');
+                    $emailOk = true;
+                    $this->info('     EMAIL SENT');
                     $this->logger->info('EMAIL_SENT', [
                         'run_id' => $runId,
                         'no_quotation' => $payload['no_quotation'],
                         'to' => $recipients['to'],
                     ]);
                 } else {
-                    $failed++;
-                    $this->error('     FAILED send()=false');
+                    $this->error('     EMAIL FAILED send()=false');
                     $this->logger->error('EMAIL_FAILED', [
                         'run_id' => $runId,
                         'no_quotation' => $payload['no_quotation'],
                     ]);
                 }
             } catch (\Throwable $e) {
-                $failed++;
-                $this->error('     FAILED: ' . $e->getMessage());
+                $this->error('     EMAIL FAILED: ' . $e->getMessage());
                 $this->logger->error('EMAIL_EXCEPTION', [
                     'run_id' => $runId,
                     'no_quotation' => $payload['no_quotation'],
                     'message' => $e->getMessage(),
                 ]);
+            }
+
+            $portalOk = $this->sendPortalNotifications($portalUsers, $payload, $runId);
+
+            if ($emailOk || $portalOk) {
+                $sent++;
+            } else {
+                $failed++;
             }
         }
 
@@ -566,6 +583,127 @@ class NotifySamplingH14Command extends Command
             'to' => array_values(array_unique($to)),
             'cc' => [],
         ];
+    }
+
+    /**
+     * Mode test (--email): cari akun portal customers berdasarkan email tersebut.
+     * Mode produksi: cari akun portal dari email PIC quotation.
+     *
+     * @param  string[]  $emails
+     * @return \App\Models\customer\Users[]
+     */
+    private function resolvePortalUsers(array $emails): array
+    {
+        if ($emails === []) {
+            return [];
+        }
+
+        $normalized = array_values(array_unique(array_filter(array_map(function ($email) {
+            return strtolower(trim((string) $email));
+        }, $emails))));
+
+        if ($normalized === []) {
+            return [];
+        }
+
+        return PortalUsers::query()
+            ->where('is_active', true)
+            ->where(function ($query) use ($normalized) {
+                foreach ($normalized as $email) {
+                    $query->orWhereRaw('LOWER(TRIM(email)) = ?', [$email]);
+                }
+            })
+            ->get()
+            ->all();
+    }
+
+    /**
+     * @param  \App\Models\customer\Users[]  $portalUsers
+     * @param  string[]  $emails
+     */
+    private function printPortalTargets(array $portalUsers, array $emails): void
+    {
+        if ($emails === []) {
+            $this->line('     PORTAL: (tidak ada email tujuan)');
+            return;
+        }
+
+        if ($portalUsers === []) {
+            $this->warn('     PORTAL: akun tidak ditemukan untuk ' . implode(', ', $emails));
+            return;
+        }
+
+        $labels = array_map(function ($user) {
+            return 'id=' . $user->id . ' <' . $user->email . '>';
+        }, $portalUsers);
+
+        $this->line('     PORTAL: ' . implode(', ', $labels));
+
+        $found = array_map(function ($user) {
+            return strtolower(trim((string) $user->email));
+        }, $portalUsers);
+        $missing = array_values(array_diff($emails, $found));
+        if ($missing !== []) {
+            $this->warn('     PORTAL MISSING: ' . implode(', ', $missing));
+        }
+    }
+
+    /**
+     * @param  \App\Models\customer\Users[]  $portalUsers
+     */
+    private function sendPortalNotifications(array $portalUsers, array $payload, string $runId): bool
+    {
+        if ($portalUsers === []) {
+            $this->warn('     PORTAL SKIP: tidak ada akun portal yang cocok');
+            $this->logger->warning('PORTAL_SKIP_NO_USER', [
+                'run_id' => $runId,
+                'no_quotation' => $payload['no_quotation'] ?? null,
+            ]);
+            return false;
+        }
+
+        $service = app(PortalNotificationService::class);
+        $extra = [
+            'no_quotation' => $payload['no_quotation'] ?? null,
+            'no_order' => $payload['no_order'] ?? null,
+            'nama_perusahaan' => $payload['nama_perusahaan'] ?? null,
+            'tanggal_label' => $payload['tanggal_label'] ?? null,
+            'jadwal_tanggal' => $payload['jadwal_tanggal'] ?? null,
+            'jam_mulai' => $payload['jam_mulai'] ?? null,
+        ];
+
+        $anyOk = false;
+        foreach ($portalUsers as $user) {
+            $extra['customer_name'] = $user->nama_lengkap ?? $user->name ?? $user->nama ?? null;
+            $result = $service->send($user->id, 'sampling_h14', $extra);
+            $status = $result['status'] ?? 'error';
+
+            if (in_array($status, ['success', 'skipped'], true)) {
+                $anyOk = true;
+                $expoLabel = !empty($result['expo']) ? 'expo=yes' : 'expo=no';
+                $this->info('     PORTAL SENT id=' . $user->id . ' (' . $status . ', ' . $expoLabel . ' → web+mobile)');
+                $this->logger->info('PORTAL_SENT', [
+                    'run_id' => $runId,
+                    'no_quotation' => $payload['no_quotation'] ?? null,
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'status' => $status,
+                    'expo' => !empty($result['expo']),
+                    'message' => $result['message'] ?? null,
+                ]);
+            } else {
+                $this->error('     PORTAL FAILED id=' . $user->id . ': ' . ($result['message'] ?? 'unknown'));
+                $this->logger->error('PORTAL_FAILED', [
+                    'run_id' => $runId,
+                    'no_quotation' => $payload['no_quotation'] ?? null,
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'result' => $result,
+                ]);
+            }
+        }
+
+        return $anyOk;
     }
 
     private function buildSubject(array $payload): string

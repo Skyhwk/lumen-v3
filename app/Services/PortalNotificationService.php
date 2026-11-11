@@ -40,10 +40,18 @@ class PortalNotificationService
             if (!$token) {
                 return [
                     'status' => 'skipped',
-                    'message' => 'Notification saved and MQTT dispatched, push skipped because fcm_device_token is null',
+                    'message' => 'Notification saved and MQTT dispatched, Expo push skipped because fcm_device_token is null',
                     'template' => $template,
+                    'expo' => false,
                 ];
             }
+
+            // Data Expo harus memuat url agar MOBILE-PPI / WebView bisa deep-link saat tap notif.
+            $expoData = array_merge($template['data'] ?? [], [
+                'url' => $template['url'] ?? '/',
+                'title' => $template['title'] ?? null,
+                'body' => $template['body'] ?? null,
+            ]);
 
             $client = new Client();
             $response = $client->post('https://exp.host/--/api/v2/push/send', [
@@ -55,14 +63,16 @@ class PortalNotificationService
                     'to' => $token,
                     'title' => $template['title'],
                     'body' => $template['body'],
-                    'data' => $template['data'],
+                    'sound' => 'default',
+                    'data' => $expoData,
                 ],
             ]);
 
             return [
                 'status' => 'success',
-                'message' => 'Notification sent successfully',
+                'message' => 'Notification sent successfully (inbox + MQTT + Expo push)',
                 'template' => $template,
+                'expo' => true,
                 'expo_response' => json_decode($response->getBody()->getContents(), true),
             ];
         } catch (\InvalidArgumentException $exception) {
@@ -102,6 +112,8 @@ class PortalNotificationService
             'cs_created' => fn () => $this->buildCustomerServiceTemplate($extraData, 'created'),
             'cs_reply' => fn () => $this->buildCustomerServiceTemplate($extraData, 'reply'),
             'cs_status' => fn () => $this->buildCustomerServiceTemplate($extraData, 'status'),
+            'sampling_h14' => fn () => $this->buildSamplingH14Template($extraData, $user),
+            'reminder_sampling' => fn () => $this->buildSamplingH14Template($extraData, $user),
         ];
 
         if (!isset($templates[$key])) {
@@ -281,6 +293,52 @@ class PortalNotificationService
                 'type' => 'claim_reward',
                 'screen' => 'HistoryTukarPoin',
                 'claim_code' => $claimCode,
+            ], $this->normalizeData($extraData['data'] ?? [])),
+        ];
+    }
+
+    protected function buildSamplingH14Template(array $extraData, ?Users $user = null): array
+    {
+        $noQuotation = $extraData['no_quotation'] ?? null;
+        $noOrder = $extraData['no_order'] ?? null;
+        $company = $extraData['nama_perusahaan'] ?? $extraData['company'] ?? null;
+        $tanggal = $extraData['tanggal_label'] ?? $extraData['jadwal_tanggal'] ?? null;
+        $jamMulai = $extraData['jam_mulai'] ?? null;
+
+        // Sapaan netral (tanpa asumsi gender/usia). Nama opsional setelah Bapak/Ibu.
+        $picName = trim((string) (
+            $extraData['pic_name']
+            ?? $extraData['customer_name']
+            ?? $extraData['name']
+            ?? $user->nama_lengkap
+            ?? $user->name
+            ?? $user->nama
+            ?? ''
+        ));
+        $greeting = $picName !== ''
+            ? "Yth. Bapak/Ibu {$picName}"
+            : 'Yth. Bapak/Ibu PIC';
+
+        $companyText = $company ? " di {$company}" : '';
+        $tanggalText = $tanggal ? " pada {$tanggal}" : '';
+        $jamText = $jamMulai ? " pukul {$jamMulai}" : '';
+        $qtText = $noQuotation ? " (QT {$noQuotation})" : '';
+
+        return [
+            'title' => 'Reminder Jadwal Sampling',
+            'body' => trim("{$greeting}, reminder jadwal sampling{$companyText}{$tanggalText}{$jamText}{$qtText}."),
+            // Path relatif app (BrowserRouter basename=/customers → /customers/pesanan)
+            'url' => '/pesanan',
+            'data' => array_merge([
+                'for' => 'sampling_h14',
+                'type' => 'sampling_reminder',
+                'screen' => 'Pesanan',
+                'url' => '/pesanan',
+                'no_quotation' => $noQuotation,
+                'no_order' => $noOrder,
+                'nama_perusahaan' => $company,
+                'tanggal_label' => $tanggal,
+                'jam_mulai' => $jamMulai,
             ], $this->normalizeData($extraData['data'] ?? [])),
         ];
     }
