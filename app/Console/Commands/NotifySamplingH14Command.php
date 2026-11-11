@@ -711,7 +711,7 @@ class NotifySamplingH14Command extends Command
             $company = '-';
         }
 
-        return 'Reminder Sampling ' . $payload['no_quotation'] . ', ' . $company;
+        return 'Reminder Sampling (' . $payload['no_quotation'] . ') - ' . $company;
     }
 
     private function buildBody(array $payload): string
