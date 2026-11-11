@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-class MasterWilayahK3 extends Sector
+class MasterWilayahSurat extends Sector
 {
-    protected $table = 'master_wilayah_k3';
+    protected $table = 'master_wilayah_surat';
 
     protected $fillable = [
         'wilayah_pelanggan',
@@ -29,8 +29,8 @@ class MasterWilayahK3 extends Sector
     {
         return $this->belongsToMany(
             MasterWilayahSampling::class,
-            'master_wilayah_k3_sampling',
-            'master_wilayah_k3_id',
+            'master_wilayah_surat_sampling',
+            'master_wilayah_surat_id',
             'id_master_wilayah_sampling'
         );
     }

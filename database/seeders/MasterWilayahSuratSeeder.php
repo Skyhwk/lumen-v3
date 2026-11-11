@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use App\Models\MasterWilayahK3;
+use App\Models\MasterWilayahSurat;
 use Illuminate\Database\Seeder;
 
-class MasterWilayahK3Seeder extends Seeder
+class MasterWilayahSuratSeeder extends Seeder
 {
     public function run(): void
     {
@@ -30,7 +30,7 @@ class MasterWilayahK3Seeder extends Seeder
         $timestamp = date('Y-m-d H:i:s');
 
         foreach ($wilayahPelanggan as $nama) {
-            $exists = MasterWilayahK3::where('wilayah_pelanggan', $nama)
+            $exists = MasterWilayahSurat::where('wilayah_pelanggan', $nama)
                 ->where('is_active', true)
                 ->exists();
 
@@ -38,7 +38,7 @@ class MasterWilayahK3Seeder extends Seeder
                 continue;
             }
 
-            MasterWilayahK3::create([
+            MasterWilayahSurat::create([
                 'wilayah_pelanggan' => $nama,
                 'id_cabang' => null,
                 'is_active' => true,

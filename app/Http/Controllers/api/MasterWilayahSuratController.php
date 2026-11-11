@@ -4,17 +4,17 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MasterCabang;
-use App\Models\MasterWilayahK3;
 use App\Models\MasterWilayahSampling;
+use App\Models\MasterWilayahSurat;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 
-class MasterWilayahK3Controller extends Controller
+class MasterWilayahSuratController extends Controller
 {
     public function index(Request $request)
     {
-        $data = MasterWilayahK3::with(['cabang', 'wilayahSampling'])
+        $data = MasterWilayahSurat::with(['cabang', 'wilayahSampling'])
             ->where('is_active', true);
 
         return Datatables::of($data)
@@ -45,7 +45,7 @@ class MasterWilayahK3Controller extends Controller
             ], 422);
         }
 
-        $duplicateQuery = MasterWilayahK3::where('is_active', true)
+        $duplicateQuery = MasterWilayahSurat::where('is_active', true)
             ->where('wilayah_pelanggan', $wilayahPelanggan);
 
         if ($request->id) {
@@ -82,7 +82,7 @@ class MasterWilayahK3Controller extends Controller
 
         $timestamp = date('Y-m-d H:i:s');
 
-        if ($request->id && !MasterWilayahK3::find($request->id)) {
+        if ($request->id && !MasterWilayahSurat::find($request->id)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Data tidak ditemukan.',
@@ -91,7 +91,7 @@ class MasterWilayahK3Controller extends Controller
 
         DB::transaction(function () use ($request, $wilayahPelanggan, $samplingIds, $timestamp) {
             if ($request->id) {
-                $record = MasterWilayahK3::find($request->id);
+                $record = MasterWilayahSurat::find($request->id);
 
                 $record->wilayah_pelanggan = $wilayahPelanggan;
                 $record->id_cabang = $request->id_cabang ?: null;
@@ -101,7 +101,7 @@ class MasterWilayahK3Controller extends Controller
 
                 $record->wilayahSampling()->sync($samplingIds);
             } else {
-                $record = MasterWilayahK3::create([
+                $record = MasterWilayahSurat::create([
                     'wilayah_pelanggan' => $wilayahPelanggan,
                     'id_cabang' => $request->id_cabang ?: null,
                     'is_active' => true,
@@ -121,7 +121,7 @@ class MasterWilayahK3Controller extends Controller
 
     public function destroy(Request $request)
     {
-        $record = MasterWilayahK3::find($request->id);
+        $record = MasterWilayahSurat::find($request->id);
         if (!$record) {
             return response()->json([
                 'success' => false,

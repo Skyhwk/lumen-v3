@@ -8,8 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('master_wilayah_k3')) {
-            Schema::create('master_wilayah_k3', function (Blueprint $table) {
+        if (!Schema::hasTable('master_wilayah_surat')) {
+            Schema::create('master_wilayah_surat', function (Blueprint $table) {
                 $table->bigIncrements('id');
                 $table->string('wilayah_pelanggan', 255);
                 $table->unsignedBigInteger('id_cabang')->nullable();
@@ -26,14 +26,14 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('master_wilayah_k3_sampling')) {
-            Schema::create('master_wilayah_k3_sampling', function (Blueprint $table) {
-                $table->unsignedBigInteger('master_wilayah_k3_id');
+        if (!Schema::hasTable('master_wilayah_surat_sampling')) {
+            Schema::create('master_wilayah_surat_sampling', function (Blueprint $table) {
+                $table->unsignedBigInteger('master_wilayah_surat_id');
                 $table->unsignedBigInteger('id_master_wilayah_sampling');
 
                 $table->primary(
-                    ['master_wilayah_k3_id', 'id_master_wilayah_sampling'],
-                    'pk_master_wilayah_k3_sampling'
+                    ['master_wilayah_surat_id', 'id_master_wilayah_sampling'],
+                    'pk_master_wilayah_surat_sampling'
                 );
             });
         }
@@ -41,7 +41,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('master_wilayah_k3_sampling');
-        Schema::dropIfExists('master_wilayah_k3');
+        Schema::dropIfExists('master_wilayah_surat_sampling');
+        Schema::dropIfExists('master_wilayah_surat');
     }
 };
