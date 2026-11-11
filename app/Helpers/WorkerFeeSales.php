@@ -2,19 +2,16 @@
 
 namespace App\Helpers;
 
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
-
-use Carbon\Carbon;
-
-use App\Services\FeeSalesMonthly;
 
 class WorkerFeeSales
 {
-    public static function run()
+    public static function run(): void
     {
         try {
-            $feeSalesMonthly = new FeeSalesMonthly();
-            $feeSalesMonthly->run();
+            Artisan::call('calculatefee:run');
+            Log::info('[WorkerFeeSales] ' . trim(Artisan::output()));
         } catch (\Throwable $th) {
             Log::error('[WorkerFeeSales] Error: ' . $th->getMessage());
         }
