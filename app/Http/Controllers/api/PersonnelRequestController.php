@@ -469,7 +469,7 @@ class PersonnelRequestController extends Controller
     }
 
     /**
-     * Request dianggap selesai jika jumlah hired sudah memenuhi kebutuhan.
+     * Request dianggap selesai jika jumlah terpenuhi (hired + sudah migrasi/training) memenuhi kebutuhan.
      */
     private function isPersonnelRequestFulfilled($row): bool
     {
@@ -504,7 +504,7 @@ class PersonnelRequestController extends Controller
             return $query;
         }
 
-        $hiredSub = '(SELECT COUNT(*) FROM new_recruitment nr WHERE nr.personnel_request_id = personnel_requests.id AND nr.status = \'hired\')';
+        $hiredSub = '(SELECT COUNT(*) FROM new_recruitment nr WHERE nr.personnel_request_id = personnel_requests.id AND LOWER(TRIM(COALESCE(nr.status, \'\'))) IN (\'hired\', \'training\', \'completed\'))';
         $pelamarSub = '(SELECT COUNT(*) FROM new_recruitment nr WHERE nr.personnel_request_id = personnel_requests.id)';
 
         if ($filter === 'completed') {
@@ -1320,11 +1320,11 @@ class PersonnelRequestController extends Controller
                     $this->constrainCountedApplicants($query);
                 },
                 'newRecruitments as total_hired' => function ($query) {
-                    $query->where('status', 'hired');
+                    $this->constrainCountedFulfilledRecruitments($query);
                 },
-                'newRecruitments as total_keterima' => function($query) {
-                    $query->whereIn('status', ['completed', 'hired', 'training', 'HIRED', 'Training']);
-                }
+                'newRecruitments as total_keterima' => function ($query) {
+                    $this->constrainCountedFulfilledRecruitments($query);
+                },
             ])->orderBy('id', 'desc');
 
             $data = $this->applyCompletionFilter($data, $completionFilter);
@@ -1679,10 +1679,10 @@ class PersonnelRequestController extends Controller
                 $this->constrainCountedApplicants($query);
             },
             'newRecruitments as total_hired' => function ($query) {
-                $query->where('status', 'hired');
+                $this->constrainCountedFulfilledRecruitments($query);
             },
             'newRecruitments as total_keterima' => function ($query) {
-                $query->whereIn('status', ['completed', 'hired', 'training', 'HIRED', 'Training']);
+                $this->constrainCountedFulfilledRecruitments($query);
             },
         ]);
 
@@ -2638,6 +2638,14 @@ class PersonnelRequestController extends Controller
         $query->where('is_active', 1)
             ->whereRaw('COALESCE(is_rejected_kandidat, 0) = 0')
             ->whereRaw("LOWER(TRIM(COALESCE(status, ''))) NOT IN ('assessment', 'hired', 'training')");
+    }
+
+    /**
+     * Kandidat yang memenuhi kebutuhan: masih hired atau sudah migrasi ke master (training/completed).
+     */
+    private function constrainCountedFulfilledRecruitments($query)
+    {
+        $query->whereRaw("LOWER(TRIM(COALESCE(status, ''))) IN ('hired', 'training', 'completed')");
     }
 
     private function resolveCandidateBirthDateForShio($row): ?string

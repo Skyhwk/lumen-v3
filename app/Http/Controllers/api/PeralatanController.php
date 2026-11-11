@@ -27,7 +27,8 @@ class PeralatanController extends Controller
                 'id_cabang',
                 'lokasi_penempatan_alat',
                 'status_alat',
-                'jumlah_alat_tersedia'
+                'jumlah_alat_tersedia',
+                'keterangan'
             ]);
 
         return Datatables::of($data)->make(true);
@@ -156,6 +157,7 @@ class PeralatanController extends Controller
                 'id_cabang' => 'required|integer',
                 'status_alat' => 'required|string',
                 'jumlah_alat_tersedia' => 'required|integer|min:0',
+                'keterangan' => 'nullable|string',
             ]
         );
 
@@ -170,6 +172,8 @@ class PeralatanController extends Controller
         $namaKategori = trim((string) $request->nama_kategori_pengujian);
         $statusAlat = trim((string) $request->status_alat);
         $jumlahAlatTersedia = intval($request->jumlah_alat_tersedia);
+        $keterangan = trim((string) $request->input('keterangan', ''));
+        $keterangan = $keterangan === '' ? null : $keterangan;
         if (empty($namaAlatList) || $jenisPeralatan === '' || $namaKategori === '' || $statusAlat === '' || $jumlahAlatTersedia < 0) {
             return response()->json([
                 'success' => false,
@@ -235,6 +239,7 @@ class PeralatanController extends Controller
                 $row->lokasi_penempatan_alat = $cabang->nama_cabang;
                 $row->status_alat = $statusAlat;
                 $row->jumlah_alat_tersedia = $jumlahAlatTersedia;
+                $row->keterangan = $keterangan;
                 $row->updated_by = $this->karyawan;
                 $row->updated_at = $now;
                 $row->save();
@@ -249,6 +254,7 @@ class PeralatanController extends Controller
                     $extraRow->lokasi_penempatan_alat = $cabang->nama_cabang;
                     $extraRow->status_alat = $statusAlat;
                     $extraRow->jumlah_alat_tersedia = $jumlahAlatTersedia;
+                    $extraRow->keterangan = $keterangan;
                     $extraRow->created_by = $this->karyawan;
                     $extraRow->created_at = $now;
                     $extraRow->is_active = true;
@@ -267,6 +273,7 @@ class PeralatanController extends Controller
                     $row->lokasi_penempatan_alat = $cabang->nama_cabang;
                     $row->status_alat = $statusAlat;
                     $row->jumlah_alat_tersedia = $jumlahAlatTersedia;
+                    $row->keterangan = $keterangan;
                     $row->created_by = $this->karyawan;
                     $row->created_at = $now;
                     $row->is_active = true;
