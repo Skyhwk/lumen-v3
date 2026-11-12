@@ -2,11 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\GaAsset;
 use App\Models\JadwalMobilisasi;
 use App\Models\KategoriPeralatanSampling;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class JadwalMobilisasiService
@@ -442,8 +440,40 @@ class JadwalMobilisasiService
     }
 
     /**
-     * Ambil daftar peralatan dari kategori_peralatan_sampling berdasarkan id_cabang dan warna,
-     * beserta perhitungan stok total (dari ga_assets / kategori_peralatan_sampling) dan sisa tersedia pada tanggal tersebut.
+     * Map pilihan warna jadwal → daftar warna master yang ikut ditampilkan (kumulatif).
+     * Merah = Air
+     * Biru  = Air + Udara (merah + biru)
+     * Hitam = Air + Udara + Emisi (merah + biru + hitam)
+     * ASET  = alat non-sampling
+     *
+     * @return list<string>
+     */
+    public static function resolveWarnaFilter(?string $warna): array
+    {
+        $key = strtolower(trim((string) $warna));
+        if ($key === '') {
+            return [];
+        }
+
+        switch ($key) {
+            case 'merah':
+                return ['merah'];
+            case 'biru':
+                return ['merah', 'biru'];
+            case 'hitam':
+                return ['merah', 'biru', 'hitam'];
+            case 'aset':
+                return ['aset'];
+            default:
+                return [$key];
+        }
+    }
+
+    /**
+     * Ambil daftar peralatan HANYA dari kategori_peralatan_sampling
+     * (id, nama_alat, jenis_peralatan, warna, nama_kategori_pengujian, id_cabang,
+     *  lokasi_penempatan_alat, status_alat, jumlah_alat_tersedia, is_active, ...),
+     * plus hitung terpakai/sisa di tanggal yang sama dari jadwal_mobilisasi.
      */
     public static function getPeralatanAvailable(
         ?string $tanggal = null,
@@ -461,7 +491,24 @@ class JadwalMobilisasiService
             $cleanBranchIds = array_values(array_unique(array_filter(array_map('intval', $rawBranches), fn ($v) => $v > 0)));
         }
 
-        $cleanWarna = trim((string) ($warna ?? ''));
+        $warnaList = self::resolveWarnaFilter($warna);
+
+        $selectCols = [
+            'id',
+            'nama_alat',
+            'jenis_peralatan',
+            'warna',
+            'nama_kategori_pengujian',
+            'id_cabang',
+            'lokasi_penempatan_alat',
+            'is_active',
+        ];
+        if (Schema::hasColumn('kategori_peralatan_sampling', 'status_alat')) {
+            $selectCols[] = 'status_alat';
+        }
+        if (Schema::hasColumn('kategori_peralatan_sampling', 'jumlah_alat_tersedia')) {
+            $selectCols[] = 'jumlah_alat_tersedia';
+        }
 
         $query = KategoriPeralatanSampling::query()
             ->where('is_active', true);
@@ -470,66 +517,21 @@ class JadwalMobilisasiService
             $query->whereIn('id_cabang', $cleanBranchIds);
         }
 
-        if ($cleanWarna !== '') {
-            $query->whereRaw('LOWER(warna) = ?', [strtolower($cleanWarna)]);
+        if (!empty($warnaList)) {
+            $query->where(function ($q) use ($warnaList) {
+                foreach ($warnaList as $warnaItem) {
+                    $q->orWhereRaw('LOWER(TRIM(warna)) = ?', [strtolower($warnaItem)]);
+                }
+            });
         }
 
         $kpsRows = $query
-            ->select([
-                'id',
-                'nama_alat',
-                'jenis_peralatan',
-                'warna',
-                'nama_kategori_pengujian',
-                'id_cabang',
-                'lokasi_penempatan_alat',
-            ])
+            ->select($selectCols)
             ->orderBy('nama_alat', 'asc')
             ->get();
 
         if ($kpsRows->isEmpty()) {
             return [];
-        }
-
-        // Stok fisik opsional dari ga_assets (unit sampling normal). Tidak dipakai jika 0,
-        // supaya katalog kategori_peralatan_sampling tetap jadi sumber hitungan.
-        $gaStockMap = [];
-        if (Schema::hasTable('ga_assets')) {
-            $gaQuery = GaAsset::query()
-                ->select(
-                    DB::raw('UPPER(TRIM(name)) as norm_name'),
-                    'branch_id',
-                    DB::raw('COUNT(*) as total_unit')
-                )
-                ->where('is_active', 1)
-                ->where('condition', 'normal');
-
-            if (Schema::hasColumn('ga_assets', 'record_kind')) {
-                $gaQuery->where('record_kind', GaAsset::RECORD_UNIT);
-            }
-
-            if (Schema::hasTable('master_sub_kategori_aset')) {
-                $gaQuery->whereIn('sub_kategori_aset_id', function ($sub) {
-                    $sub->select('id')
-                        ->from('master_sub_kategori_aset')
-                        ->whereRaw("UPPER(TRIM(nama_sub_kategori)) = 'SAMPLING'");
-                });
-            } else {
-                $gaQuery->where('sub_kategori_aset_id', 10);
-            }
-
-            if (!empty($cleanBranchIds)) {
-                $gaQuery->whereIn('branch_id', $cleanBranchIds);
-            }
-
-            $gaRows = $gaQuery
-                ->groupBy(DB::raw('UPPER(TRIM(name))'), 'branch_id')
-                ->get();
-
-            foreach ($gaRows as $g) {
-                $keyBranch = $g->norm_name . '|' . (int) ($g->branch_id ?? 0);
-                $gaStockMap[$keyBranch] = (int) $g->total_unit;
-            }
         }
 
         // Hitung jumlah alat yang sudah terpakai di tanggal yang sama pada jadwal_mobilisasi aktif
@@ -575,7 +577,7 @@ class JadwalMobilisasiService
         }
 
         // Group berdasarkan nama_alat + id_cabang + warna.
-        // Total default = jumlah row aktif di kategori_peralatan_sampling (bukan 0 dari ga_assets kosong).
+        // Stok = SUM(jumlah_alat_tersedia); fallback jumlah row aktif.
         $grouped = [];
         foreach ($kpsRows as $row) {
             $namaAlat = trim((string) $row->nama_alat);
@@ -583,6 +585,9 @@ class JadwalMobilisasiService
             $cabangId = $row->id_cabang !== null ? (int) $row->id_cabang : 0;
             $warnaVal = trim((string) ($row->warna ?? ''));
             $groupKey = $normName . '|' . $cabangId . '|' . strtolower($warnaVal);
+            $rowQty = Schema::hasColumn('kategori_peralatan_sampling', 'jumlah_alat_tersedia')
+                ? max(0, (int) ($row->jumlah_alat_tersedia ?? 0))
+                : 0;
 
             if (!isset($grouped[$groupKey])) {
                 $grouped[$groupKey] = [
@@ -597,29 +602,36 @@ class JadwalMobilisasiService
                     'id_cabang' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
                     'branch_id' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
                     'lokasi_penempatan_alat' => $row->lokasi_penempatan_alat,
+                    'status_alat' => $row->status_alat ?? null,
                     'kps_count' => 0,
+                    'kps_qty' => 0,
                 ];
             }
 
             $grouped[$groupKey]['kps_count']++;
+            $grouped[$groupKey]['kps_qty'] += $rowQty;
+            if (($row->status_alat ?? null) !== null && ($grouped[$groupKey]['status_alat'] === null || $grouped[$groupKey]['status_alat'] === '')) {
+                $grouped[$groupKey]['status_alat'] = $row->status_alat;
+            }
         }
 
         foreach ($grouped as &$item) {
             $normName = strtoupper((string) $item['nama_alat']);
             $cabangId = (int) ($item['id_cabang'] ?? 0);
             $kpsCount = max(1, (int) ($item['kps_count'] ?? 1));
-            $gaCount = (int) ($gaStockMap[$normName . '|' . $cabangId] ?? 0);
-            $totalStok = $gaCount > 0 ? $gaCount : $kpsCount;
+            $kpsQty = (int) ($item['kps_qty'] ?? 0);
+            $totalStok = $kpsQty > 0 ? $kpsQty : $kpsCount;
             $used = (int) ($usedByToolKey[$normName . '|' . $cabangId] ?? 0);
             if ($cabangId !== 0) {
                 $used += (int) ($usedByToolKey[$normName . '|0'] ?? 0);
             }
 
+            $item['jumlah_alat_tersedia'] = $totalStok;
             $item['total'] = $totalStok;
             $item['terpakai'] = $used;
             $item['sisa'] = max(0, $totalStok - $used);
             $item['stok'] = $totalStok;
-            unset($item['kps_count']);
+            unset($item['kps_count'], $item['kps_qty']);
         }
         unset($item);
 
