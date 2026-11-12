@@ -1241,6 +1241,162 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertCount(2, $long['members']);
     }
 
+    public function testMonitorMergesSameSamplerDailyJourneyAcrossDurations(): void
+    {
+        $connection = $this->db->getConnection('mysql');
+        $session24h = SamplerTrackingSession::create([
+            'team_key' => 'monitor-24h',
+            'tanggal_sampling' => '2026-09-17',
+            'nama_perusahaan' => 'PT Alpha',
+            'no_order' => 'ORD-24H',
+            'durasi' => '1 x 24 Jam',
+            'is_active' => true,
+        ]);
+        $member24h = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $session24h->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'Asep',
+            'effective_duration' => 2,
+            'is_active' => true,
+        ]);
+
+        $sessionSesaat = SamplerTrackingSession::create([
+            'team_key' => 'monitor-sesaat',
+            'tanggal_sampling' => '2026-09-17',
+            'nama_perusahaan' => 'PT Beta',
+            'no_order' => 'ORD-SES',
+            'durasi' => 'Sesaat',
+            'is_active' => true,
+        ]);
+        $memberSesaat = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $sessionSesaat->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'Asep',
+            'effective_duration' => 0,
+            'is_active' => true,
+        ]);
+
+        foreach ([
+            [$session24h, $member24h, 'departure', '2026-09-17 06:00:00'],
+            [$session24h, $member24h, 'checkin', '2026-09-17 07:00:00'],
+            [$session24h, $member24h, 'checkout', '2026-09-17 08:00:00'],
+            [$sessionSesaat, $memberSesaat, 'checkin', '2026-09-17 09:00:00'],
+            [$sessionSesaat, $memberSesaat, 'checkout', '2026-09-17 10:00:00'],
+            [$sessionSesaat, $memberSesaat, 'return', '2026-09-17 11:00:00'],
+        ] as [$session, $member, $type, $at]) {
+            $connection->table('sampler_tracking_events')->insert([
+                'sampler_tracking_session_id' => $session->id,
+                'sampler_tracking_member_id' => $member->id,
+                'event_type' => $type,
+                'event_at' => $at,
+            ]);
+        }
+
+        $sessions = SamplerTrackingSession::with('activeMembers.events')
+            ->whereIn('id', [$session24h->id, $sessionSesaat->id])
+            ->get();
+        $this->assertCount(2, $this->service->buildTrackingRows($sessions));
+
+        $monitor = $this->service->listTrackingRows('2026-09-17', 10)['data'];
+        $this->assertCount(1, $monitor);
+        $this->assertSame('completed', $monitor->first()['tracking_status']);
+        $this->assertStringContainsString('Sesaat', $monitor->first()['durasi']);
+        $this->assertStringContainsString('24 Jam', $monitor->first()['durasi']);
+
+        $this->assertGreaterThanOrEqual(2, $this->service->listByDate('2026-09-17', 10)->count());
+    }
+
+    public function testMonitorCompletes24HourAssignmentAfterReturnOnNextDayContinuation(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-11-13 10:00:00', 'Asia/Jakarta'));
+        $connection = $this->db->getConnection('mysql');
+
+        $sessionFirst = SamplerTrackingSession::create([
+            'team_key' => 'alur-24h',
+            'tanggal_sampling' => '2026-11-11',
+            'nama_perusahaan' => 'RS ISLAM JAKARTA SUKAPURA',
+            'no_order' => 'ALUR012602',
+            'durasi' => '1 x 24 Jam',
+            'is_active' => true,
+        ]);
+        $memberFirst = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $sessionFirst->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'Asep',
+            'effective_duration' => 2,
+            'is_active' => true,
+        ]);
+
+        $sessionNext = SamplerTrackingSession::create([
+            'team_key' => 'aaap-sesaat',
+            'tanggal_sampling' => '2026-11-12',
+            'nama_perusahaan' => 'HARAPAN GRAHA NIAGA, PT',
+            'no_order' => 'AAAP012601',
+            'durasi' => 'Sesaat',
+            'is_active' => true,
+        ]);
+        $memberNext = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $sessionNext->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'Asep',
+            'effective_duration' => 0,
+            'is_active' => true,
+        ]);
+
+        foreach ([
+            [$sessionFirst, $memberFirst, 'departure', '2026-11-11 06:00:00'],
+            [$sessionFirst, $memberFirst, 'checkin', '2026-11-11 07:00:00'],
+            [$sessionFirst, $memberFirst, 'checkout', '2026-11-11 20:00:00'],
+            [$sessionNext, $memberNext, 'checkin', '2026-11-12 08:00:00'],
+            [$sessionNext, $memberNext, 'checkout', '2026-11-12 15:00:00'],
+            [$sessionNext, $memberNext, 'return', '2026-11-12 16:00:00'],
+        ] as [$session, $member, $type, $at]) {
+            $connection->table('sampler_tracking_events')->insert([
+                'sampler_tracking_session_id' => $session->id,
+                'sampler_tracking_member_id' => $member->id,
+                'event_type' => $type,
+                'event_at' => $at,
+            ]);
+        }
+
+        $rowsDay12 = $this->service->listTrackingRows('2026-11-12', 10)['data'];
+        $this->assertCount(1, $rowsDay12);
+        $this->assertSame('completed', $rowsDay12->first()['tracking_status']);
+        $this->assertStringContainsString('ALUR012602', $rowsDay12->first()['no_order']);
+        $this->assertStringContainsString('AAAP012601', $rowsDay12->first()['no_order']);
+
+        $rowsDay11 = $this->service->listTrackingRows('2026-11-11', 10)['data'];
+        $alur = $rowsDay11->firstWhere('no_order', 'ALUR012602');
+        $this->assertNotNull($alur);
+        $this->assertSame('completed', $alur['tracking_status']);
+        $this->assertTrue(collect($alur['events'])->contains(function ($event) {
+            return ($event->event_type ?? null) === 'return';
+        }));
+    }
+
+    public function testMonitorStillSeparatesTeamMembersByEffectiveDuration(): void
+    {
+        $this->schedule(['sampler' => 'Satrio', 'userid' => 10, 'durasi' => 1]);
+        $this->schedule(['sampler' => 'Hafizh', 'userid' => 20, 'durasi' => 2]);
+        $this->schedule(['sampler' => 'Marcellius', 'userid' => 30, 'durasi' => 2]);
+        $session = $this->prepare('2026-09-17')->first();
+        $satrio = $session->activeMembers()->where('sampler_name', 'Satrio')->firstOrFail();
+
+        $this->db->getConnection('mysql')->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_tracking_member_id' => $satrio->id,
+            'event_type' => 'return',
+            'event_at' => '2026-09-17 18:00:00',
+        ]);
+
+        $rows = $this->service->listTrackingRows('2026-09-17')['data'];
+        $this->assertCount(2, $rows);
+        $short = $rows->firstWhere('sampler', 'Satrio');
+        $long = $rows->firstWhere('sampler', 'Hafizh, Marcellius');
+        $this->assertSame('completed', $short['tracking_status']);
+        $this->assertSame('ongoing', $long['tracking_status']);
+    }
+
 
     public function testJourneyDepartureReferenceRespectsSamplerReturnAndCheckinTime(): void
     {
