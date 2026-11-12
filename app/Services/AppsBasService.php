@@ -1213,7 +1213,9 @@ class AppsBasService
                         if ($request->boolean('is_final')) {
                             BasSampelService::processFinalSamples($item, fn($sample) => $this->getStatusSampling($sample));
                             $emailRequired = !empty($detailData['email_pending']) && empty($detailData['email_sent_at']);
-                            if ($emailRequired) {
+                            // Jangan reset ke 0 jika BAS pernah berhasil diemail (is_emailed_bas == 1).
+                            // Tombol Email FDL tetap mengikuti email_pending di detail_bas_documents.
+                            if ($emailRequired && (int) $header->is_emailed_bas !== 1) {
                                 $header->is_emailed_bas = 0;
                                 $header->emailed_bas_at = null;
                             }

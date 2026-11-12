@@ -57,32 +57,39 @@ class MasterTargetSalesController extends Controller
                 $target = [];
             }
 
-            $periodeArr = $request->periode ?? [];
-            foreach ($periodeArr as $periode) {
-                $target[$periode] = (int) $request->total_target;
-            }
+            $periodeArr = array_values(array_unique($request->periode ?? []));
+            $syncAllPeriods = filter_var(
+                $request->sync_all_periods ?? !$request->id,
+                FILTER_VALIDATE_BOOLEAN
+            );
 
             $data->karyawan_id  = $request->karyawan_id;
             $data->tahun        = $request->tahun;
 
-            foreach (
-                [
-                    '01' => 'januari',
-                    '02' => 'februari',
-                    '03' => 'maret',
-                    '04' => 'april',
-                    '05' => 'mei',
-                    '06' => 'juni',
-                    '07' => 'juli',
-                    '08' => 'agustus',
-                    '09' => 'september',
-                    '10' => 'oktober',
-                    '11' => 'november',
-                    '12' => 'desember'
-                ] as $k => $v
-            ) {
+            $monthMap = [
+                '01' => 'januari',
+                '02' => 'februari',
+                '03' => 'maret',
+                '04' => 'april',
+                '05' => 'mei',
+                '06' => 'juni',
+                '07' => 'juli',
+                '08' => 'agustus',
+                '09' => 'september',
+                '10' => 'oktober',
+                '11' => 'november',
+                '12' => 'desember',
+            ];
+
+            foreach ($monthMap as $k => $v) {
                 $checkPeriod = $request->tahun . '-' . $k;
-                if (in_array($checkPeriod, $periodeArr)) $data->{$v} = $kuota;
+                if (in_array($checkPeriod, $periodeArr, true)) {
+                    $data->{$v} = $kuota;
+                    $target[$checkPeriod] = (int) $request->total_target;
+                } elseif ($syncAllPeriods) {
+                    $data->{$v} = null;
+                    unset($target[$checkPeriod]);
+                }
             }
 
             $data->target = json_encode($target);
@@ -111,6 +118,64 @@ class MasterTargetSalesController extends Controller
             return response()->json(['message' => 'Deleted Successfully'], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
+            return response()->json(['message' => $th->getMessage()], 401);
+        }
+    }
+
+    /** Hapus target satu bulan (kolom bulan + entri JSON target), tanpa mengubah bulan lain. */
+    public function clearMonth(Request $request)
+    {
+        $id = (int) $request->id;
+        $period = (string) $request->period;
+
+        if (!$id || !preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $period)) {
+            return response()->json(['message' => 'Parameter id dan period (YYYY-MM) wajib valid'], 422);
+        }
+
+        $monthMap = [
+            '01' => 'januari',
+            '02' => 'februari',
+            '03' => 'maret',
+            '04' => 'april',
+            '05' => 'mei',
+            '06' => 'juni',
+            '07' => 'juli',
+            '08' => 'agustus',
+            '09' => 'september',
+            '10' => 'oktober',
+            '11' => 'november',
+            '12' => 'desember',
+        ];
+
+        [, $month] = explode('-', $period);
+        $column = $monthMap[$month] ?? null;
+        if (!$column) {
+            return response()->json(['message' => 'Bulan tidak valid'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $data = MasterTargetSales::where(['id' => $id, 'is_active' => true])->first();
+            if (!$data) {
+                DB::rollBack();
+
+                return response()->json(['message' => 'Data tidak ditemukan'], 404);
+            }
+
+            $data->{$column} = null;
+            $target = json_decode($data->target, true) ?? [];
+            unset($target[$period]);
+            $data->target = json_encode($target);
+            $data->updated_by = $this->karyawan;
+            $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->save();
+
+            DB::commit();
+
+            return response()->json(['message' => 'Target bulan dihapus'], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+
             return response()->json(['message' => $th->getMessage()], 401);
         }
     }
