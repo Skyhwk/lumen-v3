@@ -128,32 +128,23 @@ class LogTransactionQsdController extends Controller
                 ->whereYear('tanggal_sampling_min', $tahun)
                 ->whereMonth('tanggal_sampling_min', $bulan);
 
-            $forecastPelanggan = DB::table('forecast_sp')
-                ->select('no_quotation', DB::raw('MAX(pelanggan_ID) as pelanggan_ID'))
-                ->groupBy('no_quotation');
-
             // 3. Clone query untuk Datatables (Menampilkan semua riwayat)
+            // Nama perusahaan & sales dari penawaran (bukan order_header) agar revisi tetap cocok sebelum di-order ulang.
             $data = DB::table('qsd_forecast_transaction_log as log')
-                ->leftJoin('order_header as oh', 'oh.no_document', '=', 'log.no_penawaran')
-                ->leftJoinSub($forecastPelanggan, 'fs', 'fs.no_quotation', '=', 'log.no_penawaran')
-                ->leftJoin('master_pelanggan as mp_oh', 'mp_oh.id_pelanggan', '=', 'oh.id_pelanggan')
-                ->leftJoin('master_pelanggan as mp_fs', 'mp_fs.id_pelanggan', '=', 'fs.pelanggan_ID')
                 ->leftJoin('request_quotation as rq', function ($join) {
                     $join->on('rq.no_document', '=', 'log.no_penawaran')
-                        ->where('rq.is_active', 1)
-                        ->whereRaw("log.no_penawaran NOT LIKE '%QTC%'");
+                        ->whereRaw("log.no_penawaran NOT LIKE '%/QTC/%'");
                 })
                 ->leftJoin('request_quotation_kontrak_H as rqk', function ($join) {
                     $join->on('rqk.no_document', '=', 'log.no_penawaran')
-                        ->where('rqk.is_active', 1)
-                        ->whereRaw("log.no_penawaran LIKE '%QTC%'");
+                        ->whereRaw("log.no_penawaran LIKE '%/QTC/%'");
                 })
                 ->leftJoin('master_karyawan as mk_rq', 'mk_rq.id', '=', 'rq.sales_id')
                 ->leftJoin('master_karyawan as mk_rqk', 'mk_rqk.id', '=', 'rqk.sales_id')
                 ->select(
                     'log.*',
-                    DB::raw('COALESCE(rq.nama_perusahaan, rqk.nama_perusahaan, mp_oh.nama_pelanggan, mp_fs.nama_pelanggan) as nama_perusahaan'),
-                    DB::raw('COALESCE(mk_rq.nama_lengkap, mk_rqk.nama_lengkap, mp_oh.sales_penanggung_jawab, mp_fs.sales_penanggung_jawab) as sales_penanggung_jawab')
+                    DB::raw('COALESCE(rq.nama_perusahaan, rqk.nama_perusahaan) as nama_perusahaan'),
+                    DB::raw('COALESCE(mk_rq.nama_lengkap, mk_rqk.nama_lengkap) as sales_penanggung_jawab')
                 )
                 ->whereNotNull('log.tanggal_sampling_min')
                 ->whereYear('log.tanggal_sampling_min', $tahun)
@@ -178,8 +169,8 @@ class LogTransactionQsdController extends Controller
                     }
                     $like = '%' . $keyword . '%';
                     $query->where(function ($sub) use ($like) {
-                        $sub->where('mp_oh.nama_pelanggan', 'like', $like)
-                            ->orWhere('mp_fs.nama_pelanggan', 'like', $like);
+                        $sub->where('rq.nama_perusahaan', 'like', $like)
+                            ->orWhere('rqk.nama_perusahaan', 'like', $like);
                     });
                 })
                 ->filterColumn('sales_penanggung_jawab', function ($query, $keyword) {
@@ -190,9 +181,7 @@ class LogTransactionQsdController extends Controller
                     $like = '%' . $keyword . '%';
                     $query->where(function ($sub) use ($like) {
                         $sub->where('mk_rq.nama_lengkap', 'like', $like)
-                            ->orWhere('mk_rqk.nama_lengkap', 'like', $like)
-                            ->orWhere('mp_oh.sales_penanggung_jawab', 'like', $like)
-                            ->orWhere('mp_fs.sales_penanggung_jawab', 'like', $like);
+                            ->orWhere('mk_rqk.nama_lengkap', 'like', $like);
                     });
                 })
                 ->filterColumn('periode', fn($query, $keyword) => $this->filterPeriodeColumn($query, $keyword, 'log.periode'))
@@ -201,7 +190,7 @@ class LogTransactionQsdController extends Controller
                 ->filterColumn('status', fn($query, $keyword) => $this->filterStatusColumn($query, $keyword, 'log.status'))
                 ->editColumn('periode', fn($row) => $this->formatPeriodeLabel($row->periode))
                 ->editColumn('nama_perusahaan', fn($row) => $row->nama_perusahaan ?: '-')
-                ->editColumn('sales_penanggung_jawab', fn($row) => $row->sales_penanggung_jawab)
+                ->editColumn('sales_penanggung_jawab', fn($row) => $row->sales_penanggung_jawab ?: '-')
                 ->editColumn('revenue_forecast', fn($row) => (float) $row->revenue_forecast)
                 ->editColumn('total', fn($row) => (float) $row->total)
                 ->editColumn('status', fn($row) => ucfirst($row->status))
