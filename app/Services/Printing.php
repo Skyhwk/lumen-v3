@@ -9,7 +9,8 @@ use Carbon\Carbon;
 class Printing
 {
     protected static $apikey;
-    protected static $url = 'http://10.88.4.160:1126/';
+    // protected static $url = 'http://10.88.4.160:1126/';
+    protected static $url = 'http://10.88.209.240:1126/';
     protected static $karyawan;
     protected static $file;
     protected static $printer;
