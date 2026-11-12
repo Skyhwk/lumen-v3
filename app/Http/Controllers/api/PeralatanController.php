@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Yajra\Datatables\Datatables;
 
-class KategoriPeralatanSamplingController extends Controller
+class PeralatanController extends Controller
 {
     public function index()
     {
@@ -26,6 +26,8 @@ class KategoriPeralatanSamplingController extends Controller
                 'nama_kategori_pengujian',
                 'id_cabang',
                 'lokasi_penempatan_alat',
+                'status_alat',
+                'jumlah_alat_tersedia',
             ]);
 
         return Datatables::of($data)->make(true);
@@ -127,13 +129,35 @@ class KategoriPeralatanSamplingController extends Controller
 
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'nama_alat' => 'required|string|max:255',
-            'jenis_peralatan' => 'required|string|max:255',
-            'warna' => 'required|in:Merah,Biru,Hitam',
-            'nama_kategori_pengujian' => 'required|string|max:70',
-            'id_cabang' => 'required|integer',
-        ]);
+        $rawNamaAlat = $request->input('nama_alat');
+        $namaAlatList = [];
+        if (is_array($rawNamaAlat)) {
+            foreach ($rawNamaAlat as $item) {
+                $trimmed = trim((string) $item);
+                if ($trimmed !== '' && !in_array($trimmed, $namaAlatList, true)) {
+                    $namaAlatList[] = $trimmed;
+                }
+            }
+        } elseif (is_string($rawNamaAlat) || is_numeric($rawNamaAlat)) {
+            $trimmed = trim((string) $rawNamaAlat);
+            if ($trimmed !== '') {
+                $namaAlatList[] = $trimmed;
+            }
+        }
+
+        $validator = Validator::make(
+            array_merge($request->all(), ['nama_alat_list' => $namaAlatList]),
+            [
+                'nama_alat_list' => 'required|array|min:1',
+                'nama_alat_list.*' => 'required|string|max:255',
+                'jenis_peralatan' => 'required|string|max:255',
+                'warna' => 'required|in:Merah,Biru,Hitam',
+                'nama_kategori_pengujian' => 'required|string|max:70',
+                'id_cabang' => 'required|integer',
+                'status_alat' => 'required|string',
+                'jumlah_alat_tersedia' => 'required|integer|min:0',
+            ]
+        );
 
         if ($validator->fails()) {
             return response()->json([
@@ -142,13 +166,14 @@ class KategoriPeralatanSamplingController extends Controller
             ], 422);
         }
 
-        $namaAlat = trim((string) $request->nama_alat);
         $jenisPeralatan = trim((string) $request->jenis_peralatan);
         $namaKategori = trim((string) $request->nama_kategori_pengujian);
-        if ($namaAlat === '' || $jenisPeralatan === '' || $namaKategori === '') {
+        $statusAlat = trim((string) $request->status_alat);
+        $jumlahAlatTersedia = intval($request->jumlah_alat_tersedia);
+        if (empty($namaAlatList) || $jenisPeralatan === '' || $namaKategori === '' || $statusAlat === '' || $jumlahAlatTersedia < 0) {
             return response()->json([
                 'success' => false,
-                'message' => 'Nama alat, jenis peralatan, dan kategori pengujian wajib diisi',
+                'message' => 'Nama alat, jenis peralatan, kategori pengujian, status alat, dan jumlah alat tersedia wajib diisi',
             ], 422);
         }
 
@@ -164,9 +189,9 @@ class KategoriPeralatanSamplingController extends Controller
             ], 404);
         }
 
-        $duplicate = KategoriPeralatanSampling::query()
+        $duplicateNames = KategoriPeralatanSampling::query()
             ->where('is_active', true)
-            ->where('nama_alat', $namaAlat)
+            ->whereIn('nama_alat', $namaAlatList)
             ->where('jenis_peralatan', $jenisPeralatan)
             ->where('warna', $request->warna)
             ->where('nama_kategori_pengujian', $namaKategori)
@@ -174,12 +199,13 @@ class KategoriPeralatanSamplingController extends Controller
             ->when($request->filled('id'), function ($query) use ($request) {
                 $query->where('id', '!=', $request->id);
             })
-            ->exists();
+            ->pluck('nama_alat')
+            ->all();
 
-        if ($duplicate) {
+        if (!empty($duplicateNames)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Data dengan nama alat, jenis, warna, kategori pengujian, dan lokasi yang sama sudah ada',
+                'message' => 'Nama alat ' . implode(', ', $duplicateNames) . ' dengan jenis, warna, kategori pengujian, dan lokasi yang sama sudah ada',
             ], 400);
         }
 
@@ -200,24 +226,55 @@ class KategoriPeralatanSamplingController extends Controller
                     ], 404);
                 }
 
+                $firstNamaAlat = array_shift($namaAlatList);
+                $row->nama_alat = $firstNamaAlat;
+                $row->jenis_peralatan = $jenisPeralatan;
+                $row->warna = $request->warna;
+                $row->nama_kategori_pengujian = $namaKategori;
+                $row->id_cabang = $cabang->id;
+                $row->lokasi_penempatan_alat = $cabang->nama_cabang;
+                $row->status_alat = $statusAlat;
+                $row->jumlah_alat_tersedia = $jumlahAlatTersedia;
                 $row->updated_by = $this->karyawan;
                 $row->updated_at = $now;
+                $row->save();
+
+                foreach ($namaAlatList as $extraNamaAlat) {
+                    $extraRow = new KategoriPeralatanSampling();
+                    $extraRow->nama_alat = $extraNamaAlat;
+                    $extraRow->jenis_peralatan = $jenisPeralatan;
+                    $extraRow->warna = $request->warna;
+                    $extraRow->nama_kategori_pengujian = $namaKategori;
+                    $extraRow->id_cabang = $cabang->id;
+                    $extraRow->lokasi_penempatan_alat = $cabang->nama_cabang;
+                    $extraRow->status_alat = $statusAlat;
+                    $extraRow->jumlah_alat_tersedia = $jumlahAlatTersedia;
+                    $extraRow->created_by = $this->karyawan;
+                    $extraRow->created_at = $now;
+                    $extraRow->is_active = true;
+                    $extraRow->save();
+                }
+
                 $message = 'Data kategori peralatan sampling berhasil diubah';
             } else {
-                $row = new KategoriPeralatanSampling();
-                $row->created_by = $this->karyawan;
-                $row->created_at = $now;
-                $row->is_active = true;
+                foreach ($namaAlatList as $namaAlat) {
+                    $row = new KategoriPeralatanSampling();
+                    $row->nama_alat = $namaAlat;
+                    $row->jenis_peralatan = $jenisPeralatan;
+                    $row->warna = $request->warna;
+                    $row->nama_kategori_pengujian = $namaKategori;
+                    $row->id_cabang = $cabang->id;
+                    $row->lokasi_penempatan_alat = $cabang->nama_cabang;
+                    $row->status_alat = $statusAlat;
+                    $row->jumlah_alat_tersedia = $jumlahAlatTersedia;
+                    $row->created_by = $this->karyawan;
+                    $row->created_at = $now;
+                    $row->is_active = true;
+                    $row->save();
+                }
+
                 $message = 'Data kategori peralatan sampling berhasil disimpan';
             }
-
-            $row->nama_alat = $namaAlat;
-            $row->jenis_peralatan = $jenisPeralatan;
-            $row->warna = $request->warna;
-            $row->nama_kategori_pengujian = $namaKategori;
-            $row->id_cabang = $cabang->id;
-            $row->lokasi_penempatan_alat = $cabang->nama_cabang;
-            $row->save();
 
             DB::commit();
 

@@ -97,6 +97,7 @@ class ValidatorSPController extends Controller
                 'kategori',
                 'durasi',
                 'status',
+                'warna',
                 'kendaraan',
                 'driver',
                 DB::raw('group_concat(sampler) as sampler'),
@@ -115,6 +116,7 @@ class ValidatorSPController extends Controller
                 'status',
                 'jam_mulai',
                 'jam_selesai',
+                'warna',
                 'kendaraan',
                 'driver'
             );
