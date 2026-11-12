@@ -148,15 +148,19 @@ class LogTransactionQsdController extends Controller
                         ->where('rqk.is_active', 1)
                         ->whereRaw("log.no_penawaran LIKE '%QTC%'");
                 })
+                ->leftJoin('master_karyawan as mk_rq', 'mk_rq.id', '=', 'rq.sales_id')
+                ->leftJoin('master_karyawan as mk_rqk', 'mk_rqk.id', '=', 'rqk.sales_id')
                 ->select(
                     'log.*',
-                    DB::raw('COALESCE(mp_oh.nama_pelanggan, mp_fs.nama_pelanggan, rq.nama_perusahaan, rqk.nama_perusahaan) as nama_perusahaan'),
-                    DB::raw('COALESCE(mp_oh.sales_penanggung_jawab, mp_fs.sales_penanggung_jawab) as sales_penanggung_jawab')
+                    DB::raw('COALESCE(rq.nama_perusahaan, rqk.nama_perusahaan, mp_oh.nama_pelanggan, mp_fs.nama_pelanggan) as nama_perusahaan'),
+                    DB::raw('COALESCE(mk_rq.nama_lengkap, mk_rqk.nama_lengkap, mp_oh.sales_penanggung_jawab, mp_fs.sales_penanggung_jawab) as sales_penanggung_jawab')
                 )
                 ->whereNotNull('log.tanggal_sampling_min')
                 ->whereYear('log.tanggal_sampling_min', $tahun)
                 ->whereMonth('log.tanggal_sampling_min', $bulan)
                 ->orderByDesc('log.created_at');
+
+            // dd($data->get());
 
             // 4. Clone query untuk Grand Total dengan Logika Ledger (Penambahan - Pengurangan)
             $grandTotal = (clone $baseQuery)
@@ -185,7 +189,9 @@ class LogTransactionQsdController extends Controller
                     }
                     $like = '%' . $keyword . '%';
                     $query->where(function ($sub) use ($like) {
-                        $sub->where('mp_oh.sales_penanggung_jawab', 'like', $like)
+                        $sub->where('mk_rq.nama_lengkap', 'like', $like)
+                            ->orWhere('mk_rqk.nama_lengkap', 'like', $like)
+                            ->orWhere('mp_oh.sales_penanggung_jawab', 'like', $like)
                             ->orWhere('mp_fs.sales_penanggung_jawab', 'like', $like);
                     });
                 })
@@ -195,7 +201,7 @@ class LogTransactionQsdController extends Controller
                 ->filterColumn('status', fn($query, $keyword) => $this->filterStatusColumn($query, $keyword, 'log.status'))
                 ->editColumn('periode', fn($row) => $this->formatPeriodeLabel($row->periode))
                 ->editColumn('nama_perusahaan', fn($row) => $row->nama_perusahaan ?: '-')
-                ->editColumn('sales_penanggung_jawab', fn($row) => $row->sales_penanggung_jawab ?: '-')
+                ->editColumn('sales_penanggung_jawab', fn($row) => $row->sales_penanggung_jawab)
                 ->editColumn('revenue_forecast', fn($row) => (float) $row->revenue_forecast)
                 ->editColumn('total', fn($row) => (float) $row->total)
                 ->editColumn('status', fn($row) => ucfirst($row->status))
