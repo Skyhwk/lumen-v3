@@ -741,7 +741,7 @@ class SamplingPlanController extends Controller
                 'status'          => $request->status,
                 'batch_id'        => $request->batch_id,
                 'urutan'          => $request->urutan != '' ? $request->urutan : null,
-                'kendaraan'       => $request->kendaraan,
+                'kendaraan'       => JadwalServices::normalizeKendaraan($request->kendaraan),
                 'sampling'        => $request->sampling,
                 'karyawan'        => $this->karyawan,
                 'jadwal_id'       => $request->id,
@@ -871,7 +871,7 @@ class SamplingPlanController extends Controller
                 'status'          => $request->status,
                 'urutan'          => $request->urutan != '' ? $request->urutan : null,
                 'karyawan'        => $this->karyawan,
-                'kendaraan'       => $request->kendaraan,
+                'kendaraan'       => JadwalServices::normalizeKendaraan($request->kendaraan),
                 'sampler'         => $request->sampler,
                 'driver'          => $request->driver,
                 'pendampingan_k3' => $request->pendampingan_k3,
@@ -1365,7 +1365,7 @@ class SamplingPlanController extends Controller
         $detailKonflik = [];
 
         foreach ($dataBentrok as $row) {
-            $veh = $row->kendaraan;
+            $veh = JadwalServices::normalizeKendaraan($row->kendaraan);
 
             // Jika kendaraan ini belum masuk daftar konflik, masukkan.
             if (!isset($detailKonflik[$veh])) {

@@ -52,6 +52,24 @@ class JadwalServices
         $this->timestamp = Carbon::now()->format('Y-m-d H:i:s');
     }
 
+    public static function normalizeKendaraan($kendaraan)
+    {
+        if (is_array($kendaraan)) {
+            $normalized = [];
+            foreach ($kendaraan as $key => $value) {
+                $normalized[$key] = self::normalizeKendaraan($value);
+            }
+            return $normalized;
+        }
+
+        $value = trim((string) ($kendaraan ?? ''));
+        if ($value === '') {
+            return $kendaraan === null ? null : '';
+        }
+
+        return trim((string) preg_replace('/\s*\(Tebeng Transportasi\)$/i', '', $value));
+    }
+
     public function __call($method, $arguments)
     {
         throw new Exception("Method $method does not exist on JadwalServices. Arguments: " . implode(", ", $arguments) . "\n", 404);
@@ -589,7 +607,7 @@ class JadwalServices
                         'status' => $dataUpdate->status,
                         'notif' => 0,
                         'urutan' => $dataUpdate->urutan,
-                        'kendaraan' => $dataUpdate->kendaraan,
+                        'kendaraan' => self::normalizeKendaraan($dataUpdate->kendaraan),
                         'parsial' => !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : null,
                         'updated_at' => $this->timestamp,
                         'updated_by' => $dataUpdate->karyawan,
@@ -649,7 +667,7 @@ class JadwalServices
                         'urutan' => $dataUpdate->urutan,
                         'updated_by' => $dataUpdate->karyawan,
                         'updated_at' => $this->timestamp,
-                        'kendaraan' => $dataUpdate->kendaraan,
+                        'kendaraan' => self::normalizeKendaraan($dataUpdate->kendaraan),
                         'parsial' => !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : null,
                         'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
@@ -973,7 +991,7 @@ class JadwalServices
                         'urutan' => $dataUpdate->urutan,
                         'updated_by' => $dataUpdate->karyawan,
                         'updated_at' => $this->timestamp,
-                        'kendaraan' => $dataUpdate->kendaraan,
+                        'kendaraan' => self::normalizeKendaraan($dataUpdate->kendaraan),
                         'parsial' => !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : NULL,
                         'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
@@ -1154,7 +1172,7 @@ class JadwalServices
                     "status" => $dataAdd->status[$i],
                     "created_by" => $dataAdd->karyawan,
                     "created_at" => $this->timestamp,
-                    "kendaraan" => $dataAdd->kendaraan[$i] ?? null,
+                    "kendaraan" => self::normalizeKendaraan($dataAdd->kendaraan[$i] ?? null),
                     "wilayah" => $wilayah,
                     "isokinetic" => $dataAdd->isokinetic[$i] ?? 0,
                     "pendampingan_k3" => $dataAdd->pendampingan_k3[$i] ?? 0,
@@ -1195,7 +1213,7 @@ class JadwalServices
                             'created_by' => $val['created_by'],
                             'created_at' => $val['created_at'],
                             'note' => $val['note'],
-                            'kendaraan' => $val['kendaraan'],
+                            'kendaraan' => self::normalizeKendaraan($val['kendaraan'] ?? null),
                             'id_sampling' => $val['id_sampling'],
                             'id_cabang' => $val['id_cabang'][$keys],
                             'wilayah' => $val['wilayah'],
@@ -1231,7 +1249,7 @@ class JadwalServices
                             'created_by' => $val['created_by'],
                             'created_at' => $val['created_at'],
                             'note' => $val['note'],
-                            'kendaraan' => $val['kendaraan'],
+                            'kendaraan' => self::normalizeKendaraan($val['kendaraan'] ?? null),
                             'id_sampling' => $val['id_sampling'],
                             'id_cabang' => $val['id_cabang'][$keys],
                             'wilayah' => $val['wilayah'],
@@ -1442,7 +1460,7 @@ class JadwalServices
                     'status' => $dataParsial->status,
                     'notif' => 0,
                     'urutan' => $dataParsial->urutan,
-                    'kendaraan' => $dataParsial->kendaraan,
+                    'kendaraan' => self::normalizeKendaraan($dataParsial->kendaraan),
                     'pendampingan_k3' => $dataParsial->pendampingan_k3,
                     'isokinetic' => $dataParsial->isokinetic,
                     'parsial' => $dataParsial->id,
@@ -1628,7 +1646,7 @@ class JadwalServices
                     'urutan' => $dataParsial->urutan,
                     'created_by' => $dataParsial->karyawan,
                     'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'kendaraan' => $dataParsial->kendaraan,
+                    'kendaraan' => self::normalizeKendaraan($dataParsial->kendaraan),
                     'parsial' => $dataParsial->id,
                     'id_sampling' => $dataParsial->id_sampling,
                     'id_cabang' => $dataParsial->id_cabang,
