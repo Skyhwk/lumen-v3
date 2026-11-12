@@ -36,6 +36,16 @@ class PengesahanLhpController extends Controller
             ->make(true);
     }
 
+    public function list()
+    {
+        $data = PengesahanLhp::orderByDesc('berlaku_mulai')->orderByDesc('id')->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+        ], 200);
+    }
+
     public function store(Request $request)
     {
         DB::beginTransaction();

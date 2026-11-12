@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Jadwal;
 use App\Models\OrderDetail;
+use App\Models\PengesahanDokumenSampling;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
@@ -68,6 +69,14 @@ class TicketSkK3SuratService
         $dir = self::ensureDir(self::DIR_GENERATED);
 
         $now = Carbon::now();
+        $pengesah = PengesahanDokumenSampling::latestForType(
+            PengesahanDokumenSampling::TYPE_K3,
+            $now
+        );
+        if (!$pengesah || trim((string) $pengesah->nama_karyawan) === '') {
+            throw new \RuntimeException('Pengesah K3 belum di-set. Atur dulu di Administrator > Pengesahan Dokumen > K3.');
+        }
+
         $logoPath = public_path('img/isl_logo.png');
         $logoW = 55;
         $logoH = 17;
@@ -89,6 +98,8 @@ class TicketSkK3SuratService
             'pengujian' => $payload['pengujian'],
             'jumlahTitik' => $payload['jumlah_titik'],
             'tanggalSurat' => $this->tanggalIndonesia($now->format('Y-m-d')),
+            'namaPengesah' => trim((string) $pengesah->nama_karyawan),
+            'jabatanPengesah' => trim((string) ($pengesah->jabatan_karyawan ?: '')),
         ])->render();
 
         $mpdf = new Mpdf([
