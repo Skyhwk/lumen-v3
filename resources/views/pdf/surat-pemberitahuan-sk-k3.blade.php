@@ -127,8 +127,8 @@
         Tangerang, {{ $tanggalSurat }}<br>
         Hormat Saya,
         <div class="sign-space"></div>
-        <p class="sign-name">Sucita Rahmi</p>
-        <p class="sign-job">Penanggungjawab K3</p>
+        <p class="sign-name">{{ $namaPengesah }}</p>
+        <p class="sign-job">{{ $jabatanPengesah !== '' ? $jabatanPengesah : 'Penanggungjawab K3' }}</p>
     </div>
 </body>
 </html>
