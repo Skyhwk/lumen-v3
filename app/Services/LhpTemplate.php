@@ -453,13 +453,15 @@ class LhpTemplate
                     '266;jumlah bakteri total', 
                     '619;t. bakteri (kudr - 8 jam)', 
                     '620;t. jamur (kudr - 8 jam)', 
-                    '563;medan magnet','309;pencahayaan', 
+                    '309;pencahayaan', 
+                    '578;t.bakteri (8 jam)',
+                    '579;t. jamur (8 jam)',
+                    '1300;legionella',
+                    '563;medan magnet',
                     '316;power density', 
                     '277;medan listrik',
                     '236;gelombang elektro',
-                    '578;t.bakteri (8 jam)',
-                    '579;t. jamur (8 jam)',
-                    '1300;legionella'
+                    '2411;medan magnet statis'
                     ]
                 );
             })) {

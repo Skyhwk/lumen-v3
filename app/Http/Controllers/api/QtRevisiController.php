@@ -38,6 +38,15 @@ class QtRevisiController extends Controller
             ->addColumn('status_quotation', function ($row) {
                 return $this->resolveStatusQuotation($row);
             })
+            ->filterColumn('created_at', function ($query, $keyword) {
+                $keyword = trim((string) $keyword);
+                $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                    return;
+                }
+
+                $query->whereDate('order_header.created_at', $date);
+            })
             ->filterColumn('status_quotation', function ($query, $keyword) {
                 $keyword = trim((string) $keyword);
                 if ($keyword === '') {

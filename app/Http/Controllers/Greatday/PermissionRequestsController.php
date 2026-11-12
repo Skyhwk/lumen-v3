@@ -12,6 +12,7 @@ use App\Services\Hr\Greatday\FormSubmitterVoidService;
 use App\Services\Hr\Greatday\PermissionRequestHrService;
 use App\Services\Hr\HrFormAttachmentStorage;
 use App\Services\Hr\HrRequestResolver;
+use App\Services\Hr\LegacyFormGreatdayApprovalSteps;
 use App\Support\Greatday\FormSubmissionDates;
 use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
@@ -57,6 +58,7 @@ class PermissionRequestsController extends Controller
                 $attachments = HrFormAttachmentStorage::resolvePublicUrls($item->attachment, GreatdayAssetPaths::KEY_IZIN);
                 $item->attachments = $attachments;
                 $item->attachment = $attachments[0] ?? null;
+                app(LegacyFormGreatdayApprovalSteps::class)->applyToObject($item, HrRequest::TYPE_PERMISSION);
 
                 return $item;
             });
@@ -122,18 +124,19 @@ class PermissionRequestsController extends Controller
 
         $permissionRequest->save();
 
-        $service = new FirebaseService();
-
-        if ($employee->grade !== 'MANAGER') {
-            $recipientIds = app(FormAtasanSubmitNotificationService::class)
-                ->initialApproverIds($employee, HrRequest::TYPE_PERMISSION);
-            if ($recipientIds !== []) {
-                $service->sendNotifications(
-                    $recipientIds,
-                    NotificationCopy::legacyAtasanPending('Permohonan izin', $employee->nama_lengkap, NotificationCopy::pathForms('approval'))
-                );
-            }
-        }
+        // TODO: Aktifkan kembali setelah credential Firebase Greatday/Attendance tersedia.
+        // $service = new FirebaseService();
+        //
+        // if ($employee->grade !== 'MANAGER') {
+        //     $recipientIds = app(FormAtasanSubmitNotificationService::class)
+        //         ->initialApproverIds($employee, HrRequest::TYPE_PERMISSION);
+        //     if ($recipientIds !== []) {
+        //         $service->sendNotifications(
+        //             $recipientIds,
+        //             NotificationCopy::legacyAtasanPending('Permohonan izin', $employee->nama_lengkap, NotificationCopy::pathForms('approval'))
+        //         );
+        //     }
+        // }
 
 
         return response()->json(['message' => 'Your permission request has been submitted successfully'], 201);

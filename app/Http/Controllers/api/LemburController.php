@@ -542,6 +542,7 @@ class LemburController extends Controller
                 return [
                     'id' => $item->id,
                     'nama_lengkap' => $item->nama_lengkap,
+                    'jabatan' => $item->grade ?? null,
                 ];
             })
             ->unique('id')
@@ -632,6 +633,8 @@ class LemburController extends Controller
                 ];
             }
             OvertimeRequestMembers::on('intilab_apps')->insert($details);
+
+            app(PortalHrSync::class)->syncOvertimeFromLegacy((int) $header->id);
 
             $title = 'Request Lembur Kamu Berhasil Diperbaharui!';
             $body = $this->grade === 'MANAGER' || $this->grade === 'SENIOR MANAGER'
