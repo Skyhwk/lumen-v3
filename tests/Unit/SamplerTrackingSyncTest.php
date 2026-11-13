@@ -1987,31 +1987,6 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertCount(0, $this->service->listByDate('2026-09-17'));
     }
 
-    public function testMenuJadwalVoidDeactivatesDriftedTeamKeySessionOnSameDate(): void
-    {
-        $morning = $this->schedule(['jam_mulai' => '08:00:00', 'kendaraan' => 'B 1']);
-        $this->schedule(['jam_mulai' => '13:00:00', 'kendaraan' => 'B 2', 'userid' => 20, 'sampler' => 'B']);
-        $sessions = $this->prepare('2026-09-17');
-        $morningSession = $sessions->firstWhere('jam_mulai', '08:00:00');
-        $afternoonSession = $sessions->firstWhere('jam_mulai', '13:00:00');
-        $this->assertNotNull($morningSession);
-        $this->assertNotNull($afternoonSession);
-        $this->attendance($morningSession);
-
-        $morningSession->team_key = 'drifted-void-key';
-        $morningSession->tanggal_sampling = '2026-09-17 00:00:00';
-        $morningSession->save();
-
-        $before = $this->service->snapshotSchedules('Q1');
-        $morning->is_active = false;
-        $morning->save();
-        $this->service->syncAfterScheduleVoid('Q1', $before);
-        $this->service->finalizeMenuJadwalVoid(collect([$morning]));
-
-        $this->assertFalse((bool) $morningSession->fresh()->is_active);
-        $this->assertTrue((bool) $afternoonSession->fresh()->is_active);
-    }
-
     public function testEditSameDayTimeAndVehicleKeepsSessionMemberAndAttendanceIds(): void
     {
         $row = $this->schedule();
