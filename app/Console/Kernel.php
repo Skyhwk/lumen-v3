@@ -112,6 +112,7 @@ class Kernel extends ConsoleKernel
         Commands\BackupMasterPelangganDediWibowoCommand::class,
         Commands\AssignBankDataOrderedCommand::class,
         Commands\VoidFollowUpInactiveSalesCommand::class,
+        Commands\InspectSkK3RefsCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,
