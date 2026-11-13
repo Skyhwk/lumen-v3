@@ -79,13 +79,73 @@ class PortalNotificationService
             return [
                 'status' => 'error',
                 'message' => $exception->getMessage(),
+                'exception' => $this->serializeThrowable($exception),
             ];
         } catch (\Throwable $exception) {
             return [
                 'status' => 'error',
                 'message' => 'Failed to send notification: ' . $exception->getMessage(),
+                'exception' => $this->serializeThrowable($exception),
             ];
         }
+    }
+
+    /**
+     * Serialisasi exception sampai akar (previous chain) + file/line terkait.
+     */
+    protected function serializeThrowable(\Throwable $exception, int $maxFrames = 25): array
+    {
+        $base = rtrim((string) base_path(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        $relative = static function (?string $path) use ($base): ?string {
+            if ($path === null || $path === '') {
+                return $path;
+            }
+            if (strpos($path, $base) === 0) {
+                return substr($path, strlen($base));
+            }
+            return $path;
+        };
+
+        $chain = [];
+        $current = $exception;
+        $guard = 0;
+        while ($current instanceof \Throwable && $guard < 10) {
+            $frames = [];
+            foreach (array_slice($current->getTrace(), 0, $maxFrames) as $frame) {
+                $frames[] = [
+                    'file' => $relative($frame['file'] ?? null),
+                    'line' => $frame['line'] ?? null,
+                    'class' => $frame['class'] ?? null,
+                    'function' => $frame['function'] ?? null,
+                    'type' => $frame['type'] ?? null,
+                ];
+            }
+
+            $chain[] = [
+                'class' => get_class($current),
+                'message' => $current->getMessage(),
+                'code' => $current->getCode(),
+                'file' => $relative($current->getFile()),
+                'line' => $current->getLine(),
+                'trace' => $frames,
+            ];
+            $current = $current->getPrevious();
+            $guard++;
+        }
+
+        $root = $chain[count($chain) - 1] ?? $chain[0];
+
+        return [
+            'summary' => sprintf(
+                '%s: %s at %s:%s',
+                $root['class'] ?? 'Throwable',
+                $root['message'] ?? '',
+                $root['file'] ?? '-',
+                $root['line'] ?? '-'
+            ),
+            'root' => $root,
+            'chain' => $chain,
+        ];
     }
 
     protected function resolveTemplate(string $for, array $extraData = [], ?Users $user = null): array
