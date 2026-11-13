@@ -334,6 +334,43 @@ class JadwalMobilisasiService
         return $record->fresh();
     }
 
+    /**
+     * Simpan peralatan bawaan aktual untuk semua mobilisasi dalam daftar batch_id (1 tim → N PT).
+     * Request SP tetap di peralatan_sampling; yang diubah hanya peralatan_aktual.
+     *
+     * @param  array<int, mixed>  $batchIdList
+     */
+    public static function syncPeralatanAktualForBatches(array $batchIdList, array $peralatanAktual, ?string $actor = null): int
+    {
+        if (!Schema::hasTable('jadwal_mobilisasi') || !Schema::hasColumn('jadwal_mobilisasi', 'peralatan_aktual')) {
+            return 0;
+        }
+
+        $normalizedList = self::normalizePeralatan($peralatanAktual);
+        $now = Carbon::now()->format('Y-m-d H:i:s');
+        $updated = 0;
+
+        foreach ($batchIdList as $batchIds) {
+            $record = self::findActiveRecordByBatchIds($batchIds);
+            if (!$record) {
+                continue;
+            }
+            $record->update([
+                'peralatan_aktual' => $normalizedList,
+                'updated_by' => $actor,
+                'updated_at' => $now,
+            ]);
+            $updated++;
+        }
+
+        return $updated;
+    }
+
+    public static function normalizePeralatanList($raw): array
+    {
+        return self::normalizePeralatan($raw);
+    }
+
     private static function isTxtFilename(?string $value): bool
     {
         if ($value === null) {
@@ -479,7 +516,8 @@ class JadwalMobilisasiService
         ?string $tanggal = null,
         $branchId = null,
         $excludeBatchIds = null,
-        ?string $warna = null
+        ?string $warna = null,
+        ?string $excludePetugasKey = null
     ): array {
         if (!Schema::hasTable('kategori_peralatan_sampling')) {
             return [];
@@ -534,46 +572,17 @@ class JadwalMobilisasiService
             return [];
         }
 
-        // Hitung jumlah alat yang sudah terpakai di tanggal yang sama pada jadwal_mobilisasi aktif
+        // Pengunci stok = bawaan aktual TIM di Informasi Operasional (io_peralatan_tim),
+        // bukan request peralatan_sampling dari jadwal/SP.
+        // excludeBatchIds tidak dipakai di sini: jadwal/SP tetap harus melihat alat yang
+        // sudah dikunci tim IO. Exclude hanya untuk petugas_key (saat edit bawaan tim sendiri).
         $usedByToolKey = [];
-        if ($tanggal && Schema::hasTable('jadwal_mobilisasi')) {
-            $normalizedExclude = self::normalizeBatchIds($excludeBatchIds);
-            $activeMobilisasi = JadwalMobilisasi::where('is_active', true)
-                ->whereDate('tanggal', $tanggal)
-                ->get();
-
-            foreach ($activeMobilisasi as $mob) {
-                if (!empty($normalizedExclude['ids'])) {
-                    $mobBatch = self::normalizeBatchIds($mob->batch_id ?: ($mob->batch_jadwal_ids ?? []));
-                    if (!empty(array_intersect($normalizedExclude['ids'], $mobBatch['ids']))) {
-                        continue;
-                    }
-                }
-
-                $peralatan = $mob->peralatan_sampling;
-                if (is_string($peralatan)) {
-                    $peralatan = json_decode($peralatan, true);
-                }
-                if (!is_array($peralatan)) {
-                    continue;
-                }
-
-                foreach ($peralatan as $item) {
-                    if (!is_array($item)) {
-                        continue;
-                    }
-                    $namaAlat = strtoupper(trim((string) ($item['nama_alat'] ?? '')));
-                    $qty = (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0);
-                    $itemCabang = isset($item['id_cabang']) && $item['id_cabang'] !== ''
-                        ? (int) $item['id_cabang']
-                        : (isset($item['branch_id']) && $item['branch_id'] !== '' ? (int) $item['branch_id'] : 0);
-
-                    if ($namaAlat !== '' && $qty > 0) {
-                        $specificKey = $namaAlat . '|' . $itemCabang;
-                        $usedByToolKey[$specificKey] = ($usedByToolKey[$specificKey] ?? 0) + $qty;
-                    }
-                }
-            }
+        if ($tanggal) {
+            $usedByToolKey = IoPeralatanTimService::usedQtyByTanggal(
+                $tanggal,
+                $excludePetugasKey,
+                null
+            );
         }
 
         // Group berdasarkan nama_alat + id_cabang + warna.
