@@ -52,7 +52,6 @@ class DashboardHRDController extends Controller
         }
 
         return $hari_ini;
-
     }
     // Tested - Clear
     public function totGrade(Request $request)
@@ -118,7 +117,7 @@ class DashboardHRDController extends Controller
                     ->whereYear('tgl_berakhir_kontrak', $nextYear);
             });
         })
-            ->where('status_karyawan', 'Training')
+            ->whereIn('status_karyawan', ['Training', 'Contract'])
             ->where('is_active', true)
             ->get();
 
