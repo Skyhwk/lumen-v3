@@ -228,7 +228,7 @@ class FollowUpController extends Controller
         }
 
         // Preload sekali: hindari N+1 (MasterKaryawan + LogWebphone per baris)
-        $karyawanQuery = MasterKaryawan::query()->select('id', 'nama_lengkap');
+        $karyawanQuery = MasterKaryawan::query()->select('id', 'nama_lengkap')->where('is_active', true);
         if ($salesNames !== null) {
             $karyawanQuery->whereIn('nama_lengkap', $salesNames);
         } else {
