@@ -125,6 +125,54 @@ class SamplerTrackingJourney
         return !$nextDeparture;
     }
 
+    /** Event pulang yang menutup kunjungan member ini (termasuk pulang di PT lanjutan). */
+    public function returnClosingMember(SamplerTrackingMember $member, string $date): ?SamplerTrackingEvent
+    {
+        $checkin = $member->events->where('event_type', 'checkin')->sortBy('event_at')->first();
+        $checkout = $member->events->where('event_type', 'checkout')->sortByDesc('event_at')->first();
+        if (!$member->sampler_id || !$checkin || !$checkout || !$checkin->event_at || !$checkout->event_at
+            || Carbon::parse($checkout->event_at)->lt(Carbon::parse($checkin->event_at))) {
+            return null;
+        }
+
+        $departure = $member->events->where('event_type', 'departure')->filter(function ($event) use ($checkin) {
+            return $event->event_at && Carbon::parse($event->event_at)->lte(Carbon::parse($checkin->event_at));
+        })->sortByDesc('event_at')->first();
+        if (!$departure) {
+            $departure = $this->findDepartureForSampler($member->sampler_id, (string) $checkin->event_at, $date);
+        }
+        if (!$departure) {
+            return null;
+        }
+
+        $departure->loadMissing('member.session');
+        $departureDate = optional(optional($departure->member)->session)->tanggal_sampling;
+        if (!$departureDate) {
+            return null;
+        }
+
+        $return = $this->findReturnForSampler(
+            $member->sampler_id,
+            (string) $departure->event_at,
+            (string) $departureDate,
+            (string) $checkout->event_at
+        );
+        if (!$return || Carbon::parse($return->event_at)->lt(Carbon::parse($checkout->event_at))) {
+            return null;
+        }
+
+        $return->loadMissing('member.session');
+        $ownSessionId = (int) $member->sampler_tracking_session_id;
+        $returnSessionId = (int) optional($return->member)->sampler_tracking_session_id;
+        if ($ownSessionId > 0 && $returnSessionId === $ownSessionId) {
+            return $return;
+        }
+
+        $nextDeparture = $this->hasNextDepartureForSampler($member->sampler_id, (string) $departure->event_at, $return);
+
+        return $nextDeparture ? null : $return;
+    }
+
     protected function findDepartureForSampler($samplerId, string $checkinAt, string $date)
     {
         $events = $this->eventsForSampler($samplerId);

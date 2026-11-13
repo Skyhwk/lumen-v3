@@ -13,6 +13,7 @@ class JadwalMobilisasi extends Sector
     protected $casts = [
         'batch_jadwal_ids' => 'array',
         'peralatan_sampling' => 'array',
+        'peralatan_aktual' => 'array',
         'is_active' => 'boolean',
         'tanggal' => 'date',
         'released_io_at' => 'datetime',

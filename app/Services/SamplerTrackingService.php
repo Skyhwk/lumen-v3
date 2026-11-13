@@ -1937,7 +1937,9 @@ class SamplerTrackingService
         $sessions = $this->listByDate($date, $samplerId, $samplerName);
         $rows = $this->releaseUnblockedOverdueRows(
             $this->attachParallelCheckinMeta(
-                $this->buildTrackingRows($sessions),
+                $this->finalizeMonitorTrackingRows(
+                    $this->buildTrackingRows($sessions)
+                ),
                 $sessions,
                 $date
             )
@@ -1971,7 +1973,9 @@ class SamplerTrackingService
     {
         $sessions = $this->listByDate($date, $samplerId, $samplerName, $sessionIds);
         $rows = $this->attachParallelCheckinMeta(
-            $this->buildTrackingRows($sessions),
+            $this->finalizeMonitorTrackingRows(
+                $this->buildTrackingRows($sessions)
+            ),
             $sessions,
             $date
         );
@@ -2125,6 +2129,448 @@ public function buildTrackingRows($sessions)
         return !$this->isEmptyTrackingShellRow($row);
     })->values();
 }
+
+    /**
+     * Monitor web: normalisasi baris tabel (gabung perjalanan + status journey).
+     * Tidak memengaruhi listByDate / activity Apps FDL.
+     */
+    public function finalizeMonitorTrackingRows($rows)
+    {
+        return $this->applyMonitorJourneyTrackingStatus(
+            $this->attachMonitorJourneyReturnEvents(
+                $this->mergeMonitorRowsByExtendedJourney(
+                    $this->mergeMonitorRowsByDailyJourney($rows)
+                )
+            )
+        );
+    }
+
+    /**
+     * Sertakan event pulang dari PT lanjutan sebagai referensi journey di payload monitor
+     * agar detail web tidak menampilkan "Belum pulang" untuk kunjungan yang sudah ditutup.
+     */
+    protected function attachMonitorJourneyReturnEvents($rows)
+    {
+        $journey = new SamplerTrackingJourney();
+
+        return collect($rows)->map(function ($row) use ($journey) {
+            $events = collect($row['events'] ?? []);
+            if ($events->contains(function ($event) {
+                return $this->eventValue($event, 'event_type') === 'return'
+                    && !$this->eventIsJourneyReference($event);
+            })) {
+                return $row;
+            }
+
+            $return = null;
+            foreach (collect($row['members'] ?? []) as $member) {
+                if (!($member instanceof SamplerTrackingMember)) {
+                    continue;
+                }
+                $member->loadMissing(['session', 'events']);
+                $assignmentDate = optional($member->session)->tanggal_sampling ?: ($row['tanggal_sampling'] ?? null);
+                if (!$assignmentDate) {
+                    continue;
+                }
+                $candidate = $journey->returnClosingMember($member, (string) $assignmentDate);
+                if ($candidate) {
+                    $return = $candidate;
+                    break;
+                }
+            }
+
+            if (!$return) {
+                return $row;
+            }
+
+            $reference = clone $return;
+            $reference->is_journey_reference = true;
+            if ($returnSessionId = (int) optional($return->member)->sampler_tracking_session_id) {
+                $ownSessionIds = collect($row['sessions'] ?? [])->map(function ($session) {
+                    return is_object($session) ? (int) $session->id : (int) ($session['id'] ?? 0);
+                })->filter()->values();
+                if ($ownSessionIds->isNotEmpty() && !$ownSessionIds->contains($returnSessionId)) {
+                    $closingOrder = optional(optional($return->member)->session)->no_order;
+                    if ($closingOrder) {
+                        $reference->note = trim(($reference->note ? $reference->note . ' ' : '')
+                            . '(Pulang dicatat setelah kunjungan lanjutan ' . $closingOrder . ')');
+                    }
+                }
+            }
+
+            $row['events'] = $events->push($reference)->unique('id')->values()->all();
+
+            return $row;
+        })->values();
+    }
+
+    protected function applyMonitorJourneyTrackingStatus($rows)
+    {
+        return collect($rows)->map(function ($row) {
+            $row['tracking_status'] = $this->resolveMonitorRowTrackingStatus($row);
+
+            return $row;
+        })->values();
+    }
+
+    /**
+     * Status monitor: selain event return di baris, hormati penutupan perjalanan lintas PT/tanggal
+     * (return di hari lanjutan menutup kunjungan 1×24 jam hari sebelumnya).
+     */
+    public function resolveMonitorRowTrackingStatus(array $row): string
+    {
+        $members = collect($row['members'] ?? []);
+        if ($members->isEmpty() && !empty($row['member'])) {
+            $members = collect([$row['member']]);
+        }
+
+        $durationValues = $members->map(function ($member) {
+            return SamplerTrackingActivity::duration($member);
+        });
+
+        $status = $this->resolveTrackingStatus(
+            $row['events'] ?? [],
+            $row['tanggal_sampling'] ?? null,
+            $row['jam_mulai'] ?? null,
+            $row['jam_selesai'] ?? null,
+            $durationValues->max()
+        );
+
+        if ($status === 'completed') {
+            return 'completed';
+        }
+
+        if ($members->isEmpty()) {
+            return $status;
+        }
+
+        $stopsComplete = $members->every(function ($member) {
+            return is_object($member)
+                && SamplerTrackingActivity::hasEvent($member, 'checkin')
+                && SamplerTrackingActivity::hasEvent($member, 'checkout');
+        });
+
+        if (!$stopsComplete) {
+            return $status;
+        }
+
+        $journey = new SamplerTrackingJourney();
+        $journeyComplete = $members->every(function ($member) use ($journey) {
+            if (!is_object($member) || !$member->sampler_id) {
+                return false;
+            }
+
+            if ($member instanceof SamplerTrackingMember) {
+                $member->loadMissing('session');
+            }
+
+            $memberDate = optional($member->session)->tanggal_sampling;
+            if (!$memberDate) {
+                return false;
+            }
+
+            return $journey->isComplete($member, (string) $memberDate);
+        });
+
+        return $journeyComplete ? 'completed' : $status;
+    }
+
+    /**
+     * Gabung baris tim yang sama (sampler) di tanggal berbeda bila lanjutan satu perjalanan
+     * (mis. 1×24 jam 11 Nov + PT lanjutan 12 Nov).
+     */
+    public function mergeMonitorRowsByExtendedJourney($rows)
+    {
+        $rows = collect($rows)->values();
+        if ($rows->count() < 2) {
+            return $rows;
+        }
+
+        return $rows->groupBy(function ($row) {
+            $keys = $this->rowSamplerIdentityKeys($row);
+
+            return $keys === []
+                ? 'row:' . ($row['row_id'] ?? md5(json_encode($row)))
+                : json_encode($keys);
+        })->flatMap(function ($group) {
+            if ($group->count() < 2) {
+                return $group;
+            }
+
+            $sorted = $group->sortBy('tanggal_sampling')->values()->all();
+
+            return collect($this->buildMonitorJourneyChains($sorted))->map(function ($chain) {
+                if (count($chain) === 1) {
+                    return $chain[0];
+                }
+
+                return $this->mergeMonitorTrackingRows($chain);
+            });
+        })->values();
+    }
+
+    protected function buildMonitorJourneyChains(array $rows): array
+    {
+        if (count($rows) <= 1) {
+            return [$rows];
+        }
+
+        $chains = [];
+        $current = [$rows[0]];
+
+        for ($index = 1; $index < count($rows); $index++) {
+            if ($this->monitorRowsShareExtendedJourney($current[count($current) - 1], $rows[$index])) {
+                $current[] = $rows[$index];
+                continue;
+            }
+
+            $chains[] = $current;
+            $current = [$rows[$index]];
+        }
+
+        $chains[] = $current;
+
+        return $chains;
+    }
+
+    protected function monitorRowsShareExtendedJourney(array $earlier, array $later): bool
+    {
+        $earlierDate = $earlier['tanggal_sampling'] ?? '';
+        $laterDate = $later['tanggal_sampling'] ?? '';
+        if (!$earlierDate || !$laterDate || $laterDate <= $earlierDate) {
+            return false;
+        }
+
+        $laterSessionIds = collect($later['sessions'] ?? [])->map(function ($session) {
+            return is_object($session) ? (int) $session->id : (int) ($session['id'] ?? 0);
+        })->filter()->values()->all();
+
+        if ($laterSessionIds === []) {
+            return false;
+        }
+
+        foreach (collect($earlier['members'] ?? []) as $member) {
+            if (!($member instanceof SamplerTrackingMember)) {
+                continue;
+            }
+            if (!SamplerTrackingActivity::hasEvent($member, 'checkin')) {
+                continue;
+            }
+
+            $member->loadMissing('session');
+            $assignmentDate = optional($member->session)->tanggal_sampling ?: $earlierDate;
+            $due = Carbon::parse($assignmentDate)->addDays(max(0, SamplerTrackingActivity::duration($member) - 1))->toDateString();
+            $extension = (new SamplerTrackingJourney())->extension($member, (string) $assignmentDate, $due);
+            if (!$extension) {
+                continue;
+            }
+
+            foreach ($extension['assignments'] ?? [] as $assignment) {
+                if (in_array((int) ($assignment['session_id'] ?? 0), $laterSessionIds, true)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Monitor web: gabung baris tim yang sama (sampler + tanggal) terpisah hanya karena durasi,
+     * mis. 1×24 jam + lanjutan sesaat dalam satu perjalanan harian. Tidak memengaruhi listByDate Apps FDL.
+     */
+    public function mergeMonitorRowsByDailyJourney($rows)
+    {
+        $rows = collect($rows);
+        if ($rows->count() < 2) {
+            return $rows->values();
+        }
+
+        return $rows->groupBy(function ($row) {
+            $keys = $this->rowSamplerIdentityKeys($row);
+            if ($keys === []) {
+                return 'row:' . ($row['row_id'] ?? md5(json_encode($row)));
+            }
+
+            return ($row['tanggal_sampling'] ?? '-') . '|' . json_encode($keys);
+        })->map(function ($group, $bucketKey) {
+            if (strpos((string) $bucketKey, 'row:') === 0 || $group->count() === 1) {
+                return $group->first();
+            }
+
+            return $this->mergeMonitorTrackingRows($group->values()->all());
+        })->values();
+    }
+
+    protected function rowSamplerIdentityKeys(array $row): array
+    {
+        $members = collect($row['members'] ?? []);
+        if ($members->isEmpty() && !empty($row['member'])) {
+            $members = collect([$row['member']]);
+        }
+
+        return $members->map(function ($member) {
+            $samplerId = is_object($member) ? ($member->sampler_id ?? null) : ($member['sampler_id'] ?? null);
+            if ($samplerId) {
+                return 'id:' . $samplerId;
+            }
+
+            $name = is_object($member) ? ($member->sampler_name ?? '') : ($member['sampler_name'] ?? '');
+
+            return 'name:' . mb_strtolower(trim((string) $name));
+        })->filter(function ($key) {
+            return $key !== 'name:' && $key !== 'id:';
+        })->unique()->sort()->values()->all();
+    }
+
+    protected function mergeMonitorTrackingRows(array $rows): array
+    {
+        $rows = collect($rows);
+        $date = $rows->pluck('tanggal_sampling')->filter(function ($value) {
+            return $value && $value !== '-';
+        })->sort()->first() ?: ($rows->first()['tanggal_sampling'] ?? '-');
+        $samplerKeys = $this->rowSamplerIdentityKeys($rows->first());
+
+        $sessions = $rows->flatMap(function ($row) {
+            return collect($row['sessions'] ?? []);
+        })->unique(function ($session) {
+            return is_object($session) ? (int) $session->id : (int) ($session['id'] ?? 0);
+        })->values();
+
+        $members = $rows->flatMap(function ($row) {
+            return collect($row['members'] ?? []);
+        })->unique(function ($member) {
+            return is_object($member) ? (int) $member->id : (int) ($member['id'] ?? 0);
+        })->values();
+
+        $events = $rows->flatMap(function ($row) {
+            return collect($row['events'] ?? []);
+        })->unique(function ($event) {
+            return is_object($event) ? (int) $event->id : (int) ($event['id'] ?? 0);
+        })->sortBy(function ($event) {
+            return is_object($event) ? ($event->event_at ?? '') : ($event['event_at'] ?? '');
+        })->values();
+
+        $noOrders = collect();
+        $perusahaan = collect();
+        $durations = collect();
+        $durationValues = collect();
+        $movementGroups = collect();
+        $statuses = collect();
+        $samplers = collect();
+        $jamMulai = null;
+        $jamSelesai = null;
+
+        foreach ($members as $member) {
+            $samplerName = is_object($member)
+                ? ($member->sampler_name ?: ($member->sampler_id ?: '-'))
+                : ($member['sampler_name'] ?? ($member['sampler_id'] ?? '-'));
+            $samplers->push($samplerName);
+            $durationValues->push($this->firstFilledValue([
+                is_object($member) ? $member->effective_duration : ($member['effective_duration'] ?? null),
+                is_object($member) ? ($member->durasi_personal ?? null) : ($member['durasi_personal'] ?? null),
+                is_object($member) ? ($member->duration ?? null) : ($member['duration'] ?? null),
+                is_object($member) ? ($member->durasi ?? null) : ($member['durasi'] ?? null),
+            ]));
+            $durations->push($this->durationLabel($durationValues->last()));
+            $movementGroups->push(is_object($member) ? ($member->current_movement_group ?? '-') : ($member['current_movement_group'] ?? '-'));
+        }
+
+        foreach ($rows as $row) {
+            foreach ($this->splitRowListField($row['no_order'] ?? '-') as $value) {
+                $noOrders->push($value);
+            }
+            $companyList = $row['perusahaan_list'] ?? null;
+            if (!is_array($companyList) || count($companyList) === 0) {
+                $companyList = $this->splitRowListField($row['nama_perusahaan'] ?? '-');
+            }
+            foreach ($companyList as $value) {
+                $perusahaan->push($value);
+            }
+            foreach ($this->splitRowListField($row['status'] ?? '-') as $value) {
+                $statuses->push($value);
+            }
+            if (!empty($row['jam_mulai']) && (!$jamMulai || $row['jam_mulai'] < $jamMulai)) {
+                $jamMulai = $row['jam_mulai'];
+            }
+            if (!empty($row['jam_selesai']) && (!$jamSelesai || $row['jam_selesai'] > $jamSelesai)) {
+                $jamSelesai = $row['jam_selesai'];
+            }
+        }
+
+        $noOrders = $this->uniqueValues($noOrders);
+        $perusahaan = $this->uniqueValues($perusahaan);
+        $samplers = $this->uniqueValues($samplers);
+        $durations = $this->uniqueValues($durations);
+        $statuses = $this->uniqueValues($statuses);
+        $movementGroups = $this->uniqueValues($movementGroups);
+
+        $primaryMember = $members->sortByDesc(function ($member) {
+            return SamplerTrackingActivity::duration($member);
+        })->first();
+
+        $primarySession = $sessions->first(function ($session) use ($primaryMember) {
+            $sessionId = is_object($session) ? (int) $session->id : (int) ($session['id'] ?? 0);
+            $memberSessionId = is_object($primaryMember)
+                ? (int) $primaryMember->sampler_tracking_session_id
+                : (int) ($primaryMember['sampler_tracking_session_id'] ?? 0);
+
+            return $memberSessionId > 0 && $sessionId === $memberSessionId;
+        }) ?: $sessions->first();
+
+        $journeyTag = $rows->pluck('tanggal_sampling')->unique()->count() > 1 ? 'journey:extended' : 'journey:daily';
+        $groupKey = json_encode([$date, $samplerKeys, $journeyTag]);
+        $meaningfulEvents = $this->meaningfulTrackingEvents($events);
+        $lastEvent = $this->latestEvent($meaningfulEvents);
+
+        $mergedRow = [
+            'row_id' => $date . '-' . md5($groupKey),
+            'group_key' => $groupKey,
+            'session' => $primarySession,
+            'member' => $primaryMember,
+            'sessions' => $sessions,
+            'members' => $members,
+            'events' => $events,
+            'tanggal_sampling' => $date,
+            'jam' => ($jamMulai ?: '-') . ' - ' . ($jamSelesai ?: '-'),
+            'jam_mulai' => $jamMulai,
+            'jam_selesai' => $jamSelesai,
+            'no_order' => count($noOrders) > 0 ? implode(', ', $noOrders) : '-',
+            'perusahaan_list' => $perusahaan,
+            'nama_perusahaan' => count($perusahaan) > 0 ? implode(', ', $perusahaan) : '-',
+            'sampler_list' => $samplers,
+            'samplers' => $samplers,
+            'sampler' => count($samplers) > 0 ? implode(', ', $samplers) : '-',
+            'durasi' => count($durations) > 0 ? implode(', ', $durations) : '-',
+            'movement_group' => $this->teamMovementCode($date, $groupKey),
+            'internal_movement_groups' => $movementGroups,
+            'total_event' => $meaningfulEvents->count(),
+            'last_event' => $lastEvent ? (($lastEvent->event_type ?: '-') . ' - ' . ($lastEvent->event_at ?: '-')) : '-',
+            'status' => count($statuses) > 0 ? implode(', ', $statuses) : '-',
+        ];
+
+        $mergedRow['tracking_status'] = $this->resolveMonitorRowTrackingStatus($mergedRow);
+
+        return $mergedRow;
+    }
+
+    protected function splitRowListField($value): array
+    {
+        if (is_array($value)) {
+            return collect($value)->filter(function ($item) {
+                return $this->isFilledTrackingLabel($item);
+            })->all();
+        }
+
+        $text = trim((string) $value);
+        if ($text === '' || $text === '-') {
+            return [];
+        }
+
+        return array_values(array_filter(preg_split('/\s*,\s*/', $text) ?: [], function ($item) {
+            return $this->isFilledTrackingLabel($item);
+        }));
+    }
 
     /**
      * Baris session aktif tanpa identitas kunjungan & tanpa event — sisa sync/reschedule.

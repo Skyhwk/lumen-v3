@@ -14,6 +14,7 @@ use App\Models\OrderHeader;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
+use App\Services\IoPeralatanTimService;
 use App\Services\JadwalMobilisasiService;
 use App\Services\RenderInformasiOperasionalService;
 use Carbon\Carbon;
@@ -105,11 +106,14 @@ class InformasiOperasionalController extends Controller
 
         $query->orderBy($jadwalTable . '.jam_mulai', 'ASC');
 
+        // Bawaan aktual = level TIM + TANGGAL (bukan per PT).
+        $timPeralatanMap = IoPeralatanTimService::mapByTanggal($tanggal);
+
         return Datatables::of($query)
             ->addColumn('lokasi_penempatan', function ($row) {
                 return $row->nama_cabang ?: 'HEAD OFFICE (Default)';
             })
-            ->addColumn('mobilisasi', function ($row) {
+            ->addColumn('mobilisasi', function ($row) use ($timPeralatanMap) {
                 if (empty($row->batch_id)) {
                     return null;
                 }
@@ -120,6 +124,15 @@ class InformasiOperasionalController extends Controller
                 }
 
                 $peralatan = $this->decodePeralatan($mob['peralatan_sampling'] ?? []);
+                $petugasKey = IoPeralatanTimService::normalizePetugasKey($row->sampler ?? '');
+                $peralatanAktual = [];
+                if ($petugasKey !== '' && isset($timPeralatanMap[$petugasKey])) {
+                    $peralatanAktual = $timPeralatanMap[$petugasKey];
+                } elseif (!empty($mob['peralatan_aktual'])) {
+                    // fallback data lama yang sempat disimpan di jadwal_mobilisasi
+                    $peralatanAktual = $this->decodePeralatan($mob['peralatan_aktual']);
+                }
+
                 $namaAlat = [];
                 $jumlahAlat = [];
                 foreach ($peralatan as $item) {
@@ -129,6 +142,17 @@ class InformasiOperasionalController extends Controller
                     }
                     $namaAlat[] = $nama;
                     $jumlahAlat[] = (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0);
+                }
+
+                $namaAlatAktual = [];
+                $jumlahAlatAktual = [];
+                foreach ($peralatanAktual as $item) {
+                    $nama = trim((string) ($item['nama_alat'] ?? ''));
+                    if ($nama === '') {
+                        continue;
+                    }
+                    $namaAlatAktual[] = $nama;
+                    $jumlahAlatAktual[] = (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0);
                 }
 
                 $ketOps = trim(html_entity_decode(strip_tags((string) ($mob['keterangan_operasional'] ?? $mob['keterangan_operasional_sp'] ?? '')), ENT_QUOTES, 'UTF-8'));
@@ -149,6 +173,10 @@ class InformasiOperasionalController extends Controller
                     'nama_alat' => $namaAlat,
                     'jumlah_alat_list' => $jumlahAlat,
                     'jumlah_alat' => $this->requestCount($peralatan),
+                    'peralatan_aktual' => $peralatanAktual,
+                    'nama_alat_aktual' => $namaAlatAktual,
+                    'jumlah_alat_aktual' => $jumlahAlatAktual,
+                    'has_peralatan_aktual' => count($namaAlatAktual) > 0,
                 ];
             })
             ->addColumn('keterangan_qs', function ($row) {
@@ -337,13 +365,356 @@ class InformasiOperasionalController extends Controller
             $request->input('tanggal'),
             $request->input('branch_id') ?? $request->input('id_cabang'),
             $request->input('batch_id'),
-            $request->input('warna')
+            $request->input('warna'),
+            $request->input('exclude_petugas_key') ?: $request->input('petugas_key')
         );
 
         return response()->json([
             'status' => true,
             'data' => $data,
         ]);
+    }
+
+    /**
+     * Ringkasan peralatan 1 tim (N perusahaan) untuk modal Update Peralatan.
+     * Request per PT (read-only referensi) + bawaan aktual = milik TIM/HARI.
+     */
+    public function showPeralatanTim(Request $request)
+    {
+        $batchGroups = $this->normalizeBatchGroupList($request->input('batch_ids', $request->input('batch_id')));
+        if ($batchGroups === []) {
+            return response()->json(['message' => 'batch_ids wajib diisi.'], 422);
+        }
+
+        $companies = [];
+        $toolMap = [];
+        $legacyAktual = null;
+        $petugas = trim((string) $request->input('petugas_sampling', ''));
+        $tanggal = null;
+        $idCabang = null;
+        $warnaSet = [];
+        $cabangSet = [];
+
+        foreach ($batchGroups as $batchIds) {
+            $ctxRequest = Request::create('/', 'POST', ['batch_id' => $batchIds]);
+            $row = $this->resolveJadwalContext($ctxRequest);
+            if (!$row) {
+                continue;
+            }
+
+            if ($petugas === '' && !empty($row['sampler'])) {
+                $petugas = trim((string) $row['sampler']);
+            }
+            if ($tanggal === null && !empty($row['tanggal'])) {
+                $tanggal = Carbon::parse($row['tanggal'])->format('Y-m-d');
+            }
+            if ($idCabang === null && !empty($row['id_cabang'])) {
+                $idCabang = (int) $row['id_cabang'];
+            }
+            if (!empty($row['id_cabang'])) {
+                $cabangSet[(int) $row['id_cabang']] = true;
+            }
+            if (!empty($row['warna'])) {
+                $warnaSet[strtolower(trim((string) $row['warna']))] = true;
+            }
+
+            $mob = JadwalMobilisasiService::findActiveByBatchIds($batchIds);
+            $requestItems = $this->decodePeralatan($mob['peralatan_sampling'] ?? []);
+            $aktualItems = $this->decodePeralatan($mob['peralatan_aktual'] ?? []);
+            if ($legacyAktual === null && $aktualItems !== []) {
+                $legacyAktual = $aktualItems;
+            }
+
+            $perCompanyTools = [];
+            foreach ($requestItems as $item) {
+                $nama = trim((string) ($item['nama_alat'] ?? ''));
+                if ($nama === '') {
+                    continue;
+                }
+                $qty = max(0, (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0));
+                $key = mb_strtolower($nama);
+                $perCompanyTools[] = [
+                    'nama_alat' => $nama,
+                    'jumlah_alat' => $qty,
+                ];
+
+                if (!isset($toolMap[$key])) {
+                    $toolMap[$key] = [
+                        'nama_alat' => $nama,
+                        'id_kategori_peralatan' => $item['id_kategori_peralatan'] ?? null,
+                        'jenis_peralatan' => $item['jenis_peralatan'] ?? null,
+                        'warna' => $item['warna'] ?? ($row['warna'] ?? null),
+                        'id_cabang' => $item['id_cabang'] ?? ($row['id_cabang'] ?? null),
+                        'request_total' => 0,
+                        'request_max' => 0,
+                        'per_company' => [],
+                    ];
+                }
+                $toolMap[$key]['request_total'] += $qty;
+                $toolMap[$key]['request_max'] = max($toolMap[$key]['request_max'], $qty);
+                $toolMap[$key]['per_company'][] = [
+                    'nama_perusahaan' => $row['nama_perusahaan'] ?? '-',
+                    'batch_id' => $batchIds,
+                    'jumlah_alat' => $qty,
+                ];
+            }
+
+            $companies[] = [
+                'batch_id' => $batchIds,
+                'id_mobilisasi' => $mob['id'] ?? null,
+                'nama_perusahaan' => $row['nama_perusahaan'] ?? '-',
+                'wilayah' => $row['wilayah'] ?? null,
+                'jam_mulai' => $row['jam_mulai'] ?? null,
+                'tanggal' => $row['tanggal'] ?? null,
+                'id_cabang' => $row['id_cabang'] ?? null,
+                'warna' => $row['warna'] ?? null,
+                'peralatan_request' => $perCompanyTools,
+            ];
+        }
+
+        if ($companies === []) {
+            return response()->json(['message' => 'Data jadwal tim tidak ditemukan.'], 404);
+        }
+
+        $suggested = [];
+        foreach ($toolMap as $tool) {
+            $suggested[] = [
+                'nama_alat' => $tool['nama_alat'],
+                'jumlah_alat' => max(1, (int) $tool['request_max']),
+                'request_total' => (int) $tool['request_total'],
+                'request_max' => (int) $tool['request_max'],
+                'id_kategori_peralatan' => $tool['id_kategori_peralatan'],
+                'jenis_peralatan' => $tool['jenis_peralatan'],
+                'warna' => $tool['warna'],
+                'id_cabang' => $tool['id_cabang'],
+                'per_company' => $tool['per_company'],
+            ];
+        }
+
+        $petugasKey = IoPeralatanTimService::normalizePetugasKey($petugas);
+        $savedTim = ($tanggal && $petugasKey !== '')
+            ? IoPeralatanTimService::findActive($tanggal, $petugasKey)
+            : null;
+
+        $savedAktual = null;
+        if ($savedTim && !empty($savedTim->peralatan)) {
+            $savedAktual = $savedTim->peralatan;
+        } elseif ($legacyAktual !== null) {
+            $savedAktual = $legacyAktual;
+        }
+
+        $aktual = $savedAktual !== null
+            ? JadwalMobilisasiService::normalizePeralatanList($savedAktual)
+            : array_map(function ($item) {
+                return [
+                    'nama_alat' => $item['nama_alat'],
+                    'jumlah_alat' => $item['jumlah_alat'],
+                    'id_kategori_peralatan' => $item['id_kategori_peralatan'],
+                    'jenis_peralatan' => $item['jenis_peralatan'],
+                    'warna' => $item['warna'],
+                    'id_cabang' => $item['id_cabang'],
+                ];
+            }, $suggested);
+
+        return response()->json([
+            'petugas_sampling' => $petugas,
+            'petugas_key' => $petugasKey,
+            'tanggal' => $tanggal,
+            'id_cabang' => $idCabang,
+            'cabang_ids' => array_map('intval', array_keys($cabangSet)),
+            'warna_list' => array_values(array_keys($warnaSet)),
+            'company_count' => count($companies),
+            'companies' => $companies,
+            'request_summary' => $suggested,
+            'peralatan_aktual' => $aktual,
+            'has_saved_aktual' => $savedAktual !== null,
+            'snapshots' => ($savedTim && is_array($savedTim->snapshots)) ? $savedTim->snapshots : [],
+            'storage' => 'io_peralatan_tim',
+        ]);
+    }
+
+    /**
+     * Simpan bawaan aktual peralatan level TIM + TANGGAL (bukan per PT).
+     */
+    public function updatePeralatanTim(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'batch_ids' => 'required|array|min:1',
+            'petugas_sampling' => 'nullable|string',
+            'peralatan_aktual' => 'required|array|min:1',
+            'peralatan_aktual.*.nama_alat' => 'required|string',
+            'peralatan_aktual.*.jumlah_alat' => 'required|integer|min:1',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first()], 422);
+        }
+
+        if (!Schema::hasTable('io_peralatan_tim')) {
+            return response()->json([
+                'message' => 'Tabel io_peralatan_tim belum tersedia. Jalankan migrate terlebih dahulu.',
+            ], 422);
+        }
+
+        $batchGroups = $this->normalizeBatchGroupList($request->input('batch_ids'));
+        if ($batchGroups === []) {
+            return response()->json(['message' => 'batch_ids tidak valid.'], 422);
+        }
+
+        $peralatan = JadwalMobilisasiService::normalizePeralatanList($request->input('peralatan_aktual', []));
+        if ($peralatan === []) {
+            return response()->json(['message' => 'Minimal 1 alat dengan jumlah >= 1.'], 422);
+        }
+
+        $petugas = trim((string) $request->input('petugas_sampling', ''));
+        $tanggal = null;
+        $idCabang = null;
+        $flatBatchIds = [];
+
+        foreach ($batchGroups as $batchIds) {
+            $ctxRequest = Request::create('/', 'POST', ['batch_id' => $batchIds]);
+            $row = $this->resolveJadwalContext($ctxRequest);
+            if (!$row) {
+                continue;
+            }
+            if ($petugas === '' && !empty($row['sampler'])) {
+                $petugas = trim((string) $row['sampler']);
+            }
+            if ($tanggal === null && !empty($row['tanggal'])) {
+                $tanggal = Carbon::parse($row['tanggal'])->format('Y-m-d');
+            }
+            if ($idCabang === null && !empty($row['id_cabang'])) {
+                $idCabang = (int) $row['id_cabang'];
+            }
+            if (is_array($batchIds)) {
+                foreach ($batchIds as $id) {
+                    $flatBatchIds[] = $id;
+                }
+            } else {
+                $flatBatchIds[] = $batchIds;
+            }
+        }
+
+        if ($tanggal === null || trim($petugas) === '') {
+            return response()->json([
+                'message' => 'Tanggal / petugas sampling tim tidak ditemukan.',
+            ], 422);
+        }
+
+        $record = null;
+        DB::transaction(function () use ($tanggal, $petugas, $flatBatchIds, $peralatan, $idCabang, $batchGroups, &$record) {
+            $record = IoPeralatanTimService::upsert(
+                $tanggal,
+                $petugas,
+                $flatBatchIds,
+                $peralatan,
+                $idCabang,
+                $this->karyawan
+            );
+
+            // Mirror opsional ke jadwal_mobilisasi (fallback baca lama) jika kolom masih ada.
+            if (Schema::hasColumn('jadwal_mobilisasi', 'peralatan_aktual')) {
+                JadwalMobilisasiService::syncPeralatanAktualForBatches(
+                    $batchGroups,
+                    $peralatan,
+                    $this->karyawan
+                );
+            }
+        });
+
+        return response()->json([
+            'message' => 'Peralatan bawaan aktual tim berhasil disimpan.',
+            'id' => $record->id ?? null,
+            'tanggal' => $tanggal,
+            'petugas_sampling' => $petugas,
+            'snapshots_count' => is_array($record->snapshots ?? null) ? count($record->snapshots) : 0,
+            'storage' => 'io_peralatan_tim',
+        ]);
+    }
+
+    /**
+     * Update keterangan operasional per perusahaan (1 batch / no QT → 1 jadwal_mobilisasi).
+     * Tidak mengubah peralatan.
+     */
+    public function updateKeteranganOperasional(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'batch_id' => 'required',
+            'keterangan_operasional' => 'nullable|string',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first()], 422);
+        }
+
+        if (!Schema::hasColumn('jadwal_mobilisasi', 'keterangan_operasional')) {
+            return response()->json([
+                'message' => 'Kolom keterangan_operasional belum tersedia.',
+            ], 422);
+        }
+
+        $row = $this->resolveJadwalContext($request);
+        if (!$row) {
+            return response()->json(['message' => 'Data jadwal tidak ditemukan.'], 404);
+        }
+
+        $record = JadwalMobilisasiService::findActiveRecordByBatchIds($row['batch_id']);
+        if (!$record) {
+            $now = Carbon::now()->format('Y-m-d H:i:s');
+            $normalized = JadwalMobilisasiService::normalizeBatchIds($row['batch_id']);
+            $record = JadwalMobilisasi::create([
+                'id_sampling' => $row['id_sampling'] ?? null,
+                'no_quotation' => $row['no_quotation'] ?? null,
+                'tanggal' => $row['tanggal'] ?? null,
+                'warna' => $row['warna'] ?? null,
+                'batch_id' => $normalized['csv'],
+                'batch_jadwal_ids' => $normalized['ids'],
+                'is_active' => true,
+                'status_rilis_io' => 'draft',
+                'created_by' => $this->karyawan,
+                'updated_by' => $this->karyawan,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
+        JadwalMobilisasiService::updateInformasiOperasional($record, [
+            'warna' => $record->warna,
+            'keterangan_operasional' => $request->input('keterangan_operasional', ''),
+        ], $this->karyawan);
+
+        return response()->json([
+            'message' => 'Keterangan operasional berhasil disimpan.',
+            'no_quotation' => $row['no_quotation'] ?? null,
+            'id_mobilisasi' => $record->id,
+        ]);
+    }
+
+    /**
+     * @param  mixed  $raw
+     * @return array<int, string|array>
+     */
+    private function normalizeBatchGroupList($raw): array
+    {
+        if (is_string($raw) && trim($raw) !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $raw = $decoded;
+            } else {
+                $raw = [$raw];
+            }
+        }
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($raw as $item) {
+            $normalized = JadwalMobilisasiService::normalizeBatchIds($item);
+            if (!empty($normalized['ids'])) {
+                $result[] = $normalized['csv'] !== '' ? $normalized['csv'] : $normalized['ids'];
+            }
+        }
+
+        return $result;
     }
 
     public function getNomorAlatAvailable(Request $request)
