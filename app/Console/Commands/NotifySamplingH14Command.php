@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\LogReminderSamplingCustomer;
 use App\Models\MasterKaryawan;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
@@ -12,6 +13,7 @@ use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\View;
 
 /**
@@ -28,6 +30,12 @@ use Illuminate\Support\Facades\View;
  *
  * Cron terpisah (contoh jam 15:00 WIB):
  *  0 15 * * * cd /path/lumen-v3 && php artisan sampling:notify-h14 >> /dev/null 2>&1
+ *
+ * Hasil kirim (sent/failed/skipped) dicatat di tabel log_reminder_sampling_customer.
+ * Retensi compliance ~3 bulan:
+ *  - DB log_reminder_sampling_customer
+ *  - file channel sampling_h14 (days=90)
+ *  - snapshot JSON di storage/logs/sampling_h14/snapshots
  */
 class NotifySamplingH14Command extends Command
 {
@@ -77,20 +85,19 @@ class NotifySamplingH14Command extends Command
             $this->line('Limit      : ' . $limit);
         }
 
+        $cleanup = $this->purgeOldReminderArtifacts(3);
+        if (($cleanup['db'] + $cleanup['snapshots'] + $cleanup['files']) > 0) {
+            $this->line(sprintf(
+                'Cleanup >3 bulan: db=%d | snapshots=%d | log_files=%d',
+                $cleanup['db'],
+                $cleanup['snapshots'],
+                $cleanup['files']
+            ));
+        }
+
         if ($this->option('debug')) {
             $this->printDbDebug($targetDate);
         }
-
-        $this->logger->info('START', [
-            'run_id' => $runId,
-            'mode' => $modeLabel,
-            'target_date' => $targetDate,
-            'days' => $days,
-            'dry_run' => $dryRun,
-            'test_mode' => $testMode,
-            'test_emails' => $testEmails,
-            'limit' => $limit,
-        ]);
 
         $teams = $this->fetchTeams($targetDate);
         if ($limit !== null) {
@@ -98,11 +105,6 @@ class NotifySamplingH14Command extends Command
         }
 
         $this->info('Tim ditemukan: ' . count($teams));
-        $this->logger->info('TEAMS_LOADED', [
-            'run_id' => $runId,
-            'count' => count($teams),
-            'batch_ids' => array_column($teams, 'batch_id'),
-        ]);
 
         $snapshot = $this->buildSnapshot($targetDate, $teams);
         $changes = $this->diffWithPreviousSnapshot($targetDate, $snapshot);
@@ -113,16 +115,8 @@ class NotifySamplingH14Command extends Command
             $this->line('  + added   : ' . count($changes['added']));
             $this->line('  - removed : ' . count($changes['removed']));
             $this->line('  ~ changed : ' . count($changes['changed']));
-            $this->logger->info('CHANGES_DETECTED', [
-                'run_id' => $runId,
-                'target_date' => $targetDate,
-                'added' => $changes['added'],
-                'removed' => $changes['removed'],
-                'changed' => $changes['changed'],
-            ]);
         } else {
             $this->line('Tidak ada perubahan dibanding snapshot sebelumnya (atau snapshot pertama).');
-            $this->logger->info('NO_CHANGES', ['run_id' => $runId, 'target_date' => $targetDate]);
         }
 
         $sent = 0;
@@ -136,10 +130,19 @@ class NotifySamplingH14Command extends Command
             if ($payload === null) {
                 $skipped++;
                 $this->warn("[{$no}] SKIP {$team['no_quotation']} — quotation/PIC tidak ditemukan");
-                $this->logger->warning('SKIP_NO_QUOTATION', [
+                $this->writeReminderLog([
                     'run_id' => $runId,
-                    'no_quotation' => $team['no_quotation'],
-                    'batch_id' => $team['batch_id'],
+                    'mode' => $modeLabel,
+                    'is_dry_run' => $dryRun,
+                    'target_date' => $targetDate,
+                    'jadwal_tanggal' => $team['jadwal_tanggal'] ?? null,
+                    'no_quotation' => $team['no_quotation'] ?? null,
+                    'batch_id' => $team['batch_id'] ?? null,
+                    'nama_perusahaan' => $team['nama_perusahaan'] ?? null,
+                    'status' => 'skipped',
+                    'email_status' => 'skipped',
+                    'portal_status' => 'skipped',
+                    'error_message' => 'quotation/PIC tidak ditemukan',
                 ]);
                 continue;
             }
@@ -148,45 +151,69 @@ class NotifySamplingH14Command extends Command
             $body = $this->buildBody($payload);
             $recipients = $this->resolveRecipients($payload, $testEmails);
             $portalUsers = $this->resolvePortalUsers($recipients['to']);
+            $portalUserMeta = array_map(function ($u) {
+                return ['id' => $u->id, 'email' => $u->email];
+            }, $portalUsers);
 
             $this->line("[{$no}] {$payload['no_quotation']} | {$payload['no_order']} | {$payload['nama_perusahaan']}");
             $this->line('     TO: ' . implode(', ', $recipients['to']));
             $this->printPortalTargets($portalUsers, $recipients['to']);
 
-            $this->logger->info('PREPARE_NOTIFY', [
-                'run_id' => $runId,
-                'no_quotation' => $payload['no_quotation'],
-                'no_order' => $payload['no_order'],
-                'batch_id' => $payload['batch_id'],
-                'jadwal_tanggal' => $payload['jadwal_tanggal'],
-                'kategori' => $payload['kategori_summary'],
-                'sampler' => $payload['sampler_list'],
-                'to' => $recipients['to'],
-                'cc' => $recipients['cc'],
-                'subject' => $subject,
-                'fingerprint' => $payload['fingerprint'],
-                'portal_users' => array_map(function ($u) {
-                    return ['id' => $u->id, 'email' => $u->email];
-                }, $portalUsers),
-            ]);
-
             if ($dryRun) {
                 $this->line('     DRY-RUN: email & portal tidak dikirim');
                 $sent++;
+                $this->writeReminderLog([
+                    'run_id' => $runId,
+                    'mode' => $modeLabel,
+                    'is_dry_run' => true,
+                    'target_date' => $targetDate,
+                    'jadwal_tanggal' => $payload['jadwal_tanggal'] ?? null,
+                    'no_quotation' => $payload['no_quotation'] ?? null,
+                    'no_order' => $payload['no_order'] ?? null,
+                    'batch_id' => $payload['batch_id'] ?? null,
+                    'nama_perusahaan' => $payload['nama_perusahaan'] ?? null,
+                    'subject' => $subject,
+                    'fingerprint' => $payload['fingerprint'] ?? null,
+                    'status' => 'dry_run',
+                    'email_status' => 'dry_run',
+                    'portal_status' => 'dry_run',
+                    'email_to' => $recipients['to'],
+                    'portal_users' => $portalUserMeta,
+                    'meta' => [
+                        'kategori' => $payload['kategori_summary'] ?? null,
+                        'sampler' => $payload['sampler_list'] ?? null,
+                    ],
+                ]);
                 continue;
             }
 
             if ($recipients['to'] === []) {
                 $skipped++;
                 $this->warn('     SKIP: tidak ada email tujuan valid');
-                $this->logger->warning('SKIP_NO_RECIPIENT', [
+                $this->writeReminderLog([
                     'run_id' => $runId,
-                    'no_quotation' => $payload['no_quotation'],
+                    'mode' => $modeLabel,
+                    'is_dry_run' => false,
+                    'target_date' => $targetDate,
+                    'jadwal_tanggal' => $payload['jadwal_tanggal'] ?? null,
+                    'no_quotation' => $payload['no_quotation'] ?? null,
+                    'no_order' => $payload['no_order'] ?? null,
+                    'batch_id' => $payload['batch_id'] ?? null,
+                    'nama_perusahaan' => $payload['nama_perusahaan'] ?? null,
+                    'subject' => $subject,
+                    'fingerprint' => $payload['fingerprint'] ?? null,
+                    'status' => 'skipped',
+                    'email_status' => 'skipped',
+                    'portal_status' => 'skipped',
+                    'error_message' => 'tidak ada email tujuan valid',
                 ]);
                 continue;
             }
 
             $emailOk = false;
+            $emailStatus = 'failed';
+            $emailError = null;
+            $emailException = null;
             try {
                 $ok = SendEmail::where('to', $recipients['to'][0])
                     ->where('cc', array_slice($recipients['to'], 1))
@@ -199,40 +226,68 @@ class NotifySamplingH14Command extends Command
 
                 if ($ok) {
                     $emailOk = true;
+                    $emailStatus = 'sent';
                     $this->info('     EMAIL SENT');
-                    $this->logger->info('EMAIL_SENT', [
-                        'run_id' => $runId,
-                        'no_quotation' => $payload['no_quotation'],
-                        'to' => $recipients['to'],
-                    ]);
                 } else {
+                    $emailError = 'send()=false';
                     $this->error('     EMAIL FAILED send()=false');
-                    $this->logger->error('EMAIL_FAILED', [
-                        'run_id' => $runId,
-                        'no_quotation' => $payload['no_quotation'],
-                    ]);
                 }
             } catch (\Throwable $e) {
-                $this->error('     EMAIL FAILED: ' . $e->getMessage());
-                $this->logger->error('EMAIL_EXCEPTION', [
-                    'run_id' => $runId,
-                    'no_quotation' => $payload['no_quotation'],
-                    'message' => $e->getMessage(),
-                ]);
+                $emailException = $this->serializeThrowable($e);
+                $emailError = $emailException['summary'] ?? $e->getMessage();
+                $this->error('     EMAIL FAILED: ' . $emailError);
             }
 
-            $portalOk = $this->sendPortalNotifications($portalUsers, $payload, $runId);
+            $portalResult = $this->sendPortalNotifications($portalUsers, $payload, $runId);
+            $portalOk = !empty($portalResult['ok']);
+            $portalStatus = $portalResult['status'] ?? ($portalOk ? 'sent' : 'failed');
+
+            $errors = array_values(array_filter([
+                $emailError ? ('email: ' . $emailError) : null,
+                !empty($portalResult['error']) ? ('portal: ' . $portalResult['error']) : null,
+            ]));
 
             if ($emailOk || $portalOk) {
                 $sent++;
+                $overall = 'sent';
             } else {
                 $failed++;
+                $overall = 'failed';
             }
+
+            $this->writeReminderLog([
+                'run_id' => $runId,
+                'mode' => $modeLabel,
+                'is_dry_run' => false,
+                'target_date' => $targetDate,
+                'jadwal_tanggal' => $payload['jadwal_tanggal'] ?? null,
+                'no_quotation' => $payload['no_quotation'] ?? null,
+                'no_order' => $payload['no_order'] ?? null,
+                'batch_id' => $payload['batch_id'] ?? null,
+                'nama_perusahaan' => $payload['nama_perusahaan'] ?? null,
+                'subject' => $subject,
+                'fingerprint' => $payload['fingerprint'] ?? null,
+                'status' => $overall,
+                'email_status' => $emailStatus,
+                'portal_status' => $portalStatus,
+                'email_to' => $recipients['to'],
+                'portal_users' => $portalUserMeta,
+                'error_message' => $errors !== [] ? implode(' | ', $errors) : null,
+                'meta' => [
+                    'kategori' => $payload['kategori_summary'] ?? null,
+                    'sampler' => $payload['sampler_list'] ?? null,
+                    'portal_detail' => $portalResult['details'] ?? null,
+                    'email_exception' => $emailException,
+                    'portal_exceptions' => $portalResult['exceptions'] ?? null,
+                    'related_files' => $this->collectRelatedFiles([
+                        $emailException,
+                        $portalResult['exceptions'] ?? null,
+                    ]),
+                ],
+            ]);
         }
 
-        $summary = compact('sent', 'skipped', 'failed') + ['total' => count($teams)];
         $this->info('Selesai. sent=' . $sent . ' skipped=' . $skipped . ' failed=' . $failed);
-        $this->logger->info('FINISH', ['run_id' => $runId, 'summary' => $summary, 'mode' => $modeLabel]);
 
         return $failed > 0 ? self::FAILURE : self::SUCCESS;
     }
@@ -427,7 +482,7 @@ class NotifySamplingH14Command extends Command
 
         $sales = null;
         if (!empty($quotation->sales_id)) {
-            $sales = MasterKaryawan::where('id', $quotation->sales_id)->first();
+            $sales = MasterKaryawan::where('id', $quotation->sales_id)->where('is_active', 1)->first();
         }
 
         $payload = array_merge($team, [
@@ -648,16 +703,18 @@ class NotifySamplingH14Command extends Command
 
     /**
      * @param  \App\Models\customer\Users[]  $portalUsers
+     * @return array{ok:bool,status:string,error:?string,details:array}
      */
-    private function sendPortalNotifications(array $portalUsers, array $payload, string $runId): bool
+    private function sendPortalNotifications(array $portalUsers, array $payload, string $runId): array
     {
         if ($portalUsers === []) {
             $this->warn('     PORTAL SKIP: tidak ada akun portal yang cocok');
-            $this->logger->warning('PORTAL_SKIP_NO_USER', [
-                'run_id' => $runId,
-                'no_quotation' => $payload['no_quotation'] ?? null,
-            ]);
-            return false;
+            return [
+                'ok' => false,
+                'status' => 'skipped',
+                'error' => 'tidak ada akun portal yang cocok',
+                'details' => [],
+            ];
         }
 
         $service = app(PortalNotificationService::class);
@@ -671,37 +728,251 @@ class NotifySamplingH14Command extends Command
         ];
 
         $anyOk = false;
+        $details = [];
+        $errors = [];
+        $exceptions = [];
+
         foreach ($portalUsers as $user) {
             $extra['customer_name'] = $user->nama_lengkap ?? $user->name ?? $user->nama ?? null;
-            $result = $service->send($user->id, 'sampling_h14', $extra);
+            try {
+                $result = $service->send($user->id, 'sampling_h14', $extra);
+            } catch (\Throwable $e) {
+                $serialized = $this->serializeThrowable($e);
+                $result = [
+                    'status' => 'error',
+                    'message' => $serialized['summary'] ?? $e->getMessage(),
+                    'exception' => $serialized,
+                ];
+            }
             $status = $result['status'] ?? 'error';
+            $exceptionPayload = $result['exception'] ?? null;
+
+            $detail = [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'status' => $status,
+                'expo' => !empty($result['expo']),
+                'message' => $result['message'] ?? null,
+                'exception' => $exceptionPayload,
+            ];
+            $details[] = $detail;
+            if ($exceptionPayload) {
+                $exceptions[] = [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'exception' => $exceptionPayload,
+                ];
+            }
 
             if (in_array($status, ['success', 'skipped'], true)) {
                 $anyOk = true;
                 $expoLabel = !empty($result['expo']) ? 'expo=yes' : 'expo=no';
                 $this->info('     PORTAL SENT id=' . $user->id . ' (' . $status . ', ' . $expoLabel . ' → web+mobile)');
-                $this->logger->info('PORTAL_SENT', [
-                    'run_id' => $runId,
-                    'no_quotation' => $payload['no_quotation'] ?? null,
-                    'user_id' => $user->id,
-                    'email' => $user->email,
-                    'status' => $status,
-                    'expo' => !empty($result['expo']),
-                    'message' => $result['message'] ?? null,
-                ]);
             } else {
-                $this->error('     PORTAL FAILED id=' . $user->id . ': ' . ($result['message'] ?? 'unknown'));
-                $this->logger->error('PORTAL_FAILED', [
-                    'run_id' => $runId,
-                    'no_quotation' => $payload['no_quotation'] ?? null,
-                    'user_id' => $user->id,
-                    'email' => $user->email,
-                    'result' => $result,
-                ]);
+                $msg = $result['message'] ?? 'unknown';
+                if (!empty($exceptionPayload['summary'])) {
+                    $msg = $exceptionPayload['summary'];
+                }
+                $errors[] = 'id=' . $user->id . ' ' . $msg;
+                $this->error('     PORTAL FAILED id=' . $user->id . ': ' . $msg);
             }
         }
 
-        return $anyOk;
+        return [
+            'ok' => $anyOk,
+            'status' => $anyOk ? 'sent' : 'failed',
+            'error' => $errors !== [] ? implode('; ', $errors) : null,
+            'details' => $details,
+            'exceptions' => $exceptions,
+        ];
+    }
+
+    /**
+     * Serialisasi exception sampai previous/root + file/line/trace terkait.
+     */
+    private function serializeThrowable(\Throwable $exception, int $maxFrames = 25): array
+    {
+        $base = rtrim((string) base_path(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        $relative = static function (?string $path) use ($base): ?string {
+            if ($path === null || $path === '') {
+                return $path;
+            }
+            if (strpos($path, $base) === 0) {
+                return substr($path, strlen($base));
+            }
+            return $path;
+        };
+
+        $chain = [];
+        $current = $exception;
+        $guard = 0;
+        while ($current instanceof \Throwable && $guard < 10) {
+            $frames = [];
+            foreach (array_slice($current->getTrace(), 0, $maxFrames) as $frame) {
+                $frames[] = [
+                    'file' => $relative($frame['file'] ?? null),
+                    'line' => $frame['line'] ?? null,
+                    'class' => $frame['class'] ?? null,
+                    'function' => $frame['function'] ?? null,
+                    'type' => $frame['type'] ?? null,
+                ];
+            }
+
+            $chain[] = [
+                'class' => get_class($current),
+                'message' => $current->getMessage(),
+                'code' => $current->getCode(),
+                'file' => $relative($current->getFile()),
+                'line' => $current->getLine(),
+                'trace' => $frames,
+            ];
+            $current = $current->getPrevious();
+            $guard++;
+        }
+
+        $root = $chain[count($chain) - 1] ?? ($chain[0] ?? []);
+
+        return [
+            'summary' => sprintf(
+                '%s: %s at %s:%s',
+                $root['class'] ?? 'Throwable',
+                $root['message'] ?? '',
+                $root['file'] ?? '-',
+                $root['line'] ?? '-'
+            ),
+            'root' => $root,
+            'chain' => $chain,
+        ];
+    }
+
+    /**
+     * Kumpulkan daftar unik file yang muncul di exception chain/trace.
+     */
+    private function collectRelatedFiles($blobs): array
+    {
+        $files = [];
+        $walk = function ($node) use (&$walk, &$files) {
+            if (!is_array($node)) {
+                return;
+            }
+            if (!empty($node['file']) && is_string($node['file'])) {
+                $files[$node['file']] = true;
+            }
+            if (!empty($node['trace']) && is_array($node['trace'])) {
+                foreach ($node['trace'] as $frame) {
+                    if (!empty($frame['file']) && is_string($frame['file'])) {
+                        $files[$frame['file']] = true;
+                    }
+                }
+            }
+            if (!empty($node['root']) && is_array($node['root'])) {
+                $walk($node['root']);
+            }
+            if (!empty($node['chain']) && is_array($node['chain'])) {
+                foreach ($node['chain'] as $item) {
+                    $walk($item);
+                }
+            }
+            if (!empty($node['exception']) && is_array($node['exception'])) {
+                $walk($node['exception']);
+            }
+            foreach ($node as $value) {
+                if (is_array($value)) {
+                    $walk($value);
+                }
+            }
+        };
+
+        if (is_array($blobs)) {
+            foreach ($blobs as $blob) {
+                $walk($blob);
+            }
+        } else {
+            $walk($blobs);
+        }
+
+        $list = array_keys($files);
+        sort($list);
+        return $list;
+    }
+
+    /**
+     * Bersihkan artefak reminder yang lebih tua dari $months bulan (DB + snapshot + log file).
+     *
+     * @return array{db:int,snapshots:int,files:int}
+     */
+    private function purgeOldReminderArtifacts(int $months = 3): array
+    {
+        $result = ['db' => 0, 'snapshots' => 0, 'files' => 0];
+        $cutoffTs = Carbon::now('Asia/Jakarta')->subMonths(max(1, $months))->startOfDay()->getTimestamp();
+
+        if (Schema::hasTable('log_reminder_sampling_customer')) {
+            try {
+                $result['db'] = LogReminderSamplingCustomer::purgeOlderThanMonths($months);
+            } catch (\Throwable $e) {
+                $this->warn('Gagal cleanup DB log lama: ' . $e->getMessage());
+            }
+        } else {
+            $this->warn('Tabel log_reminder_sampling_customer belum ada — skip cleanup DB (jalankan migrate).');
+        }
+
+        try {
+            $snapshotDir = $this->snapshotDir();
+            foreach (glob($snapshotDir . '/target_*.json') ?: [] as $path) {
+                if (!is_file($path)) {
+                    continue;
+                }
+                $mtime = @filemtime($path);
+                if ($mtime !== false && $mtime < $cutoffTs) {
+                    if (@unlink($path)) {
+                        $result['snapshots']++;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            $this->warn('Gagal cleanup snapshot lama: ' . $e->getMessage());
+        }
+
+        try {
+            $logDir = storage_path('logs/sampling_h14');
+            foreach (glob($logDir . '/log-*.log') ?: [] as $path) {
+                if (!is_file($path)) {
+                    continue;
+                }
+                $mtime = @filemtime($path);
+                if ($mtime !== false && $mtime < $cutoffTs) {
+                    if (@unlink($path)) {
+                        $result['files']++;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            $this->warn('Gagal cleanup log file lama: ' . $e->getMessage());
+        }
+
+        return $result;
+    }
+
+    private function writeReminderLog(array $data): void
+    {
+        if (!Schema::hasTable('log_reminder_sampling_customer')) {
+            return;
+        }
+
+        try {
+            LogReminderSamplingCustomer::create($data);
+        } catch (\Throwable $e) {
+            $serialized = $this->serializeThrowable($e);
+            $this->warn('Gagal menulis log DB: ' . ($serialized['summary'] ?? $e->getMessage()));
+            if ($this->logger) {
+                $this->logger->warning('DB_LOG_WRITE_FAILED', [
+                    'message' => $e->getMessage(),
+                    'exception' => $serialized,
+                    'related_files' => $this->collectRelatedFiles($serialized),
+                    'data' => $data,
+                ]);
+            }
+        }
     }
 
     private function buildSubject(array $payload): string
@@ -872,10 +1143,5 @@ class NotifySamplingH14Command extends Command
 
         file_put_contents($path, json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         $this->line('Snapshot  : ' . $path);
-        $this->logger->info('SNAPSHOT_WRITTEN', [
-            'path' => $path,
-            'target_date' => $targetDate,
-            'count' => $snapshot['count'],
-        ]);
     }
 }
