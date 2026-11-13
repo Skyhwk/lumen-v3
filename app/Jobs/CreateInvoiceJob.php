@@ -32,13 +32,23 @@ class CreateInvoiceJob extends Job
     public function handle()
     {
         $orderHeader = OrderHeader::where('id', $this->orderHeaderId)->first();
-        $quotation = $this->getQuotation();
 
-        if (!$orderHeader || !$quotation) {
-            Log::error('CreateInvoiceJob: order header atau quotation tidak ditemukan.', [
+        if (!$orderHeader) {
+            Log::error('CreateInvoiceJob: order header tidak ditemukan.', [
+                'order_header_id' => $this->orderHeaderId,
+            ]);
+            return;
+        }
+
+        $quotation = $this->resolveQuotation($orderHeader);
+
+        if (!$quotation) {
+            Log::error('CreateInvoiceJob: quotation tidak ditemukan atau tidak cocok dengan order.', [
                 'order_header_id' => $this->orderHeaderId,
                 'quotation_type' => $this->quotationType,
                 'quotation_id' => $this->quotationId,
+                'no_order' => $orderHeader->no_order,
+                'no_document' => $orderHeader->no_document,
             ]);
             return;
         }
@@ -87,13 +97,81 @@ class CreateInvoiceJob extends Job
         }
     }
 
-    private function getQuotation()
+    /**
+     * Quotation harus di-resolve dari no_document order, bukan id saja (id bisa bentrok antar tabel).
+     */
+    private function resolveQuotation(OrderHeader $orderHeader)
     {
-        if ($this->quotationType === 'kontrak') {
-            return QuotationKontrakH::with('detail')->where('id', $this->quotationId)->first();
+        $isKontrak = $this->quotationType === 'kontrak'
+            || $this->isKontrakDocument($orderHeader->no_document);
+
+        if ($isKontrak) {
+            $quotation = QuotationKontrakH::with('detail')
+                ->where('no_document', $orderHeader->no_document)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$quotation && $this->quotationId) {
+                $byId = QuotationKontrakH::with('detail')->where('id', $this->quotationId)->first();
+                if ($byId && $byId->no_document === $orderHeader->no_document) {
+                    $quotation = $byId;
+                }
+            }
+        } else {
+            $quotation = QuotationNonKontrak::where('no_document', $orderHeader->no_document)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$quotation && $this->quotationId) {
+                $byId = QuotationNonKontrak::where('id', $this->quotationId)->first();
+                if ($byId && $byId->no_document === $orderHeader->no_document) {
+                    $quotation = $byId;
+                }
+            }
         }
 
-        return QuotationNonKontrak::where('id', $this->quotationId)->first();
+        if (!$quotation) {
+            return null;
+        }
+
+        if (!$this->quotationMatchesOrder($orderHeader, $quotation)) {
+            Log::error('CreateInvoiceJob: quotation tidak match dengan order header.', [
+                'no_order' => $orderHeader->no_order,
+                'order_no_document' => $orderHeader->no_document,
+                'order_pelanggan' => $orderHeader->id_pelanggan,
+                'quotation_no_document' => $quotation->no_document,
+                'quotation_pelanggan' => $quotation->pelanggan_ID,
+                'quotation_id' => $quotation->id,
+                'quotation_type' => $this->quotationType,
+            ]);
+            return null;
+        }
+
+        return $quotation;
+    }
+
+    private function isKontrakDocument(?string $noDocument): bool
+    {
+        if ($noDocument === null || $noDocument === '') {
+            return false;
+        }
+
+        $parts = explode('/', $noDocument);
+
+        return isset($parts[1]) && $parts[1] === 'QTC';
+    }
+
+    private function quotationMatchesOrder(OrderHeader $orderHeader, $quotation): bool
+    {
+        if ($quotation->no_document !== $orderHeader->no_document) {
+            return false;
+        }
+
+        if ((string) $quotation->pelanggan_ID !== (string) $orderHeader->id_pelanggan) {
+            return false;
+        }
+
+        return true;
     }
 
     private function createDefaultInvoices($orderHeader, $quotation)
@@ -222,7 +300,7 @@ class CreateInvoiceJob extends Job
             'periode' => $periodeInvoice,
             'no_order' => $orderHeader->no_order,
             'nama_perusahaan' => $namaPerusahaan,
-            'pelanggan_id' => $quotation->pelanggan_ID,
+            'pelanggan_id' => $orderHeader->id_pelanggan,
             'no_invoice' => $noInvoice,
             'faktur_pajak' => null,
             'no_faktur' => null,

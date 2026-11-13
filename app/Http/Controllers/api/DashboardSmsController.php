@@ -653,12 +653,21 @@ class DashboardSmsController extends Controller
     }
 
     public function yearlyComparison(Request $request){
+        if ($request->filled('mode') || $request->filled('karyawan_id')) {
+            $this->assertDashboardSelectionAllowed($request);
+        }
+
+        $salesIds = $this->resolveDashboardSalesIds($request);
+        if (!is_array($salesIds) || count($salesIds) === 0) {
+            $salesIds = [];
+        }
+
         $years = [
             ($request->year - 1),
             $request->year,
         ];
 
-        $allKpiBar = SalesKpi::where(function ($q) use ($years) {
+        $allKpiBarQuery = SalesKpi::where(function ($q) use ($years) {
             foreach ($years as $yr) {
                 $q->orWhere('periode', 'like', $yr . '-%');
             }
@@ -668,7 +677,15 @@ class DashboardSmsController extends Controller
                 SUM(revenue_order_nonkontrak_exist) as revenue_order_nonkontrak_exist,
                 SUM(revenue_order_kontrak_new) as revenue_order_kontrak_new,
                 SUM(revenue_order_kontrak_exist) as revenue_order_kontrak_exist
-            ')
+            ');
+
+        if (count($salesIds) > 0) {
+            $allKpiBarQuery->whereIn('karyawan_id', $salesIds);
+        } else {
+            $allKpiBarQuery->whereRaw('1 = 0');
+        }
+
+        $allKpiBar = $allKpiBarQuery
             ->groupBy('periode')
             ->get()
             ->keyBy('periode');

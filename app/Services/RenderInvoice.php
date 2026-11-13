@@ -472,95 +472,260 @@ class RenderInvoice
                         ');
                     } else {
                         if (is_array($cekArray)) { // kondisi array
-                            $tambah = self::ivInvoiceExtraRowCount($values);
                             $resetData = reset($cekArray);
                             $usingData = (isset($resetData->data_sampling) && is_array($resetData->data_sampling))
                                 ? $resetData->data_sampling
                                 : $cekArray;
-                            $chunks = self::chunkByContentHeight($usingData, $tambah);
-                            for ($i = 0; $i < count($chunks); $i++) {
-                                foreach ($chunks[$i] as $keys => $dataSampling) {
+                            for ($i = 0; $i < count(array_chunk($usingData, 15)); $i++) {
+                                foreach (array_chunk($usingData, 15)[$i] as $keys => $dataSampling) {
                                     if ($keys == 0) {
-                                        if ($i == count($chunks) - 1) {
-                                            $rowspan = count($chunks[$i]) + 1 + $tambah;
+                                        if ($i == count(array_chunk($usingData, 15)) - 1) {
                                             $pdf->writeHTML(
                                                 '<tr style="border: 1px solid; font-size: 9px;">
-                                                <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
-                                                <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document . '<br/>' . ($periode ? $periode : '') . '</b></span></td>'
+                                                <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;">' . $no . '</td>
+                                                <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document . '<br/>' . ($periode ? $periode : '') . '</b></span></td>'
                                             );
                                         } else {
-                                            $rowspan = count($chunks[$i]) + 1;
+                                            $rowspan = count(array_chunk($usingData, 15)[$i]) + 1;
                                             $pdf->writeHTML(
                                                 '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
-                                                <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
-                                                <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document . '<br/>' . ($periode ? $periode : '') . '</b></span></td>'
+                                                <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;">' . $no . '</td>
+                                                <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document . '<br/>' . ($periode ? $periode : '') . '</b></span></td>'
                                             );
                                         }
                                     }
-                                    self::writeIvInvoiceSamplingRow($pdf, $dataSampling, $values, $allPeriode);
+
+                                    // dd($dataSampling);
+                                    // $kategori2 = explode("-", $dataSampling->kategori_2);
+                                    $split = explode("/", $values->no_document);
+                                    if ($split[1] == 'QTC') {
+                                        if (isset($dataSampling->keterangan_pengujian)) {
+                                            $totalBiayaQt += $dataSampling->harga_total;
+                                        } else {
+                                            $totalBiayaQt += $allPeriode ? $dataSampling->harga_satuan * ($dataSampling->jumlah_titik) * (count($dataSampling->periode)) : $dataSampling->harga_satuan * ($dataSampling->jumlah_titik);
+                                        }
+                                    } else {
+                                        $totalBiayaQt += $dataSampling->harga_total;
+                                    }
                                 }
 
-                                $isLastElement = $i == count($chunks) - 1;
+                                $isLastElement = $i == count(array_chunk($usingData, 15)) - 1;
+
                                 if ($isLastElement) {
-                                    self::writeIvInvoiceExtraRows($pdf, $values);
-                                }
-                            }
+                                    if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
+                                        // dump('Transport', $values->harga_transportasi_total);
+                                        $totalBiayaQt += $values->harga_transportasi_total;
+                                    }
 
-                            if (empty($chunks)) {
-                                $tambah = max(1, self::ivInvoiceExtraRowCount($values));
-                                $pdf->writeHTML(
-                                    '<tr style="border: 1px solid; font-size: 9px;">
-                                                <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $tambah . '">' . $no . '</td>
-                                                <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $tambah . '"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document . '<br/>' . ($periode ? $periode : '') . '</b></span></td>'
-                                );
-                                self::writeIvInvoiceExtraRows($pdf, $values);
+                                    $perdiem_24 = '';
+                                    $total_perdiem = 0;
+                                    if ($values->jam_jumlah_orang_24 > 0 && $values->jam_jumlah_orang_24 != null && $values->harga_24jam_personil_total > 0) {
+                                        $perdiem_24 = 'Termasuk Perdiem (24 Jam)';
+
+                                        // dump('penjulamlahan total Pardiem', $total_perdiem);
+                                        $total_perdiem = $total_perdiem + $values->harga_24jam_personil_total;
+                                    }
+
+                                    if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
+                                        // dd($values->satuan_perdiem, $values->harga_perdiem_personil_total);
+                                        if (isset($values->keterangan_perdiem)) {
+                                            // dump('plus biaya pardiem atas', $values->harga_perdiem_personil_total);
+                                            $totalBiayaQt += $values->harga_perdiem_personil_total;
+                                        } else {
+                                            // dump('plus biaya pardiem bawah', ($values->harga_perdiem_personil_total + $total_perdiem));
+                                            $totalBiayaQt += $values->harga_perdiem_personil_total + $total_perdiem;
+                                        }
+                                    }
+
+                                    if (isset($values->keterangan_lainnya)) {
+                                        foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
+                                            // dump('plus biaya keterangan', $ket->harga_total);
+                                            $totalBiayaQt += $ket->harga_total;
+                                        }
+                                    }
+
+                                    if ($values->biaya_lain != null && $values->biaya_lain > 0) {
+                                        if (isset($values->keterangan_biaya_lain)) {
+                                            // dump('plus biaya Lain atas', $values->biaya_lain);
+                                            $totalBiayaQt += $values->biaya_lain;
+                                        } else {
+                                            $biayaLainArray = json_decode($values->keterangan_biaya, true);
+                                            if (is_array($biayaLainArray)) {
+                                                foreach ($biayaLainArray as $biayaLain) {
+                                                    // dump('plus biaya Lain foreach', $biayaLain['harga']);
+                                                    $totalBiayaQt += $biayaLain['harga'];
+                                                }
+                                            } else {
+                                                // dump('plus biaya Lain bawah', $values->biaya_lain);
+                                                $totalBiayaQt += $values->biaya_lain;
+                                            }
+                                        }
+                                    }
+                                    $pdf->writeHTML('
+                                        <td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="5">REIMBURSEMENT BIAYA TRANSPORTASI</td>
+                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($totalBiayaQt) . '</td></tr>
+                                    ');
+                                }
                             }
                         } else { // kondisi object
+                            // dd('bawah');
                             foreach (json_decode($values->data_pendukung_sampling) as $keys => $dataSampling) {
-                                if (!isset($dataSampling->data_sampling) || !is_array($dataSampling->data_sampling)) {
-                                    continue;
+
+                                $tambah = 0;
+
+                                if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
+                                    $tambah = $tambah + 1;
                                 }
 
-                                $tambah = self::ivInvoiceExtraRowCount($values);
-                                $chunks = self::chunkByContentHeight($dataSampling->data_sampling, $tambah);
-
-                                if ($values->periode != null && $values->periode != '' && $values->periode != 'all' && $values->periode != 'null') {
-                                    $pr = self::tanggal_indonesia($values->periode, 'period');
-                                } else {
-                                    $pr = $periode ?: '';
+                                if ($values->harga_perdiem_personil_total > 0 && $values->harga_perdiem_personil_total != null) {
+                                    $tambah = $tambah + 1;
                                 }
 
-                                $no_order_render_now = '';
-                                for ($i = 0; $i < count($chunks); $i++) {
-                                    foreach ($chunks[$i] as $key => $datasp) {
+                                if ($values->biaya_lain != null) {
+                                    $tambah = $tambah + count(json_decode($values->biaya_lain));
+                                }
+
+                                if (isset($values->biaya_preparasi) && $values->biaya_preparasi != "[]") {
+                                    $tambah = $tambah + 1;
+                                }
+
+                                if (isset($values->keterangan_lainnya)) {
+                                    $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
+                                }
+                                //cek ada berapa pengujian, jika lebih dari 17 pengujian maka akan add page baru
+                                for ($i = 0; $i < count(array_chunk($dataSampling->data_sampling, 15)); $i++) {
+
+                                    foreach (array_chunk($dataSampling->data_sampling, 15)[$i] as $key => $datasp) {
+
+                                        if ($values->periode != null) {
+                                            $pr = self::tanggal_indonesia($values->periode, 'period');
+                                        } else {
+                                            $pr = "";
+                                        }
+
                                         if ($key == 0) {
-                                            $isLastChunk = $i == count($chunks) - 1;
-                                            $rowspan = $isLastChunk
-                                                ? count($chunks[$i]) + 1 + $tambah
-                                                : count($chunks[$i]) + 1;
-                                            $rowStyle = $isLastChunk
-                                                ? 'border: 1px solid; font-size: 9px;'
-                                                : 'page-break-inside: avoid; border: 1px solid; font-size: 9px;';
 
-                                            $is_order_same = $no_order_render_now === $values->no_order;
-                                            if ($is_order_same) {
-                                                $pdf->writeHTML('</tbody></table>');
-                                                $pdf->AddPage();
-                                                $pdf->writeHTML(self::ivInvoiceTableHeadHtml());
+
+                                            if ($i == count(array_chunk($dataSampling->data_sampling, 15)) - 1) {
+                                                $rowspan = count(array_chunk($dataSampling->data_sampling, 15)[$i]) + 1 + $tambah;
+
+                                                $pdf->writeHTML(
+                                                    '<tr style="border: 1px solid; font-size: 9px;">
+                                                        <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;">' . $no . '</td>
+                                                        <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
+                                                );
+                                            } else {
+                                                $rowspan = count(array_chunk($dataSampling->data_sampling, 15)[$i]) + 1;
+                                                $pdf->writeHTML(
+                                                    '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
+                                                        <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" >' . $no . '</td>
+                                                        <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" ><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
+                                                );
+                                            }
+                                        }
+
+                                        $kategori2 = explode("-", $datasp->kategori_2);
+                                        if (isset($datasp->keterangan_pengujian)) {
+                                            $keterangan_pengujian = $datasp->keterangan_pengujian;
+                                            $harga_total = $datasp->harga_total;
+                                        } else {
+                                            $keterangan_pengujian = strtoupper($kategori2[1]) . ' - ' . $datasp->total_parameter . ' Parameter';
+                                            $harga_total = $datasp->harga_satuan * $datasp->jumlah_titik;
+
+
+
+                                            if (is_string($datasp->regulasi)) {
+                                                $decodedRegulasi = json_decode($datasp->regulasi, true);
+                                                $datasp->regulasi = $decodedRegulasi ?: [];
                                             }
 
-                                            $pdf->writeHTML(
-                                                '<tr style="' . $rowStyle . '">
-                                                        <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
-                                                        <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span></td>'
-                                            );
-                                            $no_order_render_now = $values->no_order;
+                                            if (!is_array($datasp->regulasi)) {
+                                                $datasp->regulasi = [];
+                                            }
+
+                                            foreach ($datasp->regulasi as $rg => $v) {
+                                                $reg = '';
+
+                                                if ($v != '') {
+                                                    $regulasi = explode("-", $v);
+                                                    $reg = $regulasi[1];
+                                                }
+                                            }
                                         }
-                                        self::writeIvInvoiceSamplingRow($pdf, $datasp, $values, $allPeriode);
+
+                                        $totalBiayaQt += $harga_total;
                                     }
 
-                                    if ($i == count($chunks) - 1) {
-                                        self::writeIvInvoiceExtraRows($pdf, $values);
+                                    $isLastElement = $i == count(array_chunk($dataSampling->data_sampling, 15)) - 1;
+
+                                    if ($isLastElement) {
+
+                                        if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
+
+                                            if (isset($values->keterangan_transportasi)) {
+                                                $keterangan_transportasi = $values->keterangan_transportasi;
+                                            } else {
+
+                                                $keterangan_transportasi = "Transportasi - Wilayah Sampling : " . explode("-", $values->wilayah)[1];
+                                            }
+                                            $totalBiayaQt += $values->harga_transportasi_total;
+                                        }
+
+
+                                        $perdiem_24 = '';
+                                        $total_perdiem = 0;
+                                        if ($values->jam_jumlah_orang_24 > 0 && $values->jam_jumlah_orang_24 != null && $values->harga_24jam_personil_total > 0) {
+                                            $perdiem_24 = 'Termasuk Perdiem (24 Jam)';
+                                            $total_perdiem = $total_perdiem + $values->harga_24jam_personil_total;
+                                        }
+
+
+                                        if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
+                                            if (isset($values->keterangan_perdiem)) {
+                                                $keterangan_perdiem = $values->keterangan_perdiem;
+                                                $harga_perdiem = $values->harga_perdiem_personil_total;
+                                                $jml_perdiem = $values->perdiem_jumlah_orang;
+                                                if (isset($values->satuan_perdiem)) {
+                                                    $satuan_perdiem = self::rupiah($values->satuan_perdiem);
+                                                } else {
+                                                    if ($values->harga_perdiem_personil_total == 0) {
+                                                        $jml_perdiem = '';
+                                                        $satuan_perdiem = '';
+                                                        continue;
+                                                    } else {
+                                                        $sdiem = $harga_perdiem / $jml_perdiem;
+                                                        $satuan_perdiem = self::rupiah($sdiem);
+                                                    }
+                                                }
+                                            } else {
+                                                $keterangan_perdiem = "Perdiem " . $perdiem_24;
+                                                $harga_perdiem = $values->harga_perdiem_personil_total + $total_perdiem;
+                                                $jml_perdiem = '';
+                                                $satuan_perdiem = '';
+                                            }
+                                            $totalBiayaQt += $harga_perdiem;
+                                        }
+
+                                        if (isset($values->keterangan_lainnya)) {
+                                            foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
+                                                $totalBiayaQt += $ket->harga_total;
+                                            }
+                                        }
+
+                                        if ($values->biaya_lain != null) {
+                                            foreach (json_decode($values->biaya_lain) as $b => $biayaL) {
+                                                $totalBiayaQt += $biayaL->harga;
+                                            }
+                                        }
+
+                                        if (isset($values->biaya_preparasi) && $values->biaya_preparasi != "[]") {
+                                            $totalBiayaQt += $values->total_biaya_preparasi;
+                                        }
+
+                                        $pdf->writeHTML('
+                                            <td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="5">REIMBURSEMENT BIAYA TRANSPORTASI</td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($totalBiayaQt) . '</td></tr>
+                                        ');
                                     }
                                 }
                             }
@@ -2340,280 +2505,6 @@ class RenderInvoice
     {
         $hasil_rupiah = "Rp " . number_format($angka, 0, ".", ",");
         return $hasil_rupiah;
-    }
-
-    private static function ivInvoiceTableHeadHtml(): string
-    {
-        return '
-            <table style="border-collapse: collapse;">
-                <thead>
-                    <tr>
-                        <th style="font-size:10px; padding:14px; border:1px solid #000;">NO</th>
-                        <th style="font-size:10px; padding:14px; padding:5px;border:1px solid #000">NO QT</th>
-                        <th style="font-size:10px; padding:14px; border:1px solid #000;" class="text-center" colspan="5">KETERANGAN</th>
-                        <th style="font-size:10px; padding:14px; border:1px solid #000;">TOTAL HARGA</th>
-                    </tr>
-                </thead>
-                <tbody>
-        ';
-    }
-
-    private static function ivInvoiceExtraRowCount($values): int
-    {
-        $tambah = 0;
-
-        if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
-            $tambah++;
-        }
-
-        if ($values->harga_perdiem_personil_total > 0 && $values->harga_perdiem_personil_total != null) {
-            $tambah++;
-        }
-
-        if (QuotationPromoPresentation::sukaSukaInvoiceLine($values)) {
-            $tambah++;
-        }
-
-        if ($values->biaya_lain != null && $values->biaya_lain > 0) {
-            if (isset($values->keterangan_biaya_lain)) {
-                $tambah++;
-            } else {
-                $biayaLainArray = isset($values->keterangan_biaya)
-                    ? json_decode($values->keterangan_biaya, true)
-                    : (is_string($values->biaya_lain) ? json_decode($values->biaya_lain, true) : null);
-                if (is_array($biayaLainArray)) {
-                    $tambah += count($biayaLainArray);
-                } else {
-                    $tambah++;
-                }
-            }
-        }
-
-        if (isset($values->keterangan_lainnya)) {
-            $tambah += count(json_decode($values->keterangan_lainnya));
-        }
-
-        if (isset($values->biaya_preparasi) && $values->biaya_preparasi != '[]') {
-            $tambah++;
-        }
-
-        return $tambah;
-    }
-
-    private static function writeIvInvoiceSamplingRow($pdf, $dataSampling, $values, bool $allPeriode): void
-    {
-        $split = explode('/', $values->no_document);
-        $kategori2 = explode('-', $dataSampling->kategori_2 ?? '-');
-
-        if ($split[1] == 'QTC') {
-            if (isset($dataSampling->keterangan_pengujian)) {
-                $harga_total = $dataSampling->harga_total;
-                $pdf->writeHTML('
-                    <tr>
-                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="5"><span>' . $dataSampling->keterangan_pengujian . ' Parameter</span></td>
-                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($harga_total) . '</td>
-                    </tr>
-                ');
-                return;
-            }
-
-            $harga_total = $allPeriode
-                ? $dataSampling->harga_satuan * ($dataSampling->jumlah_titik) * count($dataSampling->periode ?? [])
-                : $dataSampling->harga_satuan * ($dataSampling->jumlah_titik);
-
-            $pdf->writeHTML('
-                <tr>
-                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="5"><span>' . strtoupper($kategori2[1] ?? '') . ' - ' . $dataSampling->total_parameter . ' Parameter</span><br>
-            ');
-
-            $regulasi = $dataSampling->regulasi ?? [];
-            if (is_string($regulasi)) {
-                $regulasi = json_decode($regulasi, true) ?: [];
-            }
-            if (!is_array($regulasi)) {
-                $regulasi = [];
-            }
-
-            foreach ($regulasi as $rg => $v) {
-                $reg = '';
-                if ($v != '') {
-                    $regulasiParts = explode('-', $v);
-                    $reg = $regulasiParts[1] ?? '';
-                }
-                if ($rg == 0) {
-                    $pdf->WriteHTML('<span style="font-size: 9px;">' . $reg . '</span>');
-                } else {
-                    $pdf->WriteHTML('<br><span style="font-size: 9px;">' . $reg . '</span>');
-                }
-            }
-
-            $pdf->writeHTML('
-                    </td>
-                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($harga_total) . '</td>
-                </tr>
-            ');
-            return;
-        }
-
-        if (isset($dataSampling->keterangan_pengujian)) {
-            $harga_total = $dataSampling->harga_total;
-            $pdf->writeHTML('
-                <tr>
-                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="5"><span>' . $dataSampling->keterangan_pengujian . '</span></td>
-                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($harga_total) . '</td>
-                </tr>
-            ');
-            return;
-        }
-
-        $harga_total = $dataSampling->harga_total ?? ($dataSampling->harga_satuan * $dataSampling->jumlah_titik);
-        $pdf->writeHTML('
-            <tr>
-                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="5"><span>' . strtoupper($kategori2[1] ?? '') . ' - ' . $dataSampling->total_parameter . ' Parameter</span><br>
-        ');
-
-        $regulasi = $dataSampling->regulasi ?? [];
-        if (is_string($regulasi)) {
-            $regulasi = json_decode($regulasi, true) ?: [];
-        }
-        if (!is_array($regulasi)) {
-            $regulasi = [];
-        }
-
-        foreach ($regulasi as $rg => $v) {
-            $reg = '';
-            if ($v != '') {
-                $regulasiParts = explode('-', $v);
-                $reg = $regulasiParts[1] ?? '';
-            }
-            if ($rg == 0) {
-                $pdf->WriteHTML('<span style="font-size: 9px;">' . $reg . '</span>');
-            } else {
-                $pdf->WriteHTML('<br><span style="font-size: 9px;">' . $reg . '</span>');
-            }
-        }
-
-        $pdf->writeHTML('
-                </td>
-                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($harga_total) . '</td>
-            </tr>
-        ');
-    }
-
-    private static function writeIvInvoiceExtraRows($pdf, $values): void
-    {
-        QuotationPromoPresentation::writeSukaSukaInvoiceRowIv($pdf, $values);
-
-        if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
-            if (isset($values->keterangan_transportasi)) {
-                $ket_transportasi = $values->keterangan_transportasi;
-            } else {
-                $wilayahParts = explode('-', $values->wilayah ?? '');
-                $ket_transportasi = 'Transportasi - Wilayah Sampling : ' . ($wilayahParts[1] ?? $values->wilayah);
-            }
-
-            $pdf->writeHTML('
-                <tr>
-                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="5"><span>' . $ket_transportasi . '</span></td>
-                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total) . '</td>
-                </tr>
-            ');
-        }
-
-        $perdiem_24 = '';
-        $total_perdiem = 0;
-        if ($values->jam_jumlah_orang_24 > 0 && $values->jam_jumlah_orang_24 != null && $values->harga_24jam_personil_total > 0) {
-            $perdiem_24 = 'Termasuk Perdiem (24 Jam)';
-            $total_perdiem += $values->harga_24jam_personil_total;
-        }
-
-        if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
-            if (isset($values->keterangan_perdiem)) {
-                $ket_perdiem = $values->keterangan_perdiem;
-                $harga_perdiem = $values->harga_perdiem_personil_total;
-            } else {
-                $ket_perdiem = 'Perdiem ' . $perdiem_24;
-                $harga_perdiem = $values->harga_perdiem_personil_total + $total_perdiem;
-            }
-
-            $pdf->writeHTML('
-                <tr>
-                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="5">' . $ket_perdiem . '</td>
-                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($harga_perdiem) . '</td>
-                </tr>
-            ');
-        }
-
-        if (isset($values->keterangan_lainnya)) {
-            foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
-                $pdf->writeHTML('
-                    <tr>
-                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="5">' . $ket->deskripsi . '</td>
-                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_total) . '</td>
-                    </tr>
-                ');
-            }
-        }
-
-        if ($values->biaya_lain != null && $values->biaya_lain > 0) {
-            if (isset($values->keterangan_biaya_lain)) {
-                $pdf->writeHTML('
-                    <tr>
-                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="5">' . $values->keterangan_biaya_lain . '</td>
-                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td>
-                    </tr>
-                ');
-            } else {
-                $biayaLainArray = isset($values->keterangan_biaya)
-                    ? json_decode($values->keterangan_biaya, true)
-                    : json_decode($values->biaya_lain, true);
-
-                if (is_array($biayaLainArray)) {
-                    foreach ($biayaLainArray as $biayaLain) {
-                        $deskripsi = $biayaLain['deskripsi'] ?? 'Biaya Lain-Lain';
-                        $harga = $biayaLain['harga'] ?? 0;
-                        $pdf->writeHTML('
-                            <tr>
-                                <td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="5">' . $deskripsi . '</td>
-                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($harga) . '</td>
-                            </tr>
-                        ');
-                    }
-                } else {
-                    $pdf->writeHTML('
-                        <tr>
-                            <td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="5">Biaya Lain-Lain</td>
-                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td>
-                        </tr>
-                    ');
-                }
-            }
-        } elseif ($values->biaya_lain != null && is_string($values->biaya_lain)) {
-            foreach (json_decode($values->biaya_lain) as $b => $biayaL) {
-                $pdf->writeHTML('
-                    <tr>
-                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="5">Biaya : ' . $biayaL->deskripsi . '</td>
-                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaL->harga) . '</td>
-                    </tr>
-                ');
-            }
-        }
-
-        if (isset($values->biaya_preparasi) && $values->biaya_preparasi != '[]') {
-            $preparasi = json_decode($values->biaya_preparasi);
-            if ($preparasi) {
-                $collection = collect($preparasi);
-                $first = $collection->first();
-                if ($first) {
-                    $pdf->writeHTML('
-                        <tr>
-                            <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="5">' . ($first->Deskripsi ?? '') . '</td>
-                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->total_biaya_preparasi) . '</td>
-                        </tr>
-                    ');
-                }
-            }
-        }
     }
 
     private static function chunkByContentHeight($data, $extra_row = null)

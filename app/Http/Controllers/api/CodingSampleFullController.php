@@ -263,13 +263,13 @@ class CodingSampleFullController extends Controller
     {
         $first = $orderDetail->first();
         $dates = $orderDetail->pluck('tanggal_sampling')->filter()->unique()->sort()->values();
-        if ($dates->count() <= 1) {
-            $headerDate = Carbon::parse($dates->first() ?: $first->tanggal_sampling)->translatedFormat('d F Y');
-        } else {
-            $headerDate = Carbon::parse($dates->first())->translatedFormat('d F Y')
-                . ' - '
-                . Carbon::parse($dates->last())->translatedFormat('d F Y');
+        $headerDate = $dates->map(function ($date) {
+            return Carbon::parse($date)->translatedFormat('d F Y');
+        })->implode('<br>');
+        if ($headerDate === '') {
+            $headerDate = Carbon::parse($first->tanggal_sampling)->translatedFormat('d F Y');
         }
+        $dateFontSize = $dates->count() > 1 ? '9px' : '12px';
 
         $csParts = explode('/', $first->no_quotation);
         if (isset($csParts[1])) {
@@ -318,7 +318,7 @@ class CodingSampleFullController extends Controller
                 <tr>
                     <td class="custom1" width="200">PT INTI SURYA LABORATORIUM</td>
                     <td class="custom2" width="320">CODING SAMPLE</br><p style="text-align: center; font-size: x-small;">' . $noDocument . '</p></td>
-                    <td class="custom3">' . $headerDate . '</td>
+                    <td class="custom3" style="font-size: ' . $dateFontSize . ';">' . $headerDate . '</td>
                 </tr>
                 <tr><td colspan="3" style="padding: 2px;"></td></tr>
                 <tr>

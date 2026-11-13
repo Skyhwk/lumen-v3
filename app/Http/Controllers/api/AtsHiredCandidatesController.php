@@ -67,7 +67,8 @@ class AtsHiredCandidatesController extends Controller
                     $currentYY = Carbon::now()->year % 100;
                     return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
                 }
-            } catch (\Exception $e) {}
+            } catch (\Exception $e) {
+            }
         }
 
         if (!$ttl) return null;
@@ -730,11 +731,11 @@ class AtsHiredCandidatesController extends Controller
         $karyawan = new MasterKaryawan();
         $karyawan->created_by = $this->karyawan;
         $karyawan->created_at = $timestamp;
-        $karyawan->nama_lengkap = trim((string) (data_get($request, 'personal.nama_lengkap') ?: $recruitment->nama_lengkap));
+        $karyawan->nama_lengkap = ucwords(strtolower(trim((string) (data_get($request, 'personal.nama_lengkap') ?: $recruitment->nama_lengkap))));
         $karyawan->nik_ktp = data_get($request, 'personal.nik_ktp') ?: optional($profile)->nik_ktp;
-        $karyawan->nama_panggilan = data_get($request, 'personal.salutation') ?: optional($profile)->nama_panggilan;
+        $karyawan->nama_panggilan = ucwords(strtolower(data_get($request, 'personal.salutation') ?: optional($profile)->nama_panggilan));
         $karyawan->kebangsaan = data_get($request, 'personal.nationality', 'Indonesia');
-        $karyawan->tempat_lahir = data_get($request, 'personal.birth_place') ?: $recruitment->tempat_lahir;
+        $karyawan->tempat_lahir = ucwords(strtolower(data_get($request, 'personal.birth_place') ?: $recruitment->tempat_lahir));
         $karyawan->tanggal_lahir = data_get($request, 'personal.date_birth') ?: $recruitment->tanggal_lahir;
         $karyawan->jenis_kelamin = data_get($request, 'personal.gender') ?: $recruitment->jenis_kelamin;
         $karyawan->agama = MasterKaryawanAgamaHelper::normalize(
@@ -826,7 +827,9 @@ class AtsHiredCandidatesController extends Controller
             'keterangan_mata' => $this->normalizeKeteranganMata(data_get($request, 'medical.keterangan_mata')),
         ];
 
-        if (collect($medicalData)->filter(function ($v) { return $v !== null && $v !== ''; })->isNotEmpty()) {
+        if (collect($medicalData)->filter(function ($v) {
+            return $v !== null && $v !== '';
+        })->isNotEmpty()) {
             $medis = new MedicalCheckup();
             $medis->karyawan_id = $karyawan->id;
             $medis->tinggi_badan = $medicalData['tinggi_badan'];
@@ -1121,8 +1124,10 @@ class AtsHiredCandidatesController extends Controller
 
     private function migrateSupportingInfoAnswers($recruitmentId, $karyawanId, $timestamp): int
     {
-        if (!Schema::hasTable('candidate_supporting_info_answers')
-            || !Schema::hasTable('supporting_info_answers')) {
+        if (
+            !Schema::hasTable('candidate_supporting_info_answers')
+            || !Schema::hasTable('supporting_info_answers')
+        ) {
             return 0;
         }
 

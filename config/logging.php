@@ -71,6 +71,13 @@ return [
             'path' => storage_path('logs/sampling/log.log'),
             'level' => 'info',
         ],
+        'sampling_h14' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/sampling_h14/log.log'),
+            'level' => 'info',
+            // Samakan dengan retensi DB log_reminder_sampling_customer (~3 bulan).
+            'days' => 90,
+        ],
         'assessment_rejection' => [
             'driver' => 'daily',
             'path' => storage_path('logs/assessment_rejection/log.log'),
