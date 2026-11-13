@@ -34,4 +34,14 @@ class MasterWilayahSurat extends Sector
             'id_master_wilayah_sampling'
         );
     }
+  
+    public function sampling()
+    {
+        return $this->belongsToMany(
+            MasterWilayahSampling::class,
+            'master_wilayah_surat_sampling',
+            'master_wilayah_surat_id',
+            'id_master_wilayah_sampling'
+        );
+    }
 }
