@@ -468,6 +468,8 @@ class SamplerTrackingService
                 foreach ($group as $row) {
                     $this->deactivateSessionIfNoActiveJadwalForTeamKey($quotation, $row);
                 }
+
+                $this->deactivateOrphanSessionsForQuotationDate($quotation, $date);
             }
         }, 5);
     }
@@ -512,9 +514,12 @@ class SamplerTrackingService
 
         $stillActiveForTeam = Jadwal::where('no_quotation', $quotation)
             ->where('is_active', true)
+            ->whereDate('tanggal', $date)
             ->get()
-            ->contains(function ($jadwal) use ($teamKey) {
-                return $this->makeTeamKey($jadwal) === $teamKey;
+            ->contains(function ($jadwal) use ($teamKey, $legacyKey) {
+                return $this->makeTeamKey($jadwal) === $teamKey
+                    || $this->makeLegacyTeamKey($jadwal) === $teamKey
+                    || $this->makeTeamKey($jadwal) === $legacyKey;
             });
 
         if ($stillActiveForTeam) {
@@ -539,6 +544,47 @@ class SamplerTrackingService
             $session->save();
 
             $memberUpdate = $this->onlyExistingColumns((new SamplerTrackingMember())->getTable(), ['is_active' => false]);
+            if ($memberUpdate !== []) {
+                SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)->update($memberUpdate);
+            }
+            (new SamplerTrackingTroubleService())->deactivateForSessions([$session->id]);
+        }
+    }
+
+    protected function deactivateOrphanSessionsForQuotationDate(string $quotation, string $date): void
+    {
+        $activeJadwals = Jadwal::where('no_quotation', $quotation)
+            ->whereDate('tanggal', $date)
+            ->where('is_active', true)
+            ->get();
+
+        $activeKeys = [];
+        $activeVisits = [];
+        foreach ($activeJadwals as $jadwal) {
+            $activeKeys[$this->makeTeamKey($jadwal)] = true;
+            $activeKeys[$this->makeLegacyTeamKey($jadwal)] = true;
+            $activeVisits[$this->visitIdentity($jadwal)] = true;
+        }
+
+        $sessions = SamplerTrackingSession::where('no_quotation', $quotation)
+            ->whereDate('tanggal_sampling', $date)
+            ->where('is_active', true)
+            ->get();
+
+        $memberUpdate = $this->onlyExistingColumns((new SamplerTrackingMember())->getTable(), ['is_active' => false]);
+        foreach ($sessions as $session) {
+            $stillScheduled = isset($activeKeys[$session->team_key])
+                || isset($activeVisits[$this->visitIdentity($session)]);
+            if ($stillScheduled) {
+                continue;
+            }
+
+            SamplerTrackingHistory::append((int) $session->id, 'session_deactivated', [
+                'reason' => 'schedule_voided_orphan',
+                'before' => SamplerTrackingHistory::snapshot($session),
+            ]);
+            $session->fill($this->onlyExistingColumns($session->getTable(), ['is_active' => false]));
+            $session->save();
             if ($memberUpdate !== []) {
                 SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)->update($memberUpdate);
             }
@@ -1291,19 +1337,31 @@ class SamplerTrackingService
 
     protected function visitIdentity($row)
     {
-        $date = isset($row->tanggal_sampling) && $row->tanggal_sampling
-            ? $row->tanggal_sampling
-            : (isset($row->tanggal) && $row->tanggal ? $row->tanggal : 'date-null');
+        $rawDate = $row->tanggal_sampling ?? $row->tanggal ?? null;
+        $date = $this->normalizeScheduleDate($rawDate) ?: 'date-null';
 
         return implode('|', [
             $row->id_sampling ?: 'sampling-null',
             $row->parsial ?: 'parsial-null',
             $this->resolveOrderNumber($row) ?: ('qt:' . ($row->no_quotation ?: 'null')),
             $date,
-            $row->jam_mulai ?: 'start-null',
-            $row->jam_selesai ?: 'end-null',
+            $this->normalizeClock($row->jam_mulai ?? null, 'start-null'),
+            $this->normalizeClock($row->jam_selesai ?? null, 'end-null'),
             mb_strtolower(trim((string) ($row->nama_perusahaan ?: 'company-null'))),
         ]);
+    }
+
+    protected function normalizeClock($value, string $empty = 'time-null'): string
+    {
+        if ($value === null || $value === '') {
+            return $empty;
+        }
+
+        try {
+            return Carbon::parse($value)->format('H:i:s');
+        } catch (\Throwable $exception) {
+            return (string) $value;
+        }
     }
 
     protected function quotationRoot(?string $quotation): string
