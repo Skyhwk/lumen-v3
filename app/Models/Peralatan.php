@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-class KategoriPeralatanSampling extends Sector
+class Peralatan extends Sector
 {
-    protected $table = 'kategori_peralatan_sampling';
+    protected $table = 'peralatan';
 
     protected $guarded = ['id'];
 
@@ -16,5 +16,10 @@ class KategoriPeralatanSampling extends Sector
     public function cabang()
     {
         return $this->belongsTo(MasterCabang::class, 'id_cabang');
+    }
+
+    public function monitoring()
+    {
+        return $this->hasMany(MonitoringPeralatan::class, 'id_peralatan');
     }
 }

@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\GaAsset;
 use App\Models\JadwalMobilisasi;
 use App\Models\JadwalMobilisasiAset;
-use App\Models\KategoriPeralatanSampling;
+use App\Models\Peralatan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -306,11 +306,11 @@ class PreparasiMonitoringAlatController extends Controller
             ->filter()
             ->unique()
             ->values();
-        if ($names->isEmpty() || !class_exists(KategoriPeralatanSampling::class)) {
+        if ($names->isEmpty() || !class_exists(Peralatan::class)) {
             return [];
         }
 
-        return KategoriPeralatanSampling::query()
+        return Peralatan::query()
             ->where('is_active', true)
             ->whereIn('nama_alat', $names->all())
             ->whereNotNull('jenis_peralatan')

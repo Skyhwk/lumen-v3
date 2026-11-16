@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
-use App\Models\GaAsset;
-use App\Models\KategoriPeralatanSampling;
 use App\Models\MasterCabang;
 use App\Models\MasterKategori;
+use App\Models\MonitoringPeralatan;
+use App\Models\Peralatan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Yajra\Datatables\Datatables;
 
@@ -16,75 +17,93 @@ class PeralatanController extends Controller
 {
     public function index()
     {
-        $table = (new KategoriPeralatanSampling())->getTable();
+        $table = (new Peralatan())->getTable();
+        $monitoringTable = (new MonitoringPeralatan())->getTable();
 
-        $data = KategoriPeralatanSampling::query()
-            ->where("{$table}.is_active", true)
+        $latestMonitoring = DB::table($monitoringTable)
+            ->select('id_peralatan', DB::raw('MAX(id) as latest_id'))
+            ->where('is_active', true)
+            ->whereNotNull('id_peralatan')
+            ->groupBy('id_peralatan');
+
+        $data = Peralatan::query()
+            ->from("{$table} as p")
+            ->leftJoinSub($latestMonitoring, 'latest_mp', function ($join) {
+                $join->on('latest_mp.id_peralatan', '=', 'p.id');
+            })
+            ->leftJoin("{$monitoringTable} as mp", 'mp.id', '=', 'latest_mp.latest_id')
+            ->where('p.is_active', true)
             ->select([
-                "{$table}.id",
-                "{$table}.nama_alat",
-                "{$table}.kode_alat",
-                "{$table}.jenis_peralatan",
-                "{$table}.warna",
-                "{$table}.nama_kategori_pengujian",
-                "{$table}.id_cabang",
-                "{$table}.lokasi_penempatan_alat",
-                "{$table}.status_alat",
+                'p.id',
+                'p.nama_alat',
+                'p.kode_aset',
+                'p.jenis_peralatan',
+                'p.warna',
+                'p.nama_kategori_pengujian',
+                'p.id_cabang',
+                'p.lokasi_penempatan_alat',
+                'mp.status_alat',
+                'mp.keterangan',
+                'mp.start_date',
+                'mp.end_date',
             ])
             ->selectRaw(
                 "(
                     SELECT COUNT(*)
-                    FROM {$table} AS k2
-                    WHERE k2.is_active = 1
-                      AND k2.nama_alat = {$table}.nama_alat
-                      AND k2.jenis_peralatan <=> {$table}.jenis_peralatan
-                      AND k2.nama_kategori_pengujian <=> {$table}.nama_kategori_pengujian
-                      AND k2.warna <=> {$table}.warna
-                      AND k2.lokasi_penempatan_alat <=> {$table}.lokasi_penempatan_alat
-                      AND k2.status_alat = ?
+                    FROM {$table} AS p2
+                    LEFT JOIN (
+                        SELECT id_peralatan, MAX(id) AS latest_id
+                        FROM {$monitoringTable}
+                        WHERE is_active = 1
+                          AND id_peralatan IS NOT NULL
+                        GROUP BY id_peralatan
+                    ) AS lm2 ON lm2.id_peralatan = p2.id
+                    LEFT JOIN {$monitoringTable} AS mp2 ON mp2.id = lm2.latest_id
+                    WHERE p2.is_active = 1
+                      AND p2.nama_alat = p.nama_alat
+                      AND p2.jenis_peralatan <=> p.jenis_peralatan
+                      AND p2.nama_kategori_pengujian <=> p.nama_kategori_pengujian
+                      AND p2.warna <=> p.warna
+                      AND p2.lokasi_penempatan_alat <=> p.lokasi_penempatan_alat
+                      AND mp2.status_alat = ?
                 ) AS jumlah_alat_tersedia",
                 ['Tersedia']
             )
             ->selectRaw(
                 "(
                     SELECT COUNT(*)
-                    FROM {$table} AS k3
-                    WHERE k3.is_active = 1
-                      AND k3.nama_alat = {$table}.nama_alat
-                      AND k3.jenis_peralatan <=> {$table}.jenis_peralatan
-                      AND k3.nama_kategori_pengujian <=> {$table}.nama_kategori_pengujian
-                      AND k3.warna <=> {$table}.warna
-                      AND k3.lokasi_penempatan_alat <=> {$table}.lokasi_penempatan_alat
-                      AND (k3.status_alat IS NULL OR k3.status_alat <> ?)
+                    FROM {$table} AS p3
+                    LEFT JOIN (
+                        SELECT id_peralatan, MAX(id) AS latest_id
+                        FROM {$monitoringTable}
+                        WHERE is_active = 1
+                          AND id_peralatan IS NOT NULL
+                        GROUP BY id_peralatan
+                    ) AS lm3 ON lm3.id_peralatan = p3.id
+                    LEFT JOIN {$monitoringTable} AS mp3 ON mp3.id = lm3.latest_id
+                    WHERE p3.is_active = 1
+                      AND p3.nama_alat = p.nama_alat
+                      AND p3.jenis_peralatan <=> p.jenis_peralatan
+                      AND p3.nama_kategori_pengujian <=> p.nama_kategori_pengujian
+                      AND p3.warna <=> p.warna
+                      AND p3.lokasi_penempatan_alat <=> p.lokasi_penempatan_alat
+                      AND (mp3.status_alat IS NULL OR mp3.status_alat <> ?)
                 ) AS jumlah_alat_belum_tersedia",
                 ['Tersedia']
             )
-            ->orderBy("{$table}.nama_alat")
-            ->orderBy("{$table}.jenis_peralatan")
-            ->orderBy("{$table}.nama_kategori_pengujian")
-            ->orderBy("{$table}.warna")
-            ->orderBy("{$table}.lokasi_penempatan_alat")
-            ->orderBy("{$table}.kode_alat")
-            ->orderBy("{$table}.id");
+            ->orderBy('p.nama_alat')
+            ->orderBy('p.jenis_peralatan')
+            ->orderBy('p.nama_kategori_pengujian')
+            ->orderBy('p.warna')
+            ->orderBy('p.lokasi_penempatan_alat')
+            ->orderBy('p.kode_aset')
+            ->orderBy('p.id');
 
         return Datatables::of($data)->make(true);
     }
 
     public function getNames()
     {
-        // $data = GaAsset::query()
-        //     ->join('master_sub_kategori_aset as s', 's.id', '=', 'ga_assets.sub_kategori_aset_id')
-        //     ->where('ga_assets.is_active', true)
-        //     ->where('ga_assets.record_kind', GaAsset::RECORD_UNIT)
-        //     ->where('ga_assets.condition', 'normal')
-        //     ->whereRaw("UPPER(TRIM(s.nama_sub_kategori)) = 'SAMPLING'")
-        //     ->whereNotNull('ga_assets.name')
-        //     ->whereRaw("TRIM(ga_assets.name) <> ''")
-        //     ->selectRaw('TRIM(ga_assets.name) as name')
-        //     ->distinct()
-        //     ->orderBy('name')
-        //     ->get();
-
         $data = [];
 
         return response()->json([
@@ -102,7 +121,7 @@ class PeralatanController extends Controller
             ->whereRaw("TRIM(nama_kategori) <> ''")
             ->pluck('nama_kategori');
 
-        $fromSampling = KategoriPeralatanSampling::query()
+        $fromSampling = Peralatan::query()
             ->where('is_active', true)
             ->whereNotNull('nama_kategori_pengujian')
             ->whereRaw("TRIM(nama_kategori_pengujian) <> ''")
@@ -134,7 +153,7 @@ class PeralatanController extends Controller
 
     public function getJenis()
     {
-        $data = KategoriPeralatanSampling::query()
+        $data = Peralatan::query()
             ->where('is_active', true)
             ->whereNotNull('jenis_peralatan')
             ->whereRaw("TRIM(jenis_peralatan) <> ''")
@@ -176,6 +195,7 @@ class PeralatanController extends Controller
             $rawDetails = [];
         }
 
+        $isUpdate = $request->filled('id');
         $details = [];
         $kodeSeen = [];
         foreach ($rawDetails as $item) {
@@ -183,25 +203,49 @@ class PeralatanController extends Controller
                 continue;
             }
 
-            $kodeAlat = trim((string) ($item['kode_alat'] ?? ''));
+            $kodeAset = trim((string) ($item['kode_aset'] ?? $item['kode_alat'] ?? ''));
             $statusAlat = trim((string) ($item['status_alat'] ?? ''));
-            if ($kodeAlat === '' || $statusAlat === '') {
+            if ($kodeAset === '') {
+                continue;
+            }
+            if (!$isUpdate && $statusAlat === '') {
                 continue;
             }
 
-            $kodeKey = mb_strtolower($kodeAlat);
+            $kodeKey = mb_strtolower($kodeAset);
             if (isset($kodeSeen[$kodeKey])) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Kode alat "' . $kodeAlat . '" duplikat di form',
+                    'message' => 'Kode aset "' . $kodeAset . '" duplikat di form',
                 ], 422);
             }
             $kodeSeen[$kodeKey] = true;
 
             $details[] = [
-                'kode_alat' => $kodeAlat,
+                'kode_aset' => $kodeAset,
                 'status_alat' => $statusAlat,
+                'keterangan' => trim((string) ($item['keterangan'] ?? '')),
+                'start_date' => $this->normalizeDate($item['start_date'] ?? null),
+                'end_date' => $this->normalizeDate($item['end_date'] ?? null),
             ];
+        }
+
+        $rules = [
+            'nama_alat' => 'required|string|max:255',
+            'jenis_peralatan' => 'required|string|max:255',
+            'warna' => 'required|in:Merah,Biru,Hitam',
+            'nama_kategori_pengujian' => 'required|string|max:70',
+            'id_cabang' => 'required|integer',
+            'details' => 'required|array|min:1',
+            'details.*.kode_aset' => 'required|string|max:255',
+            'details.*.keterangan' => 'nullable|string',
+            'details.*.start_date' => 'nullable|date',
+            'details.*.end_date' => 'nullable|date',
+        ];
+        if (!$isUpdate) {
+            $rules['details.*.status_alat'] = 'required|string';
+        } else {
+            $rules['details.*.status_alat'] = 'nullable|string';
         }
 
         $validator = Validator::make(
@@ -211,16 +255,7 @@ class PeralatanController extends Controller
                 'nama_kategori_pengujian' => $namaKategori,
                 'details' => $details,
             ]),
-            [
-                'nama_alat' => 'required|string|max:255',
-                'jenis_peralatan' => 'required|string|max:255',
-                'warna' => 'required|in:Merah,Biru,Hitam',
-                'nama_kategori_pengujian' => 'required|string|max:70',
-                'id_cabang' => 'required|integer',
-                'details' => 'required|array|min:1',
-                'details.*.kode_alat' => 'required|string',
-                'details.*.status_alat' => 'required|string',
-            ]
+            $rules
         );
 
         if ($validator->fails()) {
@@ -233,7 +268,7 @@ class PeralatanController extends Controller
         if ($namaAlat === '' || $jenisPeralatan === '' || $namaKategori === '' || empty($details)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Nama alat, jenis peralatan, kategori pengujian, dan minimal satu detail kode alat wajib diisi',
+                'message' => 'Nama alat, jenis peralatan, kategori pengujian, dan minimal satu detail kode aset wajib diisi',
             ], 422);
         }
 
@@ -249,24 +284,19 @@ class PeralatanController extends Controller
             ], 404);
         }
 
-        $kodeList = array_column($details, 'kode_alat');
-        $duplicateQuery = KategoriPeralatanSampling::query()
+        $kodeList = array_column($details, 'kode_aset');
+        $duplicateQuery = Peralatan::query()
             ->where('is_active', true)
-            ->where('nama_alat', $namaAlat)
-            ->where('jenis_peralatan', $jenisPeralatan)
-            ->where('warna', $request->warna)
-            ->where('nama_kategori_pengujian', $namaKategori)
-            ->where('id_cabang', $cabang->id)
-            ->whereIn('kode_alat', $kodeList)
+            ->whereIn('kode_aset', $kodeList)
             ->when($request->filled('id'), function ($query) use ($request) {
                 $query->where('id', '!=', $request->id);
             });
 
-        $duplicateKode = $duplicateQuery->pluck('kode_alat')->all();
+        $duplicateKode = $duplicateQuery->pluck('kode_aset')->all();
         if (!empty($duplicateKode)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Kode alat ' . implode(', ', $duplicateKode) . ' dengan nama, jenis, warna, kategori, dan lokasi yang sama sudah ada',
+                'message' => 'Kode aset ' . implode(', ', $duplicateKode) . ' sudah terdaftar',
             ], 400);
         }
 
@@ -275,8 +305,8 @@ class PeralatanController extends Controller
             $now = date('Y-m-d H:i:s');
             $savedCount = 0;
 
-            if ($request->filled('id')) {
-                $row = KategoriPeralatanSampling::query()
+            if ($isUpdate) {
+                $row = Peralatan::query()
                     ->where('is_active', true)
                     ->find($request->id);
 
@@ -284,61 +314,31 @@ class PeralatanController extends Controller
                     DB::rollBack();
                     return response()->json([
                         'success' => false,
-                        'message' => 'Data kategori peralatan sampling tidak ditemukan',
+                        'message' => 'Data peralatan tidak ditemukan',
                     ], 404);
                 }
 
-                $firstDetail = array_shift($details);
-                $row->nama_alat = $namaAlat;
-                $row->kode_alat = $firstDetail['kode_alat'];
-                $row->jenis_peralatan = $jenisPeralatan;
-                $row->warna = $request->warna;
-                $row->nama_kategori_pengujian = $namaKategori;
-                $row->id_cabang = $cabang->id;
-                $row->lokasi_penempatan_alat = $cabang->nama_cabang;
-                $row->status_alat = $firstDetail['status_alat'];
+                $firstDetail = $details[0];
+                $this->fillPeralatanMaster($row, $namaAlat, $jenisPeralatan, $namaKategori, $cabang, $request->warna, $firstDetail['kode_aset']);
                 $row->updated_by = $this->karyawan;
                 $row->updated_at = $now;
                 $row->save();
-                $savedCount++;
+                $savedCount = 1;
 
-                foreach ($details as $detail) {
-                    $extraRow = new KategoriPeralatanSampling();
-                    $extraRow->nama_alat = $namaAlat;
-                    $extraRow->kode_alat = $detail['kode_alat'];
-                    $extraRow->jenis_peralatan = $jenisPeralatan;
-                    $extraRow->warna = $request->warna;
-                    $extraRow->nama_kategori_pengujian = $namaKategori;
-                    $extraRow->id_cabang = $cabang->id;
-                    $extraRow->lokasi_penempatan_alat = $cabang->nama_cabang;
-                    $extraRow->status_alat = $detail['status_alat'];
-                    $extraRow->created_by = $this->karyawan;
-                    $extraRow->created_at = $now;
-                    $extraRow->is_active = true;
-                    $extraRow->save();
-                    $savedCount++;
-                }
-
-                $message = 'Data kategori peralatan sampling berhasil diubah (' . $savedCount . ' baris)';
+                $message = 'Data peralatan berhasil diubah';
             } else {
                 foreach ($details as $detail) {
-                    $row = new KategoriPeralatanSampling();
-                    $row->nama_alat = $namaAlat;
-                    $row->kode_alat = $detail['kode_alat'];
-                    $row->jenis_peralatan = $jenisPeralatan;
-                    $row->warna = $request->warna;
-                    $row->nama_kategori_pengujian = $namaKategori;
-                    $row->id_cabang = $cabang->id;
-                    $row->lokasi_penempatan_alat = $cabang->nama_cabang;
-                    $row->status_alat = $detail['status_alat'];
+                    $row = new Peralatan();
+                    $this->fillPeralatanMaster($row, $namaAlat, $jenisPeralatan, $namaKategori, $cabang, $request->warna, $detail['kode_aset']);
                     $row->created_by = $this->karyawan;
                     $row->created_at = $now;
                     $row->is_active = true;
                     $row->save();
+                    $this->createMonitoringHistory($row->id, $detail, $now);
                     $savedCount++;
                 }
 
-                $message = 'Data kategori peralatan sampling berhasil disimpan (' . $savedCount . ' baris)';
+                $message = 'Data peralatan berhasil disimpan (' . $savedCount . ' kode aset)';
             }
 
             DB::commit();
@@ -360,25 +360,98 @@ class PeralatanController extends Controller
 
     public function delete(Request $request)
     {
-        $row = KategoriPeralatanSampling::query()
+        $row = Peralatan::query()
             ->where('is_active', true)
             ->find($request->id);
 
         if (!$row) {
             return response()->json([
                 'success' => false,
-                'message' => 'Data kategori peralatan sampling tidak ditemukan',
+                'message' => 'Data peralatan tidak ditemukan',
             ], 404);
         }
 
+        $now = date('Y-m-d H:i:s');
         $row->is_active = false;
-        $row->deleted_at = date('Y-m-d H:i:s');
+        $row->deleted_at = $now;
         $row->deleted_by = $this->karyawan;
         $row->save();
 
+        if (Schema::hasTable('monitoring_peralatan')) {
+            MonitoringPeralatan::query()
+                ->where('id_peralatan', $row->id)
+                ->where('is_active', true)
+                ->update([
+                    'is_active' => false,
+                    'deleted_at' => $now,
+                    'deleted_by' => $this->karyawan,
+                    'updated_at' => $now,
+                    'updated_by' => $this->karyawan,
+                ]);
+        }
+
         return response()->json([
             'success' => true,
-            'message' => 'Data kategori peralatan sampling berhasil dihapus',
+            'message' => 'Data peralatan berhasil dihapus',
         ]);
+    }
+
+    private function fillPeralatanMaster(
+        Peralatan $row,
+        string $namaAlat,
+        string $jenisPeralatan,
+        string $namaKategori,
+        MasterCabang $cabang,
+        $warna,
+        string $kodeAset
+    ): void {
+        $row->nama_alat = $namaAlat;
+        $row->kode_aset = $kodeAset;
+        $row->jenis_peralatan = $jenisPeralatan;
+        $row->warna = $warna;
+        $row->nama_kategori_pengujian = $namaKategori;
+        $row->id_cabang = $cabang->id;
+        $row->lokasi_penempatan_alat = $cabang->nama_cabang;
+    }
+
+    private function createMonitoringHistory(int $idPeralatan, array $detail, string $now): void
+    {
+        $history = new MonitoringPeralatan();
+        $history->id_peralatan = $idPeralatan;
+        $history->status_alat = $detail['status_alat'];
+        $history->keterangan = $detail['keterangan'] !== '' ? $detail['keterangan'] : null;
+        $history->start_date = $detail['start_date'];
+        $history->end_date = $detail['end_date'];
+        $history->is_active = true;
+        $history->created_by = $this->karyawan;
+        $history->created_at = $now;
+        $history->save();
+    }
+
+    private function normalizeDate($value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            $timestamp = (int) $value;
+            if ($timestamp > 20000000000) {
+                $timestamp = (int) floor($timestamp / 1000);
+            }
+            return date('Y-m-d', $timestamp);
+        }
+
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return null;
+        }
+
+        $timestamp = strtotime($raw);
+        if ($timestamp === false) {
+            return null;
+        }
+
+        return date('Y-m-d', $timestamp);
     }
 }
