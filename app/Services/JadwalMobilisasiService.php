@@ -715,10 +715,22 @@ class JadwalMobilisasiService
             'lokasi_penempatan_alat',
             'is_active',
         ];
+<<<<<<< HEAD
 
         $query = Peralatan::query()
             ->where('is_active', true)
             ->whereNull('deleted_at');
+=======
+        if (Schema::hasColumn('peralatan', 'status_alat')) {
+            $selectCols[] = 'status_alat';
+        }
+        if (Schema::hasColumn('peralatan', 'jumlah_alat_tersedia')) {
+            $selectCols[] = 'jumlah_alat_tersedia';
+        }
+
+        $query = Peralatan::query()
+            ->where('is_active', true);
+>>>>>>> f6302001cb585b5c181d098be33c3683a801e845
 
         if (!empty($cleanBranchIds)) {
             $query->whereIn('id_cabang', $cleanBranchIds);
@@ -764,6 +776,12 @@ class JadwalMobilisasiService
             $cabangId = $row->id_cabang !== null ? (int) $row->id_cabang : 0;
             $warnaVal = trim((string) ($row->warna ?? ''));
             $groupKey = $normName . '|' . $cabangId . '|' . strtolower($warnaVal);
+<<<<<<< HEAD
+=======
+            $rowQty = Schema::hasColumn('peralatan', 'jumlah_alat_tersedia')
+                ? max(0, (int) ($row->jumlah_alat_tersedia ?? 0))
+                : 0;
+>>>>>>> f6302001cb585b5c181d098be33c3683a801e845
 
             if (!isset($grouped[$groupKey])) {
                 $grouped[$groupKey] = [
