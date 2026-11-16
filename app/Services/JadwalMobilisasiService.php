@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\JadwalMobilisasi;
-use App\Models\KategoriPeralatanSampling;
+use App\Models\Peralatan;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Schema;
 
@@ -507,7 +507,7 @@ class JadwalMobilisasiService
     }
 
     /**
-     * Ambil daftar peralatan HANYA dari kategori_peralatan_sampling
+     * Ambil daftar peralatan HANYA dari tabel peralatan
      * (id, nama_alat, jenis_peralatan, warna, nama_kategori_pengujian, id_cabang,
      *  lokasi_penempatan_alat, status_alat, jumlah_alat_tersedia, is_active, ...),
      * plus hitung terpakai/sisa di tanggal yang sama dari jadwal_mobilisasi.
@@ -519,7 +519,7 @@ class JadwalMobilisasiService
         ?string $warna = null,
         ?string $excludePetugasKey = null
     ): array {
-        if (!Schema::hasTable('kategori_peralatan_sampling')) {
+        if (!Schema::hasTable('peralatan')) {
             return [];
         }
 
@@ -541,14 +541,14 @@ class JadwalMobilisasiService
             'lokasi_penempatan_alat',
             'is_active',
         ];
-        if (Schema::hasColumn('kategori_peralatan_sampling', 'status_alat')) {
+        if (Schema::hasColumn('peralatan', 'status_alat')) {
             $selectCols[] = 'status_alat';
         }
-        if (Schema::hasColumn('kategori_peralatan_sampling', 'jumlah_alat_tersedia')) {
+        if (Schema::hasColumn('peralatan', 'jumlah_alat_tersedia')) {
             $selectCols[] = 'jumlah_alat_tersedia';
         }
 
-        $query = KategoriPeralatanSampling::query()
+        $query = Peralatan::query()
             ->where('is_active', true);
 
         if (!empty($cleanBranchIds)) {
@@ -594,7 +594,7 @@ class JadwalMobilisasiService
             $cabangId = $row->id_cabang !== null ? (int) $row->id_cabang : 0;
             $warnaVal = trim((string) ($row->warna ?? ''));
             $groupKey = $normName . '|' . $cabangId . '|' . strtolower($warnaVal);
-            $rowQty = Schema::hasColumn('kategori_peralatan_sampling', 'jumlah_alat_tersedia')
+            $rowQty = Schema::hasColumn('peralatan', 'jumlah_alat_tersedia')
                 ? max(0, (int) ($row->jumlah_alat_tersedia ?? 0))
                 : 0;
 
