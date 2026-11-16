@@ -680,10 +680,12 @@ class JadwalMobilisasiService
     }
 
     /**
-     * Ambil daftar peralatan dari tabel `peralatan`
-     * (1 row = 1 unit aset via kode_aset).
-     * Stok = jumlah row aktif per nama_alat + cabang + warna.
-     * Pengunci stok = bawaan aktual TIM di io_peralatan_tim.
+     * Ambil daftar peralatan dari tabel `peralatan` (grouped untuk SP / katalog).
+     *
+     * Model aktif (HEAD): 1 row = 1 unit via kode_aset → stok default = jumlah row.
+     * Kompat tim (mo-aset): jika kolom jumlah_alat_tersedia ada → stok = SUM(qty),
+     * fallback ke jumlah row; status_alat ikut diekspos bila kolom tersedia.
+     * Pengunci stok = bawaan aktual TIM di io_peralatan_tim (bukan request SP).
      */
     public static function getPeralatanAvailable(
         ?string $tanggal = null,
@@ -703,11 +705,14 @@ class JadwalMobilisasiService
         }
 
         $warnaList = self::resolveWarnaFilter($warna);
+        $hasKodeAset = Schema::hasColumn('peralatan', 'kode_aset');
+        $hasStatusAlat = Schema::hasColumn('peralatan', 'status_alat');
+        $hasJumlahTersedia = Schema::hasColumn('peralatan', 'jumlah_alat_tersedia');
+        $hasDeletedAt = Schema::hasColumn('peralatan', 'deleted_at');
 
         $selectCols = [
             'id',
             'nama_alat',
-            'kode_aset',
             'jenis_peralatan',
             'warna',
             'nama_kategori_pengujian',
@@ -715,22 +720,20 @@ class JadwalMobilisasiService
             'lokasi_penempatan_alat',
             'is_active',
         ];
-<<<<<<< HEAD
-
-        $query = Peralatan::query()
-            ->where('is_active', true)
-            ->whereNull('deleted_at');
-=======
-        if (Schema::hasColumn('peralatan', 'status_alat')) {
+        if ($hasKodeAset) {
+            $selectCols[] = 'kode_aset';
+        }
+        if ($hasStatusAlat) {
             $selectCols[] = 'status_alat';
         }
-        if (Schema::hasColumn('peralatan', 'jumlah_alat_tersedia')) {
+        if ($hasJumlahTersedia) {
             $selectCols[] = 'jumlah_alat_tersedia';
         }
 
-        $query = Peralatan::query()
-            ->where('is_active', true);
->>>>>>> f6302001cb585b5c181d098be33c3683a801e845
+        $query = Peralatan::query()->where('is_active', true);
+        if ($hasDeletedAt) {
+            $query->whereNull('deleted_at');
+        }
 
         if (!empty($cleanBranchIds)) {
             $query->whereIn('id_cabang', $cleanBranchIds);
@@ -747,15 +750,19 @@ class JadwalMobilisasiService
         $rows = $query
             ->select($selectCols)
             ->orderBy('nama_alat', 'asc')
-            ->orderBy('kode_aset', 'asc')
+            ->when($hasKodeAset, function ($q) {
+                $q->orderBy('kode_aset', 'asc');
+            })
             ->get();
 
         if ($rows->isEmpty()) {
             return [];
         }
 
-        // Pengunci stok = bawaan aktual TIM di Informasi Operasional (io_peralatan_tim).
-        // Exclude hanya petugas_key saat edit bawaan tim sendiri.
+        // Pengunci stok = bawaan aktual TIM di Informasi Operasional (io_peralatan_tim),
+        // bukan request peralatan_sampling dari jadwal/SP.
+        // excludeBatchIds tidak dipakai di sini: jadwal/SP tetap harus melihat alat yang
+        // sudah dikunci tim IO. Exclude hanya untuk petugas_key (saat edit bawaan tim sendiri).
         $usedByToolKey = [];
         if ($tanggal) {
             $usedByToolKey = IoPeralatanTimService::usedQtyByTanggal(
@@ -765,7 +772,8 @@ class JadwalMobilisasiService
             );
         }
 
-        // Group: nama_alat + id_cabang + warna. Stok = jumlah unit (row) aktif.
+        // Group: nama_alat + id_cabang + warna.
+        // Stok = SUM(jumlah_alat_tersedia) jika kolom ada & > 0; else jumlah unit (row) aktif.
         $grouped = [];
         foreach ($rows as $row) {
             $namaAlat = trim((string) $row->nama_alat);
@@ -776,12 +784,9 @@ class JadwalMobilisasiService
             $cabangId = $row->id_cabang !== null ? (int) $row->id_cabang : 0;
             $warnaVal = trim((string) ($row->warna ?? ''));
             $groupKey = $normName . '|' . $cabangId . '|' . strtolower($warnaVal);
-<<<<<<< HEAD
-=======
-            $rowQty = Schema::hasColumn('peralatan', 'jumlah_alat_tersedia')
+            $rowQty = $hasJumlahTersedia
                 ? max(0, (int) ($row->jumlah_alat_tersedia ?? 0))
                 : 0;
->>>>>>> f6302001cb585b5c181d098be33c3683a801e845
 
             if (!isset($grouped[$groupKey])) {
                 $grouped[$groupKey] = [
@@ -796,22 +801,39 @@ class JadwalMobilisasiService
                     'id_cabang' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
                     'branch_id' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
                     'lokasi_penempatan_alat' => $row->lokasi_penempatan_alat,
+                    'status_alat' => $hasStatusAlat ? ($row->status_alat ?? null) : null,
                     'unit_count' => 0,
+                    'qty_sum' => 0,
                     'kode_aset_list' => [],
                 ];
             }
 
             $grouped[$groupKey]['unit_count']++;
-            $kodeAset = trim((string) ($row->kode_aset ?? ''));
-            if ($kodeAset !== '') {
-                $grouped[$groupKey]['kode_aset_list'][] = $kodeAset;
+            $grouped[$groupKey]['qty_sum'] += $rowQty;
+            if (
+                $hasStatusAlat
+                && ($row->status_alat ?? null) !== null
+                && ($row->status_alat ?? '') !== ''
+                && ($grouped[$groupKey]['status_alat'] === null || $grouped[$groupKey]['status_alat'] === '')
+            ) {
+                $grouped[$groupKey]['status_alat'] = $row->status_alat;
+            }
+
+            if ($hasKodeAset) {
+                $kodeAset = trim((string) ($row->kode_aset ?? ''));
+                if ($kodeAset !== '') {
+                    $grouped[$groupKey]['kode_aset_list'][] = $kodeAset;
+                }
             }
         }
 
         foreach ($grouped as &$item) {
             $normName = strtoupper((string) $item['nama_alat']);
             $cabangId = (int) ($item['id_cabang'] ?? 0);
-            $totalStok = max(0, (int) ($item['unit_count'] ?? 0));
+            $unitCount = max(0, (int) ($item['unit_count'] ?? 0));
+            $qtySum = max(0, (int) ($item['qty_sum'] ?? 0));
+            // Tim: pakai SUM(jumlah_alat_tersedia) bila ada; HEAD: fallback hitung unit.
+            $totalStok = $qtySum > 0 ? $qtySum : $unitCount;
             $used = (int) ($usedByToolKey[$normName . '|' . $cabangId] ?? 0);
             if ($cabangId !== 0) {
                 $used += (int) ($usedByToolKey[$normName . '|0'] ?? 0);
@@ -822,7 +844,7 @@ class JadwalMobilisasiService
             $item['terpakai'] = $used;
             $item['sisa'] = max(0, $totalStok - $used);
             $item['stok'] = $totalStok;
-            unset($item['unit_count']);
+            unset($item['unit_count'], $item['qty_sum']);
         }
         unset($item);
 
