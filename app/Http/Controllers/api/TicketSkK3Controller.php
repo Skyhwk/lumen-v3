@@ -7,6 +7,7 @@ use App\Models\Jadwal;
 use App\Models\MasterKaryawan;
 use App\Models\MasterWilayahSampling;
 use App\Models\MasterWilayahSurat;
+use App\Models\ObservasiK3;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
@@ -22,6 +23,7 @@ use App\Services\TicketSkK3SuratService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Yajra\Datatables\Datatables;
 
 class TicketSkK3Controller extends Controller
@@ -33,6 +35,8 @@ class TicketSkK3Controller extends Controller
     private const MENU_URL = '/request/ticket-sk-k3';
     private const VOIDABLE_STATUSES = ['WAITING APPROVE', 'WAITING PROCESS', 'PROCESS'];
     private const EDITABLE_STATUSES = ['WAITING APPROVE', 'WAITING PROCESS'];
+    private const BACKABLE_STATUSES = ['WAITING PROCESS', 'PROCESS', 'SCHEDULED'];
+    private const REJECTABLE_STATUSES = ['WAITING PROCESS', 'PROCESS', 'SCHEDULED'];
 
     private function isSuperAdmin(): bool
     {
@@ -66,20 +70,24 @@ class TicketSkK3Controller extends Controller
 
     private function notifyK3(string $title, string $message)
     {
-        $k3Ids = MasterKaryawan::where('id_department', self::K3_DEPARTMENT_ID)
-            ->where('is_active', true)
-            ->pluck('id')
-            ->toArray();
+        try {
+            $k3Ids = MasterKaryawan::where('id_department', self::K3_DEPARTMENT_ID)
+                ->where('is_active', true)
+                ->pluck('id')
+                ->toArray();
 
-        if (empty($k3Ids)) {
-            return;
+            if (empty($k3Ids)) {
+                return;
+            }
+
+            Notification::whereIn('id', $k3Ids)
+                ->title($title)
+                ->message($message)
+                ->url(self::MENU_URL)
+                ->send();
+        } catch (\Throwable $e) {
+            // MQTT/realtime gagal tidak boleh menggagalkan aksi ticket
         }
-
-        Notification::whereIn('id', $k3Ids)
-            ->title($title)
-            ->message($message)
-            ->url(self::MENU_URL)
-            ->send();
     }
 
     private function notifyCreator($ticket, string $title, string $message)
@@ -88,30 +96,44 @@ class TicketSkK3Controller extends Controller
             return;
         }
 
-        Notification::where('nama_lengkap', $ticket->created_by)
-            ->title($title)
-            ->message($message)
-            ->url(self::MENU_URL)
-            ->send();
+        try {
+            Notification::where('nama_lengkap', $ticket->created_by)
+                ->title($title)
+                ->message($message)
+                ->url(self::MENU_URL)
+                ->send();
+        } catch (\Throwable $e) {
+            // MQTT/realtime gagal tidak boleh menggagalkan aksi ticket
+        }
     }
 
-    private function notifyAtasan(string $title, string $message)
+    private function notifyAtasan(string $title, string $message, $namaLengkap = null)
     {
-        $atasanIds = GetAtasan::where('nama_lengkap', $this->karyawan)->get()->pluck('id');
-        if ($atasanIds->isEmpty()) {
-            return;
+        try {
+            $nama = $namaLengkap ?: $this->karyawan;
+            $atasanIds = GetAtasan::where('nama_lengkap', $nama)->get()->pluck('id');
+            if ($atasanIds->isEmpty()) {
+                return;
+            }
+
+            Notification::whereIn('id', $atasanIds)
+                ->title($title)
+                ->message($message)
+                ->url(self::MENU_URL)
+                ->send();
+        } catch (\Throwable $e) {
+            // MQTT/realtime gagal tidak boleh menggagalkan aksi ticket
+        }
+    }
+
+    private function findTicket($id, $includeInactive = false)
+    {
+        $query = TicketSkK3::where('id', $id);
+        if (!$includeInactive) {
+            $query->where('is_active', true);
         }
 
-        Notification::whereIn('id', $atasanIds)
-            ->title($title)
-            ->message($message)
-            ->url(self::MENU_URL)
-            ->send();
-    }
-
-    private function findTicket($id)
-    {
-        return TicketSkK3::where('id', $id)->where('is_active', true)->first();
+        return $query->first();
     }
 
     private function getActiveJadwal($samplingPlanId)
@@ -284,18 +306,108 @@ class TicketSkK3Controller extends Controller
         $row->save();
     }
 
-    private function baseTicketListQuery()
+    private function clearSamplerK3FromJadwal($samplingPlanId)
     {
-        if ($this->canViewAllTickets()) {
-            return TicketSkK3::with('samplingPlan.jadwal')->where('is_active', true)->orderBy('id', 'desc');
+        if (!$samplingPlanId) {
+            return;
         }
 
-        $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
+        Jadwal::where('id_sampling', $samplingPlanId)->update(['sampler_k3' => null]);
+    }
 
-        return TicketSkK3::with('samplingPlan.jadwal')
-            ->whereIn('request_by', $getBawahan)
-            ->where('is_active', true)
-            ->orderBy('id', 'desc');
+    private function deleteObservasiForTicket(TicketSkK3 $ticket)
+    {
+        if (!Schema::hasColumn('observasi_k3', 'nomor_ticket_sk_k3')) {
+            return;
+        }
+
+        $nomor = trim((string) ($ticket->nomor_ticket ?? ''));
+        if ($nomor === '') {
+            return;
+        }
+
+        $rows = ObservasiK3::where('nomor_ticket_sk_k3', $nomor)->get();
+        foreach ($rows as $obs) {
+            $fotos = $obs->foto;
+            if (is_string($fotos)) {
+                $fotos = json_decode($fotos, true);
+            }
+            if (is_array($fotos)) {
+                foreach ($fotos as $file) {
+                    $name = '';
+                    if (is_array($file)) {
+                        $name = $file['filename'] ?? $file['name'] ?? '';
+                    } else {
+                        $name = $file;
+                    }
+                    $name = basename((string) $name);
+                    if ($name === '') {
+                        continue;
+                    }
+                    $path = public_path('dokumentasi/sampling/' . $name);
+                    if (is_file($path)) {
+                        @unlink($path);
+                    }
+                }
+            }
+
+            $pdf = trim((string) ($obs->file_pengesahan_pdf ?? ''));
+            if ($pdf !== '') {
+                $pdfPath = public_path('dokumen/observasi_k3/' . basename($pdf));
+                if (is_file($pdfPath)) {
+                    @unlink($pdfPath);
+                }
+            }
+
+            $obs->delete();
+        }
+    }
+
+    private function clearTicketProcessData(TicketSkK3 $ticket)
+    {
+        $this->clearSamplerK3FromJadwal($ticket->sampling_plan_id);
+        TicketSkK3SuratService::deleteFiles($ticket);
+        $ticket->no_document_surat = null;
+        $ticket->filename_surat = null;
+        $this->deleteObservasiForTicket($ticket);
+    }
+
+    private function resetTicketToInitialRequest(TicketSkK3 $ticket)
+    {
+        $this->clearTicketProcessData($ticket);
+
+        $ticket->status = 'WAITING APPROVE';
+        $ticket->approved_by = null;
+        $ticket->approved_time = null;
+        $ticket->process_by = null;
+        $ticket->process_time = null;
+        $ticket->scheduled_by = null;
+        $ticket->scheduled_time = null;
+        $ticket->released_by = null;
+        $ticket->released_time = null;
+        $ticket->rejected_by = null;
+        $ticket->rejected_time = null;
+        $ticket->rejected_notes = null;
+        $ticket->updated_by = $this->karyawan;
+        $ticket->updated_at = Carbon::now();
+    }
+
+    private function baseTicketListQuery($statusTab = null)
+    {
+        $query = TicketSkK3::with('samplingPlan.jadwal')->orderBy('id', 'desc');
+
+        if ($statusTab === 'reject') {
+            $query->where('status', 'REJECT');
+        } else {
+            $query->where('is_active', true);
+        }
+
+        if (!$this->canViewAllTickets()) {
+            $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
+            $query->whereIn('request_by', $getBawahan);
+        }
+
+        return $query;
     }
 
     private function applyStatusTabFilter($query, ?string $statusTab)
@@ -363,7 +475,7 @@ class TicketSkK3Controller extends Controller
             $counts = [];
 
             foreach ($tabs as $tab) {
-                $query = $this->baseTicketListQuery();
+                $query = $this->baseTicketListQuery($tab);
                 $counts[$tab] = $this->applyStatusTabFilter($query, $tab)->count();
             }
 
@@ -384,7 +496,7 @@ class TicketSkK3Controller extends Controller
     {
         try {
             $data = $this->applyStatusTabFilter(
-                $this->baseTicketListQuery(),
+                $this->baseTicketListQuery($request->status_tab),
                 $request->status_tab
             );
 
@@ -1171,7 +1283,7 @@ class TicketSkK3Controller extends Controller
     public function show(Request $request)
     {
         try {
-            $data = $this->findTicket($request->id);
+            $data = $this->findTicket($request->id, true);
             if (!$data) {
                 return response()->json([
                     'success' => false,
@@ -1432,6 +1544,65 @@ class TicketSkK3Controller extends Controller
         }
     }
 
+    public function back(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            if (!$this->isK3Team() && !$this->isItProgrammingTeam()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hanya divisi K3 yang dapat mengembalikan ticket ini',
+                ], 403);
+            }
+
+            $data = $this->findTicket($request->id);
+            if (!$data) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ticket tidak ditemukan',
+                ], 404);
+            }
+
+            if (!in_array($data->status, self::BACKABLE_STATUSES, true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ticket tidak dapat di-back pada status ini',
+                ], 422);
+            }
+
+            $this->resetTicketToInitialRequest($data);
+            $data->save();
+
+            $reason = trim((string) ($request->notes ?? ''));
+            $message = 'Ticket SK K3 dikembalikan ke data awal dan menunggu approve atasan';
+            if ($reason !== '') {
+                $message .= '. Alasan: ' . $reason;
+            }
+
+            $this->notifyCreator($data, 'Ticket SK K3 Update', $message . ' oleh ' . $this->karyawan);
+            $this->notifyAtasan(
+                'Ticket SK K3 Menunggu Approve Ulang',
+                $data->nomor_ticket . ' dikembalikan ke waiting approve oleh ' . $this->karyawan . ' dan perlu disetujui ulang',
+                $data->created_by
+            );
+
+            $data->load('samplingPlan.jadwal');
+
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => 'Ticket SK K3 dikembalikan ke data awal dan menunggu approve atasan',
+                'data' => $data,
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollback();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal back Ticket SK K3: ' . $th->getMessage(),
+            ], 500);
+        }
+    }
+
     public function reject(Request $request)
     {
         DB::beginTransaction();
@@ -1451,27 +1622,34 @@ class TicketSkK3Controller extends Controller
                 ], 404);
             }
 
-            if (!in_array($data->status, ['WAITING PROCESS', 'PROCESS'], true)) {
+            if (!in_array($data->status, self::REJECTABLE_STATUSES, true)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Ticket tidak dapat direject pada status ini',
                 ], 422);
             }
 
+            $this->clearTicketProcessData($data);
             $data->status = 'REJECT';
+            $data->is_active = false;
             $data->rejected_by = $this->karyawan;
             $data->rejected_time = Carbon::now();
             $data->rejected_notes = $request->notes;
+            $data->updated_by = $this->karyawan;
+            $data->updated_at = Carbon::now();
             $data->save();
 
             $message = 'Ticket SK K3 telah direject';
             $this->notifyCreator($data, 'Ticket SK K3 Update', $message . ' oleh ' . $this->karyawan);
             TicketSkK3ConversationService::notifyConversationClosed($data, $this->karyawan);
 
+            $data->load('samplingPlan.jadwal');
+
             DB::commit();
             return response()->json([
                 'success' => true,
                 'message' => $message,
+                'data' => $data,
             ], 200);
         } catch (\Throwable $th) {
             DB::rollback();
