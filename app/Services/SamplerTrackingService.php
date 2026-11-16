@@ -1526,7 +1526,7 @@ class SamplerTrackingService
 
     protected function sessionMatchesJadwalLineage(SamplerTrackingSession $session, $jadwalFirst, bool $strict = false): bool
     {
-        if ((string) ($session->parsial ?? '') === (string) ($jadwalFirst->parsial ?? '')) {
+        if ($session->team_key && $session->team_key === $this->makeTeamKey($jadwalFirst)) {
             return true;
         }
 
@@ -1534,19 +1534,33 @@ class SamplerTrackingService
         $jadwalVehicle = trim((string) $jadwalFirst->kendaraan);
         $driver = trim((string) $session->driver);
         $jadwalDriver = trim((string) $jadwalFirst->driver);
-        if ($vehicle !== '' && $jadwalVehicle !== '' && $vehicle === $jadwalVehicle
+        $vehicleMatch = $vehicle !== '' && $jadwalVehicle !== '' && $vehicle === $jadwalVehicle;
+
+        if ($vehicleMatch
             && $driver !== '' && $jadwalDriver !== '' && $driver === $jadwalDriver) {
             return true;
         }
 
         $sessionCats = json_decode($session->kategori ?: '[]', true) ?: [];
         $jadwalCats = json_decode($this->normalizeJson($jadwalFirst->kategori) ?: '[]', true) ?: [];
-        if ($sessionCats !== [] && $jadwalCats !== []
-            && count(array_intersect($sessionCats, $jadwalCats)) > 0) {
+        $categoryMatch = $sessionCats !== [] && $jadwalCats !== []
+            && count(array_intersect($sessionCats, $jadwalCats)) > 0;
+
+        if ($categoryMatch && (!$strict || $vehicleMatch)) {
             return true;
         }
 
-        if (!$strict && (int) $session->id_sampling === (int) $jadwalFirst->id_sampling && (int) $jadwalFirst->id_sampling) {
+        if ($strict) {
+            $parsialMatch = (string) ($session->parsial ?? '') === (string) ($jadwalFirst->parsial ?? '');
+
+            return $parsialMatch && $vehicleMatch;
+        }
+
+        if ((string) ($session->parsial ?? '') === (string) ($jadwalFirst->parsial ?? '')) {
+            return true;
+        }
+
+        if ((int) $session->id_sampling === (int) $jadwalFirst->id_sampling && (int) $jadwalFirst->id_sampling) {
             return true;
         }
 
@@ -1640,8 +1654,9 @@ class SamplerTrackingService
                         ->where('is_active', true)
                         ->whereDate('tanggal', $empty->tanggal_sampling)
                         ->get()
-                        ->first(function ($row) use ($visitKey) {
-                            return $this->rescheduleVisitKey($row) === $visitKey;
+                        ->first(function ($row) use ($visitKey, $empty) {
+                            return $this->rescheduleVisitKey($row) === $visitKey
+                                && $this->sessionMatchesJadwalLineage($empty, $row, true);
                         });
                 }
 
@@ -3307,12 +3322,17 @@ public function buildTrackingRows($sessions)
                 return !$this->memberHasTrackingEvent($target->id, $eventType);
             });
 
-            if ($eventType === 'checkin' && $members->contains(function ($target) use ($activity, $member) {
-                return $this->hasOpenCheckin($this->appActivities($target), $target, $activity ?: $member->session);
-            })) {
-                throw ValidationException::withMessages([
-                    'event_type' => ['Selesaikan check out lokasi yang masih terbuka sebelum check in lokasi lain.'],
-                ]);
+            if ($eventType === 'checkin') {
+                $targetSession = $activity ?: $member->session;
+                // Teammates who are still checked in elsewhere must not receive
+                // an automatic check-in, but they also must not block the actor.
+                $members = $members->reject(function ($target) use ($member, $targetSession) {
+                    if ((string) $target->id === (string) $member->id) {
+                        return false;
+                    }
+
+                    return $this->hasOpenCheckin($this->appActivities($target), $target, $targetSession);
+                })->values();
             }
 
             $basWarning = $eventType === 'checkout' ? $this->checkoutBasWarning($member->id) : null;
