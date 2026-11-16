@@ -1386,8 +1386,9 @@ class LimsStpsController extends Controller
             // Ambil konfigurasi pengesahan yang berlaku pada tanggal STPS
             $latestPengesahan = null;
             if ($tanggal) {
-                $latestPengesahan = PengesahanDokumenSampling::orderByDesc('berlaku_mulai')
-                    ->first();
+                $latestPengesahan = PengesahanDokumenSampling::latestForType(
+                    PengesahanDokumenSampling::TYPE_SAMPLING
+                );
             }
 
             // Generate QR pengesahan hanya jika:
