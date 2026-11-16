@@ -208,7 +208,10 @@ class TicketSkK3SuratService
 
     private function buildPengujianList(TicketSkK3 $ticket, $header): array
     {
-        $names = $this->pengujianFromQuotation($ticket, $header);
+        $names = $this->pengujianFromKategoriTerpilih($ticket);
+        if (count($names) === 0) {
+            $names = $this->pengujianFromQuotation($ticket, $header);
+        }
         if (count($names) === 0) {
             $names = $this->pengujianFromOrderDetail($ticket);
         }
@@ -222,6 +225,26 @@ class TicketSkK3SuratService
             'items' => $items,
             'jumlah_titik' => count($names),
         ];
+    }
+
+    private function pengujianFromKategoriTerpilih(TicketSkK3 $ticket): array
+    {
+        $selected = TicketSkK3KategoriService::decodeSelection($ticket->kategori_terpilih ?? null);
+        $names = [];
+
+        foreach ($selected as $item) {
+            $label = is_array($item)
+                ? (string) ($item['label'] ?? $item['value'] ?? $item['code'] ?? '')
+                : (string) $item;
+            $parsed = TicketSkK3KategoriService::parseJadwalLabel($label);
+            $name = $parsed['nama'] !== '' ? $parsed['nama'] : trim($label);
+            if ($name === '') {
+                continue;
+            }
+            $names[] = $name;
+        }
+
+        return $names;
     }
 
     private function pengujianFromQuotation(TicketSkK3 $ticket, $header): array
