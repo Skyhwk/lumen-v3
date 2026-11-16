@@ -420,6 +420,7 @@ class EmployeeAdjustmentMutasiService
         $activeDate = $this->resolveActiveEffectiveDate($record);
 
         return [
+            'mutasi_under_same_manager' => self::isUnderSameManagerScope($record),
             'receiver_salary_decision' => $record->receiver_salary_decision,
             'receiver_salary_decision_label' => $this->salaryDecisionLabel($record->receiver_salary_decision),
             'receiver_adjustment_gaji' => $record->receiver_adjustment_gaji !== null

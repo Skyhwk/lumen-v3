@@ -9,5 +9,14 @@ class HistoriPrinting extends Sector
     protected $table = 'histori_printing';
     public $timestamps = false;
 
-    protected $fillable = ['filename', 'printer', 'karyawan', 'timestamp', 'printer', 'destination'];
+    protected $fillable = [
+        'filename',
+        'printer',
+        'karyawan',
+        'timestamp',
+        'status',
+        'destination',
+        'created_at',
+        'updated_at',
+    ];
 }
