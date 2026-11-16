@@ -223,7 +223,7 @@ class PeralatanController extends Controller
 
             $details[] = [
                 'kode_aset' => $kodeAset,
-                'status_alat' => $statusAlat,
+                'status_alat' => $statusAlat === '' ? null : $statusAlat,
                 'keterangan' => trim((string) ($item['keterangan'] ?? '')),
                 'start_date' => $this->normalizeDate($item['start_date'] ?? null),
                 'end_date' => $this->normalizeDate($item['end_date'] ?? null),
@@ -243,9 +243,9 @@ class PeralatanController extends Controller
             'details.*.end_date' => 'nullable|date',
         ];
         if (!$isUpdate) {
-            $rules['details.*.status_alat'] = 'required|string';
+            $rules['details.*.status_alat'] = 'required|in:' . implode(',', MonitoringPeralatan::STATUS_ALAT);
         } else {
-            $rules['details.*.status_alat'] = 'nullable|string';
+            $rules['details.*.status_alat'] = 'nullable|in:' . implode(',', MonitoringPeralatan::STATUS_ALAT);
         }
 
         $validator = Validator::make(
@@ -270,6 +270,22 @@ class PeralatanController extends Controller
                 'success' => false,
                 'message' => 'Nama alat, jenis peralatan, kategori pengujian, dan minimal satu detail kode aset wajib diisi',
             ], 422);
+        }
+
+        if (!$isUpdate) {
+            foreach ($details as $index => $detail) {
+                $needsPeriod = MonitoringPeralatan::requiresPeriod($detail['status_alat'] ?? null);
+                if ($needsPeriod && (empty($detail['start_date']) || empty($detail['end_date']))) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Tanggal mulai dan berakhir wajib diisi untuk status maintenance/kalibrasi (detail ke-' . ($index + 1) . ')',
+                    ], 422);
+                }
+                if (!$needsPeriod) {
+                    $details[$index]['start_date'] = null;
+                    $details[$index]['end_date'] = null;
+                }
+            }
         }
 
         $cabang = MasterCabang::query()
