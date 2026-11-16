@@ -39,7 +39,7 @@ use Illuminate\Support\Facades\View;
  */
 class NotifySamplingH14Command extends Command
 {
-    protected $signature = 'sampling:notify-h14
+    protected $signature = 'remindersampling
                             {--dry-run : Simulasi saja, tidak kirim email/portal}
                             {--email= : Email tujuan custom (koma). Mode test ke akun portal + email itu}
                             {--date= : Override tanggal target Y-m-d (default CURDATE+14)}
