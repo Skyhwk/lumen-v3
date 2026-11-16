@@ -110,7 +110,15 @@ class IoPeralatanTimService
             $peralatan = JadwalMobilisasiService::normalizePeralatanList($row->peralatan ?? []);
             foreach ($peralatan as $item) {
                 $namaAlat = strtoupper(trim((string) ($item['nama_alat'] ?? '')));
-                $qty = (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0);
+                $kodeList = [];
+                if (!empty($item['kode_aset_list']) && is_array($item['kode_aset_list'])) {
+                    $kodeList = array_values(array_filter(array_map(function ($k) {
+                        return trim((string) $k);
+                    }, $item['kode_aset_list'])));
+                }
+                $qty = $kodeList !== []
+                    ? count($kodeList)
+                    : (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0);
                 $itemCabang = isset($item['id_cabang']) && $item['id_cabang'] !== ''
                     ? (int) $item['id_cabang']
                     : (isset($item['branch_id']) && $item['branch_id'] !== '' ? (int) $item['branch_id'] : 0);
@@ -125,6 +133,84 @@ class IoPeralatanTimService
         }
 
         return $used;
+    }
+
+    /**
+     * Daftar kode_aset yang sudah dibawa tim lain pada rentang tanggal yang overlap.
+     * Rentang = tanggal … tanggal+(durasi-1). Durasi diambil dari jadwal batch tim tersebut.
+     *
+     * @return array{kodes: list<string>, by_kode: array<string, string>, range: array{start: string, end: string, durasi: int}}
+     */
+    public static function usedKodeAsetByTanggal(
+        string $tanggal,
+        ?string $excludePetugasKey = null,
+        int $durasi = 1
+    ): array {
+        $start = Carbon::parse($tanggal)->format('Y-m-d');
+        $durasi = max(1, $durasi);
+        $end = JadwalMobilisasiService::resolveEndDate($start, $durasi);
+        $empty = [
+            'kodes' => [],
+            'by_kode' => [],
+            'range' => ['start' => $start, 'end' => $end, 'durasi' => $durasi],
+        ];
+
+        if (!Schema::hasTable('io_peralatan_tim') || trim($tanggal) === '') {
+            return $empty;
+        }
+
+        $excludeKey = $excludePetugasKey !== null ? trim($excludePetugasKey) : '';
+        // Ambil kandidat di sekitar rentang (durasi jadwal max praktis ~8–14 hari).
+        $lookbackStart = Carbon::parse($start)->subDays(14)->format('Y-m-d');
+        $rows = IoPeralatanTim::query()
+            ->where('is_active', true)
+            ->whereDate('tanggal', '>=', $lookbackStart)
+            ->whereDate('tanggal', '<=', $end)
+            ->get(['petugas_key', 'petugas_sampling', 'peralatan', 'batch_ids', 'tanggal']);
+
+        $kodes = [];
+        $byKode = [];
+        foreach ($rows as $row) {
+            $key = (string) ($row->petugas_key ?? '');
+            if ($excludeKey !== '' && $key === $excludeKey) {
+                continue;
+            }
+
+            $rowStart = $row->tanggal
+                ? Carbon::parse($row->tanggal)->format('Y-m-d')
+                : null;
+            if ($rowStart === null) {
+                continue;
+            }
+            $rowDurasi = JadwalMobilisasiService::resolveDurasiFromBatchIds($row->batch_ids ?? []);
+            $rowEnd = JadwalMobilisasiService::resolveEndDate($rowStart, $rowDurasi);
+            if (!JadwalMobilisasiService::dateRangesOverlap($start, $end, $rowStart, $rowEnd)) {
+                continue;
+            }
+
+            $owner = trim((string) ($row->petugas_sampling ?? '')) ?: $key;
+            $peralatan = JadwalMobilisasiService::normalizePeralatanList($row->peralatan ?? []);
+            foreach ($peralatan as $item) {
+                $list = $item['kode_aset_list'] ?? [];
+                if (!is_array($list)) {
+                    continue;
+                }
+                foreach ($list as $kode) {
+                    $kode = trim((string) $kode);
+                    if ($kode === '' || isset($byKode[$kode])) {
+                        continue;
+                    }
+                    $byKode[$kode] = $owner;
+                    $kodes[] = $kode;
+                }
+            }
+        }
+
+        return [
+            'kodes' => $kodes,
+            'by_kode' => $byKode,
+            'range' => ['start' => $start, 'end' => $end, 'durasi' => $durasi],
+        ];
     }
 
     /**

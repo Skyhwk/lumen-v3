@@ -16,6 +16,7 @@ use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
 use App\Services\IoPeralatanTimService;
 use App\Services\JadwalMobilisasiService;
+use App\Services\MonitoringPeralatanService;
 use App\Services\RenderInformasiOperasionalService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -361,16 +362,58 @@ class InformasiOperasionalController extends Controller
 
     public function getPeralatanAvailable(Request $request)
     {
-        $data = JadwalMobilisasiService::getPeralatanAvailable(
-            $request->input('tanggal'),
-            $request->input('branch_id') ?? $request->input('id_cabang'),
-            $request->input('batch_id'),
+        $excludeKey = $request->input('exclude_petugas_key') ?: $request->input('petugas_key');
+        $branchId = $request->input('branch_id') ?? $request->input('id_cabang');
+        $mode = strtolower(trim((string) $request->input('mode', 'grouped')));
+
+        $batchIds = $request->input('batch_id') ?? $request->input('batch_ids');
+        // Prioritas: warna terluas dari batch jadwal (sumber kebenaran), lalu input request.
+        $warnaFromBatch = JadwalMobilisasiService::resolveWarnaFromBatchIds($batchIds);
+        $warna = JadwalMobilisasiService::resolveWidestWarna(array_filter([
+            $warnaFromBatch,
             $request->input('warna'),
-            $request->input('exclude_petugas_key') ?: $request->input('petugas_key')
-        );
+        ]));
+        $warnaAllowed = JadwalMobilisasiService::resolveWarnaFilter($warna);
+
+        $durasiReq = (int) $request->input('durasi', 0);
+        $durasi = $durasiReq > 0
+            ? $durasiReq
+            : JadwalMobilisasiService::resolveDurasiFromBatchIds($batchIds);
+        $tanggal = $request->input('tanggal');
+        $range = null;
+        if ($tanggal) {
+            $range = [
+                'start' => Carbon::parse($tanggal)->format('Y-m-d'),
+                'end' => JadwalMobilisasiService::resolveEndDate($tanggal, $durasi),
+                'durasi' => max(1, $durasi),
+            ];
+        }
+
+        if ($mode === 'units' || $mode === 'kode_aset') {
+            $data = JadwalMobilisasiService::getPeralatanUnitsAvailable(
+                $tanggal,
+                $branchId,
+                $warna,
+                $excludeKey,
+                $durasi
+            );
+        } else {
+            $data = JadwalMobilisasiService::getPeralatanAvailable(
+                $tanggal,
+                $branchId,
+                $request->input('batch_id'),
+                $warna,
+                $excludeKey
+            );
+        }
 
         return response()->json([
             'status' => true,
+            'mode' => $mode === 'units' || $mode === 'kode_aset' ? 'units' : 'grouped',
+            'warna' => $warna,
+            'warna_allowed' => $warnaAllowed,
+            'durasi' => max(1, $durasi),
+            'range' => $range,
             'data' => $data,
         ]);
     }
@@ -394,6 +437,7 @@ class InformasiOperasionalController extends Controller
         $idCabang = null;
         $warnaSet = [];
         $cabangSet = [];
+        $flatBatchIdsForDurasi = [];
 
         foreach ($batchGroups as $batchIds) {
             $ctxRequest = Request::create('/', 'POST', ['batch_id' => $batchIds]);
@@ -416,6 +460,9 @@ class InformasiOperasionalController extends Controller
             }
             if (!empty($row['warna'])) {
                 $warnaSet[strtolower(trim((string) $row['warna']))] = true;
+            }
+            foreach (JadwalMobilisasiService::flattenBatchIds($batchIds) as $bid) {
+                $flatBatchIdsForDurasi[] = $bid;
             }
 
             $mob = JadwalMobilisasiService::findActiveByBatchIds($batchIds);
@@ -516,13 +563,24 @@ class InformasiOperasionalController extends Controller
                 ];
             }, $suggested);
 
+        $warnaList = array_values(array_keys($warnaSet));
+        $warnaResolved = JadwalMobilisasiService::resolveWidestWarna($warnaList);
+        $durasi = JadwalMobilisasiService::resolveDurasiFromBatchIds($flatBatchIdsForDurasi);
+        $tanggalEnd = $tanggal
+            ? JadwalMobilisasiService::resolveEndDate($tanggal, $durasi)
+            : null;
+
         return response()->json([
             'petugas_sampling' => $petugas,
             'petugas_key' => $petugasKey,
             'tanggal' => $tanggal,
+            'tanggal_end' => $tanggalEnd,
+            'durasi' => $durasi,
             'id_cabang' => $idCabang,
             'cabang_ids' => array_map('intval', array_keys($cabangSet)),
-            'warna_list' => array_values(array_keys($warnaSet)),
+            'warna_list' => $warnaList,
+            'warna' => $warnaResolved,
+            'warna_allowed' => JadwalMobilisasiService::resolveWarnaFilter($warnaResolved),
             'company_count' => count($companies),
             'companies' => $companies,
             'request_summary' => $suggested,
@@ -543,7 +601,9 @@ class InformasiOperasionalController extends Controller
             'petugas_sampling' => 'nullable|string',
             'peralatan_aktual' => 'required|array|min:1',
             'peralatan_aktual.*.nama_alat' => 'required|string',
-            'peralatan_aktual.*.jumlah_alat' => 'required|integer|min:1',
+            'peralatan_aktual.*.jumlah_alat' => 'nullable|integer|min:1',
+            'peralatan_aktual.*.kode_aset_list' => 'nullable|array',
+            'peralatan_aktual.*.kode_aset_list.*' => 'string',
         ]);
         if ($validator->fails()) {
             return response()->json(['message' => $validator->errors()->first()], 422);
@@ -562,7 +622,34 @@ class InformasiOperasionalController extends Controller
 
         $peralatan = JadwalMobilisasiService::normalizePeralatanList($request->input('peralatan_aktual', []));
         if ($peralatan === []) {
-            return response()->json(['message' => 'Minimal 1 alat dengan jumlah >= 1.'], 422);
+            return response()->json(['message' => 'Minimal 1 alat dengan kode aset / jumlah >= 1.'], 422);
+        }
+
+        $hasKodeList = false;
+        $seenKode = [];
+        foreach ($peralatan as $item) {
+            $list = $item['kode_aset_list'] ?? [];
+            if (!is_array($list) || $list === []) {
+                continue;
+            }
+            $hasKodeList = true;
+            foreach ($list as $kode) {
+                $kode = trim((string) $kode);
+                if ($kode === '') {
+                    continue;
+                }
+                if (isset($seenKode[$kode])) {
+                    return response()->json([
+                        'message' => "Kode aset {$kode} dipilih lebih dari sekali.",
+                    ], 422);
+                }
+                $seenKode[$kode] = true;
+            }
+        }
+        if (!$hasKodeList) {
+            return response()->json([
+                'message' => 'Pilih minimal 1 unit alat (kode aset).',
+            ], 422);
         }
 
         $petugas = trim((string) $request->input('petugas_sampling', ''));
@@ -600,8 +687,38 @@ class InformasiOperasionalController extends Controller
             ], 422);
         }
 
+        $petugasKey = IoPeralatanTimService::normalizePetugasKey($petugas);
+        $durasi = JadwalMobilisasiService::resolveDurasiFromBatchIds($flatBatchIds);
+        $tanggalEnd = JadwalMobilisasiService::resolveEndDate($tanggal, $durasi);
+        $locked = IoPeralatanTimService::usedKodeAsetByTanggal($tanggal, $petugasKey, $durasi);
+        $lockedByKode = $locked['by_kode'] ?? [];
+        foreach (array_keys($seenKode) as $kode) {
+            if (isset($lockedByKode[$kode])) {
+                $owner = $lockedByKode[$kode];
+                return response()->json([
+                    'message' => "Kode aset {$kode} sudah dibawa tim lain ({$owner}) pada rentang {$tanggal} s/d {$tanggalEnd}.",
+                ], 422);
+            }
+        }
+
+        $beforePeralatan = [];
+        $existingTim = IoPeralatanTimService::findActive($tanggal, $petugasKey);
+        if ($existingTim) {
+            $beforePeralatan = JadwalMobilisasiService::normalizePeralatanList($existingTim->peralatan ?? []);
+        }
+
         $record = null;
-        DB::transaction(function () use ($tanggal, $petugas, $flatBatchIds, $peralatan, $idCabang, $batchGroups, &$record) {
+        DB::transaction(function () use (
+            $tanggal,
+            $tanggalEnd,
+            $petugas,
+            $flatBatchIds,
+            $peralatan,
+            $idCabang,
+            $batchGroups,
+            $beforePeralatan,
+            &$record
+        ) {
             $record = IoPeralatanTimService::upsert(
                 $tanggal,
                 $petugas,
@@ -619,6 +736,15 @@ class InformasiOperasionalController extends Controller
                     $this->karyawan
                 );
             }
+
+            // Status unit di monitoring_peralatan → Sedang Digunakan (ikut rentang jadwal).
+            MonitoringPeralatanService::syncSedangDigunakanFromPeralatan(
+                $beforePeralatan,
+                $peralatan,
+                $this->karyawan,
+                $tanggal,
+                $tanggalEnd
+            );
         });
 
         return response()->json([

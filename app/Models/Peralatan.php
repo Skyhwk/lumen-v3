@@ -17,9 +17,12 @@ class Peralatan extends Sector
     {
         return $this->belongsTo(MasterCabang::class, 'id_cabang');
     }
+<<<<<<< HEAD
+=======
 
     public function monitoring()
     {
         return $this->hasMany(MonitoringPeralatan::class, 'id_peralatan');
     }
+>>>>>>> f6302001cb585b5c181d098be33c3683a801e845
 }

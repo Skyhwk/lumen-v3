@@ -2451,6 +2451,77 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertStringContainsString('terkunci', $notice);
     }
 
+    public function testTeammateOpenCheckinElsewhereDoesNotBlockActorCheckin(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-11-16 09:00:00', 'Asia/Jakarta'));
+        $connection = $this->db->getConnection('mysql');
+        if (!$connection->getSchemaBuilder()->hasColumn('order_header', 'id_pelanggan')) {
+            $connection->getSchemaBuilder()->table('order_header', function (Blueprint $table) {
+                $table->integer('id_pelanggan')->nullable();
+            });
+        }
+
+        $connection->table('sampling_plan')->insert(['id' => 2, 'no_quotation' => 'Q2']);
+        $connection->table('order_header')->insert([
+            ['no_document' => 'Q1', 'no_order' => 'O1', 'id_pelanggan' => 801, 'is_active' => true],
+            ['no_document' => 'Q2', 'no_order' => 'O2', 'id_pelanggan' => 802, 'is_active' => true],
+        ]);
+        $this->schedule([
+            'tanggal' => '2026-11-16',
+            'userid' => 1237,
+            'sampler' => 'Fath Ramadany Budiono',
+            'nama_perusahaan' => 'AICHI TEX INDONESIA, PT',
+            'durasi' => 2,
+            'durasi_personal' => 2,
+        ]);
+        $this->schedule([
+            'tanggal' => '2026-11-16',
+            'no_quotation' => 'Q2',
+            'id_sampling' => 2,
+            'userid' => 44,
+            'sampler' => 'Agung Widianto',
+            'nama_perusahaan' => 'INDO SUKSES SENTRA USAHA, PT',
+            'durasi' => 2,
+            'durasi_personal' => 2,
+        ]);
+        $this->schedule([
+            'tanggal' => '2026-11-16',
+            'no_quotation' => 'Q2',
+            'id_sampling' => 2,
+            'userid' => 1237,
+            'sampler' => 'Fath Ramadany Budiono',
+            'nama_perusahaan' => 'INDO SUKSES SENTRA USAHA, PT',
+            'durasi' => 2,
+            'durasi_personal' => 2,
+        ]);
+
+        $sessions = $this->prepare('2026-11-16');
+        $aichi = $sessions->firstWhere('nama_perusahaan', 'AICHI TEX INDONESIA, PT');
+        $indo = $sessions->firstWhere('nama_perusahaan', 'INDO SUKSES SENTRA USAHA, PT');
+        $this->assertNotNull($aichi);
+        $this->assertNotNull($indo);
+
+        $fathAichi = $aichi->activeMembers()->where('sampler_id', 1237)->firstOrFail();
+        $agung = $indo->activeMembers()->where('sampler_id', 44)->firstOrFail();
+        $fathIndo = $indo->activeMembers()->where('sampler_id', 1237)->firstOrFail();
+
+        foreach (['departure', 'checkin'] as $type) {
+            $this->service->storeEvent(['member_id' => $fathAichi->id, 'event_type' => $type]);
+        }
+        $this->service->storeEvent(['member_id' => $agung->id, 'event_type' => 'departure']);
+
+        $events = $this->service->storeEvent([
+            'member_id' => $agung->id,
+            'event_type' => 'checkin',
+        ]);
+        $this->assertTrue($events->contains(function ($event) use ($agung) {
+            return (int) $event->sampler_tracking_member_id === (int) $agung->id
+                && $event->event_type === 'checkin';
+        }));
+        $this->assertSame(0, $fathIndo->events()->where('event_type', 'checkin')->count());
+        $this->assertSame(1, $fathAichi->events()->where('event_type', 'checkin')->count());
+    }
+
     public function testManagerOpenActivityAllowsCheckinWhileLongerShiftStillCheckedIn(): void
     {
         $connection = $this->db->getConnection('mysql');
@@ -2672,5 +2743,99 @@ class SamplerTrackingSyncTest extends TestCase
             $this->assertSame(422, $exception->getStatusCode());
             throw $exception;
         }
+    }
+
+    public function testSharedParsialSameVisitSlotKeepsSeparateTeamSessions(): void
+    {
+        $parent = $this->schedule([
+            'parsial' => null,
+            'userid' => 1204,
+            'sampler' => 'Parent',
+            'jam_selesai' => '17:00:00',
+            'kendaraan' => 'B 1115 JFZ',
+        ]);
+
+        $this->schedule([
+            'parsial' => $parent->id,
+            'id_cabang' => '4',
+            'kendaraan' => 'B 1115 JFZ',
+            'userid' => 244,
+            'sampler' => 'Bambang',
+            'jam_selesai' => '17:00:00',
+            'kategori' => '["Psikologi - 040"]',
+        ]);
+        $this->schedule([
+            'parsial' => $parent->id,
+            'id_cabang' => '4',
+            'kendaraan' => 'B 1115 JFZ',
+            'userid' => 77,
+            'sampler' => 'Malik',
+            'jam_selesai' => '17:00:00',
+            'kategori' => '["Psikologi - 040"]',
+        ]);
+        $this->schedule([
+            'parsial' => $parent->id,
+            'id_cabang' => '1',
+            'kendaraan' => 'B 1256 JFM',
+            'userid' => 74,
+            'sampler' => 'Ahmad',
+            'jam_selesai' => '17:00:00',
+            'driver' => 'Ahmad',
+            'kategori' => '["Udara Lingkungan Kerja - 155"]',
+        ]);
+        $this->schedule([
+            'parsial' => $parent->id,
+            'id_cabang' => '1',
+            'kendaraan' => 'B 1256 JFM',
+            'userid' => 1047,
+            'sampler' => 'Sayup',
+            'jam_selesai' => '17:00:00',
+            'driver' => 'Ahmad',
+            'kategori' => '["Udara Lingkungan Kerja - 155"]',
+        ]);
+
+        $psyHeader = new PersiapanSampelHeader();
+        $psyHeader->no_quotation = 'Q1';
+        $psyHeader->tanggal_sampling = '2026-09-17';
+        $psyHeader->sampler_jadwal = 'Bambang,Malik';
+        $psyHeader->is_active = true;
+        $psyHeader->save();
+        $this->service->syncByPersiapanHeader($psyHeader);
+
+        $ulkHeader = new PersiapanSampelHeader();
+        $ulkHeader->no_quotation = 'Q1';
+        $ulkHeader->tanggal_sampling = '2026-09-17';
+        $ulkHeader->sampler_jadwal = 'Ahmad,Sayup';
+        $ulkHeader->is_active = true;
+        $ulkHeader->save();
+        $this->service->syncByPersiapanHeader($ulkHeader);
+
+        $active = SamplerTrackingSession::where('no_quotation', 'Q1')
+            ->where('tanggal_sampling', '2026-09-17')
+            ->where('is_active', true)
+            ->get();
+
+        $this->assertCount(2, $active);
+        $this->assertTrue($active->contains(function ($session) {
+            return $session->activeMembers()->where('sampler_name', 'Bambang')->exists()
+                && $session->activeMembers()->where('sampler_name', 'Malik')->exists()
+                && $session->kendaraan === 'B 1115 JFZ';
+        }));
+        $this->assertTrue($active->contains(function ($session) {
+            return $session->activeMembers()->where('sampler_name', 'Ahmad')->exists()
+                && $session->activeMembers()->where('sampler_name', 'Sayup')->exists()
+                && $session->kendaraan === 'B 1256 JFM';
+        }));
+
+        $this->service->syncByPersiapanHeader($psyHeader);
+
+        $this->assertCount(2, SamplerTrackingSession::where('no_quotation', 'Q1')
+            ->where('tanggal_sampling', '2026-09-17')
+            ->where('is_active', true)
+            ->get());
+        $this->assertTrue(SamplerTrackingMember::where('sampler_name', 'Bambang')->where('is_active', true)->exists());
+        $this->assertTrue(SamplerTrackingMember::where('sampler_name', 'Malik')->where('is_active', true)->exists());
+        $this->assertTrue(SamplerTrackingMember::where('sampler_name', 'Ahmad')->where('is_active', true)->exists());
+        $this->assertTrue(SamplerTrackingMember::where('sampler_name', 'Sayup')->where('is_active', true)->exists());
     }
 }
