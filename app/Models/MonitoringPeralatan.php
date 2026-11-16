@@ -9,13 +9,12 @@ class MonitoringPeralatan extends Sector
     protected $guarded = ['id'];
 
     protected $casts = [
-        'id_cabang' => 'integer',
-        'jumlah_alat_tersedia' => 'integer',
+        'id_peralatan' => 'integer',
         'is_active' => 'boolean',
     ];
 
-    public function cabang()
+    public function peralatan()
     {
-        return $this->belongsTo(MasterCabang::class, 'id_cabang');
+        return $this->belongsTo(Peralatan::class, 'id_peralatan');
     }
 }
