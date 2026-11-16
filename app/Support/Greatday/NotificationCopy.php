@@ -109,6 +109,7 @@ class NotificationCopy
             strpos($hay, 'menunggu persetujuan') !== false
             || strpos($hay, 'menunggu review') !== false
             || strpos($hay, 'akan segera mereview') !== false
+            || strpos($hay, 'tab persetujuan') !== false
             || strpos($hay, 'diteruskan ke hrd') !== false
             || strpos($hay, 'diteruskan kepada hrd') !== false
             || strpos($hay, 'penugasan lembur') !== false
@@ -199,9 +200,6 @@ class NotificationCopy
                 $kind = self::leaveKindLabel($d->leave_kind ?? null);
                 $range = self::formatDateRange($d->start_date ?? null, $d->end_date ?? null);
                 $parts = array_filter([$kind, $range]);
-                if ($request->no_document) {
-                    $parts[] = 'No. ' . $request->no_document;
-                }
 
                 return implode(' · ', $parts);
 
@@ -238,10 +236,6 @@ class NotificationCopy
                 break;
         }
 
-        if ($request->no_document) {
-            return 'No. dokumen ' . $request->no_document;
-        }
-
         return '';
     }
 
@@ -252,10 +246,11 @@ class NotificationCopy
         $detail = self::detailLine($request);
         $detailSentence = $detail !== '' ? " ({$detail})" : '';
 
+        $statusCta = self::ctaMonitorFormsHub();
         if ($requiresAtasanApproval) {
-            $body = "{$doc}{$detailSentence} telah diterima sistem. Atasan Anda akan segera mereview pengajuan ini. Pantau status di Greatday → Formulir.";
+            $body = "{$doc}{$detailSentence} telah diterima sistem. Atasan Anda akan segera mereview pengajuan ini. {$statusCta}";
         } else {
-            $body = "{$doc}{$detailSentence} telah diterima sistem dan diteruskan ke HRD untuk proses selanjutnya. Pantau status di Greatday → Formulir.";
+            $body = "{$doc}{$detailSentence} telah diterima sistem dan diteruskan ke HRD untuk proses selanjutnya. {$statusCta}";
         }
 
         return [
@@ -275,7 +270,7 @@ class NotificationCopy
 
         return [
             'title' => "{$doc} · perlu persetujuan Anda",
-            'body' => "{$who} mengajukan {$doc}.{$detailSentence} Pengajuan ini memerlukan persetujuan Anda. Tinjau segera di Greatday → Formulir, tab Persetujuan.",
+            'body' => "{$who} mengajukan {$doc}.{$detailSentence} Pengajuan ini memerlukan persetujuan Anda. " . self::ctaReviewFormsApprovalTab(),
             'url' => $url,
         ];
     }
@@ -291,7 +286,7 @@ class NotificationCopy
 
         return [
             'title' => "{$doc} · antrian HRD",
-            'body' => "Pengajuan {$doc} dari {$who}{$div} telah disetujui atasan dan menunggu proses HRD.{$detailSentence} Periksa di Greatday → Formulir.",
+            'body' => "Pengajuan {$doc} dari {$who}{$div} telah disetujui atasan dan menunggu proses HRD.{$detailSentence} " . self::ctaCheckFormsHub(),
             'url' => $url,
         ];
     }
@@ -325,7 +320,7 @@ class NotificationCopy
 
         return [
             'title' => 'Penugasan lembur',
-            'body' => "{$who} mencantumkan Anda dalam pengajuan lembur.{$detailSentence} Detail lengkap tersedia di Greatday → Formulir. Apabila jadwal bentrok, segera koordinasikan dengan pengaju.",
+            'body' => "{$who} mencantumkan Anda dalam pengajuan lembur.{$detailSentence} " . self::ctaDetailOnFormsHub() . ' Apabila jadwal bentrok, segera koordinasikan dengan pengaju.',
             'url' => $url,
         ];
     }
@@ -337,7 +332,7 @@ class NotificationCopy
 
         return [
             'title' => "{$docTitle} · perlu persetujuan Anda",
-            'body' => "{$who} mengajukan {$docTitle}.{$detailSentence} Pengajuan ini memerlukan persetujuan Anda. Tinjau segera di Greatday → Formulir, tab Persetujuan.",
+            'body' => "{$who} mengajukan {$docTitle}.{$detailSentence} Pengajuan ini memerlukan persetujuan Anda. " . self::ctaReviewFormsApprovalTab(),
             'url' => $url,
         ];
     }
@@ -372,7 +367,7 @@ class NotificationCopy
 
         return [
             'title' => 'Konsultasi HR · pengajuan baru',
-            'body' => "{$who} mengajukan permohonan konsultasi HR. HRD akan segera meninjau topik dan jadwal yang diajukan. Periksa detail di Greatday → Formulir.",
+            'body' => "{$who} mengajukan permohonan konsultasi HR. HRD akan segera meninjau topik dan jadwal yang diajukan. " . self::ctaCheckFormsHub(),
             'url' => $url,
         ];
     }
@@ -381,7 +376,7 @@ class NotificationCopy
     {
         return [
             'title' => 'Konsultasi HR · disetujui',
-            'body' => 'Permohonan konsultasi Anda telah disetujui HRD. Detail jadwal dan catatan tersedia di Greatday → Formulir.',
+            'body' => 'Permohonan konsultasi Anda telah disetujui HRD. ' . self::ctaDetailOnFormsHub(),
             'url' => $url,
         ];
     }
@@ -401,7 +396,7 @@ class NotificationCopy
 
         return [
             'title' => 'Reimburse lembur · perlu persetujuan',
-            'body' => "{$who} mengajukan penggantian biaya lembur. Atasan berwenang akan segera mereview dokumen dan rincian biaya di Greatday → Formulir.",
+            'body' => "{$who} mengajukan penggantian biaya lembur. Atasan berwenang akan segera mereview lampiran dan rincian biaya. " . self::ctaReviewFormsApprovalTab(),
             'url' => $url,
         ];
     }
@@ -410,7 +405,7 @@ class NotificationCopy
     {
         return [
             'title' => 'Reimburse lembur · disetujui',
-            'body' => 'Penggantian biaya lembur Anda telah disetujui. Pembayaran mengikuti jadwal payroll perusahaan. Pantau status di Greatday → Formulir.',
+            'body' => 'Penggantian biaya lembur Anda telah disetujui. Pembayaran mengikuti jadwal payroll perusahaan. ' . self::ctaMonitorFormsHub(),
             'url' => $url,
         ];
     }
@@ -424,6 +419,26 @@ class NotificationCopy
             'body' => "Pengajuan reimburse lembur belum disetujui pada tahap {$stage}. Catatan peninjau: {$why} Perbaiki dokumen atau hubungi peninjau terkait.",
             'url' => $url,
         ];
+    }
+
+    private static function ctaReviewFormsApprovalTab(): string
+    {
+        return 'Tinjau segera di halaman formulir pada tab persetujuan.';
+    }
+
+    private static function ctaMonitorFormsHub(): string
+    {
+        return 'Pantau status di halaman formulir.';
+    }
+
+    private static function ctaCheckFormsHub(): string
+    {
+        return 'Periksa di halaman formulir.';
+    }
+
+    private static function ctaDetailOnFormsHub(): string
+    {
+        return 'Detail lengkap tersedia di halaman formulir.';
     }
 
     private static function personName(?string $name): string

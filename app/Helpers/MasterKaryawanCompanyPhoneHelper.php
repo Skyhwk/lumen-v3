@@ -42,13 +42,16 @@ class MasterKaryawanCompanyPhoneHelper
     {
         $contact = $contact ?? [];
 
+        $companyPhone = trim((string) ($contact['company_phone'] ?? ''));
+        $personalPhone = trim((string) ($contact['phone'] ?? ''));
+
         if (self::isAutoFillPosition($positionId)) {
-            $personalPhone = trim((string) ($contact['phone'] ?? ''));
+            if ($companyPhone !== '') {
+                return $companyPhone;
+            }
 
             return $personalPhone !== '' ? $personalPhone : null;
         }
-
-        $companyPhone = trim((string) ($contact['company_phone'] ?? ''));
 
         return $companyPhone !== '' ? $companyPhone : null;
     }

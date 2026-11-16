@@ -9,7 +9,8 @@ use Carbon\Carbon;
 class Printing
 {
     protected static $apikey;
-    protected static $url = 'http://10.88.4.160:1126/';
+    // protected static $url = 'http://10.88.4.160:1126/';
+    protected static $url = 'http://10.88.209.240:1126/';
     protected static $karyawan;
     protected static $file;
     protected static $printer;
@@ -167,11 +168,14 @@ class Printing
             throw new \Exception('Failed to print');
         }
 
+        $now = Carbon::now()->format('Y-m-d H:i:s');
         HistoriPrinting::create([
             'filename' => $filename,
             'karyawan' => self::$karyawan,
             'status' => $printJob->status(),
-            'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+            'timestamp' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
             'printer' => self::$printer_name,
             'destination' => self::$destination
         ]);

@@ -124,6 +124,45 @@ class SamplingPlanController extends Controller
             ->filterColumn('nama_perusahaan', function ($query, $keyword) {
                 $query->where('nama_perusahaan', 'like', '%' . $keyword . '%');
             })
+            ->filterColumn('periode', function ($query, $keyword) {
+                $keyword = trim((string) $keyword);
+                if ($keyword === '') {
+                    return;
+                }
+
+                $months = [
+                    'januari' => '01', 'februari' => '02', 'maret' => '03', 'april' => '04',
+                    'mei' => '05', 'juni' => '06', 'juli' => '07', 'agustus' => '08',
+                    'september' => '09', 'oktober' => '10', 'november' => '11', 'desember' => '12',
+                ];
+
+                $normalized = strtolower($keyword);
+                $monthNum = null;
+                foreach ($months as $name => $num) {
+                    if (strpos($normalized, $name) !== false) {
+                        $monthNum = $num;
+                        break;
+                    }
+                }
+
+                preg_match('/(20\d{2}|19\d{2})/', $keyword, $yearMatch);
+                $year = $yearMatch[1] ?? null;
+
+                if ($monthNum && $year) {
+                    $query->where('periode', 'like', $year . '-' . $monthNum . '%');
+                    return;
+                }
+                if ($monthNum) {
+                    $query->where('periode', 'like', '%-' . $monthNum . '%');
+                    return;
+                }
+                if ($year) {
+                    $query->where('periode', 'like', $year . '%');
+                    return;
+                }
+
+                $query->where('periode', 'like', '%' . $keyword . '%');
+            })
             ->filterColumn('tanggal', function ($query, $keyword) {
                 $query->where('tanggal', 'like', '%' . $keyword . '%');
             })

@@ -51,12 +51,32 @@ class SamplerTrackingActivity
         return $member->sampler_id ? (string) $member->sampler_id : mb_strtolower(trim((string) $member->sampler_name));
     }
 
+  /** Member ids that may appear on an activity-open grant after route consolidation. */
+    public static function grantMemberIds($member): array
+    {
+        $ids = $member->activity_member_ids ?? [];
+        if (!is_array($ids)) {
+            $ids = [];
+        }
+
+        if ($member && $member->id) {
+            $ids[] = $member->id;
+        }
+
+        return array_values(array_unique(array_filter(array_map('intval', $ids))));
+    }
+
     public static function duration($member)
     {
         foreach (['effective_duration', 'durasi_personal', 'duration', 'durasi'] as $field) {
             if ($member->$field !== null && $member->$field !== '') return max(0, (int) $member->$field);
         }
         return 0;
+    }
+
+    public static function isSesaat($member): bool
+    {
+        return self::duration($member) === 0;
     }
 
     public static function hasEvent($member, $type)

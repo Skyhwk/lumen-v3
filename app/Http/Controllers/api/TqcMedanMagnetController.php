@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Models\LhpsKebisinganDetail;
 use App\Models\LhpsKebisinganHeader;
+use App\Models\ParameterFdl;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -23,6 +24,14 @@ class TqcMedanMagnetController extends Controller
 {
     public function index(Request $request)
     {
+        $parameter = ParameterFdl::select('parameters')->where('nama_fdl', 'listrik_dan_magnet')->where('is_active', 1)->first();
+        $parameterList = json_decode($parameter->parameters ?? '[]', true);
+        $parameterList = is_array($parameterList) ? array_values(array_filter($parameterList)) : [];
+
+        $regexPattern = implode('|', array_map(function ($val) {
+            return preg_quote($val, '/');
+        }, $parameterList));
+
         $data = OrderDetail::select(
             'cfr',
             DB::raw('MAX(id) as max_id'),
@@ -40,17 +49,13 @@ class TqcMedanMagnetController extends Controller
             ->where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '4-Udara')
-            ->where('kategori_3', '27-Udara Lingkungan Kerja');
-
-        $data->where(function ($q) {
-            $q->whereJsonContains('parameter', "563;Medan Magnet")
-                ->orWhereJsonContains('parameter', "316;Power Density")
-                ->orWhereJsonContains('parameter', "277;Medan Listrik")
-                ->orWhereJsonContains('parameter', "236;Gelombang Elektro");
-        });
-
-
-        $data->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan','parameter')
+            ->where('kategori_3', '27-Udara Lingkungan Kerja')
+            ->when($regexPattern !== '', function ($q) use ($regexPattern) {
+                return $q->whereRaw('parameter REGEXP ?', [$regexPattern]);
+            }, function ($q) {
+                return $q->whereRaw('1 = 0');
+            })
+            ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan', 'parameter')
             ->orderBy('tanggal_terima');
 
         return Datatables::of($data)->make(true);
@@ -133,7 +138,10 @@ class TqcMedanMagnetController extends Controller
                 
                 $processedData = $combinedData->map(function ($item) {
                     $item->source = $item->data_type === 'medanlm' ? 'Medan LM' : 'Subkontrak';
-                    if($item->source == 'Medan LM') $item->ws_udara->hasil1 = json_decode($item->ws_udara->hasil1); 
+                    if ($item->source == 'Medan LM' && $item->ws_udara) {
+                        $item->ws_udara->hasil1 = json_decode($item->ws_udara->hasil1);
+                        $item->ws_udara->hasil24 = json_decode($item->ws_udara->hasil24);
+                    } 
                     return $item;
                 });
 
@@ -291,28 +299,22 @@ class TqcMedanMagnetController extends Controller
             $headerAll = MedanLmHeader::where('no_sampel', $orderDetail->no_sampel)->get();
 
             foreach ($headerAll as $header) {
-                // 1. Gunakan first() agar mendapatkan satu objek model, bukan collection
-                // 2. Pastikan perbandingannya menggunakan data yang tepat
                 $ws = $wsAll->where('id_medan_lm_header', $header->id)->first();
-
-                // Jika $ws tidak ditemukan, lanjut ke iterasi berikutnya atau set default
-                if (!$ws) {
-                    // Logika jika data ws tidak ada
-                    $hasilWs = [];
-                } else {
-                    $hasilWs = json_decode($ws->hasil1, true) ?? [];
-                }
+                $hasil1 = json_decode($ws->hasil1 ?? '{}', true) ?: [];
+                $hasil24 = json_decode($ws->hasil24 ?? '{}', true) ?: [];
 
                 $nilai = null;
+                $rata_listrik = null;
+                $rata_magnet = null;
+
                 if ($header->parameter === 'Power Density' || $header->parameter === 'Gelombang Elektro') {
-                    $nilai = $hasilWs['hasil_mwatt'] ?? null;
-                    $rata_listrik = $hasilWs['rata_listrik'] ?? null;
-                    $rata_magnet = $hasilWs['rata_magnet'] ?? null;
-                } elseif ($header->parameter === 'Medan Magnet') {
-                    // Prioritas pengambilan data sesuai ketersediaan key di JSON
-                    $nilai = $hasilWs['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
+                    $nilai = $hasil24['hasil_mwatt'] ?? $hasil1['hasil_mwatt'] ?? null;
+                    $rata_listrik = $hasil24['rata_listrik'] ?? $hasil1['rata_listrik'] ?? null;
+                    $rata_magnet = $hasil24['rata_magnet'] ?? $hasil24['medan_magnet'] ?? $hasil1['rata_magnet'] ?? $hasil1['medan_magnet'] ?? null;
+                } elseif (in_array($header->parameter, ['Medan Magnet', 'Medan Magnet Statis', 'Medan Magnit Statis'], true)) {
+                    $nilai = $hasil24['medan_magnet'] ?? $hasil24['rata_magnet'] ?? $hasil1['medan_magnet'] ?? $hasil1['rata_magnet'] ?? $hasil1['medan_magnet_am'] ?? null;
                 } elseif ($header->parameter === 'Medan Listrik') {
-                    $nilai = $hasilWs['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
+                    $nilai = $hasil24['rata_listrik'] ?? $hasil24['medan_listrik'] ?? $hasil1['rata_listrik'] ?? $hasil1['medan_listrik'] ?? null;
                 }
 
                 $data[] = [
@@ -323,10 +325,10 @@ class TqcMedanMagnetController extends Controller
                     'nilai'             => $nilai,
                     'rata_listrik'      => $rata_listrik ?? null,
                     'rata_magnet'       => $rata_magnet ?? null,
-                    'nab'               => $ws->nab ?? null,
-                    'nab_power_density' => $ws->nab_power_density ?? null,
-                    'nab_medan_listrik' => $ws->nab_medan_listrik ?? null,
-                    'nab_medan_magnet'  => $ws->nab_medan_magnet ?? null,
+                    'nab'               => optional($ws)->nab,
+                    'nab_power_density' => optional($ws)->nab_power_density,
+                    'nab_medan_listrik' => optional($ws)->nab_medan_listrik,
+                    'nab_medan_magnet'  => optional($ws)->nab_medan_magnet,
                     'analyst'           => optional($lhpsMedanLmHeader)->created_by,
                     'approved_by'       => optional($lhpsMedanLmHeader)->approved_by,
                 ];

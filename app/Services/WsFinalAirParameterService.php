@@ -109,6 +109,61 @@ class WsFinalAirParameterService
     }
 
     /**
+     * Header Sampel Diantar yang memuat baris internal_data untuk no_sampel (untuk payload index WS Final).
+     */
+    public static function findSampelDiantarHeaderForSample(string $noOrder, string $noSampel, ?string $periode = null): ?SampelDiantar
+    {
+        $headers = SampelDiantar::with('detail')
+            ->where('no_order', $noOrder)
+            ->get();
+
+        $matchesSample = function (SampelDiantar $header) use ($noSampel): bool {
+            foreach ($header->detail as $detail) {
+                $decoded = self::decodeInternalDataJson($detail->internal_data);
+                if (!$decoded) {
+                    continue;
+                }
+                foreach ($decoded as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+                    if ((string) ($row['no_sampel'] ?? '') !== $noSampel) {
+                        continue;
+                    }
+                    if (array_key_exists('is_active', $row) && $row['is_active'] === false) {
+                        continue;
+                    }
+
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
+        $scoped = $headers;
+        if ($periode !== null && $periode !== '') {
+            $scoped = $scoped->where('periode_kontrak', $periode);
+        } else {
+            $scoped = $scoped->filter(fn (SampelDiantar $h) => $h->periode_kontrak === null || $h->periode_kontrak === '');
+        }
+
+        foreach ($scoped as $header) {
+            if ($matchesSample($header)) {
+                return $header;
+            }
+        }
+
+        foreach ($headers as $header) {
+            if ($matchesSample($header)) {
+                return $header;
+            }
+        }
+
+        return $scoped->first() ?? $headers->first();
+    }
+
+    /**
      * Samakan dengan ModalEvaluation.js (SD / sampel diantar).
      */
     public static function resolveSdParsedInternalData(OrderDetail $orderDetail): ?array
@@ -138,26 +193,26 @@ class WsFinalAirParameterService
         $sdParsed = $sdParsed ?? self::resolveSdParsedInternalData($orderDetail);
         $lapangan = $orderDetail->dataLapanganAir;
 
-        $ph = $isSd ? ($sdParsed['ph'] ?? null) : ($lapangan->ph ?? null);
+        $ph = $isSd ? ($sdParsed['ph'] ?? null) : ($lapangan !== null ? $lapangan->ph : null);
         if (self::hasFieldValue($ph)) {
             $parametersDiUji[] = 'pH';
             $parametersDiUji[] = 'pH (NA)';
         }
 
-        $suhu = $isSd ? ($sdParsed['suhu'] ?? null) : ($lapangan->suhu_air ?? null);
+        $suhu = $isSd ? ($sdParsed['suhu'] ?? null) : ($lapangan !== null ? $lapangan->suhu_air : null);
         if (self::hasFieldValue($suhu)) {
             $parametersDiUji[] = 'Suhu';
             $parametersDiUji[] = 'Suhu (NA)';
         }
 
-        $sampah = $isSd ? ($sdParsed['sampah'] ?? null) : ($lapangan->sampah ?? null);
+        $sampah = $isSd ? ($sdParsed['sampah'] ?? null) : ($lapangan !== null ? $lapangan->sampah : null);
         if (self::hasFieldValue($sampah)) {
             $parametersDiUji[] = 'Sampah';
         }
 
         $debit = $isSd
             ? ($sdParsed['debit_air'] ?? $sdParsed['debit'] ?? null)
-            : ($lapangan->debit_air ?? null);
+            : ($lapangan !== null ? $lapangan->debit_air : null);
 
         if (self::hasFieldValue($debit)) {
             $parametersDiUji = array_merge($parametersDiUji, self::debitAirAliasNames());

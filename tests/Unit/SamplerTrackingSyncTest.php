@@ -99,6 +99,8 @@ class SamplerTrackingSyncTest extends TestCase
         (new \AddSessionToSamplerTrackingTroubles())->up();
         require_once __DIR__ . '/../../database/migrations/2026_09_23_100000_add_lampiran_to_sampler_tracking_troubles.php';
         (new \AddLampiranToSamplerTrackingTroubles())->up();
+        require_once __DIR__ . '/../../database/migrations/2026_11_10_120000_create_sampler_tracking_activity_opens.php';
+        (new \CreateSamplerTrackingActivityOpens())->up();
         $connection->table('sampling_plan')->insert(['id' => 1, 'no_quotation' => 'Q1']);
         \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-17 10:00:00', 'Asia/Jakarta'));
         $this->service = new SamplerTrackingService();
@@ -788,6 +790,41 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertFalse($this->troubleProgress($old)['complete']);
     }
 
+    public function testOwnReturnIsNotSplitByCopiedDepartureOnAnotherSameDaySession(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-11-05 08:00:00', 'Asia/Jakarta'));
+        [$eritta, $morning] = $this->troubleAssignment('eritta-pharma', '2026-11-04', 0);
+        [$menara, $afternoon] = $this->troubleAssignment('menara-kadin', '2026-11-04', 0);
+        foreach ([
+            ['departure', '2026-11-04 05:53:04'],
+            ['checkin', '2026-11-04 08:29:57'],
+            ['checkout', '2026-11-04 09:12:56'],
+            ['return', '2026-11-04 11:14:27'],
+        ] as [$type, $at]) {
+            $this->recordTroubleJourneyEvent($eritta, $morning, $type, $at);
+        }
+        foreach ([
+            ['departure', '2026-11-04 06:01:17'],
+            ['checkin', '2026-11-04 07:52:45'],
+            ['checkout', '2026-11-04 16:13:43'],
+            ['return', '2026-11-04 18:20:39'],
+        ] as [$type, $at]) {
+            $this->recordTroubleJourneyEvent($menara, $afternoon, $type, $at);
+        }
+
+        $this->assertTrue($this->troubleProgress($eritta)['complete']);
+        $this->assertTrue($this->troubleProgress($menara)['complete']);
+
+        $service = new \App\Services\SamplerTrackingTroubleService();
+        $this->assertSame(0, $service->collect('2026-11-04', [10]));
+        $this->db->getConnection('mysql')->table('sampler_tracking_troubles')->insert([
+            'sampler_id' => 10, 'tracking_session_id' => $eritta->id,
+            'activity_date' => '2026-11-04', 'is_active' => 1, 'is_clear' => 0,
+        ]);
+        $this->assertCount(0, $service->unresolved(10));
+        $this->assertEquals(1, $this->db->getConnection('mysql')->table('sampler_tracking_troubles')->value('is_clear'));
+    }
+
     public function testTroubleJourneyStillRequiresCheckoutAndReturnAfterCheckout(): void
     {
         \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-10-29 10:00:00', 'Asia/Jakarta'));
@@ -1202,6 +1239,162 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertSame('ongoing', $long['tracking_status']);
         $this->assertCount(1, $short['members']);
         $this->assertCount(2, $long['members']);
+    }
+
+    public function testMonitorMergesSameSamplerDailyJourneyAcrossDurations(): void
+    {
+        $connection = $this->db->getConnection('mysql');
+        $session24h = SamplerTrackingSession::create([
+            'team_key' => 'monitor-24h',
+            'tanggal_sampling' => '2026-09-17',
+            'nama_perusahaan' => 'PT Alpha',
+            'no_order' => 'ORD-24H',
+            'durasi' => '1 x 24 Jam',
+            'is_active' => true,
+        ]);
+        $member24h = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $session24h->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'Asep',
+            'effective_duration' => 2,
+            'is_active' => true,
+        ]);
+
+        $sessionSesaat = SamplerTrackingSession::create([
+            'team_key' => 'monitor-sesaat',
+            'tanggal_sampling' => '2026-09-17',
+            'nama_perusahaan' => 'PT Beta',
+            'no_order' => 'ORD-SES',
+            'durasi' => 'Sesaat',
+            'is_active' => true,
+        ]);
+        $memberSesaat = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $sessionSesaat->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'Asep',
+            'effective_duration' => 0,
+            'is_active' => true,
+        ]);
+
+        foreach ([
+            [$session24h, $member24h, 'departure', '2026-09-17 06:00:00'],
+            [$session24h, $member24h, 'checkin', '2026-09-17 07:00:00'],
+            [$session24h, $member24h, 'checkout', '2026-09-17 08:00:00'],
+            [$sessionSesaat, $memberSesaat, 'checkin', '2026-09-17 09:00:00'],
+            [$sessionSesaat, $memberSesaat, 'checkout', '2026-09-17 10:00:00'],
+            [$sessionSesaat, $memberSesaat, 'return', '2026-09-17 11:00:00'],
+        ] as [$session, $member, $type, $at]) {
+            $connection->table('sampler_tracking_events')->insert([
+                'sampler_tracking_session_id' => $session->id,
+                'sampler_tracking_member_id' => $member->id,
+                'event_type' => $type,
+                'event_at' => $at,
+            ]);
+        }
+
+        $sessions = SamplerTrackingSession::with('activeMembers.events')
+            ->whereIn('id', [$session24h->id, $sessionSesaat->id])
+            ->get();
+        $this->assertCount(2, $this->service->buildTrackingRows($sessions));
+
+        $monitor = $this->service->listTrackingRows('2026-09-17', 10)['data'];
+        $this->assertCount(1, $monitor);
+        $this->assertSame('completed', $monitor->first()['tracking_status']);
+        $this->assertStringContainsString('Sesaat', $monitor->first()['durasi']);
+        $this->assertStringContainsString('24 Jam', $monitor->first()['durasi']);
+
+        $this->assertGreaterThanOrEqual(2, $this->service->listByDate('2026-09-17', 10)->count());
+    }
+
+    public function testMonitorCompletes24HourAssignmentAfterReturnOnNextDayContinuation(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-11-13 10:00:00', 'Asia/Jakarta'));
+        $connection = $this->db->getConnection('mysql');
+
+        $sessionFirst = SamplerTrackingSession::create([
+            'team_key' => 'alur-24h',
+            'tanggal_sampling' => '2026-11-11',
+            'nama_perusahaan' => 'RS ISLAM JAKARTA SUKAPURA',
+            'no_order' => 'ALUR012602',
+            'durasi' => '1 x 24 Jam',
+            'is_active' => true,
+        ]);
+        $memberFirst = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $sessionFirst->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'Asep',
+            'effective_duration' => 2,
+            'is_active' => true,
+        ]);
+
+        $sessionNext = SamplerTrackingSession::create([
+            'team_key' => 'aaap-sesaat',
+            'tanggal_sampling' => '2026-11-12',
+            'nama_perusahaan' => 'HARAPAN GRAHA NIAGA, PT',
+            'no_order' => 'AAAP012601',
+            'durasi' => 'Sesaat',
+            'is_active' => true,
+        ]);
+        $memberNext = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $sessionNext->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'Asep',
+            'effective_duration' => 0,
+            'is_active' => true,
+        ]);
+
+        foreach ([
+            [$sessionFirst, $memberFirst, 'departure', '2026-11-11 06:00:00'],
+            [$sessionFirst, $memberFirst, 'checkin', '2026-11-11 07:00:00'],
+            [$sessionFirst, $memberFirst, 'checkout', '2026-11-11 20:00:00'],
+            [$sessionNext, $memberNext, 'checkin', '2026-11-12 08:00:00'],
+            [$sessionNext, $memberNext, 'checkout', '2026-11-12 15:00:00'],
+            [$sessionNext, $memberNext, 'return', '2026-11-12 16:00:00'],
+        ] as [$session, $member, $type, $at]) {
+            $connection->table('sampler_tracking_events')->insert([
+                'sampler_tracking_session_id' => $session->id,
+                'sampler_tracking_member_id' => $member->id,
+                'event_type' => $type,
+                'event_at' => $at,
+            ]);
+        }
+
+        $rowsDay12 = $this->service->listTrackingRows('2026-11-12', 10)['data'];
+        $this->assertCount(1, $rowsDay12);
+        $this->assertSame('completed', $rowsDay12->first()['tracking_status']);
+        $this->assertStringContainsString('ALUR012602', $rowsDay12->first()['no_order']);
+        $this->assertStringContainsString('AAAP012601', $rowsDay12->first()['no_order']);
+
+        $rowsDay11 = $this->service->listTrackingRows('2026-11-11', 10)['data'];
+        $alur = $rowsDay11->firstWhere('no_order', 'ALUR012602');
+        $this->assertNotNull($alur);
+        $this->assertSame('completed', $alur['tracking_status']);
+        $this->assertTrue(collect($alur['events'])->contains(function ($event) {
+            return ($event->event_type ?? null) === 'return';
+        }));
+    }
+
+    public function testMonitorStillSeparatesTeamMembersByEffectiveDuration(): void
+    {
+        $this->schedule(['sampler' => 'Satrio', 'userid' => 10, 'durasi' => 1]);
+        $this->schedule(['sampler' => 'Hafizh', 'userid' => 20, 'durasi' => 2]);
+        $this->schedule(['sampler' => 'Marcellius', 'userid' => 30, 'durasi' => 2]);
+        $session = $this->prepare('2026-09-17')->first();
+        $satrio = $session->activeMembers()->where('sampler_name', 'Satrio')->firstOrFail();
+
+        $this->db->getConnection('mysql')->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_tracking_member_id' => $satrio->id,
+            'event_type' => 'return',
+            'event_at' => '2026-09-17 18:00:00',
+        ]);
+
+        $rows = $this->service->listTrackingRows('2026-09-17')['data'];
+        $this->assertCount(2, $rows);
+        $short = $rows->firstWhere('sampler', 'Satrio');
+        $long = $rows->firstWhere('sampler', 'Hafizh, Marcellius');
+        $this->assertSame('completed', $short['tracking_status']);
+        $this->assertSame('ongoing', $long['tracking_status']);
     }
 
 
@@ -1814,6 +2007,65 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertCount(1, $this->service->listByDate('2026-09-17'));
     }
 
+    public function testAddingTeammateOnSameDayStillCopiesDeparture(): void
+    {
+        $this->schedule(['userid' => 166, 'sampler' => 'Hafizh']);
+        $session = $this->prepare('2026-09-17')->first();
+        $hafizh = $session->activeMembers()->firstOrFail();
+        $this->db->getConnection('mysql')->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_tracking_member_id' => $hafizh->id,
+            'triggered_by_member_id' => $hafizh->id,
+            'event_type' => 'departure',
+            'event_at' => '2026-09-17 05:58:56',
+            'is_auto' => 0,
+        ]);
+        $before = $this->service->snapshotSchedules('Q1');
+        $this->schedule(['userid' => 1064, 'sampler' => 'Muhamad Rizky']);
+        $this->service->syncScheduleEdit($before, 'Q1');
+        $rizky = $session->fresh()->activeMembers()->where('sampler_name', 'Muhamad Rizky')->firstOrFail();
+        $copied = $rizky->events()->firstOrFail();
+        $this->assertTrue((bool) $session->fresh()->is_active);
+        $this->assertEquals($session->id, $rizky->sampler_tracking_session_id);
+        $this->assertSame('departure', $copied->event_type);
+        $this->assertSame('2026-09-17 05:58:56', $copied->event_at);
+        $this->assertEquals(1, $copied->is_auto);
+        $this->assertEquals($hafizh->id, $copied->triggered_by_member_id);
+    }
+
+    public function testRescheduleToAnotherDateDoesNotCopyOldDepartureToNewTeam(): void
+    {
+        $this->schedule(['userid' => 166, 'sampler' => 'Hafizh']);
+        $session = $this->prepare('2026-09-17')->first();
+        $hafizh = $session->activeMembers()->firstOrFail();
+        $this->db->getConnection('mysql')->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_tracking_member_id' => $hafizh->id,
+            'triggered_by_member_id' => $hafizh->id,
+            'event_type' => 'departure',
+            'event_at' => '2026-09-17 05:58:56',
+            'is_auto' => 0,
+        ]);
+        $before = $this->service->snapshotSchedules('Q1');
+        Jadwal::query()->update(['is_active' => false]);
+        $this->schedule(['tanggal' => '2026-09-19', 'userid' => 166, 'sampler' => 'Hafizh']);
+        $this->schedule(['tanggal' => '2026-09-19', 'userid' => 1064, 'sampler' => 'Muhamad Rizky']);
+        $this->prepare('2026-09-19');
+        $this->service->syncScheduleEdit($before, 'Q1');
+
+        $this->assertFalse((bool) $session->fresh()->is_active);
+        $this->assertSame('2026-09-17', $session->fresh()->tanggal_sampling);
+        $this->assertSame(1, $hafizh->events()->where('event_type', 'departure')->count());
+
+        $newSession = SamplerTrackingSession::where('is_active', true)
+            ->whereDate('tanggal_sampling', '2026-09-19')
+            ->firstOrFail();
+        $this->assertNotEquals($session->id, $newSession->id);
+        $rizky = $newSession->activeMembers()->where('sampler_name', 'Muhamad Rizky')->firstOrFail();
+        $this->assertSame(0, $rizky->events()->count());
+        $this->assertSame(0, $newSession->events()->count());
+    }
+
     public function testEditSamplingDateCreatesNewActivityAndDeactivatesOldSession(): void
     {
         $this->schedule();
@@ -2197,5 +2449,228 @@ class SamplerTrackingSyncTest extends TestCase
         $this->assertNotNull($notice);
         $this->assertStringContainsString('Rizki', $notice);
         $this->assertStringContainsString('terkunci', $notice);
+    }
+
+    public function testManagerOpenActivityAllowsCheckinWhileLongerShiftStillCheckedIn(): void
+    {
+        $connection = $this->db->getConnection('mysql');
+        if (!$connection->getSchemaBuilder()->hasColumn('order_header', 'id_pelanggan')) {
+            $connection->getSchemaBuilder()->table('order_header', function (Blueprint $table) {
+                $table->integer('id_pelanggan')->nullable();
+            });
+        }
+
+        $session24h = SamplerTrackingSession::create([
+            'team_key' => 'open-24h',
+            'tanggal_sampling' => '2026-09-17',
+            'nama_perusahaan' => 'PT Alpha',
+            'no_order' => 'ORD-A',
+            'durasi' => '1 x 24 Jam',
+            'is_active' => true,
+        ]);
+        $member24h = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $session24h->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'A',
+            'effective_duration' => 2,
+            'is_active' => true,
+        ]);
+
+        $sessionSesaat = SamplerTrackingSession::create([
+            'team_key' => 'open-sesaat',
+            'tanggal_sampling' => '2026-09-17',
+            'nama_perusahaan' => 'PT Beta',
+            'no_order' => 'ORD-B',
+            'durasi' => 'Sesaat',
+            'is_active' => true,
+        ]);
+        $memberSesaat = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $sessionSesaat->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'A',
+            'effective_duration' => 0,
+            'is_active' => true,
+        ]);
+
+        $connection->table('order_header')->insert([
+            ['no_document' => 'Q-A', 'no_order' => 'ORD-A', 'id_pelanggan' => 101, 'is_active' => true],
+            ['no_document' => 'Q-B', 'no_order' => 'ORD-B', 'id_pelanggan' => 202, 'is_active' => true],
+        ]);
+
+        foreach (['departure', 'checkin'] as $type) {
+            $connection->table('sampler_tracking_events')->insert([
+                'sampler_tracking_session_id' => $session24h->id,
+                'sampler_tracking_member_id' => $member24h->id,
+                'event_type' => $type,
+                'event_at' => '2026-09-17 07:00:00',
+            ]);
+        }
+
+        $openService = new \App\Services\SamplerTrackingActivityOpenService();
+        $state = $openService->parallelCheckinState($memberSesaat, $sessionSesaat, $this->service->listByDate('2026-09-17', 10));
+        $this->assertTrue($state['blocked']);
+
+        $connection->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $sessionSesaat->id,
+            'sampler_tracking_member_id' => $memberSesaat->id,
+            'event_type' => 'departure',
+            'event_at' => '2026-09-17 07:30:00',
+        ]);
+
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        try {
+            $this->service->storeEvent([
+                'member_id' => $memberSesaat->id,
+                'event_type' => 'checkin',
+                'event_at' => '2026-09-17 08:00:00',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            $message = collect($exception->errors())->flatten()->first();
+            $this->assertStringContainsString('check out', strtolower((string) $message));
+            throw $exception;
+        }
+    }
+
+    public function testOpenActivityGrantBypassesParallelCheckinLock(): void
+    {
+        $connection = $this->db->getConnection('mysql');
+        if (!$connection->getSchemaBuilder()->hasColumn('order_header', 'id_pelanggan')) {
+            $connection->getSchemaBuilder()->table('order_header', function (Blueprint $table) {
+                $table->integer('id_pelanggan')->nullable();
+            });
+        }
+
+        $session24h = SamplerTrackingSession::create([
+            'team_key' => 'grant-24h',
+            'tanggal_sampling' => '2026-09-17',
+            'nama_perusahaan' => 'PT Alpha',
+            'no_order' => 'ORD-A2',
+            'is_active' => true,
+        ]);
+        $member24h = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $session24h->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'A',
+            'effective_duration' => 2,
+            'is_active' => true,
+        ]);
+
+        $sessionSesaat = SamplerTrackingSession::create([
+            'team_key' => 'grant-sesaat',
+            'tanggal_sampling' => '2026-09-17',
+            'nama_perusahaan' => 'PT Beta',
+            'no_order' => 'ORD-B2',
+            'is_active' => true,
+        ]);
+        $memberSesaat = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $sessionSesaat->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'A',
+            'effective_duration' => 0,
+            'is_active' => true,
+        ]);
+
+        $connection->table('order_header')->insert([
+            ['no_document' => 'Q-A2', 'no_order' => 'ORD-A2', 'id_pelanggan' => 301, 'is_active' => true],
+            ['no_document' => 'Q-B2', 'no_order' => 'ORD-B2', 'id_pelanggan' => 302, 'is_active' => true],
+        ]);
+
+        foreach (['departure', 'checkin'] as $type) {
+            $connection->table('sampler_tracking_events')->insert([
+                'sampler_tracking_session_id' => $session24h->id,
+                'sampler_tracking_member_id' => $member24h->id,
+                'event_type' => $type,
+                'event_at' => '2026-09-17 07:00:00',
+            ]);
+        }
+
+        $connection->table('sampler_tracking_events')->insert([
+            'sampler_tracking_session_id' => $sessionSesaat->id,
+            'sampler_tracking_member_id' => $memberSesaat->id,
+            'event_type' => 'departure',
+            'event_at' => '2026-09-17 07:30:00',
+        ]);
+
+        $openService = new \App\Services\SamplerTrackingActivityOpenService();
+        $openService->open($memberSesaat->id, 601, 'Buka sesaat di pagi hari');
+
+        $events = $this->service->storeEvent([
+            'member_id' => $memberSesaat->id,
+            'event_type' => 'checkin',
+            'event_at' => '2026-09-17 08:00:00',
+        ]);
+        $this->assertTrue($events->contains(function ($event) {
+            return $event->event_type === 'checkin';
+        }));
+    }
+
+    public function testOpenActivityIconHiddenWhenAllAssignmentsAreSesaat(): void
+    {
+        $connection = $this->db->getConnection('mysql');
+        if (!$connection->getSchemaBuilder()->hasColumn('order_header', 'id_pelanggan')) {
+            $connection->getSchemaBuilder()->table('order_header', function (Blueprint $table) {
+                $table->integer('id_pelanggan')->nullable();
+            });
+        }
+
+        foreach (['ORD-S1', 'ORD-S2'] as $index => $order) {
+            $session = SamplerTrackingSession::create([
+                'team_key' => 'all-sesaat-' . $index,
+                'tanggal_sampling' => '2026-09-19',
+                'nama_perusahaan' => 'PT Sesaat ' . ($index + 1),
+                'no_order' => $order,
+                'is_active' => true,
+            ]);
+            SamplerTrackingMember::create([
+                'sampler_tracking_session_id' => $session->id,
+                'sampler_id' => 10,
+                'sampler_name' => 'A',
+                'effective_duration' => 0,
+                'is_active' => true,
+            ]);
+        }
+
+        $connection->table('order_header')->insert([
+            ['no_document' => 'Q-S1', 'no_order' => 'ORD-S1', 'id_pelanggan' => 501, 'is_active' => true],
+            ['no_document' => 'Q-S2', 'no_order' => 'ORD-S2', 'id_pelanggan' => 502, 'is_active' => true],
+        ]);
+
+        $rows = $this->service->listTrackingRows('2026-09-19', 10)['data'];
+        foreach ($rows as $row) {
+            $this->assertNotTrue($row['can_open_parallel_activity'] ?? false);
+        }
+    }
+
+    public function testOpenActivityRejectedForNonSesaatTarget(): void
+    {
+        $connection = $this->db->getConnection('mysql');
+        $connection->getSchemaBuilder()->dropIfExists('sampler_tracking_activity_opens');
+        (new \CreateSamplerTrackingActivityOpens())->up();
+
+        $session8h = SamplerTrackingSession::create([
+            'team_key' => 'open-8h',
+            'tanggal_sampling' => '2026-09-18',
+            'nama_perusahaan' => 'PT Gamma',
+            'no_order' => 'ORD-8H',
+            'is_active' => true,
+        ]);
+        $member8h = SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $session8h->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'A',
+            'effective_duration' => 1,
+            'is_active' => true,
+        ]);
+
+        $openService = new \App\Services\SamplerTrackingActivityOpenService();
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+        $this->expectExceptionMessage('Open activity hanya untuk penugasan sesaat.');
+
+        try {
+            $openService->open($member8h->id, 601, 'Coba buka 8 jam');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+            $this->assertSame(422, $exception->getStatusCode());
+            throw $exception;
+        }
     }
 }

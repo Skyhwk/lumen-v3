@@ -17,6 +17,7 @@ use App\Services\Hr\HrApprovalChainService;
 use App\Services\Hr\HrFormAttachmentStorage;
 use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\HrTableMode;
+use App\Services\Hr\LeaveRequestAtasanQueueService;
 use App\Services\Hr\LegacyHrMirror;
 use App\Services\Hr\Portal\HrdLeaveVoidService;
 use App\Services\Hr\Portal\PortalLeaveDatatableQuery;
@@ -165,6 +166,46 @@ class PermohonanCutiController extends Controller
             'days' => $days,
             'mode' => 'weekday',
         ], 200);
+    }
+
+    /**
+     * DataTables antrian HRD pengajuan cuti per tab status.
+     */
+    public function indexHrd(Request $request)
+    {
+        $status = (string) $request->status;
+        $allowed = [
+            WorkflowStatus::PENDING,
+            WorkflowStatus::APPROVED_ATASAN,
+            WorkflowStatus::APPROVED_HRD,
+            WorkflowStatus::REJECTED_HRD,
+        ];
+        if (!in_array($status, $allowed, true)) {
+            return Datatables::of(collect())->make(true);
+        }
+
+        $year = (int) ($request->periode ?? date('Y'));
+        $portal = HrTableMode::portalReadsHrTables();
+        $queue = app(LeaveRequestAtasanQueueService::class);
+
+        if ($portal) {
+            $portalQuery = app(PortalLeaveDatatableQuery::class);
+            $query = $portalQuery->hrdByStatus($year, $status);
+            $dt = Datatables::of($query);
+            $dt = $portalQuery->applyDatatablesFilters($dt);
+        } else {
+            $query = $this->hrdLegacyQueryByStatus($year, $status);
+            $dt = Datatables::of($query);
+            $dt = $this->applyDatatablesFilter($dt);
+        }
+
+        $dt = $this->applyHrdLeaveAtasanStepsColumn($dt, $queue);
+
+        if ($status === WorkflowStatus::PENDING) {
+            $dt = $this->applyHrdLeaveMenungguAtasanColumn($dt, $queue, $portal);
+        }
+
+        return $dt->make(true);
     }
 
     /**
@@ -359,33 +400,41 @@ class PermohonanCutiController extends Controller
 
         if (HrTableMode::portalReadsHrTables()) {
             $portalQuery = app(PortalLeaveDatatableQuery::class);
-            $onProgress = $portalQuery->countHrdUnprocessed($year);
-            $processed = $portalQuery->countHrdProcessed($year);
+            $counts = [
+                'pending' => $portalQuery->countHrdByStatus($year, WorkflowStatus::PENDING),
+                'approved_atasan' => $portalQuery->countHrdUnprocessed($year),
+                'approved_hrd' => $portalQuery->countHrdByStatus($year, WorkflowStatus::APPROVED_HRD),
+                'rejected_hrd' => $portalQuery->countHrdByStatus($year, WorkflowStatus::REJECTED_HRD),
+            ];
         } else {
-            $base = LeaveRequest::on('intilab_apps')->whereYear('leave_requests.start_date', $year);
-            $onProgress = (clone $base)
-                ->where('leave_requests.status', 'Approved Atasan')
+            $base = LeaveRequest::on('intilab_apps')
                 ->where('leave_requests.is_active', 1)
-                ->whereNull('leave_requests.approved_hrd_by')
-                ->whereNull('leave_requests.rejected_atasan_by')
-                ->whereNull('leave_requests.rejected_hrd_by')
-                ->count();
-            $processed = (clone $base)
-                ->where('leave_requests.is_active', 1)
-                ->where(function ($q) {
-                    $q->whereNotNull('leave_requests.approved_hrd_by')
-                        ->orWhereNotNull('leave_requests.rejected_atasan_by')
-                        ->orWhereNotNull('leave_requests.rejected_hrd_by');
-                })
-                ->count();
+                ->whereYear('leave_requests.start_date', $year);
+            $counts = [
+                'pending' => (clone $base)
+                    ->where('leave_requests.status', WorkflowStatus::PENDING)
+                    ->whereNull('leave_requests.rejected_atasan_by')
+                    ->whereNull('leave_requests.rejected_hrd_by')
+                    ->whereNull('leave_requests.approved_hrd_by')
+                    ->count(),
+                'approved_atasan' => (clone $base)
+                    ->where('leave_requests.status', WorkflowStatus::APPROVED_ATASAN)
+                    ->whereNull('leave_requests.approved_hrd_by')
+                    ->whereNull('leave_requests.rejected_atasan_by')
+                    ->whereNull('leave_requests.rejected_hrd_by')
+                    ->count(),
+                'approved_hrd' => (clone $base)
+                    ->where('leave_requests.status', WorkflowStatus::APPROVED_HRD)
+                    ->count(),
+                'rejected_hrd' => (clone $base)
+                    ->where('leave_requests.status', WorkflowStatus::REJECTED_HRD)
+                    ->count(),
+            ];
         }
 
         return response()->json([
             'success' => true,
-            'data' => [
-                'on_progress' => $onProgress,
-                'processed' => $processed,
-            ],
+            'data' => $counts,
         ]);
     }
 
@@ -521,6 +570,115 @@ class PermohonanCutiController extends Controller
         ]);
     }
 
+    private function hrdLegacyQueryByStatus(int $year, string $status)
+    {
+        $query = LeaveRequest::on('intilab_apps')
+            ->leftJoin('intilab_produksi.master_karyawan as karyawan', 'leave_requests.employee_id', '=', 'karyawan.id')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'karyawan.id_department', '=', 'd.id')
+            ->leftJoin('intilab_apps.special_leave_types as slt', 'leave_requests.special_leave_id', '=', 'slt.id')
+            ->select(
+                'leave_requests.id',
+                'leave_requests.id as hr_request_id',
+                'leave_requests.no_document',
+                'leave_requests.type',
+                'leave_requests.special_leave_id',
+                'slt.name as special_leave_name',
+                'leave_requests.start_date',
+                'leave_requests.end_date',
+                'leave_requests.start_date as tanggal',
+                'd.nama_divisi',
+                DB::raw('CASE
+                        WHEN leave_requests.status = "Approved Atasan" THEN "Approve Atasan"
+                        WHEN leave_requests.status = "Rejected Atasan" THEN "Rejected Atasan"
+                        WHEN leave_requests.status = "Approved HRD" THEN "Approved HRD"
+                        WHEN leave_requests.status = "Rejected HRD" THEN "Rejected HRD"
+                        ELSE "Pending"
+                    END as status'),
+                'leave_requests.status as raw_status',
+                'karyawan.id as employee_id',
+                'karyawan.nama_lengkap',
+                'karyawan.nik_karyawan',
+                'karyawan.image as karyawan_image',
+                'karyawan.grade as jabatan',
+                'leave_requests.approved_atasan_by',
+                'leave_requests.approved_atasan_at',
+                'leave_requests.rejected_atasan_by',
+                'leave_requests.rejected_atasan_at',
+                'leave_requests.reject_atasan_reason',
+                'leave_requests.approved_hrd_by',
+                'leave_requests.approved_hrd_at',
+                'leave_requests.rejected_hrd_by',
+                'leave_requests.rejected_hrd_at',
+                'leave_requests.reject_hrd_reason',
+                'leave_requests.attachment',
+                'leave_requests.created_by as nama_pengaju',
+                'leave_requests.created_at as diajukan_pada',
+                'leave_requests.description as keterangan'
+            )
+            ->where('leave_requests.is_active', 1)
+            ->whereYear('leave_requests.start_date', $year);
+
+        if ($status === WorkflowStatus::PENDING) {
+            $query->where('leave_requests.status', WorkflowStatus::PENDING)
+                ->whereNull('leave_requests.rejected_atasan_by')
+                ->whereNull('leave_requests.rejected_hrd_by')
+                ->whereNull('leave_requests.approved_hrd_by');
+        } elseif ($status === WorkflowStatus::APPROVED_ATASAN) {
+            $query->where('leave_requests.status', WorkflowStatus::APPROVED_ATASAN)
+                ->whereNull('leave_requests.approved_hrd_by')
+                ->whereNull('leave_requests.rejected_atasan_by')
+                ->whereNull('leave_requests.rejected_hrd_by');
+        } elseif ($status === WorkflowStatus::APPROVED_HRD) {
+            $query->where('leave_requests.status', WorkflowStatus::APPROVED_HRD);
+        } elseif ($status === WorkflowStatus::REJECTED_HRD) {
+            $query->where('leave_requests.status', WorkflowStatus::REJECTED_HRD);
+        } else {
+            $query->whereRaw('0 = 1');
+        }
+
+        return $query;
+    }
+
+    private function applyHrdLeaveAtasanStepsColumn($datatables, LeaveRequestAtasanQueueService $queue)
+    {
+        return $datatables->addColumn('atasan_steps', function ($row) use ($queue) {
+            return $queue->atasanStepsForLegacyRow($this->leaveRowForAtasanQueue($row));
+        });
+    }
+
+    private function applyHrdLeaveMenungguAtasanColumn($datatables, LeaveRequestAtasanQueueService $queue, bool $portal)
+    {
+        return $datatables
+            ->addColumn('menunggu_atasan', function ($row) use ($queue) {
+                return $queue->waitingAtasanNameForLegacyRow($this->leaveRowForAtasanQueue($row));
+            })
+            ->filterColumn('menunggu_atasan', function ($query, $keyword) use ($queue, $portal) {
+                $employeeIds = $queue->employeeIdsWaitingOnAtasanNamed($keyword);
+                $idColumn = $portal ? 'leave_requests.karyawan_id' : 'leave_requests.employee_id';
+                $query->whereIn($idColumn, $employeeIds);
+            })
+            ->filterColumn('diajukan_pada', function ($query, $keyword) {
+                $query->where('leave_requests.created_at', 'like', "%{$keyword}%");
+            });
+    }
+
+    private function leaveRowForAtasanQueue(object $row): object
+    {
+        $workflowStatus = $row->raw_status ?? $row->status ?? '';
+
+        return (object) [
+            'id' => isset($row->id) ? (int) $row->id : (int) ($row->hr_request_id ?? 0),
+            'hr_request_id' => isset($row->hr_request_id) ? (int) $row->hr_request_id : (int) ($row->id ?? 0),
+            'employee_id' => $row->employee_id ?? null,
+            'status' => $workflowStatus,
+            'approved_atasan_by' => $row->approved_atasan_by ?? null,
+            'approved_atasan_at' => $row->approved_atasan_at ?? null,
+            'rejected_atasan_by' => $row->rejected_atasan_by ?? null,
+            'rejected_atasan_at' => $row->rejected_atasan_at ?? null,
+            'reject_atasan_reason' => $row->reject_atasan_reason ?? null,
+        ];
+    }
+
     /**
      * Apply custom filter and order columns for Yajra DataTables
      */
@@ -550,6 +708,18 @@ class PermohonanCutiController extends Controller
             })
             ->filterColumn('nama_pengaju', function ($query, $keyword) {
                 $query->where('leave_requests.created_by', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('diajukan_pada', function ($query, $keyword) {
+                $query->where('leave_requests.created_at', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('jabatan_karyawan', function ($query, $keyword) {
+                $query->where('karyawan.grade', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('approved_atasan_by', function ($query, $keyword) {
+                $query->where('leave_requests.approved_atasan_by', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('approved_hrd_by', function ($query, $keyword) {
+                $query->where('leave_requests.approved_hrd_by', 'like', "%{$keyword}%");
             })
             ->filterColumn('keterangan', function ($query, $keyword) {
                 $query->where('leave_requests.description', 'like', "%{$keyword}%");
@@ -1073,7 +1243,8 @@ class PermohonanCutiController extends Controller
             if (!$viewer) {
                 return false;
             }
-            $hrRequest = HrRequestResolver::findByApiId(HrRequest::TYPE_LEAVE, (int) $row->id);
+            $apiId = isset($row->id) ? (int) $row->id : (int) ($row->hr_request_id ?? 0);
+            $hrRequest = HrRequestResolver::findByApiId(HrRequest::TYPE_LEAVE, $apiId);
             if (!$hrRequest) {
                 return false;
             }

@@ -2,17 +2,18 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Http\Controllers\api\Concerns\BuildsFeeSamplingDatatable;
 use App\Models\PengajuanFeeSampling;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
-use Yajra\Datatables\Datatables;
-use Illuminate\Database\Eloquent\Collection;
 
 class FeeSamplingController extends Controller
 {
+    use BuildsFeeSamplingDatatable;
+
     // public function index(Request $request)
     // {
     //     $data = PengajuanFeeSampling::with(['detail_fee' => function ($q) {
@@ -25,30 +26,24 @@ class FeeSamplingController extends Controller
     //     return Datatables::of($data)->make(true);
     // }
 
-    public function index(Request $request)
+    private function paidQuery(Request $request)
     {
-        $data = PengajuanFeeSampling::with(['detail_fee' => function ($q) {
-                $q->where('is_approve', 1);
-            }])
+        $uploaded = (int) $request->input('is_upload_bukti_pembayaran', 0);
+
+        return PengajuanFeeSampling::query()
             ->where('is_approve_finance', 1)
             ->whereNotNull('transfer_date')
-            ->where('is_upload_bukti_pembayaran', 0)
-            ->select('pengajuan_fee_sampling.*'); // pastikan select eksplisit
+            ->where('is_upload_bukti_pembayaran', $uploaded ? 1 : 0);
+    }
 
-        return Datatables::of($data)
-            ->filterColumn('tgl_pengajuan', function ($query, $keyword) {
-                $query->whereRaw("DATE_FORMAT(tgl_pengajuan, '%Y-%m-%d') LIKE ?", ["%{$keyword}%"]);
-            })
-            ->filterColumn('created_by', function ($query, $keyword) {
-                $query->whereRaw('LOWER(created_by) LIKE ?', [strtolower("%{$keyword}%")]);
-            })
-            ->filterColumn('total_fee_approve', function ($query, $keyword) {
-                $query->whereRaw('CAST(total_fee_approve AS CHAR) LIKE ?', ["%{$keyword}%"]);
-            })
-            ->filterColumn('status_payment', function ($query, $keyword) {
-                $query->whereRaw('LOWER(status_payment) LIKE ?', [strtolower("%{$keyword}%")]);
-            })
-            ->make(true);
+    public function index(Request $request)
+    {
+        return $this->buildFeeSamplingDatatable($this->paidQuery($request));
+    }
+
+    public function summary(Request $request)
+    {
+        return $this->feeSamplingSummaryJson($this->paidQuery($request), $request);
     }
     
     public function uploadFile(Request $request)

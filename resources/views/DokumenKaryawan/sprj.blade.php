@@ -428,8 +428,6 @@
     </tr>
 </table>
 
-<div class="page-break"></div>
-
 <div class="article-title"><div>Pasal 10</div><div>Lain-Lain</div></div>
 <table class="clause">
     <tr>

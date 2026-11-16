@@ -2,6 +2,7 @@
 
 namespace App\Services\QuotationGenerate;
 
+use App\Models\MasterKaryawan;
 use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
 use App\Services\SendEmail;
@@ -35,7 +36,7 @@ class QuotationGenerateEmailService
         $to = $recipients['to'];
         $bcc = $recipients['bcc'];
 
-        $portalLink = $this->linkService->portalLink($quotation);
+        $portalLink = $this->linkService->portalTrackingLink($quotation);
         $subject = $this->buildSubject($quotation);
         $body = $this->buildBody($quotation, $portalLink);
         $attachments = $this->buildAttachments($quotation);
@@ -63,14 +64,28 @@ class QuotationGenerateEmailService
     private function resolveRecipients(QuotationNonKontrak $quotation): array
     {
         if (config('quotation_auto.generate.email_test_mode')) {
-            $testTo = trim((string) config('quotation_auto.generate.email_test_to', 'abdulpatah@intilab.com'));
-            if (!filter_var($testTo, FILTER_VALIDATE_EMAIL)) {
-                throw new \RuntimeException('QUOTATION_GENERATE_EMAIL_TEST_TO tidak valid: ' . $testTo);
+            $emails = $this->parseTestEmails((string) config('quotation_auto.generate.email_test_to', ''));
+            if ($emails === []) {
+                throw new \RuntimeException('Email test kosong. Isi --email=alamat@domain.com');
             }
 
+            $to = $emails[0];
+            $salesEmail = strtolower(trim((string) config('quotation_auto.generate.email_test_sales', 'harold@intilab.com')));
+            $sales = $this->findKaryawanByEmail($salesEmail);
+            $quotation->loadMissing(['sales']);
+            if ($sales === null) {
+                $sales = $quotation->sales;
+            }
+
+            $bcc = array_merge(
+                $this->buildSalesBccList($sales, $to),
+                [$salesEmail],
+                array_slice($emails, 1)
+            );
+
             return [
-                'to' => $testTo,
-                'bcc' => [],
+                'to' => $to,
+                'bcc' => $this->uniqueValidEmails($bcc, $to),
             ];
         }
 
@@ -83,6 +98,26 @@ class QuotationGenerateEmailService
             'to' => $to,
             'bcc' => $this->buildBccList($quotation, $to),
         ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function parseTestEmails(string $raw): array
+    {
+        $emails = [];
+        foreach (preg_split('/[,;]+/', $raw) as $item) {
+            $email = strtolower(trim($item));
+            if ($email === '') {
+                continue;
+            }
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new \RuntimeException('Email test tidak valid: ' . $item);
+            }
+            $emails[] = $email;
+        }
+
+        return array_values(array_unique($emails));
     }
 
     private function buildSubject(QuotationNonKontrak $quotation): string
@@ -123,29 +158,101 @@ class QuotationGenerateEmailService
     }
 
     /**
-     * BCC: sales@intilab.com + email sales pemilik quotation (sales_id).
+     * BCC: sales@intilab.com + sales PJ + atasan langsung ber-grade SUPERVISOR saja.
      *
      * @return array<int, string>
      */
     private function buildBccList(QuotationNonKontrak $quotation, string $to): array
     {
-        $bcc = (array) config('quotation_auto.generate.default_email_bcc', ['sales@intilab.com']);
-
         $quotation->loadMissing(['sales']);
-        if ($quotation->sales !== null && !empty($quotation->sales->email)) {
-            $bcc[] = trim((string) $quotation->sales->email);
+
+        return $this->buildSalesBccList($quotation->sales, $to);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function buildSalesBccList($sales, string $to): array
+    {
+        $bcc = (array) config('quotation_auto.generate.default_email_bcc', ['sales@intilab.com']);
+        if ($sales !== null && !empty($sales->email)) {
+            $bcc[] = trim((string) $sales->email);
+        }
+        foreach ($this->supervisorAtasanEmails($sales) as $email) {
+            $bcc[] = $email;
         }
 
-        $toLower = strtolower($to);
-        $bcc = array_values(array_unique(array_filter($bcc, function ($email) use ($toLower) {
-            if (!is_string($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                return false;
+        return $this->uniqueValidEmails($bcc, $to);
+    }
+
+    private function findKaryawanByEmail(string $email): ?MasterKaryawan
+    {
+        $email = strtolower(trim($email));
+        if ($email === '') {
+            return null;
+        }
+
+        return MasterKaryawan::query()
+            ->where('is_active', 1)
+            ->whereRaw('LOWER(email) = ?', [$email])
+            ->first();
+    }
+
+    /**
+     * Atasan langsung yang grade-nya SUPERVISOR. Manager / senior manager tidak ikut.
+     *
+     * @return array<int, string>
+     */
+    private function supervisorAtasanEmails($karyawan): array
+    {
+        if ($karyawan === null) {
+            return [];
+        }
+
+        $raw = $karyawan->atasan_langsung ?? null;
+        $ids = is_array($raw) ? $raw : (json_decode((string) $raw, true) ?: []);
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array) $ids))));
+        if ($ids === []) {
+            return [];
+        }
+
+        return MasterKaryawan::query()
+            ->whereIn('id', $ids)
+            ->where('is_active', 1)
+            ->whereNotNull('email')
+            ->where(function ($query) {
+                $query->whereRaw("UPPER(TRIM(grade)) = 'SUPERVISOR'")
+                    ->orWhereRaw("UPPER(TRIM(grade)) = 'SPV'");
+            })
+            ->pluck('email')
+            ->map(function ($email) {
+                return trim((string) $email);
+            })
+            ->all();
+    }
+
+    /**
+     * @param  array<int, mixed>  $emails
+     * @return array<int, string>
+     */
+    private function uniqueValidEmails(array $emails, string $to): array
+    {
+        $toLower = strtolower(trim($to));
+        $seen = [];
+        $valid = [];
+        foreach ($emails as $email) {
+            if (!is_string($email)) {
+                continue;
             }
+            $email = strtolower(trim($email));
+            if ($email === '' || $email === $toLower || isset($seen[$email]) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                continue;
+            }
+            $seen[$email] = true;
+            $valid[] = $email;
+        }
 
-            return strtolower(trim($email)) !== $toLower;
-        })));
-
-        return $bcc;
+        return $valid;
     }
 
     /**

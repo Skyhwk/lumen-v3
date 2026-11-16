@@ -23,6 +23,7 @@ class QuotationPromo
             $total += $row->harga_total;
         }
         $preparation = (float) ($model->total_biaya_preparasi ?? 0);
+        self::applySukaSuka($promo, $model, $total);
         $model->grand_total = $total + $preparation;
         $net = $model->grand_total; $outside = 0; $discount = 0;
         self::percentage($promo, $model, $net, $outside, $discount, ['preparasi' => $preparation], []);
@@ -65,6 +66,9 @@ class QuotationPromo
             $discount = 0;
             self::percentage($promo, new \stdClass(), $subtotal, $outside, $discount, [], []);
             $total += $subtotal;
+        }
+        if (self::isSukaSuka($promo)) {
+            $total += self::sukaSukaNominal($promo) * max(1, count($periods));
         }
         return [array_values($result), round($total, 2)];
     }
@@ -116,6 +120,7 @@ class QuotationPromo
                 }
             }
         }
+        $rows = self::mergeContractHeaderSamplingRows($rows);
         $header->data_pendukung_sampling = json_encode($rows, JSON_UNESCAPED_UNICODE);
         // Category breakdowns have different names on the contract header.
         // Pangan has no header breakdown column; its value remains in the financial totals.
@@ -129,6 +134,59 @@ class QuotationPromo
         $header->kode_promo = $first->kode_promo ?? null;
         $header->discount_promo = $first->discount_promo ?? null;
         $header->save();
+    }
+
+    /** Gabung baris header kontrak promo yang identik (selain periode), sama seperti groupDataSampling non-promo. */
+    public static function mergeContractHeaderSamplingRows(array $rows): array
+    {
+        $grouped = [];
+        foreach ($rows as $row) {
+            $row = (array) $row;
+            $key = self::contractHeaderSamplingMergeKey($row);
+            if (!isset($grouped[$key])) {
+                $row['periode'] = array_values(array_unique((array) ($row['periode'] ?? [])));
+                sort($row['periode']);
+                $grouped[$key] = $row;
+                continue;
+            }
+            foreach ((array) ($row['periode'] ?? []) as $period) {
+                if (!in_array($period, $grouped[$key]['periode'], true)) {
+                    $grouped[$key]['periode'][] = $period;
+                }
+            }
+            sort($grouped[$key]['periode']);
+            unset($grouped[$key]['_promo_display_total']);
+        }
+
+        return array_values($grouped);
+    }
+
+    private static function contractHeaderSamplingMergeKey(array $row): string
+    {
+        $parameters = $row['parameter'] ?? [];
+        if (is_array($parameters)) {
+            sort($parameters);
+        }
+        $regulasi = $row['regulasi'] ?? [];
+        if (is_array($regulasi)) {
+            $regulasi = array_values(array_filter($regulasi));
+            sort($regulasi);
+        }
+        $quantity = (int) ($row['jumlah_titik'] ?? 0);
+
+        return md5(json_encode([
+            'is_promo' => !empty($row['is_promo']),
+            'kategori_1' => $row['kategori_1'] ?? null,
+            'kategori_2' => $row['kategori_2'] ?? null,
+            'parameter' => $parameters,
+            'total_parameter' => $row['total_parameter'] ?? null,
+            'regulasi' => $regulasi,
+            'jumlah_titik' => $quantity,
+            'harga_satuan' => round((float) ($row['harga_satuan'] ?? 0), 2),
+            'harga_total' => round((float) ($row['harga_total'] ?? 0), 2),
+            'volume' => $row['volume'] ?? null,
+            'penamaan_titik' => self::headerPointNames($row['penamaan_titik'] ?? [], $quantity),
+        ], JSON_UNESCAPED_UNICODE));
     }
 
     public static function reduceQuoteBases($promo, $model, &$harga_air, &$harga_udara, &$harga_emisi, &$harga_padatan, &$harga_swab_test, &$harga_tanah, &$harga_pangan, &$transport, &$perdiem, &$jam, $outside, &$discountTotal)
@@ -248,11 +306,12 @@ class QuotationPromo
         $model->discount_promo = json_encode(['deskripsi_promo_discount' => $promo->nama_diskon, 'jumlah_promo_discount' => $rate, 'dasar_diskon' => $basis]);
     }
 
-    public static function resolve($id)
+    public static function resolve($id, $quotation = null)
     {
         if (!$id) return null;
+        PromoPengujianAvailability::syncExpired();
         $promo = DB::table('promo_pengujian')->where('id', $id)->first();
-        if (!$promo || $promo->status !== 'aktif') {
+        if (!$promo || !PromoPengujianAvailability::canUse($promo, $quotation)) {
             throw new \InvalidArgumentException('Promo tidak ditemukan atau sudah tidak aktif. Pilih ulang promo.');
         }
         $promo->konfigurasi = json_decode($promo->konfigurasi, true) ?: [];
@@ -269,10 +328,49 @@ class QuotationPromo
             if (!self::hargaParameterMap($promo)) {
                 throw new \InvalidArgumentException('Konfigurasi Parameter Khusus tidak valid.');
             }
+        } elseif (self::isSukaSuka($promo)) {
+            self::sukaSukaNominal($promo);
         } elseif (!in_array($promo->metode, ['paket_pengujian', 'pengujian_free_pengujian', 'labeling'], true)) {
             throw new \InvalidArgumentException('Jenis promo tidak didukung.');
         }
         return $promo;
+    }
+
+    public static function isSukaSuka($promo)
+    {
+        return $promo && ($promo->metode ?? null) === 'suka_suka';
+    }
+
+    public static function sukaSukaNominal($promo)
+    {
+        if (!self::isSukaSuka($promo)) {
+            return 0;
+        }
+        $nominal = is_array($promo->konfigurasi ?? null)
+            ? ($promo->konfigurasi['nominal'] ?? 0)
+            : 0;
+        if (!is_numeric($nominal) || $nominal <= 0) {
+            throw new \InvalidArgumentException('Nominal promo wajib diisi lebih dari 0.');
+        }
+
+        return (float) $nominal;
+    }
+
+    public static function applySukaSuka($promo, $model, &$hargaTotal)
+    {
+        if (!self::isSukaSuka($promo)) {
+            return 0;
+        }
+        $nominal = self::sukaSukaNominal($promo);
+        $model->kode_promo = $promo->kode_promo;
+        $model->discount_promo = json_encode([
+            'deskripsi_promo_discount' => $promo->nama_diskon,
+            'jumlah_promo_discount' => $nominal,
+            'tipe' => 'suka_suka',
+        ]);
+        $hargaTotal += $nominal;
+
+        return $nominal;
     }
 
     public static function isParameterKhusus($promo)
@@ -309,6 +407,10 @@ class QuotationPromo
     public static function validateRows($promo, $rows)
     {
         $marked = array_values(array_filter($rows, fn($row) => !empty($row->is_promo)));
+        if (self::isSukaSuka($promo)) {
+            if ($marked) throw new \InvalidArgumentException('Promo suka suka tidak memakai pengujian promo terpisah.');
+            return;
+        }
         $isPackage = $promo && in_array($promo->metode, ['paket_pengujian', 'pengujian_free_pengujian'], true);
         if (!$isPackage) {
             if ($marked) throw new \InvalidArgumentException('Pengujian promo tidak sesuai dengan promo yang dipilih.');
@@ -344,6 +446,9 @@ class QuotationPromo
         $quantity = (int) $row->jumlah_titik;
         $total = $normalTotal ?? ($normalUnit * $quantity);
         if (!$promo) return [$normalUnit, $total];
+        if (self::isSukaSuka($promo)) {
+            return [0, 0];
+        }
         if (!empty($row->is_promo)) {
             if (!is_array($freeUsed)) $freeUsed = [];
             foreach (($promo->konfigurasi['data_pendukung_sampling'] ?? $promo->konfigurasi) as $key => $template) {

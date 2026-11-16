@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 class SyncLeaveAlpaLedgerCommand extends Command
 {
-    protected $signature = 'greatday:sync-leave-alpa-ledger
+    protected $signature = 'syncleavealpaledger
                             {--from= : Y-m-d awal (default: awal bulan lalu)}
                             {--to= : Y-m-d akhir (default: hari ini)}
                             {--karyawan_id= : Opsional, satu karyawan}';

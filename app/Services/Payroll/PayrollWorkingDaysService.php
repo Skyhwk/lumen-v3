@@ -4,6 +4,7 @@ namespace App\Services\Payroll;
 
 use App\Models\RekapLiburKalender;
 use App\Models\ShiftKaryawan;
+use App\Services\Hr\MonthlyAbsensiDataBuilder;
 use Carbon\Carbon;
 
 class PayrollWorkingDaysService
@@ -166,10 +167,11 @@ class PayrollWorkingDaysService
             return $shiftCount;
         }
 
-        $counts = self::calendarCountsForMonth($periodeYm);
         if ($idJabatan !== null && in_array($idJabatan, self::jabatanIncludeSaturday(), true)) {
-            return $counts['mon_sat'];
+            return count(self::eligibleWorkDateIndexForKaryawan($karyawanId, $periodeYm, $idJabatan));
         }
+
+        $counts = self::calendarCountsForMonth($periodeYm);
 
         return $counts['mon_fri'];
     }
@@ -213,6 +215,75 @@ class PayrollWorkingDaysService
         }
 
         return $index;
+    }
+
+    /**
+     * Kalender hari kerja per karyawan (Senin–Sabtu: hari shift off/libur tidak wajib masuk / tidak alpa).
+     *
+     * @param  iterable<int, array<string, mixed>>|null  $rekapRows
+     * @return array<string, true>
+     */
+    public static function eligibleWorkDateIndexForKaryawan(
+        int $karyawanId,
+        string $periodeYm,
+        ?int $idJabatan,
+        ?iterable $rekapRows = null
+    ): array {
+        $index = self::eligibleWorkDateIndex($periodeYm, $idJabatan);
+
+        if ($idJabatan === null || !in_array($idJabatan, self::jabatanIncludeSaturday(), true)) {
+            return $index;
+        }
+
+        self::removeScheduledRestDaysFromIndex($index, $karyawanId, $periodeYm, $rekapRows);
+
+        return $index;
+    }
+
+    /**
+     * @param  array<string, true>  $index
+     * @param  iterable<int, array<string, mixed>>|null  $rekapRows
+     */
+    private static function removeScheduledRestDaysFromIndex(
+        array &$index,
+        int $karyawanId,
+        string $periodeYm,
+        ?iterable $rekapRows = null
+    ): void {
+        $parts = explode('-', $periodeYm);
+        $start = sprintf('%s-%s-01', $parts[0] ?? '1970', $parts[1] ?? '01');
+        $end = date('Y-m-t', strtotime($start));
+
+        $shiftByDate = ShiftKaryawan::query()
+            ->select('tanggal', 'shift')
+            ->where('karyawan_id', $karyawanId)
+            ->whereBetween('tanggal', [$start, $end])
+            ->get()
+            ->keyBy(fn ($row) => (string) $row->tanggal);
+
+        foreach ($shiftByDate as $ymd => $row) {
+            if (!isset($index[$ymd])) {
+                continue;
+            }
+            if (MonthlyAbsensiDataBuilder::isRestDayShift($row->shift ?? null)) {
+                unset($index[$ymd]);
+            }
+        }
+
+        if ($rekapRows === null) {
+            return;
+        }
+
+        foreach ($rekapRows as $data) {
+            $row = is_array($data) ? $data : (array) $data;
+            $tanggal = (string) ($row['tanggal'] ?? '');
+            if ($tanggal === '' || !isset($index[$tanggal])) {
+                continue;
+            }
+            if (MonthlyAbsensiDataBuilder::isRestDayShift($row['shift'] ?? null)) {
+                unset($index[$tanggal]);
+            }
+        }
     }
 
     public static function isMasukPerShift(string $shift): bool
@@ -259,9 +330,12 @@ class PayrollWorkingDaysService
     public static function collectMasukKerjaDates(
         iterable $rekapRows,
         ?int $idJabatan,
-        string $periodeYm
+        string $periodeYm,
+        ?int $karyawanId = null
     ): array {
-        $eligible = self::eligibleWorkDateIndex($periodeYm, $idJabatan);
+        $eligible = $karyawanId !== null
+            ? self::eligibleWorkDateIndexForKaryawan($karyawanId, $periodeYm, $idJabatan, $rekapRows)
+            : self::eligibleWorkDateIndex($periodeYm, $idJabatan);
         $dates = [];
 
         foreach ($rekapRows as $data) {
@@ -325,5 +399,20 @@ class PayrollWorkingDaysService
         $masuk = self::sqlShowDataMasukKerja();
 
         return 'GREATEST((' . $hari . ' - ' . $masuk . '), 0)';
+    }
+
+    /**
+     * Kolom preview generate: hitung dari rekap, tapi baris yang sudah submit memakai snapshot payroll.
+     */
+    public static function sqlPreviewOrStoredHariKerja(?string $periodeYm = null): string
+    {
+        return 'CASE WHEN payroll.id IS NULL THEN ' . self::sqlShowDataHariKerja($periodeYm)
+            . ' ELSE IFNULL(payroll.hari_kerja, 0) END';
+    }
+
+    public static function sqlPreviewOrStoredTidakHadir(?string $periodeYm = null): string
+    {
+        return 'CASE WHEN payroll.id IS NULL THEN ' . self::sqlShowDataTidakHadir($periodeYm)
+            . ' ELSE IFNULL(payroll.tidak_hadir, 0) END';
     }
 }

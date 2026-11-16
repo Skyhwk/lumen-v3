@@ -10,6 +10,7 @@ class DFUS extends Sector
 
     protected $casts = [
         'status_quotation' => 'array',
+        'keterangan_at' => 'datetime',
     ];
 
     public function pelanggan()

@@ -11,6 +11,7 @@ use App\Services\Hr\ApprovalService;
 use App\Services\Hr\HrRequestResolver;
 use App\Services\Hr\HrTableMode;
 use App\Services\Hr\LegacyHrMirror;
+use App\Services\Hr\PermissionRequestAtasanQueueService;
 use App\Services\Hr\Portal\HrdPermissionVoidService;
 use App\Services\Hr\Portal\PortalHrdIzinDatatableQuery;
 use App\Services\Hr\PortalHrSync;
@@ -392,11 +393,30 @@ class IzinController extends Controller
 
     private function izinRows(int $periode, string $status)
     {
-        if (HrTableMode::portalReadsHrTables()) {
-            return app(PortalHrdIzinDatatableQuery::class)->byStatus($periode, $status);
-        }
+        $rows = HrTableMode::portalReadsHrTables()
+            ? app(PortalHrdIzinDatatableQuery::class)->byStatus($periode, $status)
+            : $this->legacyPermissionQuery($periode, $status)->get();
 
-        return $this->legacyPermissionQuery($periode, $status)->get();
+        return $this->attachMenungguAtasan($rows);
+    }
+
+    private function attachMenungguAtasan($rows)
+    {
+        $service = app(PermissionRequestAtasanQueueService::class);
+
+        return collect($rows)->map(function ($row) use ($service) {
+            $row->atasan_steps = $service->atasanStepsForLegacyRow($row);
+            $row->menunggu_atasan = $service->waitingAtasanNameForLegacyRow($row);
+            unset(
+                $row->legacy_id,
+                $row->permission_employee_id,
+                $row->hr_request_id,
+                $row->status_raw,
+                $row->karyawan_id
+            );
+
+            return $row;
+        })->values();
     }
 
     private function countIzin(int $periode, string $status): int
@@ -458,6 +478,9 @@ class IzinController extends Controller
     {
         return [
             DB::raw("CONCAT('PR-', pr.id) as id"),
+            'pr.id as legacy_id',
+            'pr.employee_id as permission_employee_id',
+            'pr.status as status_raw',
             'pr.no_document',
             'd.nama_divisi',
             DB::raw('NULL as special_leave_name'),
@@ -486,8 +509,10 @@ class IzinController extends Controller
             'pr.approved_hrd_at',
             'pr.rejected_atasan_by',
             'pr.rejected_atasan_at',
+            'pr.reject_atasan_reason',
             'pr.rejected_hrd_by',
             'pr.rejected_hrd_at',
+            'pr.reject_hrd_reason',
             'u.nama_lengkap as nama_karyawan',
             'pr.created_by as nama_pengaju',
             'pr.attachment as filename',

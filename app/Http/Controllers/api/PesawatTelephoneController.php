@@ -31,8 +31,9 @@ class PesawatTelephoneController extends Controller
             'defaults' => CiscoPhoneCnfXmlService::defaultConfig(),
             'phone_vendors' => $this->phoneVendors(),
             'phone_models' => $this->allPhoneModels(),
+            'phone_models_by_vendor' => $this->phoneModelsByVendor(),
             'time_zones' => $this->timeZones(),
-            'transport_protocols' => ['UDP', 'TCP', 'TLS'],
+            'transport_protocols' => ['AUTO', 'UDP', 'TCP', 'TLS'],
             'call_pickup_policies' => [
                 'Cisco Call Pickup',
                 'Cisco Group Call Pickup',
@@ -303,11 +304,16 @@ class PesawatTelephoneController extends Controller
         $configJson = CiscoPhoneCnfXmlService::mergeConfig($configJson);
 
         $configJson['sip_server'] = $request->sip_server ?: ($configJson['sip_server'] ?? $defaults['sip_server']);
+        // IP PBX di callManager/processNodeName (backup CP-78xx pakai IP LAN PBX, bukan hostname)
+        $configJson['call_manager_host'] = trim((string) ($request->input(
+            'call_manager_host',
+            $configJson['call_manager_host'] ?? ''
+        )));
         $configJson['phone_password'] = $request->phone_password ?? ($configJson['phone_password'] ?? '');
         $configJson['date_template'] = $request->date_template ?? ($configJson['date_template'] ?? $defaults['date_template']);
         $configJson['time_zone'] = $request->time_zone ?? ($configJson['time_zone'] ?? $defaults['time_zone']);
         $configJson['nat_enabled'] = filter_var($request->nat_enabled ?? ($configJson['nat_enabled'] ?? false), FILTER_VALIDATE_BOOLEAN);
-        $configJson['transport_layer_protocol'] = $request->transport_layer_protocol ?? ($configJson['transport_layer_protocol'] ?? 'UDP');
+        $configJson['transport_layer_protocol'] = $request->transport_layer_protocol ?? ($configJson['transport_layer_protocol'] ?? 'AUTO');
         $configJson['timer_register_expires'] = (int) ($request->timer_register_expires ?? ($configJson['timer_register_expires'] ?? 3600));
 
         if ($request->filled('ntp_servers')) {
@@ -431,8 +437,23 @@ class PesawatTelephoneController extends Controller
             $this->ciscoModels(),
             $this->yealinkModels(),
             $this->grandstreamModels(),
+            $this->polycomModels(),
+            $this->fanvilModels(),
             $this->otherModels()
         )));
+    }
+
+    /** Daftar model per vendor (id = phone_vendors.id). */
+    private function phoneModelsByVendor(): array
+    {
+        return [
+            'cisco' => $this->ciscoModels(),
+            'yealink' => $this->yealinkModels(),
+            'grandstream' => $this->grandstreamModels(),
+            'polycom' => $this->polycomModels(),
+            'fanvil' => $this->fanvilModels(),
+            'other' => $this->otherModels(),
+        ];
     }
 
     private function ciscoModels(): array
@@ -456,9 +477,19 @@ class PesawatTelephoneController extends Controller
         return ['GXP1610', 'GXP1620', 'GXP1625', 'GXP2130', 'GXP2140', 'GXP2160', 'GXP2170', 'GRP2601', 'GRP2602', 'WP820'];
     }
 
+    private function polycomModels(): array
+    {
+        return ['VVX 311', 'VVX 411', 'VVX 501'];
+    }
+
+    private function fanvilModels(): array
+    {
+        return ['X3SG', 'X5S', 'X6'];
+    }
+
     private function otherModels(): array
     {
-        return ['VVX 311', 'VVX 411', 'VVX 501', 'X3SG', 'X5S', 'X6', 'Custom'];
+        return ['Custom'];
     }
 
     private function phoneModels(): array

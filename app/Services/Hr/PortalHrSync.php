@@ -158,11 +158,14 @@ class PortalHrSync
             ->where('overtime_request_id', $legacyId)
             ->get();
 
+        $activeMemberIds = [];
         foreach ($members as $member) {
             $participantId = (int) $member->employee_id;
             if ($participantId <= 0) {
                 continue;
             }
+
+            $activeMemberIds[] = $participantId;
 
             HrOvertimeParticipant::updateOrCreate(
                 ['request_id' => $hr->id, 'karyawan_id' => $participantId],
@@ -172,6 +175,14 @@ class PortalHrSync
                     'updated_at' => $member->updated_at,
                 ]
             );
+        }
+
+        if ($activeMemberIds === []) {
+            HrOvertimeParticipant::where('request_id', $hr->id)->delete();
+        } else {
+            HrOvertimeParticipant::where('request_id', $hr->id)
+                ->whereNotIn('karyawan_id', $activeMemberIds)
+                ->delete();
         }
 
         $this->rebuildApprovalStepsFromLegacy($hr->id, $row, true);

@@ -56,7 +56,48 @@ class QuotationContractPromoTest extends TestCase
         $this->assertEquals(2640700 * 3, $header->grand_total);
         $this->assertEquals(2640600 * 3, $header->total_dpp);
         $this->assertEquals(300, $header->total_discount_promo);
-        $this->assertCount(3, json_decode($header->data_pendukung_sampling));
+        $headerRows = json_decode($header->data_pendukung_sampling, true);
+        $this->assertCount(1, $headerRows);
+        $this->assertSame(['2026-09', '2026-10', '2026-11'], $headerRows[0]['periode']);
+    }
+
+    public function testContractPdfPresentationMergesIdenticalHeaderRowsAcrossPeriods()
+    {
+        $sampling = [
+            'kategori_1' => '1-Air',
+            'kategori_2' => '2-Air Limbah Domestik',
+            'jumlah_titik' => 2,
+            'harga_satuan' => 540000,
+            'harga_total' => 1080000,
+            'parameter' => ['128;pH', '46;COD'],
+            'regulasi' => ['1095-Test Regulasi'],
+        ];
+        $details = collect([]);
+        foreach (['2027-01', '2027-02', '2027-03', '2027-04'] as $period) {
+            $details->push($this->detail($period, [$sampling], 1080000));
+        }
+        $header = $this->header($details->all());
+        [$view] = QuotationPromoPresentation::forContractPdf($header, $details, (object) ['metode' => 'persentase', 'nama_diskon' => 'Test']);
+        $rows = json_decode($view->data_pendukung_sampling, true);
+        $this->assertCount(1, $rows);
+        $this->assertSame(['2027-01', '2027-02', '2027-03', '2027-04'], $rows[0]['periode']);
+    }
+
+    public function testSyncHeaderKeepsSeparateRowsWhenSamplingDiffersBetweenPeriods()
+    {
+        $details = collect([
+            $this->detail('2026-09', [['kategori_1' => '1-Air', 'harga_total' => 100000]], 100000),
+            $this->detail('2026-10', [['kategori_1' => '1-Air', 'harga_total' => 200000]], 200000),
+        ]);
+        $header = $this->getMockBuilder(\App\Models\QuotationKontrakH::class)
+            ->onlyMethods(['detail', 'save'])->getMock();
+        $header->promo_id = 1;
+        $relation = $this->getMockBuilder(\stdClass::class)->addMethods(['get'])->getMock();
+        $relation->method('get')->willReturn($details);
+        $header->method('detail')->willReturn($relation);
+        $header->method('save')->willReturn(true);
+        QuotationPromo::syncHeader($header);
+        $this->assertCount(2, json_decode($header->data_pendukung_sampling, true));
     }
 
     private function detail($period, $rows, $grand, $discount = 0)

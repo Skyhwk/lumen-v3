@@ -562,16 +562,95 @@ class SamplerTrackingTroubleService
         })->values();
     }
 
+    public static function readableDate($date)
+    {
+        $hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+        $bulan = [
+            1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+            'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+        ];
+        $carbon = Carbon::parse($date, 'Asia/Jakarta');
+
+        return $hari[$carbon->dayOfWeek] . ', ' . $carbon->day . ' ' . $bulan[$carbon->month] . ' ' . $carbon->year;
+    }
+
     public function message($troubles)
     {
-        $teamsByDate = $troubles->groupBy(function ($trouble) {
-            return Carbon::parse($trouble->activity_date)->format('d-m-Y');
-        })->map(function ($items, $date) {
-            return $items->unique('tracking_session_id')->count() . ' tim pada tanggal ' . $date;
-        })->values()->implode(' dan ');
+        if ($troubles->isEmpty()) {
+            return "Aktivitas sampling sebelumnya belum selesai.\nLapor ke atasan untuk membuka kembali, lalu selesaikan dulu sebelum lanjut hari ini.";
+        }
 
-        return 'Aktivitas sampling Anda belum selesai pada ' . $teamsByDate
-            . '. Silakan lapor kepada atasan untuk membuka kembali aktivitas tersebut, lalu selesaikan sebelum melanjutkan aktivitas hari ini.';
+        $lines = [
+            'Aktivitas sampling Anda masih ada yang belum selesai.',
+            'Selesaikan dulu yang di bawah ini sebelum lanjut hari ini.',
+        ];
+
+        $grouped = $troubles->groupBy(function ($trouble) {
+            return Carbon::parse($trouble->activity_date)->toDateString();
+        });
+
+        foreach ($grouped as $date => $items) {
+            $unique = $items->unique('tracking_session_id')->values();
+            $lines[] = '';
+            $lines[] = self::readableDate($date);
+
+            foreach ($unique as $trouble) {
+                $progress = $this->progress($trouble->sampler_id, $trouble->activity_date, $trouble->tracking_session_id);
+                $session = $this->progressSession($trouble);
+                $company = trim((string) ($session->nama_perusahaan ?? ''));
+                $label = $company !== '' ? $company : ('Penugasan #' . $trouble->tracking_session_id);
+                $lines[] = '• ' . $label;
+                $lines[] = '  Masalah: ' . $this->unfinishedProblemLabel($trouble, $progress, $session);
+            }
+        }
+
+        $lines[] = '';
+        $lines[] = 'Lapor ke atasan untuk membuka kembali aktivitas di atas, lalu selesaikan sampai selesai.';
+
+        return implode("\n", $lines);
+    }
+
+    protected function progressSession($trouble)
+    {
+        $cacheKey = $trouble->sampler_id . '|' . Carbon::parse($trouble->activity_date)->toDateString();
+        $sessions = $this->progressSessionsCache[$cacheKey] ?? collect();
+
+        return $sessions->firstWhere('id', $trouble->tracking_session_id);
+    }
+
+    protected function unfinishedProblemLabel($trouble, array $progress, $session)
+    {
+        if (!empty($progress['missing_active_assignment'])) {
+            return 'jadwal sudah tidak aktif atau diganti';
+        }
+
+        $member = null;
+        if ($session) {
+            $member = $session->activeMembers->first(function ($item) use ($trouble) {
+                return (string) $item->sampler_id === (string) $trouble->sampler_id;
+            });
+        }
+
+        $missing = [];
+        if ($member) {
+            if (!SamplerTrackingActivity::hasEvent($member, 'checkin')) {
+                $missing[] = 'belum check-in di lokasi';
+            }
+            if (!SamplerTrackingActivity::hasEvent($member, 'checkout')) {
+                $missing[] = 'belum check-out dari lokasi';
+            }
+        } elseif (empty($progress['stops_complete'])) {
+            $missing[] = 'check-in / check-out belum lengkap';
+        }
+
+        if (empty($progress['complete'])) {
+            $checkedOut = $member && SamplerTrackingActivity::hasEvent($member, 'checkout');
+            if (!empty($progress['stops_complete']) || $checkedOut || !$missing) {
+                $missing[] = 'belum pulang (return)';
+            }
+        }
+
+        return $missing ? implode(', ', $missing) : 'aktivitas belum ditutup';
     }
 
     protected function normalizeActivityDate($activityDate)
@@ -620,7 +699,7 @@ class SamplerTrackingTroubleService
                 && $this->troublesBlockingCurrentActivity($samplerId)->isEmpty()) {
                 return;
             }
-            throw new HttpException(423, 'Penugasan #' . $sessionId . ' pada tanggal ' . $activityDate . ' terkunci. Silakan lapor kepada atasan.');
+            throw new HttpException(423, 'Penugasan #' . $sessionId . ' pada ' . self::readableDate($activityDate) . ' terkunci. Lapor ke atasan untuk membuka kembali.');
         }
         if ($this->troublesBlockingCurrentActivity($samplerId)->isNotEmpty()) {
             throw new HttpException(423, $this->message($troubles));

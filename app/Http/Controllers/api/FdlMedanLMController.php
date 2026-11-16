@@ -230,7 +230,12 @@ class FdlMedanLMController extends Controller
                     $ws->nab_medan_magnet = $hasil['nab']['nab_medan_magnet'];
                     $ws->nab_power_density = $hasil['nab']['nab_power_density'];
                 }else{
-                    $ws->hasil1 = json_encode($hasil);
+                    if($parameter->nama_lab == 'Medan Magnet Statis'){
+                        $ws->hasil24 = json_encode($hasil);
+                        $ws->satuan = 'T';
+                    }else{
+                        $ws->hasil1 = json_encode($hasil);
+                    }
                 }
                 $ws->save();
 
@@ -239,7 +244,7 @@ class FdlMedanLMController extends Controller
                 $dataL->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $dataL->save();
 
-                app(NotificationFdlService::class)->sendApproveNotification('Medan Listrik & Magnet', $dataL->no_sampel, $this->karyawan, $data->created_by);
+                // app(NotificationFdlService::class)->sendApproveNotification('Medan Listrik & Magnet', $dataL->no_sampel, $this->karyawan, $data->created_by);
 
                 DB::commit();
                 return response()->json([

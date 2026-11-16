@@ -61,33 +61,33 @@ class PayrollTransferCompletionService
         $firebase = null;
 
         foreach ($payrolls as $payroll) {
-            if (strtoupper((string) $payroll->status) === 'PAID') {
-                continue;
-            }
+            $alreadyPaid = strtoupper((string) $payroll->status) === 'PAID';
 
             try {
-                DB::transaction(function () use ($payroll, &$updated) {
-                    Payroll::where('id', $payroll->id)->update([
-                        'status' => 'PAID',
-                        'updated_at' => Carbon::now()->toDateTimeString(),
-                    ]);
-                    $updated++;
-                });
+                if (!$alreadyPaid) {
+                    DB::transaction(function () use ($payroll, &$updated) {
+                        Payroll::where('id', $payroll->id)->update([
+                            'status' => 'PAID',
+                            'updated_at' => Carbon::now()->toDateTimeString(),
+                        ]);
+                        $updated++;
+                    });
 
-                $attendanceUserId = (int) ($payroll->id_karyawan ?: 0);
-                if ($attendanceUserId > 0) {
-                    try {
-                        if ($firebase === null) {
-                            $firebase = app(FirebaseService::class);
+                    $attendanceUserId = (int) ($payroll->id_karyawan ?: 0);
+                    if ($attendanceUserId > 0) {
+                        try {
+                            if ($firebase === null) {
+                                $firebase = app(FirebaseService::class);
+                            }
+                            $firebase->sendNotifications([$attendanceUserId], $notificationPayload);
+                            $notified++;
+                        } catch (\Throwable $notificationError) {
+                            $errors[] = [
+                                'payroll_id' => $payroll->id,
+                                'step' => 'notification',
+                                'message' => $notificationError->getMessage(),
+                            ];
                         }
-                        $firebase->sendNotifications([$attendanceUserId], $notificationPayload);
-                        $notified++;
-                    } catch (\Throwable $notificationError) {
-                        $errors[] = [
-                            'payroll_id' => $payroll->id,
-                            'step' => 'notification',
-                            'message' => $notificationError->getMessage(),
-                        ];
                     }
                 }
 
@@ -128,6 +128,50 @@ class PayrollTransferCompletionService
         ];
     }
 
+    /**
+     * Kirim ulang email slip untuk header (payroll sudah PAID, notif tidak diulang).
+     */
+    public function resendPayslipEmails(int $payrollHeaderId): array
+    {
+        $header = PayrollHeader::query()
+            ->where('id', $payrollHeaderId)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$header) {
+            throw new \InvalidArgumentException('Payroll header tidak ditemukan.');
+        }
+
+        $payrolls = Payroll::query()
+            ->where('payroll_header_id', $header->id)
+            ->where('is_active', true)
+            ->get();
+
+        $periodeLabel = self::formatPeriodeLabel($header->periode_payroll);
+        $emailed = 0;
+        $errors = [];
+
+        foreach ($payrolls as $payroll) {
+            try {
+                if ($this->sendPayslipEmail($payroll, $header, $periodeLabel)) {
+                    $emailed++;
+                }
+            } catch (\Throwable $mailError) {
+                $errors[] = [
+                    'payroll_id' => $payroll->id,
+                    'step' => 'email',
+                    'message' => $mailError->getMessage(),
+                ];
+            }
+        }
+
+        return [
+            'payroll_header_id' => $payrollHeaderId,
+            'emailed' => $emailed,
+            'errors' => $errors,
+        ];
+    }
+
     protected function sendPayslipEmail(Payroll $payroll, PayrollHeader $header, string $periodeLabel): bool
     {
         $karyawan = MasterKaryawan::query()
@@ -150,8 +194,10 @@ class PayrollTransferCompletionService
             'tglTransferLabel' => self::formatTransferDateLabel($header->tgl_transfer),
         ])->render();
 
+        $subject = 'Pemberitahuan Pembayaran Gaji Periode ' . $periodeLabel;
+
         SendEmail::where('to', $email)
-            ->where('subject', 'Payroll ' . $periodeLabel)
+            ->where('subject', $subject)
             ->where('body', $body)
             ->where('attachment', [
                 [
@@ -183,7 +229,7 @@ class PayrollTransferCompletionService
             RenderSlipGajiService::deleteCachedSlipFiles($payroll);
         }
 
-        $generated = RenderSlipGajiService::fromPayrollId($payrollId)->generate();
+        $generated = RenderSlipGajiService::fromPayrollIdForSystemEmail($payrollId)->generate();
         $path = $generated['path'] ?? $pdfPath;
 
         if (!is_file($path)) {

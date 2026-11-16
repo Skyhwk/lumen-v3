@@ -315,6 +315,7 @@ trait RenderNonKontrak
                 );
                 $i++;
             }
+            \App\Services\QuotationPromoPresentation::writeSukaSukaItemRow($pdf, $data, $i, function ($n) { return $this->rupiah($n); });
             $wilayah = explode("-", $data->wilayah, 2);
             if ($data->transportasi > 0 && $data->harga_transportasi_total != null) {
                 $pdf->WriteHTML(
@@ -416,7 +417,7 @@ trait RenderNonKontrak
                             <td style="text-align:center;padding:5px;">
                                 <b>SUB TOTAL</b>
                             </td>
-                            <td style="text-align:right;padding:5px;">' . self::rupiah($data->grand_total) . '</td>
+                            <td style="text-align:right;padding:5px;">' . self::rupiah(\App\Services\QuotationPromoPresentation::displayedSubTotal($data)) . '</td>
                         </tr>'
             );
             if ($data->discount_air != null && $data->total_discount_air != "0.00") {
@@ -536,7 +537,7 @@ trait RenderNonKontrak
                     );
                 }
             }
-            if ($data->total_dpp != $data->grand_total && $data->total_ppn != null && $data->total_ppn != '0.00') {
+            if (\App\Services\QuotationPromoPresentation::showAfterDiscount($data) && $data->total_ppn != null && $data->total_ppn != '0.00') {
                 $pdf->WriteHTML(
                     ' <tr>
                         <td style="text-align:center;padding:5px;">

@@ -211,9 +211,8 @@ class SalesTeamHierarchyService
     /** Payload select2 Dashboard POS sesuai hierarki user login. */
     public function getSelectPayloadForViewer(MasterKaryawan $viewer): array
     {
-        $payload = $this->getSelectPayload();
-
         if ($this->viewerHasOrgWideAccess($viewer)) {
+            $payload = $this->getSelectPayload();
             $payload['branches'] = array_map(function (array $branch) {
                 return array_merge($branch, [
                     'team_select_id'      => (int) $branch['id'],
@@ -224,8 +223,17 @@ class SalesTeamHierarchyService
             return $payload;
         }
 
-        $scopeSet  = array_flip($this->resolveViewerScopeMemberIds($viewer));
-        $viewerId  = (int) $viewer->id;
+        return $this->filterSelectPayloadByScope(
+            $viewer,
+            $this->resolveViewerScopeMemberIds($viewer)
+        );
+    }
+
+    private function filterSelectPayloadByScope(MasterKaryawan $viewer, array $scopeIds): array
+    {
+        $payload     = $this->getSelectPayload();
+        $scopeSet    = array_flip($scopeIds);
+        $viewerId    = (int) $viewer->id;
         $viewerGrade = $this->normalizeGradeForDisplay($viewer);
 
         $payload['executives'] = array_values(array_filter(
@@ -245,12 +253,12 @@ class SalesTeamHierarchyService
                 continue;
             }
 
-            $teamSelectId    = (int) $branch['id'];
-            $includeTeam     = $this->viewerCanSelectTeamRoot($viewer, $teamSelectId);
+            $teamSelectId = (int) $branch['id'];
+            $includeTeam  = $this->scopeContainsTeam($scopeSet, $teamSelectId);
 
             if (!$includeTeam && $viewerGrade === 'supervisor' && isset($scopeSet[$viewerId])) {
                 $teamSelectId = $viewerId;
-                $includeTeam  = $this->viewerCanSelectTeamRoot($viewer, $teamSelectId);
+                $includeTeam  = $this->scopeContainsTeam($scopeSet, $teamSelectId);
             }
 
             if ($viewerGrade === 'manager' && $viewerId === (int) $branch['id']) {
@@ -272,6 +280,21 @@ class SalesTeamHierarchyService
         $payload['branches'] = $branches;
 
         return $payload;
+    }
+
+    private function scopeContainsTeam(array $scopeSet, int $teamRootId): bool
+    {
+        if ($teamRootId <= 0) {
+            return false;
+        }
+
+        foreach ($this->resolveDescendantIds($teamRootId) as $memberId) {
+            if (!isset($scopeSet[$memberId])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function getViewerMeta(MasterKaryawan $viewer): array

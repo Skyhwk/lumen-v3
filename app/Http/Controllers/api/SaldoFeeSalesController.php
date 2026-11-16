@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 use DataTables;
 
@@ -82,19 +83,40 @@ class SaldoFeeSalesController extends Controller
         $saldoFeeSales->total_debit = $mutasiStats->total_debit;
         $saldoFeeSales->total_credit = $mutasiStats->total_credit;
 
-        $estimatedFee = MasterFeeSales::with('rekap')
-            ->where([
-                'sales_id' => $request->salesId,
-                'is_active' => true
-            ])
-            ->get()->sum('estimated_fee');
+        $masterQuery = [
+            'sales_id' => $request->salesId,
+            'is_active' => true,
+        ];
 
-        $claimedFee = WithdrawalFeeSales::where([
-                'sales_id' => $request->salesId,
-                'is_active' => true,
-                'rejected_by' => null,
-            ])
-            ->get()->sum('amount');
+        $estimatedFee = (float) MasterFeeSales::where($masterQuery)->sum('estimated_fee');
+        $claimedFeeMaster = (float) MasterFeeSales::where($masterQuery)->sum('claimed_fee');
+
+        $withdrawnFee = (float) WithdrawalFeeSales::where([
+            'sales_id' => $request->salesId,
+            'is_active' => true,
+            'rejected_by' => null,
+        ])->sum('amount');
+
+        $rekapJoin = function ($isLunas) use ($request) {
+            return DB::table('rekap_fee_sales as r')
+                ->join('master_fee_sales as m', 'm.id', '=', 'r.fee_sales_id')
+                ->where('m.sales_id', $request->salesId)
+                ->where('m.is_active', true)
+                ->where('r.is_lunas', $isLunas);
+        };
+
+        $paidRekapFee = (float) $rekapJoin(1)->sum(DB::raw('r.total_revenue * m.basis'));
+        $unpaidRekapFee = (float) $rekapJoin(0)->sum(DB::raw('r.total_revenue * m.basis'));
+
+        $feeMenungguPelunasan = round($unpaidRekapFee, 2);
+        $feeSudahLunas = round($paidRekapFee, 2);
+        $feeSudahDikredit = round((float) $mutasiStats->total_credit, 2);
+        // Total yang bisa dipertanggungjawabkan: sudah masuk mutasi + yang belum lunas
+        $totalFee = round($feeSudahDikredit + $feeMenungguPelunasan, 2);
+        $feeRekapBruto = round($feeSudahLunas + $feeMenungguPelunasan, 2);
+        $feeLunasBelumDikredit = round(max(0, $feeSudahLunas - $feeSudahDikredit), 2);
+        $saldoAktif = (float) $saldoFeeSales->active_balance;
+        $sudahDicairkan = round($withdrawnFee, 2);
 
         return response()->json([
             'saldoFeeSales' => $saldoFeeSales,
@@ -104,9 +126,22 @@ class SaldoFeeSalesController extends Controller
                 'count' => $pendingWithdrawal->count(),
             ],
             'summary' => [
-                'estimated_fee' => $estimatedFee,
-                'claimed_fee' => $claimedFee,
-                'fee_berjalan' => $estimatedFee - $claimedFee
+                'total_fee' => $totalFee,
+                'fee_sudah_dikredit' => $feeSudahDikredit,
+                'fee_sudah_lunas' => $feeSudahLunas,
+                'fee_menunggu_pelunasan' => $feeMenungguPelunasan,
+                'fee_rekap_bruto' => $feeRekapBruto,
+                'fee_lunas_belum_dikredit' => $feeLunasBelumDikredit,
+                'fee_data_sinkron' => $feeLunasBelumDikredit < 1,
+                'saldo_aktif' => $saldoAktif,
+                'sudah_dicairkan' => $sudahDicairkan,
+                // backward compatibility
+                'estimated_fee' => round($estimatedFee, 2),
+                'claimed_fee' => $claimedFeeMaster,
+                'fee_berjalan' => $feeMenungguPelunasan,
+                'withdrawn_fee' => $sudahDicairkan,
+                'unpaid_rekap_fee' => $feeMenungguPelunasan,
+                'active_balance' => $saldoAktif,
             ],
             'message' => 'Saldo Fee Sales retrieved successfully',
         ], 200);

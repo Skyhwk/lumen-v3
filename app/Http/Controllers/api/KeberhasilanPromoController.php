@@ -136,7 +136,7 @@ class KeberhasilanPromoController extends Controller
     public function detail(Request $request)
     {
         $kode_promo = $request->kode_promo;
-        
+
         if (!$kode_promo || $kode_promo === '') {
             return response()->json([
                 'error' => true,
@@ -147,6 +147,7 @@ class KeberhasilanPromoController extends Controller
         $status = $request->status; // 'ordered' or 'not_ordered'
 
         $nonKontrak = QuotationNonKontrak::where('kode_promo', $kode_promo)
+            ->with('sales:id,nama_lengkap')
             ->where('is_active', 1)
             ->tap(function ($query) use ($request) {
                 $this->applyTanggalPenawaranFilter($query, $request);
@@ -154,12 +155,14 @@ class KeberhasilanPromoController extends Controller
             ->get()
             ->each(function ($item) {
                 $item->tipe_quotation = 'Non Kontrak';
+                $item->nama_sales = optional($item->sales)->nama_lengkap ?: '-';
                 if (empty($item->no_document) && !empty($item->no_quotation)) {
                     $item->no_document = $item->no_quotation;
                 }
             });
 
         $kontrak = QuotationKontrakH::where('kode_promo', $kode_promo)
+            ->with('sales:id,nama_lengkap')
             ->where('is_active', 1)
             ->tap(function ($query) use ($request) {
                 $this->applyTanggalPenawaranFilter($query, $request);
@@ -167,6 +170,7 @@ class KeberhasilanPromoController extends Controller
             ->get()
             ->each(function ($item) {
                 $item->tipe_quotation = 'Kontrak';
+                $item->nama_sales = optional($item->sales)->nama_lengkap ?: '-';
                 if (empty($item->no_document) && !empty($item->no_quotation)) {
                     $item->no_document = $item->no_quotation;
                 }
@@ -190,5 +194,4 @@ class KeberhasilanPromoController extends Controller
 
         return response()->json($response);
     }
-    
 }

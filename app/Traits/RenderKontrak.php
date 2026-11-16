@@ -357,6 +357,8 @@ trait RenderKontrak
                 );
             }
 
+            \App\Services\QuotationPromoPresentation::writeSukaSukaItemRow($pdf, $data, $i, function ($n) { return $this->rupiah($n); });
+
             $wilayah = explode("-", $data->wilayah, 2);
 
             if ($data->transportasi > 0) {
@@ -453,7 +455,7 @@ trait RenderKontrak
                             <td style="text-align:center;padding:5px;">
                                 <b>SUB TOTAL</b>
                             </td>
-                            <td style="text-align:right;padding:5px;">' . self::rupiah($data->grand_total) . '</td>
+                            <td style="text-align:right;padding:5px;">' . self::rupiah(\App\Services\QuotationPromoPresentation::displayedSubTotal($data)) . '</td>
                         </tr> '
             );
             if ($data->discount_air != null && $data->total_discount_air > 0) {
@@ -552,7 +554,7 @@ trait RenderKontrak
                     </tr> '
                 );
             }
-            if ($data->total_dpp != $data->grand_total) {
+            if (\App\Services\QuotationPromoPresentation::showAfterDiscount($data)) {
                 $pdf->WriteHTML(
                     ' <tr>
                         <td style="text-align:center;padding:5px;">
@@ -849,6 +851,8 @@ trait RenderKontrak
                     }
                 }
 
+                \App\Services\QuotationPromoPresentation::writeSukaSukaItemRow($pdf, $v, $i, function ($n) { return $this->rupiah($n); });
+
                 if ($v->transportasi > 0) {
                     $pdf->WriteHTML(
                         ' <tr>
@@ -913,7 +917,7 @@ trait RenderKontrak
                                 <td style="text-align:center;padding:5px;">
                                     <b>SUB TOTAL</b>
                                 </td>
-                                <td style="text-align:right;padding:5px;" width="39%">' . self::rupiah($v->grand_total) . '</td>
+                                <td style="text-align:right;padding:5px;" width="39%">' . self::rupiah(\App\Services\QuotationPromoPresentation::displayedSubTotal($v)) . '</td>
                             </tr> '
                 );
                 if (
@@ -1031,7 +1035,7 @@ trait RenderKontrak
                     );
                 }
 
-                if ($v->total_dpp != $v->grand_total) {
+                if (\App\Services\QuotationPromoPresentation::showAfterDiscount($v)) {
                     $pdf->WriteHTML(
                         ' <tr>
                             <td style="text-align:center;padding:5px;">
@@ -1409,10 +1413,10 @@ trait RenderKontrak
             $total_harga_pengujian = 0;
             foreach ($detail as $key => $value) {
                 $pdf->WriteHTML(
-                    '<td style="font-size: 8px; text-align:right; padding: 5px;"><b>' . self::rupiah($value->grand_total) . "</b></td>"
+                    '<td style="font-size: 8px; text-align:right; padding: 5px;"><b>' . self::rupiah(\App\Services\QuotationPromoPresentation::displayedSubTotal($value)) . "</b></td>"
                 );
                 $total_harga_pengujian =
-                    $total_harga_pengujian + $value->grand_total;
+                    $total_harga_pengujian + \App\Services\QuotationPromoPresentation::displayedSubTotal($value);
             }
             $pdf->WriteHTML(
                 '<td style="font-size: 8px; text-align:right; padding: 5px;"><b>' . self::rupiah($total_harga_pengujian) . "</b></td></tr>"
@@ -1650,7 +1654,7 @@ trait RenderKontrak
             }
 
             // TOTAL HARGA SETELAH DISCOUNT
-            if ($data->total_dpp != $data->grand_total) {
+            if (\App\Services\QuotationPromoPresentation::showAfterDiscount($data)) {
                 $pdf->WriteHTML(
                     '<tr><td style="text-align:center;font-size: 8px;"><b>TOTAL HARGA SETELAH DISCOUNT</b></td>'
                 );

@@ -57,15 +57,17 @@ class DashboardQuotationVoidService
     {
         return collect([QuotationNonKontrak::class, QuotationKontrakH::class])
             ->flatMap(function ($model) use ($salesIds, $startDate, $endDate) {
-                return $model::query()
+                $query = $model::query()
                     ->with([
                         'pelanggan:id_pelanggan,nama_pelanggan',
                         'sales:id,nama_lengkap',
                     ])
                     ->whereRaw("LOWER(TRIM(COALESCE(flag_status, ''))) = 'void'")
                     ->whereBetween('created_at', [$startDate, $endDate])
-                    ->when($salesIds !== null, fn ($query) => $query->whereIn('sales_id', $salesIds))
-                    ->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'sales_id', 'biaya_akhir']);
+                    ->when($salesIds !== null, fn ($query) => $query->whereIn('sales_id', $salesIds));
+                DashboardQuotationQuery::excludeAutoPromo($query);
+
+                return $query->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'sales_id', 'biaya_akhir']);
             })
             ->filter(fn ($quote) => $this->resolveStatus($quote) === 'void')
             ->unique('no_document')

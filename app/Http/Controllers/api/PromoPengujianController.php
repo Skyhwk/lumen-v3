@@ -12,12 +12,20 @@ use App\Models\MasterKategori;
 use App\Models\MasterRegulasi;
 use App\Models\MasterSubKategori;
 use App\Models\Parameter;
+use App\Services\PromoPengujianAvailability;
 
 class PromoPengujianController extends Controller {
     public function options(Request $request)
     {
-        $promos = DB::table('promo_pengujian')->where('status', 'aktif')->orderBy('kode_promo')->get();
+        PromoPengujianAvailability::syncExpired();
+        $context = PromoPengujianAvailability::contextFromRequest($request);
+
+        $promos = DB::table('promo_pengujian')->orderBy('kode_promo')->get();
         foreach ($promos as $promo) {
+            if (!PromoPengujianAvailability::canUse($promo, $context)) {
+                $promo->invalid = true;
+                continue;
+            }
             $promo->konfigurasi = json_decode($promo->konfigurasi, true) ?: [];
             if (in_array($promo->metode, ['paket_pengujian', 'pengujian_free_pengujian'], true)) {
                 try {
@@ -96,10 +104,26 @@ class PromoPengujianController extends Controller {
         return ['parameters' => array_values($normalized)];
     }
 
+    private function sukaSukaKonfigurasi($nominal)
+    {
+        if ($nominal === null || $nominal === '') {
+            throw new \InvalidArgumentException('Nominal promo wajib diisi.');
+        }
+        $nominal = is_string($nominal) ? preg_replace('/[^\d]/', '', $nominal) : $nominal;
+        if (!is_numeric($nominal) || $nominal <= 0) {
+            throw new \InvalidArgumentException('Nominal promo wajib diisi lebih dari 0.');
+        }
+
+        return ['nominal' => +$nominal];
+    }
+
     public function index(Request $request) {
+        PromoPengujianAvailability::syncExpired();
+        $status = $this->normalizeStatus($request->input('status_tab', $request->input('status')), 'aktif');
+
         $query = DB::table('promo_pengujian')
-            ->select('id', 'kode_promo', 'metode', 'nama_diskon', 'konfigurasi')
-            ->where('status', 'aktif')
+            ->select('id', 'kode_promo', 'metode', 'nama_diskon', 'konfigurasi', 'status', 'masa_berlaku', 'berlaku_dari', 'berlaku_sampai')
+            ->where('status', $status)
             ->when($request->filled('metode'), function ($q) use ($request) {
                 $q->where('metode', $request->metode);
             })
@@ -114,6 +138,13 @@ class PromoPengujianController extends Controller {
             })
             ->filterColumn('metode', function ($q, $keyword) {
                 $q->where('metode', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('masa_berlaku', function ($q, $keyword) {
+                $q->where(function ($inner) use ($keyword) {
+                    $inner->where('masa_berlaku', 'like', "%{$keyword}%")
+                        ->orWhere('berlaku_dari', 'like', "%{$keyword}%")
+                        ->orWhere('berlaku_sampai', 'like', "%{$keyword}%");
+                });
             })
             ->make(true);
     }
@@ -162,15 +193,14 @@ class PromoPengujianController extends Controller {
             if (is_string($dataPendukung)) {
                 $dataPendukung = json_decode($dataPendukung, true) ?? [];
             }
-            // if (empty($dataPendukung)) {
-            //     return response()->json([
-            //         'message' => 'Data template pengujian tidak boleh kosong'
-            //     ], 422);
-            // }
-            try {
-                $konfigurasi = $this->paketKonfigurasi($dataPendukung, $metode);
-            } catch (\InvalidArgumentException $e) {
-                return response()->json(['message' => $e->getMessage()], 422);
+            if (empty($dataPendukung)) {
+                $konfigurasi = ['data_pendukung_sampling' => []];
+            } else {
+                try {
+                    $konfigurasi = $this->paketKonfigurasi($dataPendukung, $metode);
+                } catch (\InvalidArgumentException $e) {
+                    return response()->json(['message' => $e->getMessage()], 422);
+                }
             }
         } else if ($metode === 'labeling') {
             if (empty($kodePromo) || empty($namaDiskon)) {
@@ -179,6 +209,17 @@ class PromoPengujianController extends Controller {
                 ], 422);
             }
             $konfigurasi = [];
+        } else if ($metode === 'suka_suka') {
+            if (empty($kodePromo) || empty($namaDiskon)) {
+                return response()->json([
+                    'message' => 'Kode promo dan nama promo tidak boleh kosong'
+                ], 422);
+            }
+            try {
+                $konfigurasi = $this->sukaSukaKonfigurasi($request->input('nominal'));
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
         } 
         // else if ($metode === 'pengujian_free_pengujian') {
         //     $pemicu = $request->input('pemicu');
@@ -290,15 +331,33 @@ class PromoPengujianController extends Controller {
             'metode'       => $metode,
             'nama_diskon'  => $namaDiskon,
             'konfigurasi'  => json_encode($konfigurasi),
-            'status'       => 'aktif',
+            'status'       => 'draft',
             'created_by'   => $this->karyawan,
             'created_at'   => Carbon::now(),
             'updated_at'   => Carbon::now(),
         ]);
 
         return response()->json([
-            'message' => 'Data promo pengujian berhasil ditambahkan'
+            'message' => 'Draft promo pengujian berhasil ditambahkan'
         ], 200);
+    }
+
+    public function tabCounts()
+    {
+        PromoPengujianAvailability::syncExpired();
+        $rows = DB::table('promo_pengujian')
+            ->select('status', DB::raw('COUNT(*) as total'))
+            ->whereIn('status', ['draft', 'aktif', 'nonaktif'])
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        return response()->json([
+            'data' => [
+                'draft' => (int) ($rows['draft'] ?? 0),
+                'aktif' => (int) ($rows['aktif'] ?? 0),
+                'nonaktif' => (int) ($rows['nonaktif'] ?? 0),
+            ],
+        ]);
     }
 
     public function update (Request $request) {
@@ -366,6 +425,18 @@ class PromoPengujianController extends Controller {
                 ], 422);
             }
             $konfigurasi = [];
+        } else if ($metode === 'suka_suka') {
+            if (empty($kodePromo) || empty($namaDiskon)) {
+                return response()->json([
+                    'message' => 'Kode promo dan nama promo tidak boleh kosong'
+                ], 422);
+            }
+            $defaultNominal = is_array($konfigurasi) ? ($konfigurasi['nominal'] ?? null) : null;
+            try {
+                $konfigurasi = $this->sukaSukaKonfigurasi($request->input('nominal', $defaultNominal));
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
         } 
         // else if ($metode === 'pengujian_free_pengujian') {
         //     $pemicu = $request->input('pemicu');
@@ -576,12 +647,21 @@ class PromoPengujianController extends Controller {
                 ], 404);
             }
 
+            if ($data->status === 'draft') {
+                DB::table('promo_pengujian')->where('id', $id)->delete();
+                return response()->json([
+                    'message' => 'Draft promo pengujian berhasil dihapus'
+                ], 200);
+            }
+
             DB::table('promo_pengujian')->where('id', $id)->update([
                 'status' => 'nonaktif',
+                'updated_by' => $this->karyawan,
+                'updated_at' => Carbon::now(),
             ]);
 
             return response()->json([
-                'message' => 'Data promo pengujian berhasil dihapus'
+                'message' => 'Data promo pengujian berhasil dinonaktifkan'
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
@@ -687,9 +767,10 @@ class PromoPengujianController extends Controller {
             ], 422);
         }
 
-        if (empty($status)) {
+        $status = $this->normalizeStatus($status);
+        if ($status === null) {
             return response()->json([
-                'message' => 'Status tidak boleh kosong'
+                'message' => 'Status promo tidak valid'
             ], 422);
         }
 
@@ -728,19 +809,92 @@ class PromoPengujianController extends Controller {
                 return response()->json(['message' => $e->getMessage()], 422);
             }
         }
+        if ($status === 'aktif' && $promo->metode === 'suka_suka') {
+            $konfigurasi = json_decode($promo->konfigurasi, true) ?: [];
+            try {
+                $normalized = $this->sukaSukaKonfigurasi($konfigurasi['nominal'] ?? null);
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        }
 
-        DB::table('promo_pengujian')->where('id', $id)->update(array_merge([
+        $payload = [
             'status'     => $status,
             'updated_by' => $this->karyawan,
             'updated_at' => Carbon::now(),
-        ], $normalized === null ? [] : ['konfigurasi' => json_encode($normalized)]));
+        ];
 
-        $statusText = $status === 'aktif' ? 'diaktifkan' : 'dinonaktifkan';
+        if ($status === 'aktif') {
+            try {
+                $payload = array_merge($payload, $this->resolveMasaBerlaku($request));
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        }
+
+        if ($normalized !== null) {
+            $payload['konfigurasi'] = json_encode($normalized);
+        }
+
+        DB::table('promo_pengujian')->where('id', $id)->update($payload);
+
+        $statusText = $status === 'aktif'
+            ? 'diaktifkan'
+            : ($status === 'nonaktif' ? 'dinonaktifkan' : 'dipindahkan ke draft');
 
         return response()->json([
             'status'  => 'success',
             'message' => "Promo pengujian {$promo->kode_promo} berhasil {$statusText}",
         ], 200);
+    }
+
+    private function normalizeStatus($status, $fallback = null)
+    {
+        $status = strtolower(trim((string) $status));
+        if (in_array($status, ['draft', 'aktif', 'nonaktif'], true)) {
+            return $status;
+        }
+
+        return $fallback;
+    }
+
+    private function resolveMasaBerlaku(Request $request)
+    {
+        $masaBerlaku = strtolower(trim((string) $request->input('masa_berlaku')));
+        if (!in_array($masaBerlaku, ['lifetime', 'periode'], true)) {
+            throw new \InvalidArgumentException('Masa berlaku wajib dipilih: lifetime atau periode.');
+        }
+
+        if ($masaBerlaku === 'lifetime') {
+            return [
+                'masa_berlaku' => 'lifetime',
+                'berlaku_dari' => null,
+                'berlaku_sampai' => null,
+            ];
+        }
+
+        $dari = $request->input('berlaku_dari');
+        $sampai = $request->input('berlaku_sampai');
+        if (empty($dari) || empty($sampai)) {
+            throw new \InvalidArgumentException('Tanggal mulai dan tanggal selesai wajib diisi untuk periode.');
+        }
+
+        try {
+            $dariDate = Carbon::parse($dari)->startOfDay();
+            $sampaiDate = Carbon::parse($sampai)->startOfDay();
+        } catch (\Exception $e) {
+            throw new \InvalidArgumentException('Format tanggal masa berlaku tidak valid.');
+        }
+
+        if ($sampaiDate->lt($dariDate)) {
+            throw new \InvalidArgumentException('Tanggal selesai tidak boleh lebih awal dari tanggal mulai.');
+        }
+
+        return [
+            'masa_berlaku' => 'periode',
+            'berlaku_dari' => $dariDate->toDateString(),
+            'berlaku_sampai' => $sampaiDate->toDateString(),
+        ];
     }
 }
 

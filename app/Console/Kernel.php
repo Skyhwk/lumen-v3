@@ -14,6 +14,7 @@ class Kernel extends ConsoleKernel
      */
     protected $commands = [
         Commands\SyncSamplerTracking::class,
+        Commands\SeedSamplerTrackingPicTestCommand::class,
         Commands\CollectSamplerTrackingTroubles::class,
         Commands\BackfillSamplerTrackingHistory::class,
         Commands\CleanOldRequestLogs::class,
@@ -26,6 +27,9 @@ class Kernel extends ConsoleKernel
         Commands\AssignSales::class,
         Commands\BillingComand::class,
         Commands\CalculateFeeSales::class,
+        Commands\RollbackFeeSalesAfterPeriod::class,
+        Commands\RecalculateFeeSalesMaster::class,
+        Commands\ResyncAllFeeSales::class,
         Commands\SummaryFeeSales::class,
         Commands\KalkulasiTargetPenjadwalan::class,
         Commands\CheckOrderActive::class,
@@ -69,6 +73,7 @@ class Kernel extends ConsoleKernel
         Commands\CustomerServiceAutoCloseCommand::class,
         Commands\CustomerServiceAutoArchiveCommand::class,
         Commands\DeactivateTrialCustomersCommand::class,
+        Commands\CompletePayrollDisbursementCommand::class,
         Commands\MigrateHrRequestsFromAppsCommand::class,
         Commands\VerifyHrMigrationCommand::class,
         Commands\VerifyHrStatusParityCommand::class,
@@ -86,6 +91,7 @@ class Kernel extends ConsoleKernel
         Commands\SyncLeaveAlpaLedgerCommand::class,
         Commands\SyncGreatdayFormAttachmentFilesCommand::class,
         Commands\SyncGreatdayMobileAbsensiCommand::class,
+        Commands\ReapplyApprovedAttendanceCorrectionsCommand::class,
         Commands\ImportGreatdayAssetsFromInternalCommand::class,
         Commands\GaAssetImportFinancialCommand::class,
         Commands\GaAssetReconcileExcelCommand::class,
@@ -94,11 +100,18 @@ class Kernel extends ConsoleKernel
         Commands\QuotationCreateCommand::class,
         Commands\QuotationDispatchCommand::class,
         Commands\QuotationGenerateCommand::class,
+        Commands\GenerateJanToJuneCommand::class,
+        Commands\GenerateAutoQtCommand::class,
+        Commands\RenderAutoQtCommand::class,
+        Commands\EmailAutoQtCommand::class,
+        Commands\NotifySamplingH14Command::class,
         Commands\UpdateQuotationStatusFromExcelCommand::class,
         Commands\GenerateMonthlyAbsensiCommand::class,
         Commands\BackfillRekapHariKerjaCommand::class,
         Commands\ImportNearHo::class,
         Commands\BackupMasterPelangganDediWibowoCommand::class,
+        Commands\AssignBankDataOrderedCommand::class,
+        Commands\VoidFollowUpInactiveSalesCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,
@@ -131,10 +144,10 @@ class Kernel extends ConsoleKernel
             ->dailyAt('23:30')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping(30);
-        $schedule->command('customers:deactivate-trial')
-            ->dailyAt('23:30')
-            ->timezone('Asia/Jakarta')
-            ->withoutOverlapping(15);
+        // $schedule->command('customers:deactivate-trial')
+        //     ->dailyAt('23:30')
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping(15);
         // $schedule->command('qsd:monitor-revenue')
         //     ->everyFiveMinutes()
         //     ->timezone('Asia/Jakarta')

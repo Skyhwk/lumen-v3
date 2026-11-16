@@ -1526,7 +1526,7 @@ class GenerateDokumenKaryawanService
             'tanggalSelesai' => $endDate ? $this->formatTanggalIndonesia($endDate) : '-',
             'jumlahJangkaWaktu' => $period['jumlah'],
             'jumlahJangkaWaktuTerbilang' => $period['jumlah'] ? $this->terbilang((int) $period['jumlah']) : '-',
-            'satuanJangkaWaktu' => $period['satuan'] === 'tahun' ? 'tahun' : 'bulan',
+            'satuanJangkaWaktu' => $period['satuan'] === 'tahun' ? 'tahun' : ($period['satuan'] === 'bulan' ? 'bulan' : '-'),
             'gajiPokok' => $gajiPokok,
             'tunjangan' => $tunjangan,
             'bpjsKes' => $bpjsKes,
@@ -1848,14 +1848,11 @@ class GenerateDokumenKaryawanService
             ];
         }
 
-        $endDate = !empty($karyawan->tgl_berakhir_kontrak) ? Carbon::parse($karyawan->tgl_berakhir_kontrak) : null;
-        $months = $startDate && $endDate ? max(1, (int) $startDate->diffInMonths($endDate)) : null;
-
         return [
             'start' => $startDate,
-            'end' => $endDate,
-            'jumlah' => $months,
-            'satuan' => 'bulan',
+            'end' => null,
+            'jumlah' => null,
+            'satuan' => null,
         ];
     }
 

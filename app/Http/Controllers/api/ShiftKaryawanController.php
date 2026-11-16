@@ -26,41 +26,40 @@ class ShiftKaryawanController extends Controller{
 
     if($request->shift != null && count($request->shift) != 0) {
         foreach($request->shift as $key => $val) {
-            // Pastikan $val adalah string
-            if(is_string($val)) {
-                $nilai = explode(" ", $val);
-                $mode = $nilai[0];
-                $tanggal = $nilai[1];
-                $shift = $nilai[2];
+            if(!is_string($val) || trim($val) === '') {
+                continue;
+            }
 
-                if($shift != null) {
-                    $cekShift = DB::table('shift_karyawan')
-                                  ->where('tanggal', $tanggal)
-                                  ->where('karyawan_id', $request->id_karyawan)
-                                  ->first();
+            $nilai = preg_split('/\s+/', trim($val));
+            $tanggal = $nilai[1] ?? null;
+            $shift = $nilai[2] ?? null;
 
-                    if($cekShift != null) {
-                        $data = [
-                            'shift' => $shift,
-                            'time_in' => ($nilai[3] != 'NULL') ? $nilai[3] : NULL,
-                            'time_out' => ($nilai[4] != 'NULL') ? $nilai[4] : NULL
-                        ];
-                        $insert = DB::table('shift_karyawan')
-                                    ->where('tanggal', $tanggal)
-                                    ->where('karyawan_id', $request->id_karyawan)
-                                    ->update($data);
-                    } else {
-                        $data = [
-                            'karyawan_id' => $request->id_karyawan,
-                            'tanggal' => $tanggal,
-                            'shift' => $shift,
-                            'time_in' => ($nilai[3] != 'NULL') ? $nilai[3] : NULL,
-                            'time_out' => ($nilai[4] != 'NULL') ? $nilai[4] : NULL
-                        ];
+            if(!$tanggal) {
+                continue;
+            }
 
-                        $insert = DB::table('shift_karyawan')->insert($data);
-                    }
-                }
+            $existing = DB::table('shift_karyawan')
+                ->whereDate('tanggal', $tanggal)
+                ->where('karyawan_id', $request->id_karyawan);
+
+            if($shift === null || $shift === '' || strtoupper((string) $shift) === 'NULL') {
+                $existing->delete();
+                continue;
+            }
+
+            $payload = [
+                'shift' => $shift,
+                'time_in' => (isset($nilai[3]) && strtoupper((string) $nilai[3]) !== 'NULL') ? $nilai[3] : null,
+                'time_out' => (isset($nilai[4]) && strtoupper((string) $nilai[4]) !== 'NULL') ? $nilai[4] : null,
+            ];
+
+            if((clone $existing)->exists()) {
+                $existing->update($payload);
+            } else {
+                DB::table('shift_karyawan')->insert(array_merge($payload, [
+                    'karyawan_id' => $request->id_karyawan,
+                    'tanggal' => $tanggal,
+                ]));
             }
         }
 

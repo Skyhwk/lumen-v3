@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 
 use App\Models\{DailyQsd, DFUS, MasterTargetSales, QuotationKontrakH, QuotationNonKontrak};
 use App\Services\DashboardQuotationNoStatusService;
+use App\Services\DashboardQuotationQuery;
 use App\Services\DashboardQuotationVoidService;
 
 class DashboardSalesController extends Controller
@@ -276,11 +277,13 @@ class DashboardSalesController extends Controller
     {
         $quotes = collect([QuotationNonKontrak::class, QuotationKontrakH::class])
             ->flatMap(function ($model) use ($salesId, $startDate, $endDate) {
-                return $model::query()
+                $query = $model::query()
                     ->where('is_active', 1)
                     ->where('sales_id', $salesId)
-                    ->whereBetween('created_at', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()])
-                    ->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'kode_promo', 'total_discount_promo', 'biaya_akhir', 'tanggal_penawaran']);
+                    ->whereBetween('created_at', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()]);
+                DashboardQuotationQuery::excludeAutoPromo($query);
+
+                return $query->get(['no_document', 'pelanggan_ID', 'flag_status', 'status_quotation', 'kode_promo', 'total_discount_promo', 'biaya_akhir', 'tanggal_penawaran']);
             })
             ->map(function ($quote) {
                 $flag = strtolower(trim((string) $quote->flag_status));

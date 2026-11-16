@@ -40,17 +40,19 @@ class PayrollDeductionService
                     continue;
                 }
                 $periodField = $balanceField ? 'bulan_mulai_pemotongan' : 'bulan_efektif';
-                $sources = PayrollRecordSyncService::scopePayrollDeductionSource(
-                    $class::where('id_karyawan', $employee->id),
+                $source = PayrollRecordSyncService::resolvePayrollDeductionSource(
+                    $class::where('id_karyawan', $employee->id)->lockForUpdate(),
                     $balanceField,
                     $periodField,
-                    $payroll->periode_payroll
-                )
-                    ->orderBy('id')->lockForUpdate()->get();
-                if ($sources->count() !== 1) {
-                    throw new \DomainException("Sumber $field tidak ditemukan atau ambigu. Muat ulang dan periksa data master.");
+                    $payroll->periode_payroll,
+                    (bool) $employee->is_active
+                );
+                if ($source === null) {
+                    throw new \DomainException($this->deductionSourceErrorMessage(
+                        $field,
+                        $payroll->periode_payroll
+                    ));
                 }
-                $source = $sources->first();
                 $before = $this->state($source, $balanceField);
                 if ($balanceField) {
                     PayrollDebtService::deduct($source, $balanceField, $amount);
@@ -169,6 +171,19 @@ class PayrollDeductionService
             ->where(function ($query) {
                 $query->where('loan', '<>', 0)->orWhere('sanksi', '<>', 0)->orWhere('pencadangan_upah', '<>', 0);
             });
+    }
+
+    private function deductionSourceErrorMessage(string $field, string $periode): string
+    {
+        $labels = [
+            'loan' => 'kasbon',
+            'sanksi' => 'denda karyawan',
+            'pencadangan_upah' => 'pencadangan upah',
+        ];
+        $label = $labels[$field] ?? $field;
+
+        return "Data master {$label} tidak ditemukan untuk periode {$periode}. "
+            . 'Muat ulang payroll, periksa master HR, atau set nominal potongan = 0 sebelum submit.';
     }
 
 }

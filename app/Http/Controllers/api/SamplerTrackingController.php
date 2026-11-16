@@ -36,6 +36,42 @@ class SamplerTrackingController extends Controller
         return response()->json(['can_view' => $this->canViewActivityHistory()]);
     }
 
+    public function openActivityAccess()
+    {
+        return response()->json(['can_open' => $this->canOpenSamplerActivity()]);
+    }
+
+    public function openActivity(Request $request)
+    {
+        if (!$this->canOpenSamplerActivity()) {
+            $allowedStr = implode(', ', $this->allowedOpenActivityGrades());
+            return response()->json([
+                'success' => false,
+                'message' => "Akses ditolak. Fitur open activity hanya dapat dilakukan oleh user dengan grade: {$allowedStr}.",
+            ], 403);
+        }
+
+        $this->validate($request, [
+            'member_id' => 'required|integer|min:1',
+            'note' => 'required|string|min:5|max:2000',
+        ]);
+
+        $service = new \App\Services\SamplerTrackingActivityOpenService();
+        $grant = $service->open((int) $request->member_id, $this->user_id, $request->note);
+
+        $actor = MasterKaryawan::find($this->user_id);
+        $payload = $service->payload($grant);
+        if ($actor && is_array($payload)) {
+            $payload['opened_by_name'] = $actor->nama_lengkap;
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Activity sesaat berhasil dibuka. Sampler dapat check-in pada jadwal ini.',
+            'data' => $payload,
+        ]);
+    }
+
     public function activityHistory(Request $request)
     {
         if (!$this->canViewActivityHistory()) {
@@ -120,11 +156,14 @@ class SamplerTrackingController extends Controller
                 ]);
             }
 
-            return response()->json($this->service->dataTableByDate(
+            $table = $this->service->dataTableByDate(
                 $request,
                 $request->sampler_id,
                 $request->sampler_name
-            ));
+            );
+            $table['open_activity_access'] = $this->canOpenSamplerActivity();
+
+            return response()->json($table);
         }
 
         $data = $this->service->listTrackingRows(
@@ -138,6 +177,7 @@ class SamplerTrackingController extends Controller
             'success' => true,
             'data' => $data['data'],
             'tracking_status_counts' => $data['tracking_status_counts'],
+            'open_activity_access' => $this->canOpenSamplerActivity(),
         ]);
     }
 
@@ -177,7 +217,7 @@ class SamplerTrackingController extends Controller
         (new \App\Services\SamplerTrackingTroubleService())->assertAllowed($member->sampler_id, $member->session->tanggal_sampling, $member->sampler_tracking_session_id);
         $this->validate($request, [
             'member_id' => 'required',
-            'event_type' => 'required|in:departure,checkin,checkout,return',
+            'event_type' => 'required|in:departure,checkin,checkout,return,meet_pic,start_sampling',
             'latitude' => 'nullable',
             'longitude' => 'nullable',
             'photo' => 'nullable',
@@ -185,6 +225,10 @@ class SamplerTrackingController extends Controller
             'note' => 'nullable',
             'vehicle_plate' => 'nullable',
             'event_at' => 'nullable',
+            'pic_contacts' => 'nullable|array',
+            'started_by_name' => 'nullable|string|max:150',
+            'started_by_sampler_id' => 'nullable',
+            'started_at' => 'nullable|string',
         ]);
 
         if ($request->event_type === 'checkout') {
@@ -253,12 +297,8 @@ class SamplerTrackingController extends Controller
 
     public function reopenTrouble(Request $request)
     {
-        $allowedGradesConfig = env('SAMPLER_TRACKING_UNBLOCK_GRADES', 'MANAGER,SENIOR MANAGER');
-        $allowedGrades = array_filter(array_map('trim', explode(',', strtoupper((string) $allowedGradesConfig))));
-
-        $userGrade = $this->effectiveGrade();
-        if (!$userGrade || !in_array($userGrade, $allowedGrades, true)) {
-            $allowedStr = implode(', ', $allowedGrades);
+        if (!$this->canOpenSamplerActivity()) {
+            $allowedStr = implode(', ', $this->allowedOpenActivityGrades());
             return response()->json([
                 'success' => false,
                 'message' => "Akses ditolak. Fitur unblock activity sampler hanya dapat dilakukan oleh user dengan grade: {$allowedStr}.",
@@ -341,6 +381,23 @@ class SamplerTrackingController extends Controller
         }
 
         return strtoupper(trim((string) $grade));
+    }
+
+    protected function allowedOpenActivityGrades(): array
+    {
+        $config = env(
+            'SAMPLER_TRACKING_OPEN_GRADES',
+            env('SAMPLER_TRACKING_UNBLOCK_GRADES', 'MANAGER,SENIOR MANAGER')
+        );
+
+        return array_values(array_filter(array_map('trim', explode(',', strtoupper((string) $config)))));
+    }
+
+    protected function canOpenSamplerActivity(): bool
+    {
+        $userGrade = str_replace('_', ' ', $this->effectiveGrade());
+
+        return $userGrade && in_array($userGrade, $this->allowedOpenActivityGrades(), true);
     }
 
     protected function normalizeTroubleFilterDate($date)

@@ -67,6 +67,7 @@ class SamplerTrackingController extends \App\Http\Controllers\api\SamplerTrackin
 
             $session->setRelation('teamMembers', $teamMembers);
             $session->setRelation('activeMembers', $ownMembers);
+            $this->service->syncSessionActivityOpenFlags($session);
         });
 
         // An explicitly reopened recovery assignment is authorized to record

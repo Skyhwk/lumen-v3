@@ -67,7 +67,8 @@ class AtsHiredCandidatesController extends Controller
                     $currentYY = Carbon::now()->year % 100;
                     return $last2 <= $currentYY ? (2000 + $last2) : (1900 + $last2);
                 }
-            } catch (\Exception $e) {}
+            } catch (\Exception $e) {
+            }
         }
 
         if (!$ttl) return null;
@@ -415,10 +416,10 @@ class AtsHiredCandidatesController extends Controller
                 if (MasterKaryawan::where('email', $email)->exists()) {
                     return response()->json(['status' => false, 'message' => 'Email karyawan sudah terdaftar di Master Karyawan.'], 400);
                 }
-                if (User::where('email', $email)->exists()) {
+                if (User::where('email', $email)->where('is_active', 1)->exists()) {
                     return response()->json(['status' => false, 'message' => 'Email sudah digunakan akun sistem lain.'], 400);
                 }
-                if (User::where('username', $username)->exists()) {
+                if (User::where('username', $username)->where('is_active', 1)->exists()) {
                     return response()->json(['status' => false, 'message' => 'Username sudah digunakan akun sistem lain.'], 400);
                 }
 
@@ -730,11 +731,11 @@ class AtsHiredCandidatesController extends Controller
         $karyawan = new MasterKaryawan();
         $karyawan->created_by = $this->karyawan;
         $karyawan->created_at = $timestamp;
-        $karyawan->nama_lengkap = trim((string) (data_get($request, 'personal.nama_lengkap') ?: $recruitment->nama_lengkap));
+        $karyawan->nama_lengkap = ucwords(strtolower(trim((string) (data_get($request, 'personal.nama_lengkap') ?: $recruitment->nama_lengkap))));
         $karyawan->nik_ktp = data_get($request, 'personal.nik_ktp') ?: optional($profile)->nik_ktp;
-        $karyawan->nama_panggilan = data_get($request, 'personal.salutation') ?: optional($profile)->nama_panggilan;
+        $karyawan->nama_panggilan = ucwords(strtolower(data_get($request, 'personal.salutation') ?: optional($profile)->nama_panggilan));
         $karyawan->kebangsaan = data_get($request, 'personal.nationality', 'Indonesia');
-        $karyawan->tempat_lahir = data_get($request, 'personal.birth_place') ?: $recruitment->tempat_lahir;
+        $karyawan->tempat_lahir = ucwords(strtolower(data_get($request, 'personal.birth_place') ?: $recruitment->tempat_lahir));
         $karyawan->tanggal_lahir = data_get($request, 'personal.date_birth') ?: $recruitment->tanggal_lahir;
         $karyawan->jenis_kelamin = data_get($request, 'personal.gender') ?: $recruitment->jenis_kelamin;
         $karyawan->agama = MasterKaryawanAgamaHelper::normalize(
@@ -760,11 +761,10 @@ class AtsHiredCandidatesController extends Controller
         $karyawan->id_cabang = data_get($request, 'employee.branch') ?: null;
         $karyawan->status_karyawan = data_get($request, 'employee.estatus', 'Training');
         $karyawan->tgl_mulai_kerja = data_get($request, 'employee.sdate') ?: null;
-        $karyawan->tgl_berakhir_kontrak = $this->resolveAgreementEndDate(
-            $karyawan->tgl_mulai_kerja,
-            data_get($request, 'payroll.satuan_jangka_waktu'),
-            data_get($request, 'payroll.jumlah_jangka_waktu')
-        ) ?: (data_get($request, 'employee.ecdate') ?: null);
+        $endContractDate = data_get($request, 'employee.ecdate');
+        $karyawan->tgl_berakhir_kontrak = ($endContractDate !== null && trim((string) $endContractDate) !== '')
+            ? $endContractDate
+            : null;
         $karyawan->id_jabatan = data_get($request, 'employee.position') ?: null;
         $karyawan->kategori_grade = data_get($request, 'employee.gradec');
         $karyawan->grade = data_get($request, 'employee.grade');
@@ -827,7 +827,9 @@ class AtsHiredCandidatesController extends Controller
             'keterangan_mata' => $this->normalizeKeteranganMata(data_get($request, 'medical.keterangan_mata')),
         ];
 
-        if (collect($medicalData)->filter(function ($v) { return $v !== null && $v !== ''; })->isNotEmpty()) {
+        if (collect($medicalData)->filter(function ($v) {
+            return $v !== null && $v !== '';
+        })->isNotEmpty()) {
             $medis = new MedicalCheckup();
             $medis->karyawan_id = $karyawan->id;
             $medis->tinggi_badan = $medicalData['tinggi_badan'];
@@ -1022,7 +1024,12 @@ class AtsHiredCandidatesController extends Controller
             $payrollCounts['bpjs_tk'] = 1;
         }
 
-        if ($pph21 > 0) {
+        $adaPph21 = data_get($request, 'payroll.ada_pph21', null);
+        $pph21Enabled = $adaPph21 === null
+            ? ($pph21 > 0)
+            : !in_array($adaPph21, [0, '0', false, 'false'], true);
+
+        if ($pph21Enabled && $pph21 > 0) {
             $this->upsertPayroll('pph_21', $karyawan->id, $nikKaryawan, $namaKaryawan, [
                 'pajak_bulanan' => $pph21,
                 'pajak_tahunan' => $pph21 * 12,
@@ -1117,8 +1124,10 @@ class AtsHiredCandidatesController extends Controller
 
     private function migrateSupportingInfoAnswers($recruitmentId, $karyawanId, $timestamp): int
     {
-        if (!Schema::hasTable('candidate_supporting_info_answers')
-            || !Schema::hasTable('supporting_info_answers')) {
+        if (
+            !Schema::hasTable('candidate_supporting_info_answers')
+            || !Schema::hasTable('supporting_info_answers')
+        ) {
             return 0;
         }
 
@@ -1313,23 +1322,6 @@ class AtsHiredCandidatesController extends Controller
         return substr($name, 0, 30);
     }
 
-    private function resolveAgreementEndDate($startDate, $unit, $amount): ?string
-    {
-        $count = (int) $amount;
-        if (empty($startDate) || $count < 1 || !in_array($unit, ['bulan', 'tahun'], true)) {
-            return null;
-        }
-
-        try {
-            $start = Carbon::parse($startDate);
-            $end = $unit === 'tahun' ? $start->copy()->addYears($count) : $start->copy()->addMonths($count);
-
-            return $end->format('Y-m-d');
-        } catch (\Exception $e) {
-            return null;
-        }
-    }
-
     private function resolveContractEndDate($startDate)
     {
         if (empty($startDate)) {
@@ -1426,12 +1418,8 @@ class AtsHiredCandidatesController extends Controller
         if ($jangkaWaktuError !== null) {
             return $jangkaWaktuError;
         }
-        if ($this->resolveAgreementEndDate(
-            data_get($request, 'employee.sdate'),
-            $satuanJangkaWaktu,
-            data_get($request, 'payroll.jumlah_jangka_waktu')
-        ) === null) {
-            return 'Tanggal masuk kerja wajib diisi untuk menghitung akhir jangka waktu perjanjian.';
+        if (trim((string) data_get($request, 'employee.sdate', '')) === '') {
+            return 'Tanggal masuk kerja wajib diisi untuk menghitung periode jangka waktu perjanjian di SPRJ.';
         }
 
         if ($this->payrollUsesFixedDate($request)) {

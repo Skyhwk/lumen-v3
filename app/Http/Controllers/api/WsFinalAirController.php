@@ -74,17 +74,14 @@ class WsFinalAirController extends Controller
 				->whereIn('no_order', $noOrders)
 				->get();
 
-			$data->each(function ($item) use ($sampelDiantars) {
-				$query = $sampelDiantars->where('no_order', $item->no_order);
-
-				if (!empty($item->periode)) {
-					$query = $query->where('periode_kontrak', $item->periode);
-				}
-
-				$item->setRelation(
-					'sampelDiantar',
-					$query->first()
+			$data->each(function ($item) {
+				$header = WsFinalAirParameterService::findSampelDiantarHeaderForSample(
+					(string) $item->no_order,
+					(string) $item->no_sampel,
+					$item->periode ?? null
 				);
+
+				$item->setRelation('sampelDiantar', $header);
 			});
 		}
 
@@ -1029,13 +1026,8 @@ class WsFinalAirController extends Controller
 			}
 		}
 
-		$sdParsed = null;
-		if ($request->filled('sd_internal')) {
-			$decodedSd = json_decode($request->sd_internal, true);
-			if (is_array($decodedSd)) {
-				$sdParsed = $decodedSd;
-			}
-		}
+		// Selalu resolve dari DB (scan semua header SD) — jangan andalkan sd_internal dari frontend.
+		$sdParsed = WsFinalAirParameterService::resolveSdParsedInternalData($orderDetail);
 
 		$paramAll = WsFinalAirParameterService::parseOrderParameters($orderDetail->parameter);
 		$parametersDiUji = WsFinalAirParameterService::buildParametersDiUji($labParams, $orderDetail, $sdParsed);

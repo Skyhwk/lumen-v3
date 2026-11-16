@@ -178,6 +178,25 @@ class RenderSlipGajiService
         throw new \Exception('Tanggal lahir karyawan belum diisi, proteksi PDF tidak dapat dibuat');
     }
 
+    /**
+     * PDF lampiran email payroll (finance): pakai password tanggal lahir (dmY),
+     * tanpa PIN Greatday — PIN app tetap hanya untuk buka slip di Attendance.
+     */
+    public static function resolvePdfPasswordForPayrollEmail($karyawan, $karyawanId = null): array
+    {
+        $birthDatePassword = self::resolveBirthDatePassword($karyawan);
+
+        if ($birthDatePassword) {
+            return [
+                'password' => $birthDatePassword,
+                'hint' => self::PASSWORD_PROMPT,
+                'type' => 'dob',
+            ];
+        }
+
+        throw new \Exception('Tanggal lahir karyawan belum diisi, email slip payroll tidak dapat dikirim');
+    }
+
     public static function buildSlipFilenames(Payroll $payroll)
     {
         $karyawan = self::resolvePayrollKaryawan($payroll);
@@ -357,6 +376,54 @@ class RenderSlipGajiService
         }
 
         $passwordMeta = self::resolvePdfPasswordForKaryawan($karyawan, $verifiedPin, $karyawan->id);
+        $birthDate = self::resolveKaryawanBirthDate($karyawan);
+        $transferRaw = self::resolveTransferDateRaw($payroll, $header);
+
+        return self::createBuilder()
+            ->where('periode', self::formatPeriode($payroll->periode_payroll))
+            ->where('tgl_transfer', self::formatTglTransfer($transferRaw))
+            ->where('filename', self::buildSlipFilenames($payroll)['pdf_filename'])
+            ->where('pdf_access_pin', $passwordMeta['password'])
+            ->where('pdf_password_hint', $passwordMeta['hint'])
+            ->where('data_karyawan', (object) [
+                'nama' => $karyawan->nama_lengkap,
+                'nik' => $payroll->nik_karyawan ?? $karyawan->nik_karyawan,
+                'divisi' => optional($karyawan->divisi)->nama_divisi ?? '-',
+                'jabatan' => $payroll->nama_jabatan ?? '-',
+                'start_date' => self::formatTglTransfer($karyawan->tgl_mulai_kerja ?? null),
+                'tgl_mulai_kerja' => $karyawan->tgl_mulai_kerja,
+                'nama_bank' => $payroll->nama_bank,
+                'no_rekening' => $payroll->no_rekening,
+                'tanggal_lahir' => $birthDate,
+            ])
+            ->where('data_gaji', $payroll);
+    }
+
+    /** Generate slip untuk lampiran email setelah payroll PAID (tanpa verifikasi PIN app). */
+    public static function fromPayrollIdForSystemEmail($payrollId)
+    {
+        $payroll = Payroll::with([
+            'karyawan.divisi',
+            'karyawan.jabatan',
+        ])
+            ->where('id', $payrollId)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$payroll) {
+            throw new \Exception('Data payroll tidak ditemukan');
+        }
+
+        $header = $payroll->payroll_header_id
+            ? PayrollHeader::find($payroll->payroll_header_id)
+            : null;
+        $karyawan = self::resolvePayrollKaryawan($payroll);
+
+        if (!$karyawan) {
+            throw new \Exception('Data karyawan tidak ditemukan');
+        }
+
+        $passwordMeta = self::resolvePdfPasswordForPayrollEmail($karyawan, $karyawan->id);
         $birthDate = self::resolveKaryawanBirthDate($karyawan);
         $transferRaw = self::resolveTransferDateRaw($payroll, $header);
 

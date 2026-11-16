@@ -574,12 +574,19 @@ class SamplerTrackingService
             ->where('is_active', true)->get()
             ->mapWithKeys(function ($session) { return [$session->id => $session->activeMembers]; });
         $keyFor = function ($row) { return $this->makeTeamKey($row); };
+        $rawMapping = SamplerTrackingScheduleIdentity::replacements($before, $after, $keyFor);
         $mapping = $this->continuityMappingForScheduleEdit(
-            SamplerTrackingScheduleIdentity::replacements($before, $after, $keyFor),
+            $rawMapping,
             $before,
+            $after,
             $rescheduledIds,
             $keyFor
         );
+        $dateMovedOldKeys = array_values(array_diff(array_keys($rawMapping), array_keys($mapping)));
+        $dateMovedNewKeys = array_values(array_unique(array_map(function ($oldKey) use ($rawMapping) {
+            return $rawMapping[$oldKey];
+        }, $dateMovedOldKeys)));
+        $this->deactivateSessionsByTeamKeys($dateMovedOldKeys, $quotation);
         $afterById = $after->keyBy('id');
         $editedKeys = $before->filter(function ($row) use ($afterById, $rescheduledIds) {
             if (in_array((int) $row->id, $rescheduledIds, true)) {
@@ -597,7 +604,10 @@ class SamplerTrackingService
             collect($affectedScopes)->flatten()->unique()->values()->all(),
             $this->persiapanBackedCreationKeys($quotation)
         ));
-        $sessions = $this->syncQuotationDates($quotation, $after, $affectedScopes, $editCreationKeys);
+        if ($dateMovedNewKeys && $this->quotationHasActivePersiapan($quotation)) {
+            $editCreationKeys = array_values(array_unique(array_merge($editCreationKeys, $dateMovedNewKeys)));
+        }
+        $sessions = $this->syncQuotationDates($quotation, $after, $affectedScopes, $editCreationKeys, $dateMovedNewKeys);
         foreach ($sessions as $session) {
             if ($editedKeys->contains($session->team_key) && $previousMembers->has($session->id)) {
                 $this->inheritCorrectedTeamEvents($session, $previousMembers->get($session->id));
@@ -659,15 +669,28 @@ class SamplerTrackingService
         return Carbon::parse($value)->toDateString();
     }
 
-    protected function continuityMappingForScheduleEdit(array $mapping, $before, array $rescheduledIds, callable $keyFor)
+    /**
+     * Keep session identity only for same-day corrections (time/vehicle/team).
+     * A different sampling date is a new activity, including when Jadwal Service
+     * replaces rows instead of updating the same ID.
+     */
+    protected function continuityMappingForScheduleEdit(array $mapping, $before, $after, array $rescheduledIds, callable $keyFor)
     {
-        if (empty($rescheduledIds)) {
-            return $mapping;
-        }
         $rescheduledOldKeys = $before->whereIn('id', $rescheduledIds)->map($keyFor)->flip()->all();
+        $oldDates = $before->groupBy($keyFor)->map(function ($group) {
+            return $this->normalizeScheduleDate($group->first()->tanggal ?? null);
+        });
+        $newDates = $after->groupBy($keyFor)->map(function ($group) {
+            return $this->normalizeScheduleDate($group->first()->tanggal ?? null);
+        });
         $continuity = [];
         foreach ($mapping as $oldKey => $newKey) {
             if (isset($rescheduledOldKeys[$oldKey])) {
+                continue;
+            }
+            $oldDate = $oldDates->get($oldKey);
+            $newDate = $newDates->get($newKey);
+            if ($oldDate && $newDate && $oldDate !== $newDate) {
                 continue;
             }
             $continuity[$oldKey] = $newKey;
@@ -704,6 +727,38 @@ class SamplerTrackingService
         }
     }
 
+    protected function deactivateSessionsByTeamKeys(array $teamKeys, $quotation): void
+    {
+        $teamKeys = array_values(array_unique(array_filter($teamKeys)));
+        if (!$teamKeys) {
+            return;
+        }
+
+        $sessionUpdate = $this->onlyExistingColumns((new SamplerTrackingSession())->getTable(), ['is_active' => false]);
+        $memberUpdate = $this->onlyExistingColumns((new SamplerTrackingMember())->getTable(), ['is_active' => false]);
+        if ($sessionUpdate === []) {
+            return;
+        }
+
+        $sessions = SamplerTrackingSession::whereIn('team_key', $teamKeys)
+            ->where('is_active', true)
+            ->when($quotation !== null, function ($query) use ($quotation) {
+                $query->where('no_quotation', $quotation);
+            })
+            ->get();
+
+        foreach ($sessions as $session) {
+            SamplerTrackingHistory::append((int) $session->id, 'session_deactivated', [
+                'reason' => 'sampling_date_changed', 'before' => SamplerTrackingHistory::snapshot($session),
+            ]);
+            SamplerTrackingSession::where('id', $session->id)->update($sessionUpdate);
+            if ($memberUpdate !== []) {
+                SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)->update($memberUpdate);
+            }
+            (new SamplerTrackingTroubleService())->deactivateForSessions([$session->id]);
+        }
+    }
+
     protected function findActiveSessionForScheduleRow($row, $quotation)
     {
         foreach ([$this->makeTeamKey($row), $this->makeLegacyTeamKey($row)] as $teamKey) {
@@ -725,6 +780,7 @@ class SamplerTrackingService
     /** A schedule edit corrects the original team; a new visit never uses this path. */
     protected function inheritCorrectedTeamEvents($session, $previousMembers)
     {
+        $sessionDate = $this->normalizeScheduleDate($session->tanggal_sampling);
         $members = $session->activeMembers()->with('events')->get();
         $activeIds = $members->pluck('id');
         $donors = $previousMembers->filter(function ($member) use ($activeIds) {
@@ -745,12 +801,14 @@ class SamplerTrackingService
             if ($eligibleDonors->isEmpty()) {
                 continue;
             }
-            $events = $eligibleDonors->flatMap(function ($donor) use ($member) {
-                return $donor->events->filter(function ($event) use ($donor, $member) {
+            $events = $eligibleDonors->flatMap(function ($donor) use ($member, $sessionDate) {
+                return $donor->events->filter(function ($event) use ($donor, $member, $sessionDate) {
                     return $this->canInheritTeamEvent(
                         $event->event_type,
                         $donor->effective_duration,
-                        $member->effective_duration
+                        $member->effective_duration,
+                        $event->event_at ?? null,
+                        $sessionDate
                     );
                 });
             })->sortBy('id')->sortBy('event_at')->unique('event_type');
@@ -877,7 +935,7 @@ class SamplerTrackingService
      * still contain every sampler in those visits, so a team event remains
      * consistent without re-syncing other orders on the same day.
      */
-    protected function syncQuotationDates($quotation, $after, array $scopesByDate, array $creationKeys = [])
+    protected function syncQuotationDates($quotation, $after, array $scopesByDate, array $creationKeys = [], array $dateMovedCreationKeys = [])
     {
         $sessions = collect();
         foreach ($scopesByDate as $date => $scopeKeys) {
@@ -891,7 +949,8 @@ class SamplerTrackingService
                 true,
                 $quotation,
                 $creationKeys,
-                $scopeKeys
+                $scopeKeys,
+                $dateMovedCreationKeys
             ));
         }
 
@@ -943,18 +1002,18 @@ class SamplerTrackingService
         ]);
     }
 
-    protected function syncJadwalRows($jadwals, $date, $deactivateMissingSessions = false, $quotation = null, array $creationKeys = [], array $scopeTeamKeys = [])
+    protected function syncJadwalRows($jadwals, $date, $deactivateMissingSessions = false, $quotation = null, array $creationKeys = [], array $scopeTeamKeys = [], array $dateMovedCreationKeys = [])
     {
         $now = $this->now();
         $sessions = [];
         $activeTeamKeys = [];
 
-        DB::transaction(function () use ($jadwals, $now, &$sessions, &$activeTeamKeys, $date, $deactivateMissingSessions, $quotation, $creationKeys, $scopeTeamKeys) {
+        DB::transaction(function () use ($jadwals, $now, &$sessions, &$activeTeamKeys, $date, $deactivateMissingSessions, $quotation, $creationKeys, $scopeTeamKeys, $dateMovedCreationKeys) {
             $this->reconcileReplacedSessions($jadwals, $date, $quotation);
 
             $jadwals->groupBy(function ($row) {
                 return $this->makeTeamKey($row);
-            })->each(function ($rows, $teamKey) use ($now, &$sessions, &$activeTeamKeys, $creationKeys, $quotation, $date, $jadwals) {
+            })->each(function ($rows, $teamKey) use ($now, &$sessions, &$activeTeamKeys, $creationKeys, $dateMovedCreationKeys, $quotation, $date, $jadwals) {
                 $first = $rows->first();
                 $replacedSessionId = null;
                 $keeper = $this->findRescheduleKeeperSession($first, $quotation, $date, $teamKey, $jadwals);
@@ -986,7 +1045,8 @@ class SamplerTrackingService
                 $canMaterialize = in_array($teamKey, $creationKeys, true);
                 $visitQuotation = $quotation ?: $first->no_quotation;
                 $visitDate = Carbon::parse($first->tanggal)->toDateString();
-                if ($canMaterialize && !$this->quotationHasActivePersiapanOnDate($visitQuotation, $visitDate)) {
+                $dateMovedVisit = in_array($teamKey, $dateMovedCreationKeys, true);
+                if ($canMaterialize && !$this->quotationHasActivePersiapanOnDate($visitQuotation, $visitDate) && !$dateMovedVisit) {
                     $canMaterialize = false;
                 }
                 if ($canMaterialize && $this->revisionQuotationPendingReOrder($visitQuotation)) {
@@ -1739,16 +1799,104 @@ class SamplerTrackingService
         }
 
         // Consolidate first so shorter orders at the same stop are not dropped during multi-day work.
-        return $this->consolidateActivities($this->applyRouteOverrides($sessions, $date, $samplerId, $samplerName))
-            ->filter(function ($session) use ($date, $samplerId, $samplerName) {
-                if ($session->tanggal_sampling === $date) return true;
-                return $session->activeMembers->contains(function ($member) use ($session, $date, $samplerId, $samplerName) {
-                    $own = $samplerId ? (string) $member->sampler_id === (string) $samplerId : $member->sampler_name === $samplerName;
-                    return $own && !SamplerTrackingActivity::hasEvent($member, 'return')
-                        && Carbon::parse($session->tanggal_sampling)->addDays(max(0, SamplerTrackingActivity::duration($member) - 1))->toDateString() >= $date;
-                });
-            })->values();
+        return $this->attachSessionActivityOpenFlags(
+            $this->attachSessionStartSampling($this->attachSessionPicContacts(
+                $this->consolidateActivities($this->applyRouteOverrides($sessions, $date, $samplerId, $samplerName))
+                    ->filter(function ($session) use ($date, $samplerId, $samplerName) {
+                        if ($session->tanggal_sampling === $date) return true;
+                        return $session->activeMembers->contains(function ($member) use ($session, $date, $samplerId, $samplerName) {
+                            $own = $samplerId ? (string) $member->sampler_id === (string) $samplerId : $member->sampler_name === $samplerName;
+                            return $own && !SamplerTrackingActivity::hasEvent($member, 'return')
+                                && Carbon::parse($session->tanggal_sampling)->addDays(max(0, SamplerTrackingActivity::duration($member) - 1))->toDateString() >= $date;
+                        });
+                    })->values()
+            )),
+            $samplerId,
+            $samplerName
+        );
     }
+
+    public function applyActivityOpenToMember($session, $member, SamplerTrackingActivityOpenService $openService = null): bool
+    {
+        if (!$member || !$member->sampler_id) {
+            return false;
+        }
+
+        $openService = $openService ?: new SamplerTrackingActivityOpenService();
+        $sessionIds = array_map('intval', $session->activity_session_ids ?? [$session->id]);
+        $memberGrant = $openService->activeGrantForMember(
+            $member->sampler_id,
+            (int) $member->id,
+            $sessionIds,
+            (int) $member->sampler_tracking_session_id,
+            SamplerTrackingActivity::grantMemberIds($member)
+        );
+        $memberPayload = $openService->payload($memberGrant);
+        $memberOpen = $memberPayload !== null;
+        $member->setAttribute('activity_parallel_open', $memberOpen);
+        $member->setAttribute('activity_open', $memberPayload);
+
+        return $memberOpen;
+    }
+
+    public function syncSessionActivityOpenFlags($session, SamplerTrackingActivityOpenService $openService = null): void
+    {
+        $openService = $openService ?: new SamplerTrackingActivityOpenService();
+        $grant = null;
+        $sessionOpen = false;
+
+        foreach ($session->activeMembers as $member) {
+            if ($this->applyActivityOpenToMember($session, $member, $openService)) {
+                $sessionOpen = true;
+                $grant = $openService->activeGrantForMember(
+                    $member->sampler_id,
+                    (int) $member->id,
+                    array_map('intval', $session->activity_session_ids ?? [$session->id]),
+                    (int) $member->sampler_tracking_session_id,
+                    SamplerTrackingActivity::grantMemberIds($member)
+                );
+            }
+        }
+
+        $session->setAttribute('activity_parallel_open', $sessionOpen);
+        $session->setAttribute('activity_open', $openService->payload($grant));
+    }
+
+    public function attachSessionActivityOpenFlags($sessions, $samplerId = null, $samplerName = null)
+    {
+        $openService = new SamplerTrackingActivityOpenService();
+
+        return collect($sessions)->map(function ($session) use ($openService, $samplerId, $samplerName) {
+            foreach ($session->activeMembers as $member) {
+                $own = $samplerId
+                    ? (string) $member->sampler_id === (string) $samplerId
+                    : ($samplerName === null || $samplerName === ''
+                        ? true
+                        : mb_strtolower(trim((string) $member->sampler_name)) === mb_strtolower(trim((string) $samplerName)));
+                if (!$own || !$member->sampler_id) {
+                    continue;
+                }
+
+                $this->applyActivityOpenToMember($session, $member, $openService);
+            }
+
+            $sessionOpen = $session->activeMembers->contains(function ($member) {
+                return $member->getAttribute('activity_parallel_open') === true;
+            });
+            $session->setAttribute('activity_parallel_open', $sessionOpen);
+            if ($sessionOpen) {
+                $openMember = $session->activeMembers->first(function ($member) {
+                    return $member->getAttribute('activity_parallel_open') === true;
+                });
+                $session->setAttribute('activity_open', $openMember ? $openMember->getAttribute('activity_open') : null);
+            } else {
+                $session->setAttribute('activity_open', null);
+            }
+
+            return $session;
+        });
+    }
+
     public function departureForMember($member, $date)
     {
         $own = $member->events->firstWhere('event_type', 'departure');
@@ -1786,8 +1934,15 @@ class SamplerTrackingService
     {
         $date = $request->input('tanggal') ?: $this->today();
         $this->pruneEmptyShellSessions($date);
+        $sessions = $this->listByDate($date, $samplerId, $samplerName);
         $rows = $this->releaseUnblockedOverdueRows(
-            $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName))
+            $this->attachParallelCheckinMeta(
+                $this->finalizeMonitorTrackingRows(
+                    $this->buildTrackingRows($sessions)
+                ),
+                $sessions,
+                $date
+            )
         );
         $trackingStatusCounts = $this->trackingStatusCounts($rows);
 
@@ -1810,12 +1965,20 @@ class SamplerTrackingService
             'recordsFiltered' => $recordsFiltered,
             'tracking_status_counts' => $trackingStatusCounts,
             'data' => $rows->values(),
+            'open_activity_access' => null,
         ];
     }
 
     public function listTrackingRows($date = null, $samplerId = null, $samplerName = null, $trackingStatus = null, $sessionIds = null)
     {
-        $rows = $this->buildTrackingRows($this->listByDate($date, $samplerId, $samplerName, $sessionIds));
+        $sessions = $this->listByDate($date, $samplerId, $samplerName, $sessionIds);
+        $rows = $this->attachParallelCheckinMeta(
+            $this->finalizeMonitorTrackingRows(
+                $this->buildTrackingRows($sessions)
+            ),
+            $sessions,
+            $date
+        );
         $trackingStatusCounts = $this->trackingStatusCounts($rows);
         $rows = $this->filterForMonitorTab($rows, $trackingStatus);
 
@@ -1966,6 +2129,448 @@ public function buildTrackingRows($sessions)
         return !$this->isEmptyTrackingShellRow($row);
     })->values();
 }
+
+    /**
+     * Monitor web: normalisasi baris tabel (gabung perjalanan + status journey).
+     * Tidak memengaruhi listByDate / activity Apps FDL.
+     */
+    public function finalizeMonitorTrackingRows($rows)
+    {
+        return $this->applyMonitorJourneyTrackingStatus(
+            $this->attachMonitorJourneyReturnEvents(
+                $this->mergeMonitorRowsByExtendedJourney(
+                    $this->mergeMonitorRowsByDailyJourney($rows)
+                )
+            )
+        );
+    }
+
+    /**
+     * Sertakan event pulang dari PT lanjutan sebagai referensi journey di payload monitor
+     * agar detail web tidak menampilkan "Belum pulang" untuk kunjungan yang sudah ditutup.
+     */
+    protected function attachMonitorJourneyReturnEvents($rows)
+    {
+        $journey = new SamplerTrackingJourney();
+
+        return collect($rows)->map(function ($row) use ($journey) {
+            $events = collect($row['events'] ?? []);
+            if ($events->contains(function ($event) {
+                return $this->eventValue($event, 'event_type') === 'return'
+                    && !$this->eventIsJourneyReference($event);
+            })) {
+                return $row;
+            }
+
+            $return = null;
+            foreach (collect($row['members'] ?? []) as $member) {
+                if (!($member instanceof SamplerTrackingMember)) {
+                    continue;
+                }
+                $member->loadMissing(['session', 'events']);
+                $assignmentDate = optional($member->session)->tanggal_sampling ?: ($row['tanggal_sampling'] ?? null);
+                if (!$assignmentDate) {
+                    continue;
+                }
+                $candidate = $journey->returnClosingMember($member, (string) $assignmentDate);
+                if ($candidate) {
+                    $return = $candidate;
+                    break;
+                }
+            }
+
+            if (!$return) {
+                return $row;
+            }
+
+            $reference = clone $return;
+            $reference->is_journey_reference = true;
+            if ($returnSessionId = (int) optional($return->member)->sampler_tracking_session_id) {
+                $ownSessionIds = collect($row['sessions'] ?? [])->map(function ($session) {
+                    return is_object($session) ? (int) $session->id : (int) ($session['id'] ?? 0);
+                })->filter()->values();
+                if ($ownSessionIds->isNotEmpty() && !$ownSessionIds->contains($returnSessionId)) {
+                    $closingOrder = optional(optional($return->member)->session)->no_order;
+                    if ($closingOrder) {
+                        $reference->note = trim(($reference->note ? $reference->note . ' ' : '')
+                            . '(Pulang dicatat setelah kunjungan lanjutan ' . $closingOrder . ')');
+                    }
+                }
+            }
+
+            $row['events'] = $events->push($reference)->unique('id')->values()->all();
+
+            return $row;
+        })->values();
+    }
+
+    protected function applyMonitorJourneyTrackingStatus($rows)
+    {
+        return collect($rows)->map(function ($row) {
+            $row['tracking_status'] = $this->resolveMonitorRowTrackingStatus($row);
+
+            return $row;
+        })->values();
+    }
+
+    /**
+     * Status monitor: selain event return di baris, hormati penutupan perjalanan lintas PT/tanggal
+     * (return di hari lanjutan menutup kunjungan 1×24 jam hari sebelumnya).
+     */
+    public function resolveMonitorRowTrackingStatus(array $row): string
+    {
+        $members = collect($row['members'] ?? []);
+        if ($members->isEmpty() && !empty($row['member'])) {
+            $members = collect([$row['member']]);
+        }
+
+        $durationValues = $members->map(function ($member) {
+            return SamplerTrackingActivity::duration($member);
+        });
+
+        $status = $this->resolveTrackingStatus(
+            $row['events'] ?? [],
+            $row['tanggal_sampling'] ?? null,
+            $row['jam_mulai'] ?? null,
+            $row['jam_selesai'] ?? null,
+            $durationValues->max()
+        );
+
+        if ($status === 'completed') {
+            return 'completed';
+        }
+
+        if ($members->isEmpty()) {
+            return $status;
+        }
+
+        $stopsComplete = $members->every(function ($member) {
+            return is_object($member)
+                && SamplerTrackingActivity::hasEvent($member, 'checkin')
+                && SamplerTrackingActivity::hasEvent($member, 'checkout');
+        });
+
+        if (!$stopsComplete) {
+            return $status;
+        }
+
+        $journey = new SamplerTrackingJourney();
+        $journeyComplete = $members->every(function ($member) use ($journey) {
+            if (!is_object($member) || !$member->sampler_id) {
+                return false;
+            }
+
+            if ($member instanceof SamplerTrackingMember) {
+                $member->loadMissing('session');
+            }
+
+            $memberDate = optional($member->session)->tanggal_sampling;
+            if (!$memberDate) {
+                return false;
+            }
+
+            return $journey->isComplete($member, (string) $memberDate);
+        });
+
+        return $journeyComplete ? 'completed' : $status;
+    }
+
+    /**
+     * Gabung baris tim yang sama (sampler) di tanggal berbeda bila lanjutan satu perjalanan
+     * (mis. 1×24 jam 11 Nov + PT lanjutan 12 Nov).
+     */
+    public function mergeMonitorRowsByExtendedJourney($rows)
+    {
+        $rows = collect($rows)->values();
+        if ($rows->count() < 2) {
+            return $rows;
+        }
+
+        return $rows->groupBy(function ($row) {
+            $keys = $this->rowSamplerIdentityKeys($row);
+
+            return $keys === []
+                ? 'row:' . ($row['row_id'] ?? md5(json_encode($row)))
+                : json_encode($keys);
+        })->flatMap(function ($group) {
+            if ($group->count() < 2) {
+                return $group;
+            }
+
+            $sorted = $group->sortBy('tanggal_sampling')->values()->all();
+
+            return collect($this->buildMonitorJourneyChains($sorted))->map(function ($chain) {
+                if (count($chain) === 1) {
+                    return $chain[0];
+                }
+
+                return $this->mergeMonitorTrackingRows($chain);
+            });
+        })->values();
+    }
+
+    protected function buildMonitorJourneyChains(array $rows): array
+    {
+        if (count($rows) <= 1) {
+            return [$rows];
+        }
+
+        $chains = [];
+        $current = [$rows[0]];
+
+        for ($index = 1; $index < count($rows); $index++) {
+            if ($this->monitorRowsShareExtendedJourney($current[count($current) - 1], $rows[$index])) {
+                $current[] = $rows[$index];
+                continue;
+            }
+
+            $chains[] = $current;
+            $current = [$rows[$index]];
+        }
+
+        $chains[] = $current;
+
+        return $chains;
+    }
+
+    protected function monitorRowsShareExtendedJourney(array $earlier, array $later): bool
+    {
+        $earlierDate = $earlier['tanggal_sampling'] ?? '';
+        $laterDate = $later['tanggal_sampling'] ?? '';
+        if (!$earlierDate || !$laterDate || $laterDate <= $earlierDate) {
+            return false;
+        }
+
+        $laterSessionIds = collect($later['sessions'] ?? [])->map(function ($session) {
+            return is_object($session) ? (int) $session->id : (int) ($session['id'] ?? 0);
+        })->filter()->values()->all();
+
+        if ($laterSessionIds === []) {
+            return false;
+        }
+
+        foreach (collect($earlier['members'] ?? []) as $member) {
+            if (!($member instanceof SamplerTrackingMember)) {
+                continue;
+            }
+            if (!SamplerTrackingActivity::hasEvent($member, 'checkin')) {
+                continue;
+            }
+
+            $member->loadMissing('session');
+            $assignmentDate = optional($member->session)->tanggal_sampling ?: $earlierDate;
+            $due = Carbon::parse($assignmentDate)->addDays(max(0, SamplerTrackingActivity::duration($member) - 1))->toDateString();
+            $extension = (new SamplerTrackingJourney())->extension($member, (string) $assignmentDate, $due);
+            if (!$extension) {
+                continue;
+            }
+
+            foreach ($extension['assignments'] ?? [] as $assignment) {
+                if (in_array((int) ($assignment['session_id'] ?? 0), $laterSessionIds, true)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Monitor web: gabung baris tim yang sama (sampler + tanggal) terpisah hanya karena durasi,
+     * mis. 1×24 jam + lanjutan sesaat dalam satu perjalanan harian. Tidak memengaruhi listByDate Apps FDL.
+     */
+    public function mergeMonitorRowsByDailyJourney($rows)
+    {
+        $rows = collect($rows);
+        if ($rows->count() < 2) {
+            return $rows->values();
+        }
+
+        return $rows->groupBy(function ($row) {
+            $keys = $this->rowSamplerIdentityKeys($row);
+            if ($keys === []) {
+                return 'row:' . ($row['row_id'] ?? md5(json_encode($row)));
+            }
+
+            return ($row['tanggal_sampling'] ?? '-') . '|' . json_encode($keys);
+        })->map(function ($group, $bucketKey) {
+            if (strpos((string) $bucketKey, 'row:') === 0 || $group->count() === 1) {
+                return $group->first();
+            }
+
+            return $this->mergeMonitorTrackingRows($group->values()->all());
+        })->values();
+    }
+
+    protected function rowSamplerIdentityKeys(array $row): array
+    {
+        $members = collect($row['members'] ?? []);
+        if ($members->isEmpty() && !empty($row['member'])) {
+            $members = collect([$row['member']]);
+        }
+
+        return $members->map(function ($member) {
+            $samplerId = is_object($member) ? ($member->sampler_id ?? null) : ($member['sampler_id'] ?? null);
+            if ($samplerId) {
+                return 'id:' . $samplerId;
+            }
+
+            $name = is_object($member) ? ($member->sampler_name ?? '') : ($member['sampler_name'] ?? '');
+
+            return 'name:' . mb_strtolower(trim((string) $name));
+        })->filter(function ($key) {
+            return $key !== 'name:' && $key !== 'id:';
+        })->unique()->sort()->values()->all();
+    }
+
+    protected function mergeMonitorTrackingRows(array $rows): array
+    {
+        $rows = collect($rows);
+        $date = $rows->pluck('tanggal_sampling')->filter(function ($value) {
+            return $value && $value !== '-';
+        })->sort()->first() ?: ($rows->first()['tanggal_sampling'] ?? '-');
+        $samplerKeys = $this->rowSamplerIdentityKeys($rows->first());
+
+        $sessions = $rows->flatMap(function ($row) {
+            return collect($row['sessions'] ?? []);
+        })->unique(function ($session) {
+            return is_object($session) ? (int) $session->id : (int) ($session['id'] ?? 0);
+        })->values();
+
+        $members = $rows->flatMap(function ($row) {
+            return collect($row['members'] ?? []);
+        })->unique(function ($member) {
+            return is_object($member) ? (int) $member->id : (int) ($member['id'] ?? 0);
+        })->values();
+
+        $events = $rows->flatMap(function ($row) {
+            return collect($row['events'] ?? []);
+        })->unique(function ($event) {
+            return is_object($event) ? (int) $event->id : (int) ($event['id'] ?? 0);
+        })->sortBy(function ($event) {
+            return is_object($event) ? ($event->event_at ?? '') : ($event['event_at'] ?? '');
+        })->values();
+
+        $noOrders = collect();
+        $perusahaan = collect();
+        $durations = collect();
+        $durationValues = collect();
+        $movementGroups = collect();
+        $statuses = collect();
+        $samplers = collect();
+        $jamMulai = null;
+        $jamSelesai = null;
+
+        foreach ($members as $member) {
+            $samplerName = is_object($member)
+                ? ($member->sampler_name ?: ($member->sampler_id ?: '-'))
+                : ($member['sampler_name'] ?? ($member['sampler_id'] ?? '-'));
+            $samplers->push($samplerName);
+            $durationValues->push($this->firstFilledValue([
+                is_object($member) ? $member->effective_duration : ($member['effective_duration'] ?? null),
+                is_object($member) ? ($member->durasi_personal ?? null) : ($member['durasi_personal'] ?? null),
+                is_object($member) ? ($member->duration ?? null) : ($member['duration'] ?? null),
+                is_object($member) ? ($member->durasi ?? null) : ($member['durasi'] ?? null),
+            ]));
+            $durations->push($this->durationLabel($durationValues->last()));
+            $movementGroups->push(is_object($member) ? ($member->current_movement_group ?? '-') : ($member['current_movement_group'] ?? '-'));
+        }
+
+        foreach ($rows as $row) {
+            foreach ($this->splitRowListField($row['no_order'] ?? '-') as $value) {
+                $noOrders->push($value);
+            }
+            $companyList = $row['perusahaan_list'] ?? null;
+            if (!is_array($companyList) || count($companyList) === 0) {
+                $companyList = $this->splitRowListField($row['nama_perusahaan'] ?? '-');
+            }
+            foreach ($companyList as $value) {
+                $perusahaan->push($value);
+            }
+            foreach ($this->splitRowListField($row['status'] ?? '-') as $value) {
+                $statuses->push($value);
+            }
+            if (!empty($row['jam_mulai']) && (!$jamMulai || $row['jam_mulai'] < $jamMulai)) {
+                $jamMulai = $row['jam_mulai'];
+            }
+            if (!empty($row['jam_selesai']) && (!$jamSelesai || $row['jam_selesai'] > $jamSelesai)) {
+                $jamSelesai = $row['jam_selesai'];
+            }
+        }
+
+        $noOrders = $this->uniqueValues($noOrders);
+        $perusahaan = $this->uniqueValues($perusahaan);
+        $samplers = $this->uniqueValues($samplers);
+        $durations = $this->uniqueValues($durations);
+        $statuses = $this->uniqueValues($statuses);
+        $movementGroups = $this->uniqueValues($movementGroups);
+
+        $primaryMember = $members->sortByDesc(function ($member) {
+            return SamplerTrackingActivity::duration($member);
+        })->first();
+
+        $primarySession = $sessions->first(function ($session) use ($primaryMember) {
+            $sessionId = is_object($session) ? (int) $session->id : (int) ($session['id'] ?? 0);
+            $memberSessionId = is_object($primaryMember)
+                ? (int) $primaryMember->sampler_tracking_session_id
+                : (int) ($primaryMember['sampler_tracking_session_id'] ?? 0);
+
+            return $memberSessionId > 0 && $sessionId === $memberSessionId;
+        }) ?: $sessions->first();
+
+        $journeyTag = $rows->pluck('tanggal_sampling')->unique()->count() > 1 ? 'journey:extended' : 'journey:daily';
+        $groupKey = json_encode([$date, $samplerKeys, $journeyTag]);
+        $meaningfulEvents = $this->meaningfulTrackingEvents($events);
+        $lastEvent = $this->latestEvent($meaningfulEvents);
+
+        $mergedRow = [
+            'row_id' => $date . '-' . md5($groupKey),
+            'group_key' => $groupKey,
+            'session' => $primarySession,
+            'member' => $primaryMember,
+            'sessions' => $sessions,
+            'members' => $members,
+            'events' => $events,
+            'tanggal_sampling' => $date,
+            'jam' => ($jamMulai ?: '-') . ' - ' . ($jamSelesai ?: '-'),
+            'jam_mulai' => $jamMulai,
+            'jam_selesai' => $jamSelesai,
+            'no_order' => count($noOrders) > 0 ? implode(', ', $noOrders) : '-',
+            'perusahaan_list' => $perusahaan,
+            'nama_perusahaan' => count($perusahaan) > 0 ? implode(', ', $perusahaan) : '-',
+            'sampler_list' => $samplers,
+            'samplers' => $samplers,
+            'sampler' => count($samplers) > 0 ? implode(', ', $samplers) : '-',
+            'durasi' => count($durations) > 0 ? implode(', ', $durations) : '-',
+            'movement_group' => $this->teamMovementCode($date, $groupKey),
+            'internal_movement_groups' => $movementGroups,
+            'total_event' => $meaningfulEvents->count(),
+            'last_event' => $lastEvent ? (($lastEvent->event_type ?: '-') . ' - ' . ($lastEvent->event_at ?: '-')) : '-',
+            'status' => count($statuses) > 0 ? implode(', ', $statuses) : '-',
+        ];
+
+        $mergedRow['tracking_status'] = $this->resolveMonitorRowTrackingStatus($mergedRow);
+
+        return $mergedRow;
+    }
+
+    protected function splitRowListField($value): array
+    {
+        if (is_array($value)) {
+            return collect($value)->filter(function ($item) {
+                return $this->isFilledTrackingLabel($item);
+            })->all();
+        }
+
+        $text = trim((string) $value);
+        if ($text === '' || $text === '-') {
+            return [];
+        }
+
+        return array_values(array_filter(preg_split('/\s*,\s*/', $text) ?: [], function ($item) {
+            return $this->isFilledTrackingLabel($item);
+        }));
+    }
 
     /**
      * Baris session aktif tanpa identitas kunjungan & tanpa event — sisa sync/reschedule.
@@ -2672,6 +3277,12 @@ public function buildTrackingRows($sessions)
             }
 
             $eventType = $payload['event_type'];
+            if ($eventType === 'meet_pic') {
+                return collect([$this->storeMeetPicEvent($member, $session, $payload)]);
+            }
+            if ($eventType === 'start_sampling') {
+                return $this->storeStartSamplingEvent($member, $session, $payload);
+            }
             $this->ensureEventSequence($member, $eventType);
             $movementGroup = $member->current_movement_group ?: $this->makeMovementGroupCode($member->session);
 
@@ -2783,12 +3394,312 @@ public function buildTrackingRows($sessions)
                 ]);
             }
 
+            if ($eventType === 'checkout') {
+                (new SamplerTrackingActivityOpenService())->clearActiveGrantForMember($member);
+            }
+
             return collect($events);
         });
 
         $this->notifyTeamLockAfterFanout($source, $lockedTeammates);
 
         return $events;
+    }
+
+    protected function storeMeetPicEvent(SamplerTrackingMember $member, SamplerTrackingSession $session, array $payload)
+    {
+        if (!SamplerTrackingActivity::hasEvent($member, 'checkin')) {
+            $sessionCheckin = SamplerTrackingEvent::where('sampler_tracking_session_id', $session->id)
+                ->where('event_type', 'checkin')
+                ->exists();
+            if (!$sessionCheckin) {
+                throw ValidationException::withMessages([
+                    'event_type' => ['Check in dulu sebelum isi data PIC di lokasi ini.'],
+                ]);
+            }
+        }
+
+        $contacts = SamplerTrackingPicContacts::requireFilled($payload['pic_contacts'] ?? null);
+        $contacts['dokumentasi'] = $this->storePhotos($contacts['dokumentasi'] ?? []);
+        $existing = SamplerTrackingEvent::where('sampler_tracking_session_id', $session->id)
+            ->where('event_type', 'meet_pic')
+            ->orderByDesc('id')
+            ->lockForUpdate()
+            ->first();
+
+        $values = $this->onlyExistingColumns((new SamplerTrackingEvent())->getTable(), [
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_tracking_member_id' => $member->id,
+            'triggered_by_member_id' => $member->id,
+            'event_type' => 'meet_pic',
+            'pic_contacts' => json_encode($contacts, JSON_UNESCAPED_UNICODE),
+            'latitude' => $this->normalizeCoordinate($payload['latitude'] ?? $payload['lat'] ?? null),
+            'longitude' => $this->normalizeCoordinate($payload['longitude'] ?? $payload['longi'] ?? $payload['long'] ?? null),
+            'note' => $payload['note'] ?? null,
+            'is_auto' => false,
+            'sequence_no' => $existing ? $existing->sequence_no : $this->nextSequence($member->id),
+            'event_at' => $existing
+                ? $existing->event_at
+                : ($payload['event_at'] ?? $this->now()),
+        ]);
+
+        if ($existing) {
+            $existing->fill($values);
+            $existing->save();
+            $event = $existing->fresh();
+        } else {
+            $event = SamplerTrackingEvent::create($values);
+        }
+
+        SamplerTrackingHistory::append((int) $session->id, 'activity_recorded', [
+            'event_type' => 'meet_pic',
+            'event_at' => (string) ($event->event_at ?? $this->now()),
+            'triggered_by' => [
+                'member_id' => (int) $member->id,
+                'sampler_id' => $member->sampler_id,
+                'name' => $member->sampler_name,
+            ],
+            'pic_count' => count($contacts['pic'] ?? []),
+            'dokumentasi_count' => count($contacts['dokumentasi'] ?? []),
+            'state' => SamplerTrackingHistory::snapshot($session),
+        ]);
+
+        return $event;
+    }
+
+    protected function storeStartSamplingEvent(SamplerTrackingMember $member, SamplerTrackingSession $session, array $payload)
+    {
+        $this->assertStartSamplingAllowed($member, $session);
+
+        if ($this->memberHasTrackingEvent($member->id, 'start_sampling')) {
+            throw ValidationException::withMessages([
+                'event_type' => ['Start sampling sudah tercatat untuk lokasi ini.'],
+            ]);
+        }
+
+        $latitude = $this->normalizeCoordinate($payload['latitude'] ?? $payload['lat'] ?? null);
+        $longitude = $this->normalizeCoordinate($payload['longitude'] ?? $payload['longi'] ?? $payload['long'] ?? null);
+        if ($latitude === null || $longitude === null) {
+            throw ValidationException::withMessages([
+                'latitude' => ['Koordinat GPS wajib tercatat. Aktifkan lokasi perangkat lalu coba lagi.'],
+            ]);
+        }
+
+        $startedByName = trim((string) ($payload['started_by_name'] ?? $member->sampler_name ?? ''));
+        if ($startedByName === '') {
+            $startedByName = 'Sampler';
+        }
+
+        $eventAt = $payload['event_at'] ?? $this->now();
+        $note = trim((string) ($payload['note'] ?? ''));
+        if ($note === '') {
+            $note = 'Start sampling oleh ' . $startedByName;
+        }
+
+        $activities = $this->eventActivities($member);
+        $activity = $activities->first(function ($item) use ($member) {
+            return in_array((int) $member->sampler_tracking_session_id, array_map('intval', $item->activity_session_ids ?? [$item->id]), true);
+        });
+
+        $targets = SamplerTrackingMember::whereIn(
+            'sampler_tracking_session_id',
+            $activity->activity_session_ids ?? [$session->id]
+        )
+            ->where('is_active', true)
+            ->get()
+            ->filter(function ($target) {
+                return !$this->memberHasTrackingEvent($target->id, 'start_sampling');
+            })
+            ->values();
+
+        if ($targets->isEmpty() || !$targets->contains(function ($target) use ($member) {
+            return (string) $target->id === (string) $member->id;
+        })) {
+            throw ValidationException::withMessages([
+                'event_type' => ['Start sampling sudah tercatat untuk lokasi ini.'],
+            ]);
+        }
+
+        $movementGroup = $member->current_movement_group ?: $this->makeMovementGroupCode($session);
+        $troubleService = new SamplerTrackingTroubleService();
+        $eventModel = new SamplerTrackingEvent();
+        $events = [];
+
+        foreach ($targets as $targetMember) {
+            if ((string) $targetMember->id !== (string) $member->id
+                && $troubleService->isRecordingBlocked(
+                    $targetMember->sampler_id,
+                    $member->session->tanggal_sampling,
+                    $targetMember->sampler_tracking_session_id
+                )) {
+                continue;
+            }
+
+            $events[] = SamplerTrackingEvent::create($this->onlyExistingColumns($eventModel->getTable(), [
+                'sampler_tracking_session_id' => $targetMember->sampler_tracking_session_id,
+                'sampler_tracking_member_id' => $targetMember->id,
+                'triggered_by_member_id' => $member->id,
+                'event_type' => 'start_sampling',
+                'movement_group' => $movementGroup,
+                'latitude' => $latitude,
+                'longitude' => $longitude,
+                'note' => $note,
+                'is_auto' => (string) $targetMember->id !== (string) $member->id,
+                'sequence_no' => $this->nextSequence($targetMember->id),
+                'event_at' => $eventAt,
+            ]));
+        }
+
+        if ($events === []) {
+            throw ValidationException::withMessages([
+                'event_type' => ['Start sampling tidak dapat disimpan. Muat ulang activity lalu coba lagi.'],
+            ]);
+        }
+
+        foreach (collect($events)->groupBy('sampler_tracking_session_id') as $sessionId => $sessionEvents) {
+            SamplerTrackingHistory::append((int) $sessionId, 'activity_recorded', [
+                'event_type' => 'start_sampling',
+                'event_at' => (string) ($sessionEvents->first()->event_at ?? $this->now()),
+                'triggered_by' => [
+                    'member_id' => (int) $member->id,
+                    'sampler_id' => $member->sampler_id,
+                    'name' => $member->sampler_name,
+                ],
+                'latitude' => $latitude,
+                'longitude' => $longitude,
+                'state' => SamplerTrackingHistory::snapshot(SamplerTrackingSession::findOrFail($sessionId)),
+                'affected' => $sessionEvents->map(function ($event) {
+                    $target = SamplerTrackingMember::find($event->sampler_tracking_member_id);
+                    return [
+                        'event_id' => (int) $event->id,
+                        'member_id' => (int) $event->sampler_tracking_member_id,
+                        'sampler_id' => $target ? $target->sampler_id : null,
+                        'name' => $target ? $target->sampler_name : null,
+                        'automatic' => (bool) $event->is_auto,
+                    ];
+                })->values()->all(),
+            ]);
+        }
+
+        return collect($events);
+    }
+
+    protected function attachSessionPicContacts($sessions)
+    {
+        $sessionIds = collect($sessions)->flatMap(function ($session) {
+            return $session->activity_session_ids ?? [$session->id];
+        })->filter()->unique()->values();
+
+        $events = $sessionIds->isEmpty()
+            ? collect()
+            : SamplerTrackingEvent::whereIn('sampler_tracking_session_id', $sessionIds)
+                ->where('event_type', 'meet_pic')
+                ->orderByDesc('id')
+                ->get()
+                ->groupBy('sampler_tracking_session_id');
+
+        foreach ($sessions as $session) {
+            $ids = $session->activity_session_ids ?? [$session->id];
+            $event = collect($ids)->map(function ($id) use ($events) {
+                return optional($events->get($id))->first();
+            })->filter()->sortByDesc('id')->first();
+
+            $contacts = SamplerTrackingPicContacts::fromEvent($event);
+            $session->setAttribute('pic_contacts', $contacts);
+            $session->setAttribute('has_meet_pic', ($contacts['pic'] ?? []) !== []);
+            $session->setAttribute('meet_pic_event_id', $event ? $event->id : null);
+            $session->setAttribute('meet_pic_at', $event ? (string) $event->event_at : null);
+        }
+
+        return $sessions;
+    }
+
+    protected function attachSessionStartSampling($sessions)
+    {
+        $sessionIds = collect($sessions)->flatMap(function ($session) {
+            return $session->activity_session_ids ?? [$session->id];
+        })->filter()->unique()->values();
+
+        $events = $sessionIds->isEmpty()
+            ? collect()
+            : SamplerTrackingEvent::with('triggeredBy', 'member')
+                ->whereIn('sampler_tracking_session_id', $sessionIds)
+                ->where('event_type', 'start_sampling')
+                ->orderByDesc('event_at')
+                ->orderByDesc('id')
+                ->get()
+                ->groupBy('sampler_tracking_session_id');
+
+        foreach ($sessions as $session) {
+            $ids = $session->activity_session_ids ?? [$session->id];
+            $event = collect($ids)->map(function ($id) use ($events) {
+                return optional($events->get($id))->first();
+            })->filter()->sortByDesc(function ($item) {
+                return (string) ($item->event_at ?? '') . ':' . $item->id;
+            })->first();
+
+            $starter = null;
+            if ($event) {
+                $starter = $event->triggeredBy ?: $event->member;
+            }
+
+            $session->setAttribute('has_start_sampling', $event !== null);
+            $session->setAttribute('start_sampling_event_id', $event ? $event->id : null);
+            $session->setAttribute('start_sampling_at', $event ? (string) $event->event_at : null);
+            $session->setAttribute('start_sampling_latitude', $event ? $event->latitude : null);
+            $session->setAttribute('start_sampling_longitude', $event ? $event->longitude : null);
+            $session->setAttribute('start_sampling_by_name', $starter ? $starter->sampler_name : null);
+            $session->setAttribute('start_sampling_by_sampler_id', $starter ? $starter->sampler_id : null);
+        }
+
+        return $sessions;
+    }
+
+    protected function assertStartSamplingAllowed(SamplerTrackingMember $member, SamplerTrackingSession $session): void
+    {
+        $hasCheckin = SamplerTrackingActivity::hasEvent($member, 'checkin')
+            || SamplerTrackingEvent::where('sampler_tracking_session_id', $session->id)
+                ->where('event_type', 'checkin')
+                ->exists();
+
+        if (!$hasCheckin) {
+            throw ValidationException::withMessages([
+                'event_type' => ['Check in dulu sebelum start sampling di lokasi ini.'],
+            ]);
+        }
+
+        $relatedSessionIds = collect([$session->id]);
+        if ($session->no_order || !empty($session->no_quotation)) {
+            $relatedSessionIds = SamplerTrackingSession::where('is_active', true)
+                ->whereDate('tanggal_sampling', $session->tanggal_sampling)
+                ->where(function ($query) use ($session) {
+                    if ($session->no_order) {
+                        $query->where('no_order', $session->no_order);
+                    }
+
+                    if (!empty($session->no_quotation)) {
+                        $query->orWhere('no_quotation', $session->no_quotation);
+                    }
+                })
+                ->pluck('id');
+
+            if ($relatedSessionIds->isEmpty()) {
+                $relatedSessionIds = collect([$session->id]);
+            }
+        }
+
+        $hasPic = SamplerTrackingEvent::whereIn('sampler_tracking_session_id', $relatedSessionIds)
+            ->where('event_type', 'meet_pic')
+            ->get()
+            ->contains(function ($event) {
+                return SamplerTrackingPicContacts::isFilled($event->pic_contacts ?? null);
+            });
+
+        if (!$hasPic) {
+            throw ValidationException::withMessages([
+                'event_type' => ['Isi data PIC dulu sebelum start sampling di lokasi ini.'],
+            ]);
+        }
     }
 
     public function createMissingReturn($sessionId, $samplerId, $eventAt, $reason, $actorId, $actorName)
@@ -2911,11 +3822,143 @@ public function buildTrackingRows($sessions)
 
     protected function hasOpenCheckin($sessions, SamplerTrackingMember $member, $targetSession = null): bool
     {
-        return $sessions->contains(function ($session) use ($member, $targetSession) {
+        if (!$this->wouldBlockParallelCheckin($sessions, $member, $targetSession)) {
+            return false;
+        }
+
+        $activitySessionIds = array_map('intval', $targetSession->activity_session_ids ?? [$targetSession->id]);
+        $openService = new SamplerTrackingActivityOpenService();
+        if ($openService->hasActiveGrantForMember(
+            $member->sampler_id,
+            (int) $member->id,
+            $activitySessionIds,
+            (int) $member->sampler_tracking_session_id,
+            SamplerTrackingActivity::grantMemberIds($member)
+        )) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function samplerHasNonSesaatAssignment($sessions, $samplerId = null, $samplerName = null): bool
+    {
+        return collect($sessions)->contains(function ($session) use ($samplerId, $samplerName) {
+            return $session->activeMembers->contains(function ($member) use ($samplerId, $samplerName) {
+                if (!$member->sampler_id) {
+                    return false;
+                }
+
+                $own = $samplerId
+                    ? (string) $member->sampler_id === (string) $samplerId
+                    : ($samplerName === null || $samplerName === ''
+                        ? true
+                        : mb_strtolower(trim((string) $member->sampler_name)) === mb_strtolower(trim((string) $samplerName)));
+
+                return $own && !SamplerTrackingActivity::isSesaat($member);
+            });
+        });
+    }
+
+    protected function wouldBlockParallelCheckin($sessions, SamplerTrackingMember $member, $targetSession = null): bool
+    {
+        return collect($sessions)->contains(function ($session) use ($member, $targetSession) {
             $sessionMember = $this->sessionMemberForSampler($session, $member);
+            if (!$sessionMember) {
+                return false;
+            }
+
             return SamplerTrackingActivity::hasEvent($sessionMember, 'checkin')
                 && !SamplerTrackingActivity::hasEvent($sessionMember, 'checkout')
                 && !SamplerTrackingActivity::sameCustomer($session, $targetSession);
+        });
+    }
+
+    protected function parallelCheckinTargetSessionId($targetSession): ?int
+    {
+        if (!$targetSession) {
+            return null;
+        }
+
+        $ids = $targetSession->activity_session_ids ?? [$targetSession->id];
+
+        return (int) (is_array($ids) ? ($ids[0] ?? $targetSession->id) : $targetSession->id);
+    }
+
+    protected function resolveParallelCheckinTargetSession($row, $sessions)
+    {
+        $member = $row['member'] ?? null;
+        $session = $row['session'] ?? null;
+        if (!$member || !$session) {
+            return $session;
+        }
+
+        $memberSessionId = (int) ($member->sampler_tracking_session_id ?? $member['sampler_tracking_session_id'] ?? 0);
+        if ($memberSessionId > 0) {
+            $match = collect($sessions)->first(function ($item) use ($memberSessionId) {
+                $ids = array_map('intval', $item->activity_session_ids ?? [$item->id]);
+
+                return in_array($memberSessionId, $ids, true);
+            });
+            if ($match) {
+                return $match;
+            }
+        }
+
+        return $session;
+    }
+
+    protected function attachParallelCheckinMeta($rows, $sessions, $date = null)
+    {
+        $rows = collect($rows);
+        if ($rows->isEmpty()) {
+            return $rows;
+        }
+
+        $allSessions = collect($sessions)->values();
+        if ($allSessions->isEmpty()) {
+            return $rows;
+        }
+
+        $openService = new SamplerTrackingActivityOpenService();
+
+        return $rows->map(function ($row) use ($allSessions, $openService) {
+            $member = $row['member'] ?? null;
+            if (!$member) {
+                return $row;
+            }
+
+            $targetSession = $this->resolveParallelCheckinTargetSession($row, $allSessions);
+            if (!$targetSession) {
+                return $row;
+            }
+
+            $activitySessionIds = array_map('intval', $targetSession->activity_session_ids ?? [$targetSession->id]);
+            $grant = $openService->activeGrantForMember(
+                $member->sampler_id,
+                (int) $member->id,
+                $activitySessionIds,
+                (int) ($member->sampler_tracking_session_id ?? $targetSession->id),
+                SamplerTrackingActivity::grantMemberIds($member)
+            );
+            $row['activity_open'] = $openService->payload($grant);
+
+            if (SamplerTrackingActivity::hasEvent($member, 'checkin')) {
+                $row['parallel_checkin_blocked'] = false;
+
+                return $row;
+            }
+
+            $state = $openService->parallelCheckinState($member, $targetSession, $allSessions);
+            $wouldBlock = $this->wouldBlockParallelCheckin($allSessions, $member, $targetSession);
+            $row['parallel_checkin_blocked'] = $grant ? false : ($wouldBlock || (bool) $state['blocked']);
+            $row['parallel_blocking_session_id'] = $state['blocking_session_id'];
+            $row['can_open_parallel_activity'] = $row['parallel_checkin_blocked']
+                && empty($grant)
+                && SamplerTrackingActivity::isSesaat($member)
+                && $this->samplerHasNonSesaatAssignment($allSessions, $member->sampler_id, $member->sampler_name);
+
+            return $row;
         });
     }
 
@@ -2961,7 +4004,16 @@ public function buildTrackingRows($sessions)
 
             $previousSession = $sessions->get($currentIndex - 1);
             $previousMember = $this->sessionMemberForSampler($previousSession, $member);
-            if (!SamplerTrackingActivity::hasEvent($previousMember, 'checkout')
+            $activitySessionIds = array_map('intval', $currentSession->activity_session_ids ?? [$currentSession->id]);
+            $parallelOpen = (new SamplerTrackingActivityOpenService())->hasActiveGrantForMember(
+                $member->sampler_id,
+                (int) $member->id,
+                $activitySessionIds,
+                (int) $member->sampler_tracking_session_id,
+                SamplerTrackingActivity::grantMemberIds($member)
+            );
+            if (!$parallelOpen
+                && !SamplerTrackingActivity::hasEvent($previousMember, 'checkout')
                 && !SamplerTrackingActivity::sameCustomer($previousSession, $currentSession)) {
                 throw ValidationException::withMessages([
                     'event_type' => ['Selesaikan check out lokasi sebelumnya terlebih dahulu sebelum check in lokasi ini.'],
@@ -3012,8 +4064,17 @@ public function buildTrackingRows($sessions)
             ->exists();
     }
 
-    protected function canInheritTeamEvent(string $eventType, $donorEffectiveDuration, $recipientEffectiveDuration): bool
-    {
+    protected function canInheritTeamEvent(
+        string $eventType,
+        $donorEffectiveDuration,
+        $recipientEffectiveDuration,
+        $eventAt = null,
+        $sessionDate = null
+    ): bool {
+        if (!$this->eventMatchesSessionDate($eventAt, $sessionDate)) {
+            return false;
+        }
+
         if (in_array($eventType, ['departure', 'checkin'], true)) {
             return true;
         }
@@ -3023,6 +4084,21 @@ public function buildTrackingRows($sessions)
         }
 
         return false;
+    }
+
+    /** Team copies are same-day only. A moved schedule must not inherit yesterday's departure. */
+    protected function eventMatchesSessionDate($eventAt, $sessionDate): bool
+    {
+        if ($eventAt === null || $eventAt === '' || $sessionDate === null || $sessionDate === '') {
+            return true;
+        }
+
+        try {
+            return Carbon::parse($eventAt, 'Asia/Jakarta')->toDateString()
+                === Carbon::parse($sessionDate, 'Asia/Jakarta')->toDateString();
+        } catch (\Exception $exception) {
+            return false;
+        }
     }
 
     protected function inheritedTeamEventNote($sourceEvent, string $reason): string
@@ -3083,10 +4159,17 @@ public function buildTrackingRows($sessions)
             $sourceEvents->pluck('sampler_tracking_member_id')->filter()->unique()->all()
         )->pluck('effective_duration', 'id');
 
+        $sessionDate = $this->normalizeScheduleDate($session->tanggal_sampling);
         $eventModel = new SamplerTrackingEvent();
         foreach ($sourceEvents as $sourceEvent) {
             $donorDuration = $donorDurations->get($sourceEvent->sampler_tracking_member_id);
-            if (!$this->canInheritTeamEvent($sourceEvent->event_type, $donorDuration, $member->effective_duration)) {
+            if (!$this->canInheritTeamEvent(
+                $sourceEvent->event_type,
+                $donorDuration,
+                $member->effective_duration,
+                $sourceEvent->event_at ?? null,
+                $sessionDate
+            )) {
                 continue;
             }
 

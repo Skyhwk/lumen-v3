@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\EmployeeDocument;
 use App\Models\MasterKaryawan;
+use App\Models\MasterSallary;
 use App\Services\EmployeeDocumentService;
 use App\Services\GenerateDokumenKaryawanService;
 use Illuminate\Http\Request;
@@ -39,6 +40,20 @@ class EmployeeDocumentController extends Controller
             })
             ->where('master_karyawan.is_active', true)
             ->where('master_karyawan.grade', '!=', 'DIRECTOR')
+            ->addSelect([
+                'satuan_jangka_waktu' => MasterSallary::query()
+                    ->select('satuan_jangka_waktu')
+                    ->whereColumn('master_sallary.id_karyawan', 'master_karyawan.id')
+                    ->where('master_sallary.is_active', true)
+                    ->orderByDesc('master_sallary.id')
+                    ->limit(1),
+                'jumlah_jangka_waktu' => MasterSallary::query()
+                    ->select('jumlah_jangka_waktu')
+                    ->whereColumn('master_sallary.id_karyawan', 'master_karyawan.id')
+                    ->where('master_sallary.is_active', true)
+                    ->orderByDesc('master_sallary.id')
+                    ->limit(1),
+            ])
             ->withCount(['employeeDocuments as dokumen_count' => function ($query) {
                 $query->where('is_active', 1);
             }]);
@@ -204,6 +219,8 @@ class EmployeeDocumentController extends Controller
         $this->validate($request, [
             'karyawan_id' => 'required|integer',
             'penanggung_jawab_id' => 'required|integer',
+            'satuan_jangka_waktu' => 'required|in:bulan,tahun',
+            'jumlah_jangka_waktu' => 'required|integer|min:1',
         ]);
 
         $karyawan = MasterKaryawan::where('id', $request->karyawan_id)
@@ -212,6 +229,27 @@ class EmployeeDocumentController extends Controller
         if (!$karyawan) {
             return response()->json(['message' => 'Karyawan tidak ditemukan.'], 404);
         }
+        if (empty($karyawan->tgl_mulai_kerja)) {
+            return response()->json([
+                'message' => 'Tanggal masuk kerja wajib diisi untuk menghitung periode jangka waktu perjanjian di SPRJ.',
+            ], 422);
+        }
+
+        $salary = MasterSallary::where('id_karyawan', $karyawan->id)
+            ->where('is_active', true)
+            ->orderByDesc('id')
+            ->first();
+        if (!$salary) {
+            return response()->json([
+                'message' => 'Data gaji aktif belum ada. Jangka waktu Perjanjian disimpan pada data gaji.',
+            ], 422);
+        }
+
+        $salary->satuan_jangka_waktu = $request->satuan_jangka_waktu;
+        $salary->jumlah_jangka_waktu = (int) $request->jumlah_jangka_waktu;
+        $salary->updated_by = $this->karyawan;
+        $salary->updated_at = date('Y-m-d H:i:s');
+        $salary->save();
 
         $recruitmentId = EmployeeDocument::query()
             ->where('karyawan_id', $karyawan->id)
