@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use Bluerhinos\phpMQTT;
+use Illuminate\Support\Facades\Log;
 
 class SendTicketProgrammingConversationJob extends Job
 {
@@ -17,19 +18,28 @@ class SendTicketProgrammingConversationJob extends Job
 
     public function handle()
     {
-        $host = env('MQTT_HOST');
-        $port = env('MQTT_PORT');
-        $clientID = env('MQTT_USERNAME');
-        $username = env('MQTT_USERNAME');
-        $password = env('MQTT_PASSWORD');
-        $mqtt = new phpMQTT($host, $port, $clientID);
+        $host = trim((string) env('MQTT_HOST', ''));
+        $port = (int) env('MQTT_PORT', 0);
+        if ($host === '' || $port <= 0) {
+            return;
+        }
 
-        if ($mqtt->connect(true, null, $username, $password)) {
+        try {
+            $clientID = env('MQTT_USERNAME', env('MQTT_USER', 'Admin'));
+            $username = env('MQTT_USERNAME', env('MQTT_USER', 'Admin'));
+            $password = env('MQTT_PASSWORD');
+            $mqtt = new phpMQTT($host, $port, $clientID);
+
+            if (!$mqtt->connect(true, null, $username, $password)) {
+                return;
+            }
+
             foreach ($this->users as $user) {
-                $topic = '/notification/' . $user->id;
-                $mqtt->publish($topic, json_encode($this->data), 0);
+                $mqtt->publish('/notification/' . $user->id, json_encode($this->data), 0);
             }
             $mqtt->close();
+        } catch (\Throwable $e) {
+            Log::warning('MQTT conversation publish gagal: ' . $e->getMessage());
         }
     }
 }
