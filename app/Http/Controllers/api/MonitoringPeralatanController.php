@@ -306,7 +306,7 @@ class MonitoringPeralatanController extends Controller
             ],
             [
                 'id_peralatan' => 'required|integer|min:1',
-                'status_alat' => 'required|string',
+                'status_alat' => 'required|in:' . implode(',', MonitoringPeralatan::STATUS_ALAT),
                 'keterangan' => 'nullable|string',
                 'start_date' => 'nullable|date',
                 'end_date' => 'nullable|date',
@@ -320,10 +320,7 @@ class MonitoringPeralatanController extends Controller
             ], 422);
         }
 
-        $needsPeriod = in_array(mb_strtolower($statusAlat), [
-            'sedang di maintenance',
-            'sedang di kalibrasi',
-        ], true);
+        $needsPeriod = MonitoringPeralatan::requiresPeriod($statusAlat);
 
         if ($needsPeriod && (!$startDate || !$endDate)) {
             return response()->json([
