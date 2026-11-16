@@ -56,6 +56,27 @@ class TicketSkK3SuratService
         return null;
     }
 
+    public static function deleteFiles(TicketSkK3 $ticket): void
+    {
+        $filename = trim((string) ($ticket->filename_surat ?? ''));
+        if ($filename === '') {
+            return;
+        }
+
+        $safe = basename($filename);
+        $paths = [
+            public_path(self::DIR_UPLOADED . DIRECTORY_SEPARATOR . $safe),
+            public_path(self::DIR_GENERATED . DIRECTORY_SEPARATOR . $safe),
+            public_path('ticket_sk_k3' . DIRECTORY_SEPARATOR . $safe),
+        ];
+
+        foreach ($paths as $path) {
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
     public function generate(TicketSkK3 $ticket): array
     {
         $quotation = $this->resolveQuotation($ticket);
