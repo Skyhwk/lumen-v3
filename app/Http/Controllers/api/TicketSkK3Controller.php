@@ -17,6 +17,7 @@ use App\Services\GetAtasan;
 use App\Services\GetBawahan;
 use App\Services\Notification;
 use App\Services\TicketSkK3ConversationService;
+use App\Services\TicketSkK3KategoriService;
 use App\Services\TicketSkK3SuratService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -786,6 +787,13 @@ class TicketSkK3Controller extends Controller
             $data->no_document_sp = $samplingPlan->no_document;
             $data->wilayah_surat = $wilayahSurat;
             $data->keterangan = $keterangan;
+            $data->kategori_terpilih = $this->resolveKategoriTerpilih(
+                $noQuotation,
+                $quotation['tipe'],
+                $quotation['tipe'] === 'kontrak' ? $periode : null,
+                (int) $samplingPlan->id,
+                $request->kategori_terpilih ?? null
+            );
 
             $autoApprove = strtoupper((string) $this->grade) === 'MANAGER';
             $data->status = $autoApprove ? 'WAITING PROCESS' : 'WAITING APPROVE';
@@ -814,6 +822,88 @@ class TicketSkK3Controller extends Controller
                 'message' => 'Gagal proses Ticket SK K3: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    public function getKategoriOptions(Request $request)
+    {
+        try {
+            $noQuotation = trim((string) ($request->no_quotation ?? ''));
+            if ($noQuotation === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No quotation wajib diisi',
+                ], 422);
+            }
+
+            $tipe = trim((string) ($request->tipe_quotation ?? ''));
+            $periode = trim((string) ($request->periode ?? ''));
+            $saved = null;
+
+            if (!empty($request->id)) {
+                $ticket = $this->findTicket($request->id);
+                if ($ticket) {
+                    $saved = TicketSkK3KategoriService::decodeSelection($ticket->kategori_terpilih ?? null);
+                }
+            } elseif ($request->kategori_terpilih) {
+                $saved = TicketSkK3KategoriService::decodeSelection($request->kategori_terpilih);
+            }
+
+            $samplingPlanId = (int) ($request->sampling_plan_id ?? 0);
+
+            $payload = TicketSkK3KategoriService::buildSelectionPayload(
+                $noQuotation,
+                $tipe !== '' ? $tipe : null,
+                $periode !== '' ? $periode : null,
+                $saved,
+                $samplingPlanId > 0 ? $samplingPlanId : null
+            );
+
+            return response()->json([
+                'success' => true,
+                'data' => $payload,
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memuat kategori SK K3: ' . $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function resolveKategoriTerpilih(
+        string $noQuotation,
+        string $tipe,
+        ?string $periode,
+        int $samplingPlanId,
+        $requestSelection
+    ): ?string {
+        $manual = [];
+        if (is_string($requestSelection) && trim($requestSelection) !== '') {
+            $decoded = json_decode($requestSelection, true);
+            if (is_array($decoded)) {
+                $manual = $decoded;
+            }
+        } elseif (is_array($requestSelection)) {
+            $manual = $requestSelection;
+        }
+
+        $payload = TicketSkK3KategoriService::buildSelectionPayload(
+            $noQuotation,
+            $tipe,
+            $periode,
+            null,
+            $samplingPlanId > 0 ? $samplingPlanId : null
+        );
+        $selectable = array_column($payload['selectable_options'] ?? [], 'value');
+        $manual = array_values(array_filter(array_map('strval', $manual), function ($code) use ($selectable) {
+            return in_array($code, $selectable, true);
+        }));
+
+        if (count($manual) === 0) {
+            return null;
+        }
+
+        return TicketSkK3KategoriService::encodeSelection($manual);
     }
 
     private function resolveOrderedQuotation($noQuotation, $tipeHint = null)
@@ -1093,6 +1183,12 @@ class TicketSkK3Controller extends Controller
             $payload = $data->toArray();
             $payload['sampling_plan'] = $data->samplingPlan;
             $payload['surat_folder'] = TicketSkK3SuratService::folderFor($data);
+            $kategoriPayload = TicketSkK3KategoriService::selectionForTicket($data);
+            $payload['kategori_terpilih'] = $kategoriPayload['selected_all'];
+            $payload['kategori_manual'] = $kategoriPayload['selected_manual'];
+            $payload['kategori_labels'] = $kategoriPayload['kategori_labels'] ?? $kategoriPayload['selected_all'];
+            $payload['kategori_list'] = $kategoriPayload['kategori_list'] ?? [];
+            $payload['kategori_semua_labels'] = $kategoriPayload['kategori_semua_labels'] ?? [];
 
             return response()->json([
                 'success' => true,
