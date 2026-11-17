@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\OrderDetail;
 use App\Models\OrderHeader;
 use App\Models\WsFinalApprovalDetail;
+use App\Http\Controllers\external\LHPHandleController;
 use Datatables;
 use Exception;
 
@@ -625,6 +626,33 @@ class LaporanTrackingOrderController extends Controller
                     return $itemArray;
                 });
 
+                $rekapPengujian = [];
+                $cfr = $orderDetail->cfr ?? $noLhp;
+                if ($cfr && $noOrder) {
+                    $orderBerjalan = DB::table('order_berjalan')
+                        ->where('no_order', $noOrder)
+                        ->first(['dataOrderDetail']);
+
+                    if ($orderBerjalan && !empty($orderBerjalan->dataOrderDetail)) {
+                        $dataOrder = json_decode($orderBerjalan->dataOrderDetail, true);
+                        $detailList = is_array($dataOrder) ? ($dataOrder[0]['detail'] ?? []) : [];
+
+                        foreach ($detailList as $rawDetail) {
+                            if (!is_array($rawDetail)) {
+                                continue;
+                            }
+                            if (($rawDetail['cfr'] ?? null) !== $cfr) {
+                                continue;
+                            }
+
+                            /** @var LHPHandleController $rekapBuilder */
+                            $rekapBuilder = app(LHPHandleController::class);
+                            $rekapPengujian = $rekapBuilder->getRekapPengujianFromOrderBerjalan($rawDetail);
+                            break;
+                        }
+                    }
+                }
+
                 return response()->json([
                     'status' => 'success',
                     'message' => 'Detail step analisa berhasil ditemukan',
@@ -635,7 +663,8 @@ class LaporanTrackingOrderController extends Controller
                         'no_lhp' => $orderDetail->cfr ?? $noLhp,
                         'kategori' => $orderDetail->kategori_3 ?? null,
                         'titik_lokasi' => $orderDetail->keterangan_1 ?? null,
-                        'analisa_detail' => $analisaDetailsFormatted
+                        'analisa_detail' => $analisaDetailsFormatted,
+                        'rekap_pengujian' => $rekapPengujian,
                     ]
                 ], 200);
             }
