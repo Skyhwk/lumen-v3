@@ -87,14 +87,16 @@
 </head>
 <body class="dm-outer" bgcolor="#f1f5f9" style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#1f2937;line-height:1.6;-webkit-text-size-adjust:100%;">
 @php
-  $sectionTitle = 'margin:30px 0 6px;font-size:17px;line-height:1.35;color:#0304EC;font-weight:700;';
-  $sectionHint  = 'margin:0 0 12px;font-size:14px;line-height:1.55;color:#475569;';
-  $card         = 'border:1px solid #E0E2F5;border-radius:10px;border-collapse:separate;border-spacing:0;overflow:hidden;width:100%;background-color:#ffffff;';
-  $lbl          = 'padding:11px 14px;border-top:1px solid #E0E2F5;background-color:#F5F6FF;font-size:13px;font-weight:700;color:#475569;width:38%;vertical-align:top;';
-  $val          = 'padding:11px 14px;border-top:1px solid #E0E2F5;background-color:#ffffff;font-size:15px;color:#111827;vertical-align:top;word-break:break-word;';
+  $sectionTitle = 'margin:28px 0 10px;font-size:17px;line-height:1.35;color:#111827;font-weight:700;';
+  $card         = 'border:1px solid #E5E7EB;border-radius:10px;border-collapse:separate;border-spacing:0;overflow:hidden;width:100%;background-color:#ffffff;';
+  $rowPad       = 'padding:8px 0;font-size:15px;line-height:1.5;vertical-align:top;';
+  $classicLbl   = $rowPad . 'width:34%;font-weight:700;color:#111827;padding-right:8px;';
+  $classicColon = $rowPad . 'width:16px;color:#111827;padding-right:10px;';
+  $classicVal   = $rowPad . 'color:#374151;word-break:break-word;';
   $th           = 'padding:10px 14px;background-color:#0304EC;color:#ffffff;font-size:13px;font-weight:700;text-align:left;';
   $cell         = 'padding:11px 14px;border-top:1px solid #E0E2F5;background-color:#ffffff;font-size:15px;color:#111827;vertical-align:top;word-break:break-word;';
   $empty        = 'margin:0;padding:12px 14px;border:1px dashed #cbd5e1;border-radius:10px;font-size:14px;color:#64748b;background-color:#ffffff;';
+  $pill         = 'display:inline-block;margin:0 6px 8px 0;padding:6px 12px;border-radius:999px;background-color:#EEF0FF;border:1px solid #C7CAFF;color:#0304EC;font-size:13px;line-height:1.3;';
 
   $picDisplay = [];
   foreach (($picRows ?? []) as $r) {
@@ -110,6 +112,12 @@
           $picDisplay[$key] = ['labels' => [$lab], 'pic' => $p];
       }
   }
+
+  $picOrderName = trim((string) ($payload['pic_order']['nama'] ?? ''));
+  $greetingName = $picOrderName !== '' ? $picOrderName : 'PIC';
+  $namaSampelList = !empty($payload['nama_sampel_list'])
+      ? $payload['nama_sampel_list']
+      : ($payload['kategori_items'] ?? []);
 @endphp
 
   <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#f1f5f9;">
@@ -139,126 +147,166 @@
           <tr>
             <td class="pad dm-white" bgcolor="#ffffff" style="padding:26px 28px 30px;background-color:#ffffff;color:#1f2937;">
 
-              <p class="dm-text" style="margin:0 0 12px;font-size:16px;color:#1f2937;">Yth. Bapak/Ibu PIC,</p>
+              <p class="dm-text" style="margin:0 0 12px;font-size:16px;color:#1f2937;">Yth. Bapak/Ibu {{ $greetingName }},</p>
               <p class="dm-text" style="margin:0 0 12px;font-size:16px;color:#1f2937;">Dengan Hormat,</p>
               <p class="dm-text" style="margin:0 0 20px;font-size:16px;color:#1f2937;">
-              Melalui email ini, kami ingin menginformasikan kembali bahwa kegiatan pengambilan sampel (sampling) di perusahaan Bapak/Ibu akan dilaksanakan sesuai dengan jadwal yang tercantum di bawah ini.
+              Melalui email ini,kami menginformasikan kembali bahwa kegiatan pengambilan sampel (sampling) di perusahaan Bapak/Ibu akan dilaksanakan sesuai dengan jadwal yang tercantum di bawah ini.
               </p>
 
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0;">
+              {{-- 1. Informasi Pesanan (gaya klasik portal) --}}
+              <h3 class="dm-title" style="{{ $sectionTitle }}">Informasi Pesanan</h3>
+              <table role="presentation" class="dm-card" width="100%" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="{{ $card }}">
                 <tr>
-                  <td class="dm-blue-soft" bgcolor="#EEF0FF" style="padding:18px 20px;background-color:#EEF0FF;border:1px solid #C7CAFF;border-radius:10px;">
-                    <div class="dm-title" style="font-size:12px;font-weight:700;letter-spacing:.04em;color:#0304EC;">Tanggal Sampling</div>
-                    <div class="big-date dm-text" style="font-size:24px;line-height:1.3;font-weight:700;color:#0f172a;margin-top:4px;">{{ $payload['tanggal_label'] }}</div>
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:14px;">
+                  <td style="padding:16px 18px;background-color:#ffffff;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
                       <tr>
-                        <td width="50%" style="vertical-align:top;padding-right:8px;">
-                          <div class="dm-muted" style="font-size:12px;font-weight:700;color:#475569;">Jam Mulai</div>
-                          <div class="dm-text" style="font-size:16px;font-weight:700;color:#111827;margin-top:2px;">{{ $payload['jam_mulai'] }}</div>
-                        </td>
-                        <td width="50%" style="vertical-align:top;padding-left:8px;">
-                          <div class="dm-muted" style="font-size:12px;font-weight:700;color:#475569;">Durasi</div>
-                          <div class="dm-text" style="font-size:16px;font-weight:700;color:#111827;margin-top:2px;">{{ $payload['durasi_label'] }}</div>
-                        </td>
+                        <td style="{{ $classicLbl }}">No. Order</td>
+                        <td style="{{ $classicColon }}">:</td>
+                        <td style="{{ $classicVal }}">{{ $payload['no_order'] ?: '-' }}</td>
                       </tr>
+                      <tr>
+                        <td style="{{ $classicLbl }}">No. Penawaran</td>
+                        <td style="{{ $classicColon }}">:</td>
+                        <td style="{{ $classicVal }}">{{ $payload['no_penawaran'] ?? ($payload['no_quotation'] ?: '-') }}</td>
+                      </tr>
+                      <tr>
+                        <td style="{{ $classicLbl }}">Tanggal Order</td>
+                        <td style="{{ $classicColon }}">:</td>
+                        <td style="{{ $classicVal }}">{{ $payload['tanggal_order_label'] ?? '-' }}</td>
+                      </tr>
+                      <tr>
+                        <td style="{{ $classicLbl }}">Nama Perusahaan</td>
+                        <td style="{{ $classicColon }}">:</td>
+                        <td style="{{ $classicVal }}">{{ $payload['nama_perusahaan'] ?: '-' }}</td>
+                      </tr>
+                      <tr>
+                        <td style="{{ $classicLbl }}">Alamat Sampling</td>
+                        <td style="{{ $classicColon }}">:</td>
+                        <td style="{{ $classicVal }}">{{ $payload['alamat_sampling'] ?? '-' }}</td>
+                      </tr>
+                      @php
+                        $samePic = !empty($payload['same_pic']);
+                        $picOrderNama = trim((string) ($payload['pic_order']['nama'] ?? ''));
+                        $picOrderNo = trim((string) ($payload['pic_order']['no'] ?? ''));
+                        $picSamplingNama = trim((string) ($payload['pic_sampling']['nama'] ?? ''));
+                        $picSamplingNo = trim((string) ($payload['pic_sampling']['no'] ?? ''));
+                      @endphp
+                      @if($samePic || ($picOrderNama !== '' && $picSamplingNama === ''))
+                        <tr>
+                          <td style="{{ $classicLbl }}">PIC Order</td>
+                          <td style="{{ $classicColon }}">:</td>
+                          <td style="{{ $classicVal }}">{{ $picOrderNama !== '' ? $picOrderNama : '-' }}</td>
+                        </tr>
+                        <tr>
+                          <td style="{{ $classicLbl }}">No. Telepon</td>
+                          <td style="{{ $classicColon }}">:</td>
+                          <td style="{{ $classicVal }}">{{ $picOrderNo !== '' ? $picOrderNo : '-' }}</td>
+                        </tr>
+                      @else
+                        <tr>
+                          <td style="{{ $classicLbl }}">PIC Order</td>
+                          <td style="{{ $classicColon }}">:</td>
+                          <td style="{{ $classicVal }}">{{ $picOrderNama !== '' ? $picOrderNama : '-' }}</td>
+                        </tr>
+                        <tr>
+                          <td style="{{ $classicLbl }}">No. Telepon PIC Order</td>
+                          <td style="{{ $classicColon }}">:</td>
+                          <td style="{{ $classicVal }}">{{ $picOrderNo !== '' ? $picOrderNo : '-' }}</td>
+                        </tr>
+                        <tr>
+                          <td style="{{ $classicLbl }}">PIC Sampling</td>
+                          <td style="{{ $classicColon }}">:</td>
+                          <td style="{{ $classicVal }}">{{ $picSamplingNama !== '' ? $picSamplingNama : '-' }}</td>
+                        </tr>
+                        <tr>
+                          <td style="{{ $classicLbl }}">No. Telepon PIC Sampling</td>
+                          <td style="{{ $classicColon }}">:</td>
+                          <td style="{{ $classicVal }}">{{ $picSamplingNo !== '' ? $picSamplingNo : '-' }}</td>
+                        </tr>
+                      @endif
                     </table>
                   </td>
                 </tr>
               </table>
 
-              <h3 class="dm-title" style="{{ $sectionTitle }}">Informasi Dokumen</h3>
+              
+
+              {{-- 2. Jadwal Pengambilan Sampel (Tanggal, Jam Mulai, Durasi, Petugas, Kategori) --}}
+              <h3 class="dm-title" style="{{ $sectionTitle }}">Jadwal Pengambilan Sampel</h3>
               <table role="presentation" class="dm-card" width="100%" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="{{ $card }}">
                 <tr>
-                  <td class="dm-label" bgcolor="#F5F6FF" style="{{ $lbl }}border-top:0;">No Quotation</td>
-                  <td class="dm-text" bgcolor="#ffffff" style="{{ $val }}border-top:0;">{{ $payload['no_quotation'] }}</td>
-                </tr>
-                <tr>
-                  <td class="dm-label" bgcolor="#F5F6FF" style="{{ $lbl }}">No Order</td>
-                  <td class="dm-text" bgcolor="#ffffff" style="{{ $val }}">{{ $payload['no_order'] }}</td>
-                </tr>
-                <tr>
-                  <td class="dm-label" bgcolor="#F5F6FF" style="{{ $lbl }}">Perusahaan</td>
-                  <td class="dm-text" bgcolor="#ffffff" style="{{ $val }}">{{ $payload['nama_perusahaan'] ?: '-' }}</td>
-                </tr>
-              </table>
-
-              <h3 class="dm-title" style="{{ $sectionTitle }}">PIC Terdaftar</h3>
-              @if(empty($picDisplay))
-                <p class="dm-muted" style="{{ $empty }}">Belum ada data PIC.</p>
-              @else
-                @foreach($picDisplay as $row)
-                  <table role="presentation" class="dm-card" width="100%" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="{{ $card }}margin-bottom:12px;">
-                    <tr>
-                      <td colspan="2" class="dm-blue" bgcolor="#0304EC" style="padding:10px 14px;background-color:#0304EC;color:#ffffff;font-size:14px;font-weight:700;">{{ implode(' & ', array_filter($row['labels'])) }}</td>
-                    </tr>
-                    <tr>
-                      <td class="dm-label" bgcolor="#F5F6FF" style="{{ $lbl }}border-top:0;">Nama</td>
-                      <td class="dm-text" bgcolor="#ffffff" style="{{ $val }}border-top:0;">{{ $row['pic']['nama'] ?: '-' }}</td>
-                    </tr>
-                    <tr>
-                      <td class="dm-label" bgcolor="#F5F6FF" style="{{ $lbl }}">Kontak</td>
-                      <td class="dm-text" bgcolor="#ffffff" style="{{ $val }}">{{ $row['pic']['no'] ?: '-' }}</td>
-                    </tr>
-                  </table>
-                @endforeach
-              @endif
-
-              <h3 class="dm-title" style="{{ $sectionTitle }}">Kategori yang akan diambil</h3>
-              @if(empty($payload['kategori_summary']))
-                <p class="dm-muted" style="{{ $empty }}">Belum ada data kategori.</p>
-              @else
-                {{-- Wrapper scroll horizontal: lebar kolom tetap, di mobile digeser ke samping --}}
-                <div class="table-scroll dm-card" style="width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #E0E2F5;border-radius:10px;background-color:#ffffff;">
-                  <table role="presentation" width="520" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="width:520px;min-width:520px;border-collapse:separate;border-spacing:0;background-color:#ffffff;">
-                    <tr>
-                      <td width="56" class="dm-blue" bgcolor="#0304EC" style="{{ $th }}width:56px;text-align:center;white-space:nowrap;">No</td>
-                      <td width="340" class="dm-blue" bgcolor="#0304EC" style="{{ $th }}width:340px;white-space:nowrap;">Kategori</td>
-                      <td width="124" class="dm-blue" bgcolor="#0304EC" style="{{ $th }}width:124px;text-align:center;white-space:nowrap;">Jumlah</td>
-                    </tr>
-                    @foreach($payload['kategori_summary'] as $i => $kat)
+                  <td style="padding:16px 18px;background-color:#ffffff;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
                       <tr>
-                        <td width="56" class="dm-muted" bgcolor="#ffffff" style="{{ $cell }}width:56px;text-align:center;color:#475569;white-space:nowrap;">{{ $i + 1 }}</td>
-                        <td width="340" class="dm-text" bgcolor="#ffffff" style="{{ $cell }}width:340px;white-space:nowrap;">{{ $kat['nama'] }}</td>
-                        <td width="124" class="dm-text" bgcolor="#ffffff" style="{{ $cell }}width:124px;text-align:center;white-space:nowrap;"><strong>{{ $kat['count'] }}</strong></td>
+                        <td style="{{ $classicLbl }}">Tanggal Sampling</td>
+                        <td style="{{ $classicColon }}">:</td>
+                        <td style="{{ $classicVal }}"><strong>{{ $payload['tanggal_label'] ?: '-' }}</strong></td>
                       </tr>
-                    @endforeach
-                  </table>
-                </div>
-              @endif
+                      <tr>
+                        <td style="{{ $classicLbl }}">Jam</td>
+                        <td style="{{ $classicColon }}">:</td>
+                        <td style="{{ $classicVal }}">
+                          @if(!empty($payload['jam_mulai']) && !empty($payload['jam_selesai']) && $payload['jam_selesai'] !== '-')
+                            {{ $payload['jam_mulai'] }} s/d {{ $payload['jam_selesai'] }}
+                          @else
+                            {{ $payload['jam_range_label'] ?? ($payload['jam_mulai'] ?: '-') }}
+                          @endif
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="{{ $classicLbl }}">Durasi</td>
+                        <td style="{{ $classicColon }}">:</td>
+                        <td style="{{ $classicVal }}">{{ $payload['durasi_label'] ?: '-' }}</td>
+                      </tr>
+                      <tr>
+                        <td style="{{ $classicLbl }}">Petugas</td>
+                        <td style="{{ $classicColon }}">:</td>
+                        <td style="{{ $classicVal }}">
+                          @if(empty($payload['sampler_list']))
+                            -
+                          @else
+                            {{ implode(', ', $payload['sampler_list']) }}
+                          @endif
+                        </td>
+                      </tr>
+                    </table>
+                    
 
-              <h3 class="dm-title" style="{{ $sectionTitle }}">Daftar Sampler</h3>
-              @if(empty($payload['sampler_list']))
-                <p class="dm-muted" style="{{ $empty }}">Belum ada data sampler.</p>
-              @else
-                <table role="presentation" class="dm-card" width="100%" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="{{ $card }}">
-                  <tr>
-                    <td width="48" class="dm-blue" bgcolor="#0304EC" style="{{ $th }}text-align:center;">No</td>
-                    <td class="dm-blue" bgcolor="#0304EC" style="{{ $th }}">Nama Sampler</td>
-                  </tr>
-                  @foreach($payload['sampler_list'] as $i => $sampler)
-                    <tr>
-                      <td width="48" class="dm-muted" bgcolor="#ffffff" style="{{ $cell }}text-align:center;color:#475569;">{{ $i + 1 }}</td>
-                      <td class="dm-text" bgcolor="#ffffff" style="{{ $cell }}">{{ $sampler }}</td>
-                    </tr>
-                  @endforeach
-                </table>
-              @endif
-
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:14px;border-collapse:separate;border-spacing:0;">
-                <tr>
-                  <td class="dm-warn" bgcolor="#fffbeb" style="padding:12px 14px;border:1px solid #fcd34d;border-radius:10px;background-color:#fffbeb;font-size:14px;color:#92400e;">
-                    <strong>Catatan:</strong> sampler yang bertugas dapat berubah sesuai dengan kondisi di lapangan.
+                    <div style="margin-top:18px;padding-top:14px;border-top:1px solid #E5E7EB;">
+                      <div class="dm-title" style="margin:0 0 10px;font-size:14px;font-weight:700;color:#111827;">Kategori yang akan diambil</div>
+                      @if(empty($payload['kategori_summary']))
+                        <p class="dm-muted" style="{{ $empty }}">Belum ada data kategori.</p>
+                      @else
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="border:1px solid #E5E7EB;border-radius:8px;border-collapse:separate;border-spacing:0;overflow:hidden;width:100%;background-color:#ffffff;">
+                          <tr>
+                            <td width="12%" class="dm-blue" bgcolor="#0304EC" style="{{ $th }}text-align:center;white-space:nowrap;">No</td>
+                            <td width="68%" class="dm-blue" bgcolor="#0304EC" style="{{ $th }}white-space:nowrap;">Kategori</td>
+                            <td width="20%" class="dm-blue" bgcolor="#0304EC" style="{{ $th }}text-align:center;white-space:nowrap;">Jumlah</td>
+                          </tr>
+                          @foreach($payload['kategori_summary'] as $i => $kat)
+                            <tr>
+                              <td width="12%" class="dm-muted" bgcolor="#ffffff" style="{{ $cell }}text-align:center;color:#475569;white-space:nowrap;">{{ $i + 1 }}</td>
+                              <td width="68%" class="dm-text" bgcolor="#ffffff" style="{{ $cell }}">{{ $kat['nama'] }}</td>
+                              <td width="20%" class="dm-text" bgcolor="#ffffff" style="{{ $cell }}text-align:center;white-space:nowrap;"><strong>{{ $kat['count'] }}</strong></td>
+                            </tr>
+                          @endforeach
+                        </table>
+                      @endif
+                    </div>
+                    <p class="dm-muted" style="margin:12px 0 0;font-size:12px;font-style:italic;color:#6b7280;">
+                      *Petugas dapat berubah sewaktu-waktu sesuai kondisi lapangan
+                    </p>
                   </td>
                 </tr>
               </table>
 
               <h3 class="dm-title" style="{{ $sectionTitle }}">Ada pertanyaan?</h3>
               <p class="dm-text" style="margin:0 0 12px;font-size:15px;color:#1f2937;">
-              Apabila terdapat pertanyaan, konfirmasi penjadwalan, atau hal lain yang ingin didiskusikan, Bapak/Ibu dapat menghubungi kami melalui:<br>
+                Apabila terdapat pertanyaan, konfirmasi penjadwalan, atau hal lain yang ingin didiskusikan, Bapak/Ibu dapat menghubungi kami melalui:<br>
                 <strong>{{ $salesName }}</strong> ({{ $salesKontak }})
               </p>
               <p class="dm-text" style="margin:0 0 14px;font-size:15px;color:#1f2937;">
-              Bapak/Ibu juga dapat melihat informasi jadwal sampling secara langsung melalui Portal Pelanggan kami. Untuk kemudahan akses, Bapak/Ibu dapat mengunduh aplikasi kami melalui Google Play Store dengan mengklik tautan yang tersedia di bawah ini
+                Bapak/Ibu juga dapat melihat informasi jadwal sampling dan dokumen terkait secara langsung melalui Portal Pelanggan kami. Untuk kemudahan akses, Bapak/Ibu dapat mengunduh aplikasi kami melalui Google Play Store dengan mengklik tautan yang tersedia di bawah ini.
               </p>
 
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0;">
