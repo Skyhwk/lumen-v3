@@ -15,6 +15,7 @@ class MonitoringPeralatan extends Sector
     public const STATUS_ALAT_PERIODE = [
         'Sedang Di-maintenance',
         'Sedang Dikalibrasi',
+        'Sedang Digunakan',
     ];
 
     protected $table = 'monitoring_peralatan';

@@ -401,7 +401,8 @@ class InformasiOperasionalController extends Controller
                 $branchId,
                 $request->input('batch_id'),
                 $warna,
-                $excludeKey
+                $excludeKey,
+                max(1, $durasi)
             );
         }
 
