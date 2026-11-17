@@ -692,7 +692,8 @@ class JadwalMobilisasiService
         $branchId = null,
         $excludeBatchIds = null,
         ?string $warna = null,
-        ?string $excludePetugasKey = null
+        ?string $excludePetugasKey = null,
+        int $durasi = 1
     ): array {
         if (!Schema::hasTable('peralatan')) {
             return [];
@@ -772,10 +773,17 @@ class JadwalMobilisasiService
             );
         }
 
+        $monitoringByDays = MonitoringPeralatanService::buildByIdCachesForDateRange($tanggal, $durasi);
+
         // Group: nama_alat + id_cabang + warna.
         // Stok = SUM(jumlah_alat_tersedia) jika kolom ada & > 0; else jumlah unit (row) aktif.
         $grouped = [];
         foreach ($rows as $row) {
+            $idPeralatan = (int) $row->id;
+            if (!MonitoringPeralatanService::isEffectivelyTersediaForRange($idPeralatan, $monitoringByDays)) {
+                continue;
+            }
+
             $namaAlat = trim((string) $row->nama_alat);
             if ($namaAlat === '') {
                 continue;
@@ -801,7 +809,9 @@ class JadwalMobilisasiService
                     'id_cabang' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
                     'branch_id' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
                     'lokasi_penempatan_alat' => $row->lokasi_penempatan_alat,
-                    'status_alat' => $hasStatusAlat ? ($row->status_alat ?? null) : null,
+                    'status_alat' => $monitoringByDays !== []
+                        ? MonitoringPeralatanService::effectiveStatusOnFirstDay($idPeralatan, $monitoringByDays)
+                        : ($hasStatusAlat ? ($row->status_alat ?? null) : null),
                     'unit_count' => 0,
                     'qty_sum' => 0,
                     'kode_aset_list' => [],
@@ -919,11 +929,18 @@ class JadwalMobilisasiService
         }
         $lockedByKode = $locked['by_kode'] ?? [];
 
+        $monitoringByDays = MonitoringPeralatanService::buildByIdCachesForDateRange($tanggal, $durasi);
+
         $result = [];
         foreach ($rows as $row) {
             $namaAlat = trim((string) $row->nama_alat);
             $kodeAset = trim((string) ($row->kode_aset ?? ''));
             if ($namaAlat === '' || $kodeAset === '') {
+                continue;
+            }
+
+            $idPeralatan = (int) $row->id;
+            if (!MonitoringPeralatanService::isEffectivelyTersediaForRange($idPeralatan, $monitoringByDays)) {
                 continue;
             }
 
@@ -940,6 +957,9 @@ class JadwalMobilisasiService
                 'lokasi_penempatan_alat' => $row->lokasi_penempatan_alat,
                 'is_locked' => $isLocked,
                 'locked_by' => $isLocked ? (string) $lockedByKode[$kodeAset] : null,
+                'status_alat' => $monitoringByDays !== []
+                    ? MonitoringPeralatanService::effectiveStatusOnFirstDay($idPeralatan, $monitoringByDays)
+                    : MonitoringPeralatanService::STATUS_TERSEDIA,
             ];
         }
 
