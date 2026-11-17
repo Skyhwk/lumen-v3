@@ -13,8 +13,6 @@ class MonitoringPeralatanService
     public const STATUS_SEDANG_DIGUNAKAN = 'Sedang Digunakan';
     public const STATUS_TERSEDIA = 'Tersedia';
 
-    public const STATUS_TERSEDIA = 'Tersedia';
-
     /**
      * Status efektif per tanggal kalender D.
      * Ber-periode: aktif hanya jika D dalam [start, end].
