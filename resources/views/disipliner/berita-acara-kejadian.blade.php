@@ -69,7 +69,6 @@
         max-width: 12mm;
         max-height: 12mm;
     }
-    .sign-line { border-bottom: 0.35mm solid #111; width: 55mm; margin-top: 2mm; }
     .strike { text-decoration: line-through; }
 </style>
 
@@ -256,6 +255,16 @@
             Menunggu pengesahan (QR)
         </p>
     @endif
-    <div class="sign-line"></div>
+    </div>
 </div>
+
+@if(!empty($showLampiranSection))
+<div style="page-break-before: always;">
+    <p class="section-heading">Lampiran</p>
+    @foreach($lampiranImages as $imagePath)
+        <div style="margin: 0 0 4mm; text-align: center;">
+            <img src="{{ $imagePath }}" alt="Lampiran" style="max-width: 160mm; max-height: 110mm;">
+        </div>
+    @endforeach
 </div>
+@endif

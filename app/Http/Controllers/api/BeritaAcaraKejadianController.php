@@ -128,6 +128,7 @@ class BeritaAcaraKejadianController extends Controller
 
     public function store(Request $request)
     {
+        $writtenDokumentasi = [];
         DB::beginTransaction();
 
         try {
@@ -156,8 +157,28 @@ class BeritaAcaraKejadianController extends Controller
                 ], 404);
             }
 
+            $uploads = $this->collectDokumentasiUploads($request);
+            if ($uploads instanceof \Illuminate\Http\JsonResponse) {
+                DB::rollBack();
+
+                return $uploads;
+            }
+            if (count($uploads) < 1) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Minimal 1 lampiran wajib diunggah.',
+                ], 422);
+            }
+
             $tanggalKejadian = Carbon::parse($request->tanggal_kejadian)->format('Y-m-d');
-            $nomorData = $this->resolveNomorSuratData($request, $tanggalKejadian);
+            $nomorData = $this->nomorSuratFromRequest($request, $tanggalKejadian);
+            if ($nomorData instanceof \Illuminate\Http\JsonResponse) {
+                DB::rollBack();
+
+                return $nomorData;
+            }
             $penandatanganSnapshot = $this->buildPenandatanganSnapshot($penandatanganId);
             $now = Carbon::now();
 
@@ -194,6 +215,12 @@ class BeritaAcaraKejadianController extends Controller
             $document->save();
             $document->timestamps = true;
 
+            $writtenDokumentasi = $this->storeDokumentasiFiles((int) $document->id, $uploads);
+            $document->dokumentasi = json_encode($writtenDokumentasi, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $document->timestamps = false;
+            $document->save();
+            $document->timestamps = true;
+
             DB::commit();
 
             return response()->json([
@@ -203,6 +230,7 @@ class BeritaAcaraKejadianController extends Controller
             ], 200);
         } catch (\Throwable $ex) {
             DB::rollBack();
+            $this->deleteDokumentasiFiles($writtenDokumentasi);
 
             return response()->json([
                 'success' => false,
@@ -213,6 +241,7 @@ class BeritaAcaraKejadianController extends Controller
 
     public function update(Request $request, BeritaAcaraKejadianDocumentService $documentService)
     {
+        $writtenDokumentasi = [];
         DB::beginTransaction();
 
         try {
@@ -243,7 +272,7 @@ class BeritaAcaraKejadianController extends Controller
                 ], 422);
             }
 
-            $validation = $this->validatePayload($request, (int) $document->id);
+            $validation = $this->validatePayload($request);
             if ($validation !== true) {
                 DB::rollBack();
 
@@ -268,8 +297,37 @@ class BeritaAcaraKejadianController extends Controller
                 ], 404);
             }
 
+            $uploads = $this->collectDokumentasiUploads($request);
+            if ($uploads instanceof \Illuminate\Http\JsonResponse) {
+                DB::rollBack();
+
+                return $uploads;
+            }
+
+            $existingDokumentasi = $this->decodeDokumentasiList($document->dokumentasi);
+            $keptDokumentasi = $this->resolveKeptDokumentasi($request, $existingDokumentasi);
+            if (count($keptDokumentasi) + count($uploads) > 10) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Lampiran maksimal 10 gambar.',
+                ], 422);
+            }
+
+            if (count($keptDokumentasi) + count($uploads) < 1) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Minimal 1 lampiran wajib ada.',
+                ], 422);
+            }
+
+            $writtenDokumentasi = $this->storeDokumentasiFiles((int) $document->id, $uploads);
+            $finalDokumentasi = array_values(array_merge($keptDokumentasi, $writtenDokumentasi));
+
             $tanggalKejadian = Carbon::parse($request->tanggal_kejadian)->format('Y-m-d');
-            $nomorData = $this->resolveNomorSuratData($request, $tanggalKejadian);
             $penandatanganSnapshot = $this->buildPenandatanganSnapshot($penandatanganId);
             $now = Carbon::now();
 
@@ -285,9 +343,6 @@ class BeritaAcaraKejadianController extends Controller
                 'penandatangan_jabatan' => $penandatanganSnapshot['jabatan'],
                 'penandatangan_divisi' => $penandatanganSnapshot['divisi'],
                 'penandatangan_penempatan' => $penandatanganSnapshot['penempatan'],
-                'nomor_surat' => $nomorData['nomor_surat'],
-                'tahun_nomor' => $nomorData['tahun_nomor'],
-                'urutan_nomor' => $nomorData['urutan_nomor'],
                 'tanggal_kejadian' => $tanggalKejadian,
                 'waktu_kejadian' => $this->normalizeWaktu($request->waktu_kejadian),
                 'lokasi_kejadian' => trim((string) $request->lokasi_kejadian),
@@ -296,6 +351,7 @@ class BeritaAcaraKejadianController extends Controller
                 'lampiran' => trim((string) ($request->lampiran ?? '')) ?: null,
                 'perihal' => trim((string) ($request->perihal ?? '')) ?: null,
                 'uraian_kejadian' => trim((string) ($request->uraian_kejadian ?? '')) ?: null,
+                'dokumentasi' => json_encode($finalDokumentasi, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 'updated_by' => $this->karyawan,
                 'updated_at' => $now,
             ]);
@@ -304,6 +360,7 @@ class BeritaAcaraKejadianController extends Controller
             $documentService->invalidateStoredPdf($document);
 
             DB::commit();
+            $this->deleteDokumentasiFiles(array_values(array_diff($existingDokumentasi, $finalDokumentasi)));
 
             return response()->json([
                 'success' => true,
@@ -312,6 +369,7 @@ class BeritaAcaraKejadianController extends Controller
             ], 200);
         } catch (\Throwable $ex) {
             DB::rollBack();
+            $this->deleteDokumentasiFiles($writtenDokumentasi);
 
             return response()->json([
                 'success' => false,
@@ -596,6 +654,7 @@ class BeritaAcaraKejadianController extends Controller
                 'bak.lampiran',
                 'bak.perihal',
                 'bak.uraian_kejadian',
+                'bak.dokumentasi',
                 'bak.catatan',
                 'bak.status',
                 'bak.nama_berkas',
@@ -724,6 +783,7 @@ class BeritaAcaraKejadianController extends Controller
             return null;
         }
 
+        $item->dokumentasi = $this->decodeDokumentasiList($item->dokumentasi ?? null);
         $item->nama_karyawan = $item->nama_lengkap ?: '-';
         $item->divisi = $item->nama_divisi ?: ($item->department ?: '-');
         $item->status_label = $this->mapStatusLabel($item->status);
@@ -759,7 +819,7 @@ class BeritaAcaraKejadianController extends Controller
         return $map[$status] ?? (string) $status;
     }
 
-    private function validatePayload(Request $request, ?int $excludeId = null)
+    private function validatePayload(Request $request)
     {
         $this->validate($request, [
             'karyawan_id' => 'nullable|integer',
@@ -772,7 +832,6 @@ class BeritaAcaraKejadianController extends Controller
             'uraian_kejadian' => 'nullable|string',
             'lampiran' => 'nullable|string|max:100',
             'perihal' => 'nullable|string|max:200',
-            'nomor_surat' => 'nullable|string|max:100',
         ]);
 
         $plainUraian = trim(strip_tags((string) ($request->uraian_kejadian ?? '')));
@@ -783,43 +842,45 @@ class BeritaAcaraKejadianController extends Controller
             ], 422);
         }
 
-        $nomorSurat = trim((string) ($request->nomor_surat ?? ''));
-        if ($nomorSurat === '') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Nomor surat wajib diisi.',
-            ], 422);
-        }
-
-        $duplicateQuery = BeritaAcaraKejadianDisipliner::query()
-            ->where('is_active', true)
-            ->where('nomor_surat', $nomorSurat);
-        if ($excludeId !== null) {
-            $duplicateQuery->where('id', '!=', $excludeId);
-        }
-        if ($duplicateQuery->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Nomor surat sudah digunakan. Gunakan nomor lain.',
-            ], 422);
-        }
-
         return true;
     }
 
-    private function resolveNomorSuratData(Request $request, string $tanggalReferensi): array
+    /**
+     * @return array<string, int|string>|\Illuminate\Http\JsonResponse
+     */
+    private function nomorSuratFromRequest(Request $request, string $tanggalReferensi)
     {
-        $nomorSurat = trim((string) ($request->nomor_surat ?? ''));
+        $month = date('m', strtotime($tanggalReferensi));
         $year = (int) date('Y', strtotime($tanggalReferensi));
-        $urutan = 0;
-        if (preg_match('/(\d{1,6})$/', $nomorSurat, $matches)) {
-            $urutan = (int) $matches[1];
+        $provided = strtoupper(trim((string) $request->input('nomor_surat', '')));
+
+        if ($provided === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nomor surat wajib ada.',
+            ], 422);
         }
 
+        if (!preg_match('/^ISL-' . $month . '-BAK-[A-F0-9]{6}$/', $provided)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Format nomor surat tidak valid atau tidak sesuai bulan tanggal kejadian.',
+            ], 422);
+        }
+
+        if (BeritaAcaraKejadianDisipliner::query()->where('nomor_surat', $provided)->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nomor surat sudah digunakan. Tutup form dan buka lagi untuk nomor baru.',
+            ], 422);
+        }
+
+        $hex = substr($provided, -6);
+
         return [
-            'nomor_surat' => $nomorSurat,
+            'nomor_surat' => $provided,
             'tahun_nomor' => $year,
-            'urutan_nomor' => max(0, $urutan),
+            'urutan_nomor' => hexdec($hex),
         ];
     }
 
@@ -857,6 +918,151 @@ class BeritaAcaraKejadianController extends Controller
         $fromRequest = (int) $request->input('karyawan_id', 0);
 
         return $fromRequest > 0 ? $fromRequest : $penandatanganId;
+    }
+
+    /**
+     * @return array<int, \Illuminate\Http\UploadedFile>|\Illuminate\Http\JsonResponse
+     */
+    private function collectDokumentasiUploads(Request $request)
+    {
+        $files = $request->file('dokumentasi', []);
+        if ($files instanceof \Illuminate\Http\UploadedFile) {
+            $files = [$files];
+        }
+        if (!is_array($files)) {
+            $files = [];
+        }
+
+        $allowedImageMime = ['image/jpeg', 'image/png', 'image/webp', 'image/pjpeg'];
+        $allowedImageExt = ['jpg', 'jpeg', 'png', 'webp'];
+        $valid = [];
+
+        foreach ($files as $file) {
+            if (!$file instanceof \Illuminate\Http\UploadedFile) {
+                continue;
+            }
+            if (!$file->isValid()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File lampiran gagal diunggah.',
+                ], 422);
+            }
+
+            $mime = strtolower((string) $file->getMimeType());
+            $ext = strtolower((string) ($file->getClientOriginalExtension() ?: $file->extension()));
+            $isImage = in_array($mime, $allowedImageMime, true) && in_array($ext, $allowedImageExt, true);
+
+            if (!$isImage) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Lampiran harus berupa gambar JPG, PNG, atau WEBP.',
+                ], 422);
+            }
+
+            if ((int) $file->getSize() > 5 * 1024 * 1024) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ukuran tiap gambar lampiran maksimal 5 MB.',
+                ], 422);
+            }
+
+            $valid[] = $file;
+        }
+
+        if (count($valid) > 10) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lampiran maksimal 10 gambar.',
+            ], 422);
+        }
+
+        return $valid;
+    }
+
+    private function decodeDokumentasiList($value): array
+    {
+        if (is_array($value)) {
+            $items = $value;
+        } else {
+            $decoded = json_decode((string) $value, true);
+            $items = is_array($decoded) ? $decoded : [];
+        }
+
+        $paths = [];
+        foreach ($items as $item) {
+            $path = str_replace('\\', '/', trim((string) $item));
+            if ($path === '' || strpos($path, '..') !== false) {
+                continue;
+            }
+            $paths[] = $path;
+        }
+
+        return array_values(array_unique($paths));
+    }
+
+    private function resolveKeptDokumentasi(Request $request, array $existing): array
+    {
+        if (!$request->exists('dokumentasi_tersimpan_json')) {
+            return $existing;
+        }
+
+        $decoded = json_decode((string) $request->input('dokumentasi_tersimpan_json', '[]'), true);
+        if (!is_array($decoded)) {
+            return $existing;
+        }
+
+        $allowed = array_fill_keys($existing, true);
+        $kept = [];
+        foreach ($decoded as $path) {
+            $path = str_replace('\\', '/', trim((string) $path));
+            if ($path !== '' && isset($allowed[$path])) {
+                $kept[] = $path;
+            }
+        }
+
+        return array_values(array_unique($kept));
+    }
+
+    /**
+     * @param array<int, \Illuminate\Http\UploadedFile> $files
+     * @return array<int, string>
+     */
+    private function storeDokumentasiFiles(int $documentId, array $files): array
+    {
+        if ($files === []) {
+            return [];
+        }
+
+        $relativeDir = 'dokumen/disipliner/berita-acara-kejadian/dokumentasi/' . $documentId;
+        $directory = public_path($relativeDir);
+        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+            throw new \RuntimeException('Folder dokumentasi gagal dibuat.');
+        }
+
+        $stored = [];
+        foreach ($files as $file) {
+            $ext = strtolower((string) ($file->getClientOriginalExtension() ?: 'jpg'));
+            $name = uniqid('dok_', true) . '.' . $ext;
+            $file->move($directory, $name);
+            $stored[] = $relativeDir . '/' . $name;
+        }
+
+        return $stored;
+    }
+
+    private function deleteDokumentasiFiles(array $relativePaths): void
+    {
+        $prefix = 'dokumen/disipliner/berita-acara-kejadian/dokumentasi/';
+        foreach ($relativePaths as $relative) {
+            $relative = str_replace('\\', '/', trim((string) $relative));
+            if ($relative === '' || strpos($relative, '..') !== false || strpos($relative, $prefix) !== 0) {
+                continue;
+            }
+            $full = public_path($relative);
+            if (is_file($full)) {
+                @unlink($full);
+            }
+        }
     }
 
     /**
