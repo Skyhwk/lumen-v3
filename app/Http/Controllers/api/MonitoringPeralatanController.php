@@ -20,19 +20,53 @@ class MonitoringPeralatanController extends Controller
         $table = (new Peralatan())->getTable();
         $monitoringTable = (new MonitoringPeralatan())->getTable();
 
+        $asOfDate = $this->normalizeDate($request->input('as_of_date'));
+        $asOfDateTime = $asOfDate ? $asOfDate . ' 23:59:59' : null;
+        $asOfSql = $asOfDateTime ? ' AND created_at <= ?' : '';
+        // Pilih histori terbaru by created_at (bukan MAX(id)), supaya aman jika created_at diubah manual.
+        $latestIdExpr = "CAST(SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY created_at DESC, id DESC), ',', 1) AS UNSIGNED)";
+
         $latestMonitoring = DB::table($monitoringTable)
-            ->select('id_peralatan', DB::raw('MAX(id) as latest_id'))
+            ->select('id_peralatan', DB::raw("{$latestIdExpr} as latest_id"))
             ->where('is_active', true)
             ->whereNotNull('id_peralatan')
+            ->when($asOfDateTime, function ($query) use ($asOfDateTime) {
+                $query->where('created_at', '<=', $asOfDateTime);
+            })
             ->groupBy('id_peralatan');
 
+        $countLatestSubquery = "
+            SELECT id_peralatan, {$latestIdExpr} AS latest_id
+            FROM {$monitoringTable}
+            WHERE is_active = 1
+              AND id_peralatan IS NOT NULL
+              {$asOfSql}
+            GROUP BY id_peralatan
+        ";
+
+        $tersediaBindings = $asOfDateTime ? [$asOfDateTime, 'Tersedia'] : ['Tersedia'];
+        $belumTersediaBindings = $asOfDateTime ? [$asOfDateTime, 'Tersedia'] : ['Tersedia'];
+        $countJoin = $asOfDateTime ? 'INNER JOIN' : 'LEFT JOIN';
+        $belumTersediaCondition = $asOfDateTime
+            ? 'mp3.status_alat <> ?'
+            : '(mp3.status_alat IS NULL OR mp3.status_alat <> ?)';
+
         $data = Peralatan::query()
-            ->from("{$table} as p")
-            ->leftJoinSub($latestMonitoring, 'latest_mp', function ($join) {
+            ->from("{$table} as p");
+
+        if ($asOfDateTime) {
+            $data->joinSub($latestMonitoring, 'latest_mp', function ($join) {
                 $join->on('latest_mp.id_peralatan', '=', 'p.id');
             })
-            ->leftJoin("{$monitoringTable} as mp", 'mp.id', '=', 'latest_mp.latest_id')
-            ->where('p.is_active', true)
+                ->join("{$monitoringTable} as mp", 'mp.id', '=', 'latest_mp.latest_id');
+        } else {
+            $data->leftJoinSub($latestMonitoring, 'latest_mp', function ($join) {
+                $join->on('latest_mp.id_peralatan', '=', 'p.id');
+            })
+                ->leftJoin("{$monitoringTable} as mp", 'mp.id', '=', 'latest_mp.latest_id');
+        }
+
+        $data->where('p.is_active', true)
             ->select([
                 'p.id',
                 'p.id as id_peralatan',
@@ -53,14 +87,8 @@ class MonitoringPeralatanController extends Controller
                 "(
                     SELECT COUNT(*)
                     FROM {$table} AS p2
-                    LEFT JOIN (
-                        SELECT id_peralatan, MAX(id) AS latest_id
-                        FROM {$monitoringTable}
-                        WHERE is_active = 1
-                          AND id_peralatan IS NOT NULL
-                        GROUP BY id_peralatan
-                    ) AS lm2 ON lm2.id_peralatan = p2.id
-                    LEFT JOIN {$monitoringTable} AS mp2 ON mp2.id = lm2.latest_id
+                    {$countJoin} ({$countLatestSubquery}) AS lm2 ON lm2.id_peralatan = p2.id
+                    {$countJoin} {$monitoringTable} AS mp2 ON mp2.id = lm2.latest_id
                     WHERE p2.is_active = 1
                       AND p2.nama_alat = p.nama_alat
                       AND p2.jenis_peralatan <=> p.jenis_peralatan
@@ -69,29 +97,23 @@ class MonitoringPeralatanController extends Controller
                       AND p2.lokasi_penempatan_alat <=> p.lokasi_penempatan_alat
                       AND mp2.status_alat = ?
                 ) AS jumlah_alat_tersedia",
-                ['Tersedia']
+                $tersediaBindings
             )
             ->selectRaw(
                 "(
                     SELECT COUNT(*)
                     FROM {$table} AS p3
-                    LEFT JOIN (
-                        SELECT id_peralatan, MAX(id) AS latest_id
-                        FROM {$monitoringTable}
-                        WHERE is_active = 1
-                          AND id_peralatan IS NOT NULL
-                        GROUP BY id_peralatan
-                    ) AS lm3 ON lm3.id_peralatan = p3.id
-                    LEFT JOIN {$monitoringTable} AS mp3 ON mp3.id = lm3.latest_id
+                    {$countJoin} ({$countLatestSubquery}) AS lm3 ON lm3.id_peralatan = p3.id
+                    {$countJoin} {$monitoringTable} AS mp3 ON mp3.id = lm3.latest_id
                     WHERE p3.is_active = 1
                       AND p3.nama_alat = p.nama_alat
                       AND p3.jenis_peralatan <=> p.jenis_peralatan
                       AND p3.nama_kategori_pengujian <=> p.nama_kategori_pengujian
                       AND p3.warna <=> p.warna
                       AND p3.lokasi_penempatan_alat <=> p.lokasi_penempatan_alat
-                      AND (mp3.status_alat IS NULL OR mp3.status_alat <> ?)
+                      AND {$belumTersediaCondition}
                 ) AS jumlah_alat_belum_tersedia",
-                ['Tersedia']
+                $belumTersediaBindings
             );
 
         $idCabang = $request->input('id_cabang');
