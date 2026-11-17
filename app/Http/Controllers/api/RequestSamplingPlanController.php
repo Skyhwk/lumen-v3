@@ -8,6 +8,7 @@ use App\Models\PraNoSample;
 use App\Models\MasterKaryawan;
 use App\Jobs\RenderSamplingPlan;
 use App\Services\JadwalServices;
+use App\Services\JadwalMobilisasiService;
 use App\Models\MasterDriver;
 use App\Models\MasterCabang;
 use App\Models\QuotationNonKontrak;
@@ -361,13 +362,20 @@ class RequestSamplingPlanController extends Controller
             "sampler" => $request->sampler,
             "durasi" => $request->durasi,
             "status" => $request->status,
-            "kendaraan" => $request->kendaraan,
+            "kendaraan" => JadwalServices::normalizeKendaraan($request->kendaraan),
             "periode" => $request->periode_kontrak != "" ? $request->periode_kontrak : null,
             "karyawan" => $this->karyawan,
             'driver' => $request->driver ?? null,
             "isokinetic" => (int)$request->isokinetic,
             "pendampingan_k3" => (int)$request->pendampingan_k3,
             "durasi_personal" => $request->durasi_personal,
+            "tujuan_sampling" => $request->tujuan_sampling,
+            "estimasi_perjalanan" => $request->estimasi_perjalanan,
+            "waktu_berangkat_estimasi" => $request->waktu_berangkat_estimasi,
+            "keterangan_akomodasi" => $request->keterangan_akomodasi,
+            "rute_perjalanan" => $request->rute_perjalanan,
+            "keterangan_operasional" => $request->keterangan_operasional,
+            "peralatan_sampling" => $request->peralatan_sampling,
         ];
         
         $addJadwal = JadwalServices::on('addJadwal', $ObjectData)->addJadwalSP();
@@ -487,7 +495,7 @@ class RequestSamplingPlanController extends Controller
         $detailKonflik = [];
 
         foreach ($dataBentrok as $row) {
-            $veh = $row->kendaraan;
+            $veh = JadwalServices::normalizeKendaraan($row->kendaraan);
 
             // Jika kendaraan ini belum masuk daftar konflik, masukkan.
             if (!isset($detailKonflik[$veh])) {
@@ -519,5 +527,20 @@ class RequestSamplingPlanController extends Controller
             // Kirim detail konflik sebagai referensi Frontend
             'conflicts' => $detailKonflik 
         ]);
+    }
+
+    public function getPeralatanAvailable(Request $request)
+    {
+        $data = JadwalMobilisasiService::getPeralatanAvailable(
+            $request->input('tanggal'),
+            $request->input('branch_id') ?? $request->input('id_cabang'),
+            $request->input('batch_id'),
+            $request->input('warna')
+        );
+
+        return response()->json([
+            'status' => true,
+            'data' => $data,
+        ], 200);
     }
 }
