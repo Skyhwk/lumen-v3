@@ -23,10 +23,21 @@ class StatusOrderController extends Controller
     public function detail(Request $request)
     {
         $orderHeader = OrderHeader::find($request->id_order_header);
+
+        if (!$orderHeader) {
+            return response()->json(['message' => 'Order tidak ditemukan'], 404);
+        }
         
         $groupedData = (new CfrDetails($orderHeader, $request->periode))->get();
+        $lhpBundle = $this->resolveLhpBundleForOrder(
+            $orderHeader->no_order,
+            $request->periode ?? null
+        );
         
-        return response()->json(['groupedCFRs' => $groupedData], 200);
+        return response()->json([
+            'groupedCFRs' => $groupedData,
+            'lhp_bundle' => $lhpBundle,
+        ], 200);
     }
 
     public function viewLhp(Request $request)
@@ -54,6 +65,35 @@ class StatusOrderController extends Controller
         }
 
         return response()->json(['file_lhp' => $fileLhp], 200);
+    }
+
+    public function viewLhpBundle(Request $request)
+    {
+        $orderHeader = OrderHeader::find($request->id_order_header);
+
+        if (!$orderHeader) {
+            return response()->json(['message' => 'Order tidak ditemukan'], 404);
+        }
+
+        $lhpBundle = $this->resolveLhpBundleForOrder(
+            $orderHeader->no_order,
+            $request->periode ?? null
+        );
+
+        if (empty($lhpBundle['available']) || empty($lhpBundle['filename'])) {
+            return response()->json(['message' => 'LHP Bundle belum tersedia'], 404);
+        }
+
+        $filePath = public_path('laporan/hasil_pengujian/' . ltrim($lhpBundle['filename'], '/'));
+
+        if (!file_exists($filePath)) {
+            return response()->json(['message' => 'File LHP Bundle tidak ditemukan'], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'lhp_bundle' => $lhpBundle,
+        ], 200);
     }
     //==== masak
     public function index(Request $request)
@@ -432,6 +472,7 @@ class StatusOrderController extends Controller
                 ? implode(', ', array_column($invoicesData, 'no_invoice')) 
                 : null,
                 'link_lhp' => json_decode($item->link_lhp, true),
+                'lhp_bundle' => $this->buildLhpBundle($item->link_lhp),
                 'order_header'=>[
                     'id' =>  $item->orderHeader ? $item->orderHeader->id : null,
                     'tanggal_order' =>  $item->orderHeader ? $item->orderHeader->tanggal_order : null,
@@ -475,6 +516,7 @@ class StatusOrderController extends Controller
                 })->values()->toArray();
             }
 
+            $lhp = null;
             $lhpData = null;
             if ($item->header && $item->header->link_lhp && $item->header->link_lhp->isNotEmpty()) {
                 $lhp = $item->header->link_lhp->where('periode', $item->periode_kontrak)->first();
@@ -485,7 +527,9 @@ class StatusOrderController extends Controller
                         'periode' => $lhp->periode,
                         'jumlah_lhp' => $lhp->jumlah_lhp,
                         'jumlah_lhp_rilis' => $lhp->jumlah_lhp_rilis,
-                        'is_completed' => $lhp->is_completed
+                        'is_completed' => $lhp->is_completed,
+                        'filename' => $lhp->filename,
+                        'list_lhp_rilis' => json_decode($lhp->list_lhp_rilis ?: '[]', true),
                     ];
                 }
             }
@@ -513,6 +557,7 @@ class StatusOrderController extends Controller
                 : null,
                 'invoice' => $invoicesData,
                 'link_lhp' => $lhpData,
+                'lhp_bundle' => $this->buildLhpBundle($lhp),
                 'order_header'=>[
                     'id' =>  $item->header->orderHeader->id,
                     'tanggal_order' =>  $item->header->orderHeader->tanggal_order,
@@ -530,6 +575,84 @@ class StatusOrderController extends Controller
                 ]
             ];
         }
+    }
+
+    /**
+     * Ambil metadata LHP Bundle dari link_lhp berdasarkan no_order (+ periode untuk kontrak).
+     */
+    private function resolveLhpBundleForOrder(string $noOrder, ?string $periode = null): array
+    {
+        $query = DB::table('link_lhp')
+            ->where('no_order', $noOrder)
+            ->where(function ($q) {
+                $q->where('is_active', 1)->orWhereNull('is_active');
+            });
+
+        if (!empty($periode)) {
+            $query->where('periode', $periode);
+        }
+
+        $linkLhp = $query->orderByDesc('id')->first();
+
+        // Fallback non-kontrak: ambil link_lhp terbaru tanpa filter periode
+        if (!$linkLhp && empty($periode)) {
+            $linkLhp = DB::table('link_lhp')
+                ->where('no_order', $noOrder)
+                ->where(function ($q) {
+                    $q->where('is_active', 1)->orWhereNull('is_active');
+                })
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        return $this->buildLhpBundle($linkLhp);
+    }
+
+    /**
+     * Normalisasi payload LHP Bundle untuk frontend.
+     */
+    private function buildLhpBundle($linkLhp): array
+    {
+        if (!$linkLhp) {
+            return [
+                'available' => false,
+                'is_completed' => false,
+                'filename' => null,
+                'file_url' => null,
+                'periode' => null,
+                'no_order' => null,
+                'jumlah_lhp' => 0,
+                'jumlah_lhp_rilis' => 0,
+                'list_lhp_rilis' => [],
+            ];
+        }
+
+        $data = is_array($linkLhp) ? $linkLhp : (array) $linkLhp;
+        // Eloquent model toArray lebih aman
+        if (is_object($linkLhp) && method_exists($linkLhp, 'toArray')) {
+            $data = $linkLhp->toArray();
+        }
+
+        $filename = $data['filename'] ?? null;
+        $isCompleted = (int) ($data['is_completed'] ?? 0) === 1;
+        $listLhpRilis = $data['list_lhp_rilis'] ?? [];
+        if (is_string($listLhpRilis)) {
+            $listLhpRilis = json_decode($listLhpRilis ?: '[]', true) ?: [];
+        }
+
+        $available = $isCompleted && !empty($filename);
+
+        return [
+            'available' => $available,
+            'is_completed' => $isCompleted,
+            'filename' => $filename,
+            'file_url' => $available ? ('laporan/hasil_pengujian/' . ltrim($filename, '/')) : null,
+            'periode' => $data['periode'] ?? null,
+            'no_order' => $data['no_order'] ?? null,
+            'jumlah_lhp' => (int) ($data['jumlah_lhp'] ?? 0),
+            'jumlah_lhp_rilis' => (int) ($data['jumlah_lhp_rilis'] ?? 0),
+            'list_lhp_rilis' => is_array($listLhpRilis) ? $listLhpRilis : [],
+        ];
     }
 
     /**

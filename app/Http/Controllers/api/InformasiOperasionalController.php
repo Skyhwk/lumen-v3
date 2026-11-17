@@ -145,16 +145,7 @@ class InformasiOperasionalController extends Controller
                     $jumlahAlat[] = (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0);
                 }
 
-                $namaAlatAktual = [];
-                $jumlahAlatAktual = [];
-                foreach ($peralatanAktual as $item) {
-                    $nama = trim((string) ($item['nama_alat'] ?? ''));
-                    if ($nama === '') {
-                        continue;
-                    }
-                    $namaAlatAktual[] = $nama;
-                    $jumlahAlatAktual[] = (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0);
-                }
+                $aktualDisplay = $this->buildAktualDisplayLists($peralatanAktual);
 
                 $ketOps = trim(html_entity_decode(strip_tags((string) ($mob['keterangan_operasional'] ?? $mob['keterangan_operasional_sp'] ?? '')), ENT_QUOTES, 'UTF-8'));
 
@@ -175,9 +166,10 @@ class InformasiOperasionalController extends Controller
                     'jumlah_alat_list' => $jumlahAlat,
                     'jumlah_alat' => $this->requestCount($peralatan),
                     'peralatan_aktual' => $peralatanAktual,
-                    'nama_alat_aktual' => $namaAlatAktual,
-                    'jumlah_alat_aktual' => $jumlahAlatAktual,
-                    'has_peralatan_aktual' => count($namaAlatAktual) > 0,
+                    'nama_alat_aktual' => $aktualDisplay['nama'],
+                    'jumlah_alat_aktual' => $aktualDisplay['jumlah'],
+                    'kode_aset_aktual' => $aktualDisplay['kode'],
+                    'has_peralatan_aktual' => count($aktualDisplay['nama']) > 0,
                 ];
             })
             ->addColumn('keterangan_qs', function ($row) {
@@ -1533,6 +1525,72 @@ class InformasiOperasionalController extends Controller
         }
 
         return [];
+    }
+
+    /**
+     * Gabung peralatan aktual per nama alat untuk tampilan IO.
+     * Kode + warna digabung ke 1 baris nama agar sejajar dengan jumlah.
+     *
+     * @param  array<int, array>  $items
+     * @return array{nama: list<string>, jumlah: list<int>, kode: list<list<string>>}
+     */
+    private function buildAktualDisplayLists(array $items): array
+    {
+        $byNama = [];
+        foreach (JadwalMobilisasiService::normalizePeralatanList($items) as $item) {
+            $nama = trim((string) ($item['nama_alat'] ?? ''));
+            if ($nama === '') {
+                continue;
+            }
+            $key = mb_strtolower($nama);
+            if (!isset($byNama[$key])) {
+                $byNama[$key] = [
+                    'nama_alat' => $nama,
+                    'kode_labels' => [],
+                    'kode_seen' => [],
+                    'jumlah_fallback' => 0,
+                ];
+            }
+
+            $qty = max(0, (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0));
+            if ($qty > $byNama[$key]['jumlah_fallback']) {
+                $byNama[$key]['jumlah_fallback'] = $qty;
+            }
+
+            $warna = trim((string) ($item['warna'] ?? ''));
+            $list = $item['kode_aset_list'] ?? [];
+            if (!is_array($list)) {
+                continue;
+            }
+            foreach ($list as $kodeRaw) {
+                $kode = trim((string) $kodeRaw);
+                if ($kode === '') {
+                    continue;
+                }
+                $kodeKey = mb_strtolower($kode);
+                if (isset($byNama[$key]['kode_seen'][$kodeKey])) {
+                    continue;
+                }
+                $byNama[$key]['kode_seen'][$kodeKey] = true;
+                $byNama[$key]['kode_labels'][] = $warna !== '' ? "{$kode} ({$warna})" : $kode;
+            }
+        }
+
+        $nama = [];
+        $jumlah = [];
+        $kode = [];
+        foreach ($byNama as $entry) {
+            $labels = $entry['kode_labels'];
+            $nama[] = $entry['nama_alat'];
+            $jumlah[] = count($labels) > 0 ? count($labels) : (int) $entry['jumlah_fallback'];
+            $kode[] = $labels;
+        }
+
+        return [
+            'nama' => $nama,
+            'jumlah' => $jumlah,
+            'kode' => $kode,
+        ];
     }
 
     private function requestSummary(array $items): string
