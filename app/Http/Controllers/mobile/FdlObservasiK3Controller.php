@@ -11,6 +11,7 @@ use App\Models\OrderHeader;
 use App\Models\TicketSkK3;
 use App\Services\InsertActivityFdl;
 use App\Services\ObservasiK3PengesahanPdfService;
+use App\Services\ObservasiK3PengesahanPdfServiceLegacy;
 use App\Services\SendEmail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -384,7 +385,7 @@ class FdlObservasiK3Controller extends Controller
 
         if ($obs->is_pengesahan_selesai && !$obs->file_pengesahan_pdf) {
             $snapshotForPdf = $snapshot ?? $this->buildSnapshotPengesahan($obs);
-            $pdfService = new ObservasiK3PengesahanPdfService();
+            $pdfService = $this->observasiK3PengesahanPdfService();
             $pdfFilename = $pdfService->generate($obs, $snapshotForPdf);
             $obs->update(['file_pengesahan_pdf' => $pdfFilename]);
             $obs->refresh();
@@ -472,7 +473,7 @@ class FdlObservasiK3Controller extends Controller
         ]);
 
         $obs->refresh();
-        $pdfService = new ObservasiK3PengesahanPdfService();
+        $pdfService = $this->observasiK3PengesahanPdfService();
         $pdfFilename = $pdfService->generate($obs, $snapshot);
         $obs->update(['file_pengesahan_pdf' => $pdfFilename]);
 
@@ -748,7 +749,7 @@ class FdlObservasiK3Controller extends Controller
             'pernyataan_list' => [
                 'Data yang tercantum dalam Form Observasi K3 merupakan hasil pengamatan langsung di lapangan.',
                 'Pengisian form dilakukan secara objektif, sistematis, dan dapat dipertanggungjawabkan.',
-                'Hasil observasi digunakan sebagai dasar pelaksanaan pendampingan dan pengendalian K3.',
+                'Hasil observasi digunakan sebagai dasar pelaksanaan pendampingan dan pengendalian K3',
             ],
             'pernyataan' => 'Demikian lembar pengesahan ini dibuat untuk digunakan sebagaimana mestinya.',
             'generated_at' => Carbon::now('Asia/Jakarta')->toIso8601String(),
@@ -1006,6 +1007,15 @@ class FdlObservasiK3Controller extends Controller
         }
 
         return null;
+    }
+
+    private function observasiK3PengesahanPdfService(): object
+    {
+        if (filter_var(env('OBSERVASI_K3_PDF_LEGACY_ALL_TABLES', false), FILTER_VALIDATE_BOOLEAN)) {
+            return new ObservasiK3PengesahanPdfServiceLegacy();
+        }
+
+        return new ObservasiK3PengesahanPdfService();
     }
 
     public function convertImg($foto = '', $type = '', $user = '')
