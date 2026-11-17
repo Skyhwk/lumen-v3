@@ -465,7 +465,7 @@ class NotifySamplingH14Command extends Command
             ->where('no_document', $team['no_quotation'])
             ->where('is_active', 1)
             ->orderByDesc('id')
-            ->first(['id', 'no_order', 'no_document']);
+            ->first(['id', 'no_order', 'no_document', 'tanggal_order', 'alamat_sampling']);
 
         if (!$order) {
             return null;
@@ -485,13 +485,39 @@ class NotifySamplingH14Command extends Command
             $sales = MasterKaryawan::where('id', $quotation->sales_id)->where('is_active', 1)->first();
         }
 
+        $alamatSampling = trim((string) ($order->alamat_sampling ?? ''));
+        if ($alamatSampling === '') {
+            $alamatSampling = trim((string) ($quotation->alamat_sampling ?? ''));
+        }
+
+        $tanggalOrderLabel = '-';
+        if (!empty($order->tanggal_order)) {
+            try {
+                $tanggalOrderLabel = Carbon::parse($order->tanggal_order)->translatedFormat('d F Y');
+            } catch (\Throwable $e) {
+                $tanggalOrderLabel = (string) $order->tanggal_order;
+            }
+        }
+
+        $jamMulai = $team['jam_mulai'] ?? '-';
+        $jamSelesai = $team['jam_selesai'] ?? '-';
+        $jamRange = ($jamMulai !== '-' && $jamSelesai !== '-')
+            ? ($jamMulai . ' s/d ' . $jamSelesai)
+            : $jamMulai;
+
         $payload = array_merge($team, [
             'type' => $type,
             'no_order' => (string) $order->no_order,
+            'no_penawaran' => (string) $team['no_quotation'],
+            'tanggal_order' => $order->tanggal_order ?? null,
+            'tanggal_order_label' => $tanggalOrderLabel,
+            'alamat_sampling' => $alamatSampling !== '' ? $alamatSampling : '-',
             'kategori_items' => $kategoriItems,
             'kategori_summary' => $kategoriSummary,
+            'nama_sampel_list' => $kategoriItems,
             'sampler_list' => $samplerList,
             'durasi_label' => $this->formatDurasi($team['durasi']),
+            'jam_range_label' => $jamRange,
             'tanggal_label' => Carbon::parse($team['jadwal_tanggal'])->translatedFormat('l, d F Y'),
             'pic_order' => [
                 'nama' => $picOrderName,
@@ -543,7 +569,7 @@ class NotifySamplingH14Command extends Command
             return QuotationKontrakH::where('no_document', $noDocument)
                 ->where('is_active', true)
                 ->first([
-                    'id', 'no_document', 'sales_id', 'nama_perusahaan',
+                    'id', 'no_document', 'sales_id', 'nama_perusahaan', 'alamat_sampling',
                     'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order',
                     'nama_pic_sampling', 'jabatan_pic_sampling', 'no_tlp_pic_sampling', 'email_pic_sampling',
                 ]);
@@ -552,7 +578,7 @@ class NotifySamplingH14Command extends Command
         return QuotationNonKontrak::where('no_document', $noDocument)
             ->where('is_active', true)
             ->first([
-                'id', 'no_document', 'sales_id', 'nama_perusahaan',
+                'id', 'no_document', 'sales_id', 'nama_perusahaan', 'alamat_sampling',
                 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order',
                 'nama_pic_sampling', 'jabatan_pic_sampling', 'no_tlp_pic_sampling', 'email_pic_sampling',
             ]);
@@ -725,6 +751,7 @@ class NotifySamplingH14Command extends Command
             'tanggal_label' => $payload['tanggal_label'] ?? null,
             'jadwal_tanggal' => $payload['jadwal_tanggal'] ?? null,
             'jam_mulai' => $payload['jam_mulai'] ?? null,
+            'pic_name' => trim((string) ($payload['pic_order']['nama'] ?? '')),
         ];
 
         $anyOk = false;
@@ -733,7 +760,10 @@ class NotifySamplingH14Command extends Command
         $exceptions = [];
 
         foreach ($portalUsers as $user) {
-            $extra['customer_name'] = $user->nama_lengkap ?? $user->name ?? $user->nama ?? null;
+            // Prioritas sapaan: nama PIC Order (sudah di extra.pic_name).
+            if (trim((string) ($extra['pic_name'] ?? '')) === '') {
+                $extra['customer_name'] = $user->nama_lengkap ?? $user->name ?? $user->nama ?? null;
+            }
             try {
                 $result = $service->send($user->id, 'sampling_h14', $extra);
             } catch (\Throwable $e) {
