@@ -233,12 +233,82 @@ class LaporanTrackingOrderController extends Controller
                     }
 
                     $listJadwal = $jadwalQuery->get();
+
+                    $linkLhpBase = DB::table('link_lhp')
+                        ->where('no_order', $noOrder)
+                        ->where(function ($q) {
+                            $q->where('is_active', 1)->orWhereNull('is_active');
+                        });
+
+                    $linkLhp = null;
+                    $isKontrak = strtoupper((string) ($order->jenis_order ?? '')) === 'KONTRAK';
+
+                    // Kontrak: wajib match periode. Non-kontrak: coba periode dulu, fallback tanpa filter.
+                    if (!empty($periode)) {
+                        $linkLhp = (clone $linkLhpBase)
+                            ->where('periode', $periode)
+                            ->orderByDesc('id')
+                            ->first([
+                                'id',
+                                'no_order',
+                                'no_quotation',
+                                'periode',
+                                'jumlah_lhp',
+                                'jumlah_lhp_rilis',
+                                'list_lhp_rilis',
+                                'is_completed',
+                                'filename',
+                            ]);
+                    }
+
+                    if (!$linkLhp && !$isKontrak) {
+                        $linkLhp = (clone $linkLhpBase)
+                            ->orderByDesc('id')
+                            ->first([
+                                'id',
+                                'no_order',
+                                'no_quotation',
+                                'periode',
+                                'jumlah_lhp',
+                                'jumlah_lhp_rilis',
+                                'list_lhp_rilis',
+                                'is_completed',
+                                'filename',
+                            ]);
+                    }
+
+                    $lhpBundle = null;
+                    if ($linkLhp && !empty($linkLhp->filename) && (int) $linkLhp->is_completed === 1) {
+                        $lhpBundle = [
+                            'available' => true,
+                            'is_completed' => true,
+                            'filename' => $linkLhp->filename,
+                            'file_url' => 'laporan/hasil_pengujian/' . ltrim($linkLhp->filename, '/'),
+                            'periode' => $linkLhp->periode,
+                            'jumlah_lhp' => (int) $linkLhp->jumlah_lhp,
+                            'jumlah_lhp_rilis' => (int) $linkLhp->jumlah_lhp_rilis,
+                            'list_lhp_rilis' => json_decode($linkLhp->list_lhp_rilis ?: '[]', true),
+                        ];
+                    } else {
+                        $lhpBundle = [
+                            'available' => false,
+                            'is_completed' => (bool) ($linkLhp->is_completed ?? false),
+                            'filename' => $linkLhp->filename ?? null,
+                            'file_url' => null,
+                            'periode' => $linkLhp->periode ?? ($periode ?: null),
+                            'jumlah_lhp' => (int) ($linkLhp->jumlah_lhp ?? 0),
+                            'jumlah_lhp_rilis' => (int) ($linkLhp->jumlah_lhp_rilis ?? 0),
+                            'list_lhp_rilis' => json_decode($linkLhp->list_lhp_rilis ?? '[]', true),
+                        ];
+                    }
+
                     return response()->json([
                         'status' => 'success',
                         'message' => 'Detail Order Berhasil Ditemukan',
                         'data' => [
                             'order' => $order,
-                            'jadwal' => $listJadwal
+                            'jadwal' => $listJadwal,
+                            'lhp_bundle' => $lhpBundle,
                         ]
                     ], 200);
                 }
