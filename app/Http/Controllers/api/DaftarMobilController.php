@@ -99,6 +99,16 @@ class DaftarMobilController extends Controller
                 return response()->json(['message' => 'Plat mobil already exists'], 401);
             }
 
+            [$kepemilikan, $tanggalMulaiSewa, $tanggalAkhirSewa] = $this->resolveKepemilikanSewa($request);
+            if ($kepemilikan === 'External') {
+                if (!$tanggalMulaiSewa || !$tanggalAkhirSewa) {
+                    return response()->json(['message' => 'Tanggal mulai sewa dan tanggal akhir sewa wajib diisi untuk kepemilikan External.'], 422);
+                }
+                if ($tanggalAkhirSewa < $tanggalMulaiSewa) {
+                    return response()->json(['message' => 'Tanggal akhir sewa harus sama atau setelah tanggal mulai sewa.'], 422);
+                }
+            }
+
             if ($request->id) {
                 $data = DaftarMobil::where('id', $request->id)->first();
 
@@ -113,6 +123,9 @@ class DaftarMobilController extends Controller
                 $data->nomor_mesin = strtoupper(trim($request->nomor_mesin));
                 $data->warna_mobil = trim($request->warna_mobil);
                 $data->tahun_perakitan = $request->tahun_perakitan;
+                $data->kepemilikan = $kepemilikan;
+                $data->tanggal_mulai_sewa = $tanggalMulaiSewa;
+                $data->tanggal_akhir_sewa = $tanggalAkhirSewa;
                 if ($request->has('status_gps')) {
                     $data->status_gps = $this->toBoolean($request->status_gps);
                 }
@@ -134,6 +147,9 @@ class DaftarMobilController extends Controller
                 'nomor_mesin' => $request->nomor_mesin ? strtoupper(trim($request->nomor_mesin)) : null,
                 'warna_mobil' => trim($request->warna_mobil),
                 'tahun_perakitan' => $request->tahun_perakitan ? $request->tahun_perakitan : null,
+                'kepemilikan' => $kepemilikan,
+                'tanggal_mulai_sewa' => $tanggalMulaiSewa,
+                'tanggal_akhir_sewa' => $tanggalAkhirSewa,
                 'status_gps' => false,
                 'is_active' => true,
                 'created_at' => date('Y-m-d H:i:s'),
@@ -169,5 +185,26 @@ class DaftarMobilController extends Controller
     protected function toBoolean($value): bool
     {
         return $value === true || $value === 1 || $value === '1' || $value === 'true';
+    }
+
+    private function resolveKepemilikanSewa(Request $request): array
+    {
+        $kepemilikan = trim((string) $request->input('kepemilikan', 'Internal'));
+        if (!in_array($kepemilikan, ['Internal', 'External'], true)) {
+            $kepemilikan = 'Internal';
+        }
+
+        if ($kepemilikan !== 'External') {
+            return ['Internal', null, null];
+        }
+
+        $mulai = trim((string) $request->input('tanggal_mulai_sewa', ''));
+        $akhir = trim((string) $request->input('tanggal_akhir_sewa', ''));
+
+        return [
+            'External',
+            $mulai !== '' ? $mulai : null,
+            $akhir !== '' ? $akhir : null,
+        ];
     }
 }

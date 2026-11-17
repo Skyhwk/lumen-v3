@@ -1,0 +1,948 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Jadwal;
+use App\Models\JadwalMobilisasi;
+use App\Models\Peralatan;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Schema;
+
+class JadwalMobilisasiService
+{
+    public const PRESET_TUJUAN_OPTIONS = [
+        'Monitoring/Pemantauan Lingkungan',
+        'Pengumpulan Data Rona Awal Lingkungan',
+        'Pengawasan/Penegakkan Hukum',
+        'Penelitian di Bidang Lingkungan',
+    ];
+
+    public const KETERANGAN_OPS_DIR = 'keterangan_operasional';
+
+    /**
+     * Normalisasi array batch ID jadwal menjadi array integer berurutan & string CSV.
+     *
+     * @param array|string|int|null $batchIds
+     * @return array{ids: list<int>, csv: string}
+     */
+    public static function normalizeBatchIds($batchIds): array
+    {
+        if (is_string($batchIds)) {
+            $raw = explode(',', $batchIds);
+        } elseif (is_array($batchIds)) {
+            $raw = $batchIds;
+        } elseif ($batchIds !== null && $batchIds !== '') {
+            $raw = [$batchIds];
+        } else {
+            $raw = [];
+        }
+
+        $ids = array_values(array_unique(array_filter(array_map('intval', $raw), fn ($v) => $v > 0)));
+
+        return [
+            'ids' => $ids,
+            'csv' => implode(',', $ids),
+        ];
+    }
+
+    /**
+     * Simpan / perbarui data mobilisasi & peralatan sampling untuk 1 group batch_id.
+     *
+     * Konsep:
+     * - Jika sudah ada row aktif (berdasarkan $oldBatchIds saat update jadwal atau $newBatchIds),
+     *   maka cukup UPDATE row yang sudah ada (termasuk mengupdate batch_id ke ID baru) tanpa mematikan row lama.
+     * - Row hanya dimatikan (is_active = false) ketika jadwal benar-benar di-cancel dari Sampling Plan.
+     * - Keterangan Operasional (HTML dari TinyMCE) disimpan sebagai file .txt di public/keterangan_operasional/,
+     *   sehingga di database hanya menyimpan namafile.txt.
+     */
+    public static function saveForBatch(
+        $newBatchIds,
+        array $payload,
+        ?string $actor = null,
+        $oldBatchIds = null
+    ): ?JadwalMobilisasi {
+        if (!Schema::hasTable('jadwal_mobilisasi')) {
+            return null;
+        }
+
+        $normalizedNew = self::normalizeBatchIds($newBatchIds);
+        if (empty($normalizedNew['ids'])) {
+            return null;
+        }
+
+        $now = Carbon::now()->format('Y-m-d H:i:s');
+
+        // Cari row aktif yang sudah ada (dari batch lama saat update jadwal, atau dari batch baru)
+        $existingRecord = null;
+        if ($oldBatchIds !== null) {
+            $existingRecord = self::findActiveRecordByBatchIds($oldBatchIds);
+        }
+        if (!$existingRecord) {
+            $existingRecord = self::findActiveRecordByBatchIds($normalizedNew['ids']);
+        }
+
+        $tujuanRaw = trim((string) ($payload['tujuan_sampling'] ?? ''));
+        $tujuanPilihan = trim((string) ($payload['tujuan_sampling_pilihan'] ?? ''));
+        $tujuanManual = trim((string) ($payload['tujuan_sampling_manual'] ?? ''));
+
+        if ($tujuanPilihan === '' && $tujuanRaw !== '') {
+            if (in_array($tujuanRaw, self::PRESET_TUJUAN_OPTIONS, true)) {
+                $tujuanPilihan = $tujuanRaw;
+            } else {
+                $tujuanPilihan = 'Input Manual';
+                $tujuanManual = $tujuanRaw;
+            }
+        }
+
+        $estimasiJam = isset($payload['estimasi_jam']) ? (int) $payload['estimasi_jam'] : 0;
+        $estimasiMenit = isset($payload['estimasi_menit']) ? (int) $payload['estimasi_menit'] : 0;
+        $waktuBerangkat = trim((string) ($payload['waktu_berangkat_estimasi'] ?? $payload['waktu_berangkat'] ?? ''));
+
+        if (($estimasiJam === 0 && $estimasiMenit === 0) && $waktuBerangkat !== '') {
+            if (preg_match('/(\d+)\s*Jam/i', $waktuBerangkat, $mJam)) {
+                $estimasiJam = (int) $mJam[1];
+            }
+            if (preg_match('/(\d+)\s*Menit/i', $waktuBerangkat, $mMenit)) {
+                $estimasiMenit = (int) $mMenit[1];
+            }
+        }
+
+        if ($waktuBerangkat === '') {
+            $parts = [];
+            if ($estimasiJam > 0) {
+                $parts[] = "{$estimasiJam} Jam";
+            }
+            if ($estimasiMenit > 0) {
+                $parts[] = "{$estimasiMenit} Menit";
+            }
+            $waktuBerangkat = !empty($parts) ? implode(' ', $parts) : '';
+        }
+
+        $keteranganAkomodasi = trim((string) ($payload['keterangan_akomodasi'] ?? ''));
+        $rutePerjalanan = trim((string) ($payload['rute_perjalanan'] ?? ''));
+        $hasEstimasi = $estimasiJam > 0
+            || $estimasiMenit > 0
+            || $waktuBerangkat !== ''
+            || $keteranganAkomodasi !== ''
+            || $rutePerjalanan !== '';
+
+        $estimasiPerjalanan = trim((string) ($payload['estimasi_perjalanan'] ?? ''));
+        if ($estimasiPerjalanan === '' && $hasEstimasi) {
+            $durasiText = $waktuBerangkat !== '' ? $waktuBerangkat : '-';
+            $asalText = $keteranganAkomodasi !== '' ? $keteranganAkomodasi : '-';
+            $ruteText = $rutePerjalanan !== '' ? $rutePerjalanan : '-';
+            $estimasiPerjalanan = "{$durasiText} dari {$asalText} & RUTE ({$ruteText})";
+        }
+
+        $peralatanList = self::normalizePeralatan($payload['peralatan_sampling'] ?? []);
+        $keteranganHtmlInput = trim((string) ($payload['keterangan_operasional'] ?? $payload['keterangan_operasional_sp'] ?? ''));
+
+        // Simpan isi HTML TinyMCE ke dalam file .txt dan simpan namafile.txt di DB
+        $existingSpFile = $existingRecord ? ($existingRecord->keterangan_operasional_sp ?? null) : null;
+        $existingOpsFile = $existingRecord ? ($existingRecord->keterangan_operasional ?? null) : null;
+
+        $spFilename = self::writeTxtContent($keteranganHtmlInput, $existingSpFile, 'sp');
+        $opsFilename = self::writeTxtContent($keteranganHtmlInput, $existingOpsFile, 'ops');
+
+        $dataAttributes = [
+            'id_sampling' => isset($payload['id_sampling']) && $payload['id_sampling'] !== '' ? (int) $payload['id_sampling'] : null,
+            'no_quotation' => $payload['no_quotation'] ?? null,
+            'tanggal' => !empty($payload['tanggal']) ? Carbon::parse($payload['tanggal'])->format('Y-m-d') : null,
+            'warna' => $payload['warna'] ?? null,
+            'batch_id' => $normalizedNew['csv'],
+            'batch_jadwal_ids' => $normalizedNew['ids'],
+            'tujuan_sampling' => $tujuanRaw !== '' ? $tujuanRaw : null,
+            'tujuan_sampling_pilihan' => $tujuanPilihan !== '' ? $tujuanPilihan : null,
+            'tujuan_sampling_manual' => $tujuanManual !== '' ? $tujuanManual : null,
+            'estimasi_jam' => $estimasiJam,
+            'estimasi_menit' => $estimasiMenit,
+            'waktu_berangkat' => $waktuBerangkat !== '' ? $waktuBerangkat : null,
+            'keterangan_akomodasi' => $keteranganAkomodasi !== '' ? $keteranganAkomodasi : null,
+            'rute_perjalanan' => $rutePerjalanan !== '' ? $rutePerjalanan : null,
+            'estimasi_perjalanan' => $estimasiPerjalanan !== '' ? $estimasiPerjalanan : null,
+            'peralatan_sampling' => $peralatanList,
+            'is_active' => true,
+            'updated_by' => $actor,
+            'updated_at' => $now,
+        ];
+
+        if (Schema::hasColumn('jadwal_mobilisasi', 'keterangan_operasional_sp')) {
+            $dataAttributes['keterangan_operasional_sp'] = $spFilename;
+        }
+        if (Schema::hasColumn('jadwal_mobilisasi', 'keterangan_operasional')) {
+            $dataAttributes['keterangan_operasional'] = $opsFilename;
+        }
+
+        // Jika sudah ada record aktif pada group jadwal ini -> cukup UPDATE row yang sama!
+        if ($existingRecord) {
+            $existingRecord->update($dataAttributes);
+            return $existingRecord->fresh();
+        }
+
+        // Jika belum ada (saat create jadwal baru / parsial baru) -> INSERT row baru
+        $dataAttributes['created_by'] = $actor;
+        $dataAttributes['created_at'] = $now;
+        if (Schema::hasColumn('jadwal_mobilisasi', 'status_rilis_io')) {
+            $dataAttributes['status_rilis_io'] = $payload['status_rilis_io'] ?? 'draft';
+        }
+
+        return JadwalMobilisasi::create($dataAttributes);
+    }
+
+    private static function hasBatchJadwalIdsColumn(): bool
+    {
+        static $cached = null;
+        if ($cached === null) {
+            $cached = Schema::hasTable('jadwal_mobilisasi')
+                && Schema::hasColumn('jadwal_mobilisasi', 'batch_jadwal_ids');
+        }
+        return $cached;
+    }
+
+    /**
+     * Nonaktifkan data jadwal_mobilisasi HANYA ketika jadwal benar-benar di-cancel dari Sampling Plan.
+     */
+    public static function deactivateByBatchIds($batchIds, ?string $actor = null): int
+    {
+        if (!Schema::hasTable('jadwal_mobilisasi')) {
+            return 0;
+        }
+
+        $normalized = self::normalizeBatchIds($batchIds);
+        if (empty($normalized['ids'])) {
+            return 0;
+        }
+
+        $now = Carbon::now()->format('Y-m-d H:i:s');
+        $hasJsonCol = self::hasBatchJadwalIdsColumn();
+
+        $query = JadwalMobilisasi::where('is_active', true)
+            ->where(function ($q) use ($normalized, $hasJsonCol) {
+                $q->where('batch_id', $normalized['csv']);
+                foreach ($normalized['ids'] as $jid) {
+                    $q->orWhereRaw('FIND_IN_SET(?, batch_id) > 0', [(string) $jid]);
+                    if ($hasJsonCol) {
+                        $q->orWhereJsonContains('batch_jadwal_ids', $jid);
+                    }
+                }
+            });
+
+        return $query->update([
+            'is_active' => false,
+            'updated_by' => $actor,
+            'updated_at' => $now,
+        ]);
+    }
+
+    /**
+     * Nonaktifkan data jadwal_mobilisasi berdasarkan id_sampling (misal saat direject dari Validator).
+     */
+    public static function deactivateBySamplingId(int $samplingId, ?string $actor = null): int
+    {
+        if (!Schema::hasTable('jadwal_mobilisasi') || $samplingId <= 0) {
+            return 0;
+        }
+
+        $now = Carbon::now()->format('Y-m-d H:i:s');
+
+        return JadwalMobilisasi::where('id_sampling', $samplingId)
+            ->where('is_active', true)
+            ->update([
+                'is_active' => false,
+                'updated_by' => $actor,
+                'updated_at' => $now,
+            ]);
+    }
+
+    /**
+     * Ambil data jadwal_mobilisasi aktif beserta isi HTML dari file .txt untuk ditampilkan kembali ke frontend.
+     */
+    public static function findActiveByBatchIds($batchIds): ?array
+    {
+        $record = self::findActiveRecordByBatchIds($batchIds);
+        if (!$record) {
+            return null;
+        }
+
+        $data = $record->toArray();
+
+        $opsRaw = $data['keterangan_operasional'] ?? null;
+        $spRaw = $data['keterangan_operasional_sp'] ?? null;
+
+        $data['keterangan_operasional_file'] = self::isTxtFilename($opsRaw) ? $opsRaw : null;
+        $data['keterangan_operasional_sp_file'] = self::isTxtFilename($spRaw) ? $spRaw : null;
+
+        $data['keterangan_operasional'] = self::readTxtContent($opsRaw);
+        $data['keterangan_operasional_sp'] = self::readTxtContent($spRaw);
+
+        return $data;
+    }
+
+    public static function findActiveRecordByBatchIds($batchIds): ?JadwalMobilisasi
+    {
+        if (!Schema::hasTable('jadwal_mobilisasi')) {
+            return null;
+        }
+
+        $normalized = self::normalizeBatchIds($batchIds);
+        if (empty($normalized['ids'])) {
+            return null;
+        }
+
+        $hasJsonCol = self::hasBatchJadwalIdsColumn();
+
+        return JadwalMobilisasi::where('is_active', true)
+            ->where(function ($q) use ($normalized, $hasJsonCol) {
+                $q->where('batch_id', $normalized['csv']);
+                foreach ($normalized['ids'] as $jid) {
+                    $q->orWhereRaw('FIND_IN_SET(?, batch_id) > 0', [(string) $jid]);
+                    if ($hasJsonCol) {
+                        $q->orWhereJsonContains('batch_jadwal_ids', $jid);
+                    }
+                }
+            })
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    public static function storeKeteranganOperasionalHtml(string $html, ?string $existingFilename = null, string $prefix = 'ops'): ?string
+    {
+        return self::writeTxtContent($html, $existingFilename, $prefix);
+    }
+
+    public static function updateInformasiOperasional(JadwalMobilisasi $record, array $payload, ?string $actor = null): JadwalMobilisasi
+    {
+        $now = Carbon::now()->format('Y-m-d H:i:s');
+        $warna = trim((string) ($payload['warna'] ?? $record->warna ?? ''));
+        $peralatanList = self::normalizePeralatan($payload['peralatan_sampling'] ?? $record->peralatan_sampling ?? []);
+        $keteranganHtml = trim((string) ($payload['keterangan_operasional'] ?? ''));
+        $existingOpsFile = $record->keterangan_operasional ?? null;
+        $opsFilename = self::writeTxtContent($keteranganHtml, $existingOpsFile, 'ops');
+
+        $data = [
+            'warna' => $warna !== '' ? $warna : null,
+            'peralatan_sampling' => $peralatanList,
+            'updated_by' => $actor,
+            'updated_at' => $now,
+        ];
+
+        if (Schema::hasColumn('jadwal_mobilisasi', 'keterangan_operasional')) {
+            $data['keterangan_operasional'] = $opsFilename;
+        }
+
+        $record->update($data);
+
+        return $record->fresh();
+    }
+
+    /**
+     * Simpan peralatan bawaan aktual untuk semua mobilisasi dalam daftar batch_id (1 tim → N PT).
+     * Request SP tetap di peralatan_sampling; yang diubah hanya peralatan_aktual.
+     *
+     * @param  array<int, mixed>  $batchIdList
+     */
+    public static function syncPeralatanAktualForBatches(array $batchIdList, array $peralatanAktual, ?string $actor = null): int
+    {
+        if (!Schema::hasTable('jadwal_mobilisasi') || !Schema::hasColumn('jadwal_mobilisasi', 'peralatan_aktual')) {
+            return 0;
+        }
+
+        $normalizedList = self::normalizePeralatan($peralatanAktual);
+        $now = Carbon::now()->format('Y-m-d H:i:s');
+        $updated = 0;
+
+        foreach ($batchIdList as $batchIds) {
+            $record = self::findActiveRecordByBatchIds($batchIds);
+            if (!$record) {
+                continue;
+            }
+            $record->update([
+                'peralatan_aktual' => $normalizedList,
+                'updated_by' => $actor,
+                'updated_at' => $now,
+            ]);
+            $updated++;
+        }
+
+        return $updated;
+    }
+
+    public static function normalizePeralatanList($raw): array
+    {
+        return self::normalizePeralatan($raw);
+    }
+
+    private static function isTxtFilename(?string $value): bool
+    {
+        if ($value === null) {
+            return false;
+        }
+        $trimmed = trim($value);
+        return $trimmed !== '' && preg_match('/^[A-Za-z0-9_.-]+\.txt$/', $trimmed) === 1;
+    }
+
+    private static function writeTxtContent(string $htmlContent, ?string $existingFilename = null, string $prefix = 'ops'): ?string
+    {
+        $plainCheck = trim(strip_tags(html_entity_decode($htmlContent)));
+        if ($htmlContent === '' || $plainCheck === '') {
+            return null;
+        }
+
+        $dirPath = public_path(self::KETERANGAN_OPS_DIR);
+        if (!file_exists($dirPath)) {
+            mkdir($dirPath, 0777, true);
+        }
+
+        // Gunakan kembali file .txt yang sudah ada jika merupakan nama file .txt yang valid
+        if (self::isTxtFilename($existingFilename)) {
+            $filename = trim($existingFilename);
+        } else {
+            $microtime = str_replace('.', '', (string) microtime(true));
+            $filename = $prefix . '_' . $microtime . '_' . mt_rand(100, 999) . '.txt';
+        }
+
+        file_put_contents($dirPath . '/' . $filename, $htmlContent);
+
+        return $filename;
+    }
+
+    public static function readTxtContent(?string $value): ?string
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        $trimmed = trim($value);
+        if (self::isTxtFilename($trimmed)) {
+            $filePath = public_path(self::KETERANGAN_OPS_DIR . '/' . $trimmed);
+            if (is_file($filePath)) {
+                return (string) file_get_contents($filePath);
+            }
+            return null;
+        }
+
+        // Fallback jika ada data lama yang tersimpan langsung berupa teks/HTML
+        return $value;
+    }
+
+    private static function normalizePeralatan($raw): array
+    {
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
+            $raw = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($raw as $item) {
+            if (is_string($item)) {
+                $decodedItem = json_decode($item, true);
+                if (is_array($decodedItem)) {
+                    $item = $decodedItem;
+                }
+            }
+            if (!is_array($item)) {
+                continue;
+            }
+            $nama = trim((string) ($item['nama_alat'] ?? ''));
+            $kodeList = [];
+            if (!empty($item['kode_aset_list']) && is_array($item['kode_aset_list'])) {
+                foreach ($item['kode_aset_list'] as $kode) {
+                    $kode = trim((string) $kode);
+                    if ($kode !== '') {
+                        $kodeList[] = $kode;
+                    }
+                }
+                $kodeList = array_values(array_unique($kodeList));
+            } elseif (!empty($item['kode_aset'])) {
+                $kode = trim((string) $item['kode_aset']);
+                if ($kode !== '') {
+                    $kodeList = [$kode];
+                }
+            }
+
+            $jumlah = (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0);
+            if ($kodeList !== []) {
+                $jumlah = count($kodeList);
+            }
+            if ($nama !== '' && $jumlah > 0) {
+                $entry = [
+                    'nama_alat' => $nama,
+                    'jumlah_alat' => $jumlah,
+                ];
+                if ($kodeList !== []) {
+                    $entry['kode_aset_list'] = $kodeList;
+                }
+                foreach ([
+                    'id_kategori_peralatan',
+                    'jenis_peralatan',
+                    'warna',
+                    'nama_kategori_pengujian',
+                    'id_cabang',
+                    'lokasi_penempatan_alat',
+                    'sub_kategori_aset_id',
+                    'kategori_aset_id',
+                    'condition',
+                    'branch_id',
+                    'location_id',
+                ] as $metaKey) {
+                    if (array_key_exists($metaKey, $item) && $item[$metaKey] !== null && $item[$metaKey] !== '') {
+                        $entry[$metaKey] = $item[$metaKey];
+                    }
+                }
+                $result[] = $entry;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Map pilihan warna jadwal → daftar warna master yang ikut ditampilkan (kumulatif).
+     * Merah = Air
+     * Biru  = Air + Udara (merah + biru)
+     * Hitam = Air + Udara + Emisi (merah + biru + hitam)
+     * ASET  = alat non-sampling
+     *
+     * @return list<string>
+     */
+    public static function resolveWarnaFilter(?string $warna): array
+    {
+        $key = strtolower(trim((string) $warna));
+        if ($key === '') {
+            return [];
+        }
+
+        switch ($key) {
+            case 'merah':
+                return ['merah'];
+            case 'biru':
+                return ['merah', 'biru'];
+            case 'hitam':
+                return ['merah', 'biru', 'hitam'];
+            case 'aset':
+                return ['aset'];
+            default:
+                return [$key];
+        }
+    }
+
+    /**
+     * Rank warna jadwal — semakin besar semakin luas cakupan alatnya.
+     */
+    public static function warnaRank(?string $warna): int
+    {
+        switch (strtolower(trim((string) $warna))) {
+            case 'merah':
+                return 1;
+            case 'biru':
+                return 2;
+            case 'hitam':
+                return 3;
+            case 'aset':
+                return 4;
+            default:
+                return 0;
+        }
+    }
+
+    /**
+     * Ambil warna terluas dari daftar (hitam > biru > merah > aset).
+     *
+     * @param  list<string|null>|null  $warnaList
+     */
+    public static function resolveWidestWarna($warnaList): ?string
+    {
+        if (!is_array($warnaList) || $warnaList === []) {
+            return null;
+        }
+
+        $best = null;
+        $bestRank = -1;
+        foreach ($warnaList as $warna) {
+            $key = strtolower(trim((string) $warna));
+            if ($key === '') {
+                continue;
+            }
+            $rank = self::warnaRank($key);
+            if ($rank > $bestRank) {
+                $bestRank = $rank;
+                $best = $key;
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * Flatten batch_id input (csv string / array of csv / nested) → list id unik.
+     *
+     * @param  mixed  $batchIds
+     * @return list<int>
+     */
+    public static function flattenBatchIds($batchIds): array
+    {
+        if ($batchIds === null || $batchIds === '') {
+            return [];
+        }
+
+        if (is_string($batchIds)) {
+            $decoded = json_decode($batchIds, true);
+            if (is_array($decoded)) {
+                return self::flattenBatchIds($decoded);
+            }
+            return self::normalizeBatchIds($batchIds)['ids'];
+        }
+
+        if (!is_array($batchIds)) {
+            return self::normalizeBatchIds($batchIds)['ids'];
+        }
+
+        $ids = [];
+        foreach ($batchIds as $item) {
+            foreach (self::flattenBatchIds($item) as $id) {
+                $ids[] = $id;
+            }
+        }
+
+        return array_values(array_unique(array_filter($ids, fn ($v) => (int) $v > 0)));
+    }
+
+    /**
+     * Warna terluas dari jadwal berdasarkan batch_id (sumber kebenaran filter alat).
+     *
+     * @param  mixed  $batchIds
+     */
+    public static function resolveWarnaFromBatchIds($batchIds): ?string
+    {
+        $ids = self::flattenBatchIds($batchIds);
+        if ($ids === [] || !Schema::hasTable('jadwal')) {
+            return null;
+        }
+
+        $warnas = Jadwal::query()
+            ->whereIn('id', $ids)
+            ->where('is_active', true)
+            ->pluck('warna')
+            ->all();
+
+        return self::resolveWidestWarna($warnas);
+    }
+
+    /**
+     * Durasi terpanjang (hari kalender) dari jadwal batch.
+     * Konvensi jadwal: 1=8 jam (1 hari), 2=1x24 (2 hari), dst → end = start + durasi - 1.
+     *
+     * @param  mixed  $batchIds
+     */
+    public static function resolveDurasiFromBatchIds($batchIds): int
+    {
+        $ids = self::flattenBatchIds($batchIds);
+        if ($ids === [] || !Schema::hasTable('jadwal')) {
+            return 1;
+        }
+
+        $max = Jadwal::query()
+            ->whereIn('id', $ids)
+            ->where('is_active', true)
+            ->max('durasi');
+
+        $durasi = (int) $max;
+        return $durasi > 0 ? $durasi : 1;
+    }
+
+    /**
+     * Hitung tanggal akhir pemakaian alat dari tanggal mulai + durasi.
+     */
+    public static function resolveEndDate(string $tanggal, int $durasi = 1): string
+    {
+        $start = Carbon::parse($tanggal)->startOfDay();
+        $days = max(1, $durasi);
+
+        return $start->copy()->addDays($days - 1)->format('Y-m-d');
+    }
+
+    /**
+     * Apakah dua rentang tanggal [start, end] saling overlap (inklusif).
+     */
+    public static function dateRangesOverlap(
+        string $startA,
+        string $endA,
+        string $startB,
+        string $endB
+    ): bool {
+        return !(
+            Carbon::parse($endA)->lt(Carbon::parse($startB))
+            || Carbon::parse($endB)->lt(Carbon::parse($startA))
+        );
+    }
+
+    /**
+     * Ambil daftar peralatan dari tabel `peralatan` (grouped untuk SP / katalog).
+     *
+     * Model aktif (HEAD): 1 row = 1 unit via kode_aset → stok default = jumlah row.
+     * Kompat tim (mo-aset): jika kolom jumlah_alat_tersedia ada → stok = SUM(qty),
+     * fallback ke jumlah row; status_alat ikut diekspos bila kolom tersedia.
+     * Pengunci stok = bawaan aktual TIM di io_peralatan_tim (bukan request SP).
+     */
+    public static function getPeralatanAvailable(
+        ?string $tanggal = null,
+        $branchId = null,
+        $excludeBatchIds = null,
+        ?string $warna = null,
+        ?string $excludePetugasKey = null
+    ): array {
+        if (!Schema::hasTable('peralatan')) {
+            return [];
+        }
+
+        $cleanBranchIds = [];
+        if ($branchId !== null && $branchId !== '') {
+            $rawBranches = is_array($branchId) ? $branchId : explode(',', (string) $branchId);
+            $cleanBranchIds = array_values(array_unique(array_filter(array_map('intval', $rawBranches), fn ($v) => $v > 0)));
+        }
+
+        $warnaList = self::resolveWarnaFilter($warna);
+        $hasKodeAset = Schema::hasColumn('peralatan', 'kode_aset');
+        $hasStatusAlat = Schema::hasColumn('peralatan', 'status_alat');
+        $hasJumlahTersedia = Schema::hasColumn('peralatan', 'jumlah_alat_tersedia');
+        $hasDeletedAt = Schema::hasColumn('peralatan', 'deleted_at');
+
+        $selectCols = [
+            'id',
+            'nama_alat',
+            'jenis_peralatan',
+            'warna',
+            'nama_kategori_pengujian',
+            'id_cabang',
+            'lokasi_penempatan_alat',
+            'is_active',
+        ];
+        if ($hasKodeAset) {
+            $selectCols[] = 'kode_aset';
+        }
+        if ($hasStatusAlat) {
+            $selectCols[] = 'status_alat';
+        }
+        if ($hasJumlahTersedia) {
+            $selectCols[] = 'jumlah_alat_tersedia';
+        }
+
+        $query = Peralatan::query()->where('is_active', true);
+        if ($hasDeletedAt) {
+            $query->whereNull('deleted_at');
+        }
+
+        if (!empty($cleanBranchIds)) {
+            $query->whereIn('id_cabang', $cleanBranchIds);
+        }
+
+        if (!empty($warnaList)) {
+            $query->where(function ($q) use ($warnaList) {
+                foreach ($warnaList as $warnaItem) {
+                    $q->orWhereRaw('LOWER(TRIM(warna)) = ?', [strtolower($warnaItem)]);
+                }
+            });
+        }
+
+        $rows = $query
+            ->select($selectCols)
+            ->orderBy('nama_alat', 'asc')
+            ->when($hasKodeAset, function ($q) {
+                $q->orderBy('kode_aset', 'asc');
+            })
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return [];
+        }
+
+        // Pengunci stok = bawaan aktual TIM di Informasi Operasional (io_peralatan_tim),
+        // bukan request peralatan_sampling dari jadwal/SP.
+        // excludeBatchIds tidak dipakai di sini: jadwal/SP tetap harus melihat alat yang
+        // sudah dikunci tim IO. Exclude hanya untuk petugas_key (saat edit bawaan tim sendiri).
+        $usedByToolKey = [];
+        if ($tanggal) {
+            $usedByToolKey = IoPeralatanTimService::usedQtyByTanggal(
+                $tanggal,
+                $excludePetugasKey,
+                null
+            );
+        }
+
+        // Group: nama_alat + id_cabang + warna.
+        // Stok = SUM(jumlah_alat_tersedia) jika kolom ada & > 0; else jumlah unit (row) aktif.
+        $grouped = [];
+        foreach ($rows as $row) {
+            $namaAlat = trim((string) $row->nama_alat);
+            if ($namaAlat === '') {
+                continue;
+            }
+            $normName = strtoupper($namaAlat);
+            $cabangId = $row->id_cabang !== null ? (int) $row->id_cabang : 0;
+            $warnaVal = trim((string) ($row->warna ?? ''));
+            $groupKey = $normName . '|' . $cabangId . '|' . strtolower($warnaVal);
+            $rowQty = $hasJumlahTersedia
+                ? max(0, (int) ($row->jumlah_alat_tersedia ?? 0))
+                : 0;
+
+            if (!isset($grouped[$groupKey])) {
+                $grouped[$groupKey] = [
+                    'id' => (int) $row->id,
+                    'id_kategori_peralatan' => (int) $row->id,
+                    'nama' => $namaAlat,
+                    'name' => $namaAlat,
+                    'nama_alat' => $namaAlat,
+                    'jenis_peralatan' => $row->jenis_peralatan,
+                    'warna' => $row->warna,
+                    'nama_kategori_pengujian' => $row->nama_kategori_pengujian,
+                    'id_cabang' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
+                    'branch_id' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
+                    'lokasi_penempatan_alat' => $row->lokasi_penempatan_alat,
+                    'status_alat' => $hasStatusAlat ? ($row->status_alat ?? null) : null,
+                    'unit_count' => 0,
+                    'qty_sum' => 0,
+                    'kode_aset_list' => [],
+                ];
+            }
+
+            $grouped[$groupKey]['unit_count']++;
+            $grouped[$groupKey]['qty_sum'] += $rowQty;
+            if (
+                $hasStatusAlat
+                && ($row->status_alat ?? null) !== null
+                && ($row->status_alat ?? '') !== ''
+                && ($grouped[$groupKey]['status_alat'] === null || $grouped[$groupKey]['status_alat'] === '')
+            ) {
+                $grouped[$groupKey]['status_alat'] = $row->status_alat;
+            }
+
+            if ($hasKodeAset) {
+                $kodeAset = trim((string) ($row->kode_aset ?? ''));
+                if ($kodeAset !== '') {
+                    $grouped[$groupKey]['kode_aset_list'][] = $kodeAset;
+                }
+            }
+        }
+
+        foreach ($grouped as &$item) {
+            $normName = strtoupper((string) $item['nama_alat']);
+            $cabangId = (int) ($item['id_cabang'] ?? 0);
+            $unitCount = max(0, (int) ($item['unit_count'] ?? 0));
+            $qtySum = max(0, (int) ($item['qty_sum'] ?? 0));
+            // Tim: pakai SUM(jumlah_alat_tersedia) bila ada; HEAD: fallback hitung unit.
+            $totalStok = $qtySum > 0 ? $qtySum : $unitCount;
+            $used = (int) ($usedByToolKey[$normName . '|' . $cabangId] ?? 0);
+            if ($cabangId !== 0) {
+                $used += (int) ($usedByToolKey[$normName . '|0'] ?? 0);
+            }
+
+            $item['jumlah_alat_tersedia'] = $totalStok;
+            $item['total'] = $totalStok;
+            $item['terpakai'] = $used;
+            $item['sisa'] = max(0, $totalStok - $used);
+            $item['stok'] = $totalStok;
+            unset($item['unit_count'], $item['qty_sum']);
+        }
+        unset($item);
+
+        return array_values($grouped);
+    }
+
+    /**
+     * Daftar unit peralatan (1 row = 1 kode_aset) + flag terkunci oleh tim lain
+     * pada rentang tanggal yang overlap (tanggal + durasi).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function getPeralatanUnitsAvailable(
+        ?string $tanggal = null,
+        $branchId = null,
+        ?string $warna = null,
+        ?string $excludePetugasKey = null,
+        int $durasi = 1
+    ): array {
+        if (!Schema::hasTable('peralatan')) {
+            return [];
+        }
+
+        $cleanBranchIds = [];
+        if ($branchId !== null && $branchId !== '') {
+            $rawBranches = is_array($branchId) ? $branchId : explode(',', (string) $branchId);
+            $cleanBranchIds = array_values(array_unique(array_filter(array_map('intval', $rawBranches), fn ($v) => $v > 0)));
+        }
+
+        $warnaList = self::resolveWarnaFilter($warna);
+
+        $query = Peralatan::query()
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->whereNotNull('kode_aset')
+            ->where('kode_aset', '!=', '');
+
+        if (!empty($cleanBranchIds)) {
+            $query->whereIn('id_cabang', $cleanBranchIds);
+        }
+
+        if (!empty($warnaList)) {
+            $query->where(function ($q) use ($warnaList) {
+                foreach ($warnaList as $warnaItem) {
+                    $q->orWhereRaw('LOWER(TRIM(warna)) = ?', [strtolower($warnaItem)]);
+                }
+            });
+        }
+
+        $rows = $query
+            ->select([
+                'id',
+                'nama_alat',
+                'kode_aset',
+                'jenis_peralatan',
+                'warna',
+                'nama_kategori_pengujian',
+                'id_cabang',
+                'lokasi_penempatan_alat',
+            ])
+            ->orderBy('nama_alat', 'asc')
+            ->orderBy('kode_aset', 'asc')
+            ->get();
+
+        $locked = ['kodes' => [], 'by_kode' => [], 'range' => null];
+        if ($tanggal) {
+            $locked = IoPeralatanTimService::usedKodeAsetByTanggal(
+                $tanggal,
+                $excludePetugasKey,
+                $durasi
+            );
+        }
+        $lockedByKode = $locked['by_kode'] ?? [];
+
+        $result = [];
+        foreach ($rows as $row) {
+            $namaAlat = trim((string) $row->nama_alat);
+            $kodeAset = trim((string) ($row->kode_aset ?? ''));
+            if ($namaAlat === '' || $kodeAset === '') {
+                continue;
+            }
+
+            $isLocked = isset($lockedByKode[$kodeAset]);
+            $result[] = [
+                'id' => (int) $row->id,
+                'nama_alat' => $namaAlat,
+                'kode_aset' => $kodeAset,
+                'jenis_peralatan' => $row->jenis_peralatan,
+                'warna' => $row->warna,
+                'nama_kategori_pengujian' => $row->nama_kategori_pengujian,
+                'id_cabang' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
+                'branch_id' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
+                'lokasi_penempatan_alat' => $row->lokasi_penempatan_alat,
+                'is_locked' => $isLocked,
+                'locked_by' => $isLocked ? (string) $lockedByKode[$kodeAset] : null,
+            ];
+        }
+
+        return $result;
+    }
+}
