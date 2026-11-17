@@ -73,6 +73,10 @@ class CiscoPhoneCnfXmlService
             'dtmf_avt_payload' => 101,
             'dtmf_db_level' => 3,
             'dtmf_out_of_band' => 'avt',
+            // CP-78xx + PBX pihak ketiga (UCM): kpml off agar digit dikumpulkan dulu saat transfer; semi-attended off = tekan Transfer lagi setelah nomor lengkap.
+            'kpml' => 0,
+            'semi_attended_transfer' => false,
+            'transfer_onhook_enabled' => false,
             'network_locale' => 'Indonesia',
             'user_locale' => 'English_United_States',
             'network_load_file' => '',
@@ -105,8 +109,8 @@ class CiscoPhoneCnfXmlService
                     'caller_number' => true,
                     'redirected_number' => false,
                     'dialed_number' => true,
-                    'max_num_calls' => 2,
-                    'busy_trigger' => 1,
+                    'max_num_calls' => 4,
+                    'busy_trigger' => 2,
                     'ring_setting_idle' => 'Normal',
                     'ring_setting_active' => 'Normal',
                     'shared_line' => false,
@@ -152,6 +156,9 @@ class CiscoPhoneCnfXmlService
 
         $merged['preferred_codec'] = self::normalizePreferredCodec($merged['preferred_codec'] ?? 'g711ulaw');
         $merged['enable_vad'] = filter_var($merged['enable_vad'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $merged['semi_attended_transfer'] = filter_var($merged['semi_attended_transfer'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $merged['transfer_onhook_enabled'] = filter_var($merged['transfer_onhook_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $merged['kpml'] = (int) ($merged['kpml'] ?? 0);
 
         // CP-3905 sering gagal register jika pakai TCP — defaultkan UDP untuk model basic
         if (self::isBasicPhoneModel($merged['phone_model'] ?? 'CP-3905')) {
@@ -293,7 +300,12 @@ class CiscoPhoneCnfXmlService
         $this->appendTextNode($doc, $features, 'rfc2543Hold', ($config['rfc2543_hold'] ?? false) ? 'true' : 'false');
         $this->appendTextNode($doc, $features, 'callHoldRingback', '2');
         $this->appendTextNode($doc, $features, 'localCfwdEnable', 'true');
-        $this->appendTextNode($doc, $features, 'semiAttendedTransfer', 'true');
+        $this->appendTextNode(
+            $doc,
+            $features,
+            'semiAttendedTransfer',
+            !empty($config['semi_attended_transfer']) ? 'true' : 'false'
+        );
         $this->appendTextNode($doc, $features, 'anonymousCallBlock', '2');
         $this->appendTextNode($doc, $features, 'callerIdBlocking', '2');
         $this->appendTextNode($doc, $features, 'dndControl', '0');
@@ -319,7 +331,12 @@ class CiscoPhoneCnfXmlService
         $this->appendTextNode($doc, $sipProfile, 'autoAnswerTimer', '1');
         $this->appendTextNode($doc, $sipProfile, 'autoAnswerAltBehavior', 'false');
         $this->appendTextNode($doc, $sipProfile, 'autoAnswerOverride', 'true');
-        $this->appendTextNode($doc, $sipProfile, 'transferOnhookEnabled', 'false');
+        $this->appendTextNode(
+            $doc,
+            $sipProfile,
+            'transferOnhookEnabled',
+            !empty($config['transfer_onhook_enabled']) ? 'true' : 'false'
+        );
         // Backup CP-7821 yang jalan tidak berisi preferredCodec / g711*CodecSupport — menghindari perubahan SDP/early media & ringback
         $this->appendTextNode($doc, $sipProfile, 'enableVad', 'false');
         $this->appendTextNode($doc, $sipProfile, 'dtmfAvtPayload', '101');
@@ -327,7 +344,7 @@ class CiscoPhoneCnfXmlService
         $this->appendTextNode($doc, $sipProfile, 'dtmfOutofBand', 'avt');
         $this->appendTextNode($doc, $sipProfile, 'alwaysUsePrimeLine', 'false');
         $this->appendTextNode($doc, $sipProfile, 'alwaysUsePrimeLineVoiceMail', 'false');
-        $this->appendTextNode($doc, $sipProfile, 'kpml', '3');
+        $this->appendTextNode($doc, $sipProfile, 'kpml', (string) ((int) ($config['kpml'] ?? 0)));
         $this->appendTextNode($doc, $sipProfile, 'phoneLabel', mb_substr(trim((string) ($config['phone_label'] ?? '')) ?: $phoneModel, 0, 15));
         $this->appendTextNode($doc, $sipProfile, 'stutterMsgWaiting', '1');
         $this->appendTextNode($doc, $sipProfile, 'callStats', 'false');
@@ -356,6 +373,19 @@ class CiscoPhoneCnfXmlService
             $this->appendTextNode($doc, $autoAnswer, 'autoAnswerEnabled', !empty($line['auto_answer']) ? '1' : '2');
             $lineEl->appendChild($autoAnswer);
             $this->appendTextNode($doc, $lineEl, 'callWaiting', '3');
+            // Diperlukan agar 3-way conference bisa merge (bukan hanya swap); backup 78xx sering tidak memuat tag ini.
+            $this->appendTextNode(
+                $doc,
+                $lineEl,
+                'maxNumCalls',
+                (string) max(4, (int) ($line['max_num_calls'] ?? 4))
+            );
+            $this->appendTextNode(
+                $doc,
+                $lineEl,
+                'busyTrigger',
+                (string) max(2, (int) ($line['busy_trigger'] ?? 2))
+            );
             $this->appendTextNode($doc, $lineEl, 'authName', trim((string) ($line['auth_name'] ?? '')) ?: $name);
             $this->appendTextNode($doc, $lineEl, 'authPassword', (string) ($line['auth_password'] ?? ''));
             $this->appendTextNode($doc, $lineEl, 'sharedLine', !empty($line['shared_line']) ? 'true' : 'false');

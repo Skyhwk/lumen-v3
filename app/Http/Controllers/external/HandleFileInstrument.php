@@ -50,6 +50,9 @@ class HandleFileInstrument extends BaseController
             ], 400);
         }
         
+        // Ambil dry_run dari body/query; kalau tidak ada -> false.
+        // $dryRun = filter_var($request->input('dry_run', false), FILTER_VALIDATE_BOOLEAN);
+        
         $file = $request->file('file');
         $filePath = $file->getRealPath();
 
@@ -549,7 +552,9 @@ class HandleFileInstrument extends BaseController
                                     if(isset($payload->vl)) unset($payload->vl);
                                     $payload->vs = 50;
                                     $payload->ks = $avg_param;
-                                    $payload->kb = $blankoParam;
+                                    $kbEmisi = $blankoParam < 0 ? 0 : $blankoParam;
+                                    $payload->kb = $kbEmisi;
+                                    $icpData['blanko'] = $kbEmisi;
                                 }
                                 
                                 // Siapkan data untuk batch insert
@@ -631,6 +636,35 @@ class HandleFileInstrument extends BaseController
                     }
                 }
             }
+
+            // DRY RUN untuk test import tanpa simpan
+            // if ($dryRun) {
+            //     DB::rollBack();
+
+            //     $byStatus = [];
+            //     foreach ($icpInserts as $row) {
+            //         $status = $row['status'] ?? 'unknown';
+            //         $byStatus[$status] = ($byStatus[$status] ?? 0) + 1;
+            //     }
+
+            //     return response()->json([
+            //         'dry_run' => true,
+            //         'message' => 'Preview import (tidak ada data disimpan)',
+            //         'summary' => [
+            //             'icp_rows' => count($icpInserts),
+            //             'by_status' => $byStatus,
+            //             'would_insert' => [
+            //                 'instrument_icp' => count($icpInserts),
+            //                 'colorimetri' => count($colorimetriInserts),
+            //                 'draft_air' => count($draftAirIcpInserts),
+            //                 'draft_icp' => count($draftIcpInserts),
+            //                 'lingkungan_header' => count($lingkunganHeaderInserts),
+            //                 'emisi_cerobong_header' => count($emisiCerobongHeaderInserts),
+            //             ],
+            //         ],
+            //         'rows' => $icpInserts,
+            //     ], 200);
+            // }
             
             // Batch insert all data efficiently
             if (!empty($icpInserts)) {

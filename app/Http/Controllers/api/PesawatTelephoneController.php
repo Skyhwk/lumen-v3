@@ -41,7 +41,7 @@ class PesawatTelephoneController extends Controller
             ],
             'group_call_notes' => [
                 'call_pickup' => 'Default aktif. Pickup grup membutuhkan konfigurasi pickup group di server SIP/PBX juga.',
-                'cnf_join' => 'Default aktif. Bergabung ke conference call yang sudah berjalan (tombol Join/CNF di telepon).',
+                'cnf_join' => 'Default aktif. Ad-hoc 3-way: tekan Confrn (bukan Transfer), panggil peserta ketiga, tekan Confrn lagi untuk gabung. CP-7821 maks. 3 orang di telepon; peserta ke-4+ pakai ruang conference PBX (Meet Me). XML menyertakan maxNumCalls=4 & busyTrigger=2.',
                 'meet_me' => 'Default nonaktif (URI kosong). Isi Meet Me URI dari PBX jika ingin conference dial-in.',
                 'shared_line' => 'Aktifkan per line untuk shared extension / group appearance.',
             ],
