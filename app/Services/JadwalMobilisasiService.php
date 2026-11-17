@@ -852,8 +852,9 @@ class JadwalMobilisasiService
     }
 
     /**
-     * Daftar unit peralatan (1 row = 1 kode_aset) + flag terkunci oleh tim lain
-     * pada rentang tanggal yang overlap (tanggal + durasi).
+     * Daftar unit peralatan (1 row = 1 kode_aset) + flag terkunci.
+     * Kunci IO: tanggal sampling yang sama (tanpa durasi).
+     * Kunci monitoring: status terakhir != Tersedia DAN tanggal jadwal masih <= end_date.
      *
      * @return list<array<string, mixed>>
      */
@@ -875,6 +876,7 @@ class JadwalMobilisasiService
         }
 
         $warnaList = self::resolveWarnaFilter($warna);
+        $tanggalNorm = $tanggal ? Carbon::parse($tanggal)->format('Y-m-d') : null;
 
         $query = Peralatan::query()
             ->where('is_active', true)
@@ -909,15 +911,35 @@ class JadwalMobilisasiService
             ->orderBy('kode_aset', 'asc')
             ->get();
 
+        // IO lock antar-tim: hanya tanggal yang sama (durasi diabaikan).
         $locked = ['kodes' => [], 'by_kode' => [], 'range' => null];
-        if ($tanggal) {
+        if ($tanggalNorm) {
             $locked = IoPeralatanTimService::usedKodeAsetByTanggal(
-                $tanggal,
+                $tanggalNorm,
                 $excludePetugasKey,
-                $durasi
+                1
             );
         }
         $lockedByKode = $locked['by_kode'] ?? [];
+
+        $ownKodes = [];
+        if ($tanggalNorm && $excludePetugasKey) {
+            $own = IoPeralatanTimService::findActive($tanggalNorm, $excludePetugasKey);
+            if ($own) {
+                foreach (self::normalizePeralatanList($own->peralatan ?? []) as $item) {
+                    foreach (($item['kode_aset_list'] ?? []) as $kode) {
+                        $kode = trim((string) $kode);
+                        if ($kode !== '') {
+                            $ownKodes[$kode] = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        $monitoringById = MonitoringPeralatanService::latestMonitoringByPeralatanIds(
+            $rows->pluck('id')->map(fn ($id) => (int) $id)->all()
+        );
 
         $result = [];
         foreach ($rows as $row) {
@@ -927,9 +949,29 @@ class JadwalMobilisasiService
                 continue;
             }
 
-            $isLocked = isset($lockedByKode[$kodeAset]);
+            $idPeralatan = (int) $row->id;
+            $isLockedIo = isset($lockedByKode[$kodeAset]);
+            $monitoring = $monitoringById[$idPeralatan] ?? null;
+            $statusAlat = $monitoring['status_alat'] ?? MonitoringPeralatanService::STATUS_TERSEDIA;
+            $isOwn = isset($ownKodes[$kodeAset]);
+
+            // Sibuk dari monitoring: status != Tersedia (tanggal start/end bukan ranah IO).
+            $isBusyMonitoring = MonitoringPeralatanService::isBusyOnTanggal(
+                $monitoring,
+                $tanggalNorm ?? ''
+            );
+            $isUnavailableStatus = $isBusyMonitoring && !$isOwn;
+
+            $isLocked = $isLockedIo || $isUnavailableStatus;
+            $lockedReason = null;
+            if ($isLockedIo) {
+                $lockedReason = 'io_tim';
+            } elseif ($isUnavailableStatus) {
+                $lockedReason = 'monitoring_status';
+            }
+
             $result[] = [
-                'id' => (int) $row->id,
+                'id' => $idPeralatan,
                 'nama_alat' => $namaAlat,
                 'kode_aset' => $kodeAset,
                 'jenis_peralatan' => $row->jenis_peralatan,
@@ -938,8 +980,12 @@ class JadwalMobilisasiService
                 'id_cabang' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
                 'branch_id' => $row->id_cabang !== null ? (int) $row->id_cabang : null,
                 'lokasi_penempatan_alat' => $row->lokasi_penempatan_alat,
+                'status_alat' => $statusAlat,
+                'monitoring_start_date' => $monitoring['start_date'] ?? null,
+                'monitoring_end_date' => $monitoring['end_date'] ?? null,
                 'is_locked' => $isLocked,
-                'locked_by' => $isLocked ? (string) $lockedByKode[$kodeAset] : null,
+                'locked_reason' => $lockedReason,
+                'locked_by' => $isLockedIo ? (string) $lockedByKode[$kodeAset] : null,
             ];
         }
 

@@ -136,8 +136,8 @@ class IoPeralatanTimService
     }
 
     /**
-     * Daftar kode_aset yang sudah dibawa tim lain pada rentang tanggal yang overlap.
-     * Rentang = tanggal … tanggal+(durasi-1). Durasi diambil dari jadwal batch tim tersebut.
+     * Daftar kode_aset yang sudah dibawa tim lain di tanggal sampling yang sama.
+     * (Tanpa durasi — kunci hanya by tanggal.)
      *
      * @return array{kodes: list<string>, by_kode: array<string, string>, range: array{start: string, end: string, durasi: int}}
      */
@@ -147,12 +147,11 @@ class IoPeralatanTimService
         int $durasi = 1
     ): array {
         $start = Carbon::parse($tanggal)->format('Y-m-d');
-        $durasi = max(1, $durasi);
-        $end = JadwalMobilisasiService::resolveEndDate($start, $durasi);
+        // Param $durasi diabaikan (kompatibilitas signature); kunci hanya tanggal yang sama.
         $empty = [
             'kodes' => [],
             'by_kode' => [],
-            'range' => ['start' => $start, 'end' => $end, 'durasi' => $durasi],
+            'range' => ['start' => $start, 'end' => $start, 'durasi' => 1],
         ];
 
         if (!Schema::hasTable('io_peralatan_tim') || trim($tanggal) === '') {
@@ -160,31 +159,16 @@ class IoPeralatanTimService
         }
 
         $excludeKey = $excludePetugasKey !== null ? trim($excludePetugasKey) : '';
-        // Ambil kandidat di sekitar rentang (durasi jadwal max praktis ~8–14 hari).
-        $lookbackStart = Carbon::parse($start)->subDays(14)->format('Y-m-d');
         $rows = IoPeralatanTim::query()
             ->where('is_active', true)
-            ->whereDate('tanggal', '>=', $lookbackStart)
-            ->whereDate('tanggal', '<=', $end)
-            ->get(['petugas_key', 'petugas_sampling', 'peralatan', 'batch_ids', 'tanggal']);
+            ->whereDate('tanggal', $start)
+            ->get(['petugas_key', 'petugas_sampling', 'peralatan']);
 
         $kodes = [];
         $byKode = [];
         foreach ($rows as $row) {
             $key = (string) ($row->petugas_key ?? '');
             if ($excludeKey !== '' && $key === $excludeKey) {
-                continue;
-            }
-
-            $rowStart = $row->tanggal
-                ? Carbon::parse($row->tanggal)->format('Y-m-d')
-                : null;
-            if ($rowStart === null) {
-                continue;
-            }
-            $rowDurasi = JadwalMobilisasiService::resolveDurasiFromBatchIds($row->batch_ids ?? []);
-            $rowEnd = JadwalMobilisasiService::resolveEndDate($rowStart, $rowDurasi);
-            if (!JadwalMobilisasiService::dateRangesOverlap($start, $end, $rowStart, $rowEnd)) {
                 continue;
             }
 
@@ -209,7 +193,7 @@ class IoPeralatanTimService
         return [
             'kodes' => $kodes,
             'by_kode' => $byKode,
-            'range' => ['start' => $start, 'end' => $end, 'durasi' => $durasi],
+            'range' => ['start' => $start, 'end' => $start, 'durasi' => 1],
         ];
     }
 
