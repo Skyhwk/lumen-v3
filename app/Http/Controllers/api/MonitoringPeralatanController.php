@@ -8,8 +8,10 @@ use App\Models\MasterCabang;
 use App\Models\MasterKategori;
 use App\Models\MonitoringPeralatan;
 use App\Models\Peralatan;
+use App\Services\MonitoringPeralatanService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Yajra\Datatables\Datatables;
 
@@ -17,120 +19,116 @@ class MonitoringPeralatanController extends Controller
 {
     public function index(Request $request)
     {
-        $table = (new Peralatan())->getTable();
-        $monitoringTable = (new MonitoringPeralatan())->getTable();
+        $columnFilters = $this->extractWhitelistedColumnFilters($request);
+        $this->purgeDatatablesSearch($request);
 
-        $asOfDate = $this->normalizeDate($request->input('as_of_date'));
-        $asOfDateTime = $asOfDate ? $asOfDate . ' 23:59:59' : null;
-        $asOfSql = $asOfDateTime ? ' AND created_at <= ?' : '';
-        // Pilih histori terbaru by created_at (bukan MAX(id)), supaya aman jika created_at diubah manual.
-        $latestIdExpr = "CAST(SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY created_at DESC, id DESC), ',', 1) AS UNSIGNED)";
+        $asOfDate = $this->normalizeDate($request->input('as_of_date')) ?: date('Y-m-d');
 
-        $latestMonitoring = DB::table($monitoringTable)
-            ->select('id_peralatan', DB::raw("{$latestIdExpr} as latest_id"))
-            ->where('is_active', true)
-            ->whereNotNull('id_peralatan')
-            ->when($asOfDateTime, function ($query) use ($asOfDateTime) {
-                $query->where('created_at', '<=', $asOfDateTime);
-            })
-            ->groupBy('id_peralatan');
-
-        $countLatestSubquery = "
-            SELECT id_peralatan, {$latestIdExpr} AS latest_id
-            FROM {$monitoringTable}
-            WHERE is_active = 1
-              AND id_peralatan IS NOT NULL
-              {$asOfSql}
-            GROUP BY id_peralatan
-        ";
-
-        $tersediaBindings = $asOfDateTime ? [$asOfDateTime, 'Tersedia'] : ['Tersedia'];
-        $belumTersediaBindings = $asOfDateTime ? [$asOfDateTime, 'Tersedia'] : ['Tersedia'];
-        $countJoin = $asOfDateTime ? 'INNER JOIN' : 'LEFT JOIN';
-        $belumTersediaCondition = $asOfDateTime
-            ? 'mp3.status_alat <> ?'
-            : '(mp3.status_alat IS NULL OR mp3.status_alat <> ?)';
-
-        $data = Peralatan::query()
-            ->from("{$table} as p");
-
-        if ($asOfDateTime) {
-            $data->joinSub($latestMonitoring, 'latest_mp', function ($join) {
-                $join->on('latest_mp.id_peralatan', '=', 'p.id');
-            })
-                ->join("{$monitoringTable} as mp", 'mp.id', '=', 'latest_mp.latest_id');
-        } else {
-            $data->leftJoinSub($latestMonitoring, 'latest_mp', function ($join) {
-                $join->on('latest_mp.id_peralatan', '=', 'p.id');
-            })
-                ->leftJoin("{$monitoringTable} as mp", 'mp.id', '=', 'latest_mp.latest_id');
+        $idCabang = null;
+        if ($request->input('id_cabang') !== null && $request->input('id_cabang') !== '' && ctype_digit((string) $request->input('id_cabang'))) {
+            $idCabang = (int) $request->input('id_cabang');
         }
 
-        $data->where('p.is_active', true)
-            ->select([
-                'p.id',
-                'p.id as id_peralatan',
-                'mp.id as id_monitoring',
-                'p.nama_alat',
-                'p.jenis_peralatan',
-                'p.warna',
-                'p.nama_kategori_pengujian',
-                'p.id_cabang',
-                'p.lokasi_penempatan_alat',
-                'p.kode_aset',
-                'mp.status_alat',
-                'mp.keterangan',
-                'mp.start_date',
-                'mp.end_date',
-            ])
-            ->selectRaw(
-                "(
-                    SELECT COUNT(*)
-                    FROM {$table} AS p2
-                    {$countJoin} ({$countLatestSubquery}) AS lm2 ON lm2.id_peralatan = p2.id
-                    {$countJoin} {$monitoringTable} AS mp2 ON mp2.id = lm2.latest_id
-                    WHERE p2.is_active = 1
-                      AND p2.nama_alat = p.nama_alat
-                      AND p2.jenis_peralatan <=> p.jenis_peralatan
-                      AND p2.nama_kategori_pengujian <=> p.nama_kategori_pengujian
-                      AND p2.warna <=> p.warna
-                      AND p2.lokasi_penempatan_alat <=> p.lokasi_penempatan_alat
-                      AND mp2.status_alat = ?
-                ) AS jumlah_alat_tersedia",
-                $tersediaBindings
-            )
-            ->selectRaw(
-                "(
-                    SELECT COUNT(*)
-                    FROM {$table} AS p3
-                    {$countJoin} ({$countLatestSubquery}) AS lm3 ON lm3.id_peralatan = p3.id
-                    {$countJoin} {$monitoringTable} AS mp3 ON mp3.id = lm3.latest_id
-                    WHERE p3.is_active = 1
-                      AND p3.nama_alat = p.nama_alat
-                      AND p3.jenis_peralatan <=> p.jenis_peralatan
-                      AND p3.nama_kategori_pengujian <=> p.nama_kategori_pengujian
-                      AND p3.warna <=> p.warna
-                      AND p3.lokasi_penempatan_alat <=> p.lokasi_penempatan_alat
-                      AND {$belumTersediaCondition}
-                ) AS jumlah_alat_belum_tersedia",
-                $belumTersediaBindings
-            );
+        $resolution = MonitoringPeralatanService::buildResolutionCache($asOfDate, $idCabang);
+        $resolvedById = $resolution['by_id'];
+        $groupCounts = $resolution['group_counts'];
 
-        $idCabang = $request->input('id_cabang');
-        if ($idCabang !== null && $idCabang !== '' && ctype_digit((string) $idCabang)) {
-            $data->where('p.id_cabang', (int) $idCabang);
+        $data = Peralatan::query()->where('is_active', true);
+        if (Schema::hasColumn((new Peralatan())->getTable(), 'deleted_at')) {
+            $data->whereNull('deleted_at');
+        }
+
+        $data->select([
+            'id',
+            'nama_alat',
+            'jenis_peralatan',
+            'warna',
+            'nama_kategori_pengujian',
+            'id_cabang',
+            'lokasi_penempatan_alat',
+            'kode_aset',
+        ]);
+
+        if ($idCabang !== null && $idCabang > 0) {
+            $data->where('id_cabang', $idCabang);
+        }
+
+        $this->applyWhitelistedColumnFilters($data, $columnFilters);
+
+        $statusFilter = trim((string) $request->input('status_filter', ''));
+        if ($statusFilter !== '' && mb_strtolower($statusFilter) !== 'semua') {
+            $ids = MonitoringPeralatanService::idsMatchingEffectiveStatus($asOfDate, $statusFilter, $idCabang);
+            $data->whereIn('id', $ids !== [] ? $ids : [-1]);
+        }
+
+        $keteranganFilter = trim((string) $request->input('keterangan_filter', ''));
+        if ($keteranganFilter !== '') {
+            $like = '%' . $this->escapeLike($keteranganFilter) . '%';
+            $data->where(function ($nested) use ($like) {
+                $nested->where('kode_aset', 'like', $like)
+                    ->orWhere('nama_alat', 'like', $like);
+            });
         }
 
         if (!$this->requestHasOrderableColumn($request)) {
-            $data->orderBy('p.jenis_peralatan')
-                ->orderBy('p.nama_kategori_pengujian')
-                ->orderBy('p.nama_alat')
-                ->orderBy('p.warna')
-                ->orderBy('p.kode_aset')
-                ->orderBy('p.id');
+            $data->orderBy('jenis_peralatan')
+                ->orderBy('nama_kategori_pengujian')
+                ->orderBy('nama_alat')
+                ->orderBy('warna')
+                ->orderBy('kode_aset')
+                ->orderBy('id');
         }
 
-        return Datatables::of($data)->make(true);
+        $searchableDbColumns = [
+            'jenis_peralatan',
+            'nama_kategori_pengujian',
+            'nama_alat',
+            'warna',
+            'kode_aset',
+            'id',
+        ];
+
+        return Datatables::of($data)
+            ->whitelist($searchableDbColumns)
+            ->addColumn('id_peralatan', fn ($row) => (int) $row->id)
+            ->addColumn('status_alat', function ($row) use ($resolvedById) {
+                return $resolvedById[(int) $row->id]['status_alat'] ?? MonitoringPeralatanService::STATUS_TERSEDIA;
+            })
+            ->addColumn('keterangan', function ($row) use ($resolvedById) {
+                return $resolvedById[(int) $row->id]['keterangan'] ?? null;
+            })
+            ->addColumn('start_date', function ($row) use ($resolvedById) {
+                return $resolvedById[(int) $row->id]['start_date'] ?? null;
+            })
+            ->addColumn('end_date', function ($row) use ($resolvedById) {
+                return $resolvedById[(int) $row->id]['end_date'] ?? null;
+            })
+            ->addColumn('id_monitoring', function ($row) use ($resolvedById) {
+                return $resolvedById[(int) $row->id]['id_monitoring'] ?? null;
+            })
+            ->addColumn('jumlah_alat_tersedia', function ($row) use ($groupCounts) {
+                $key = MonitoringPeralatanService::buildGroupKey($row);
+
+                return (int) ($groupCounts[$key]['tersedia'] ?? 0);
+            })
+            ->addColumn('jumlah_alat_belum_tersedia', function ($row) use ($groupCounts) {
+                $key = MonitoringPeralatanService::buildGroupKey($row);
+
+                return (int) ($groupCounts[$key]['belum'] ?? 0);
+            })
+            ->orderColumn('status_alat', function ($query, $direction) {
+                $query->orderBy('nama_alat', $direction);
+            })
+            ->orderColumn('keterangan', function ($query, $direction) {
+                $query->orderBy('kode_aset', $direction);
+            })
+            ->orderColumn('jumlah_alat_tersedia', function ($query, $direction) {
+                $query->orderBy('nama_alat', $direction);
+            })
+            ->orderColumn('jumlah_alat_belum_tersedia', function ($query, $direction) {
+                $query->orderBy('nama_alat', $direction);
+            })
+            ->make(true);
     }
 
     public function getNames()
@@ -347,7 +345,7 @@ class MonitoringPeralatanController extends Controller
         if ($needsPeriod && (!$startDate || !$endDate)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Tanggal mulai dan berakhir wajib diisi untuk status maintenance/kalibrasi',
+                'message' => 'Tanggal mulai dan berakhir wajib diisi untuk status ber-periode (maintenance, kalibrasi, digunakan)',
             ], 422);
         }
 
@@ -464,6 +462,84 @@ class MonitoringPeralatanController extends Controller
             'success' => true,
             'message' => 'Data monitoring peralatan berhasil dihapus',
         ]);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function extractWhitelistedColumnFilters(Request $request): array
+    {
+        $whitelist = [
+            'jenis_peralatan',
+            'nama_kategori_pengujian',
+            'nama_alat',
+            'warna',
+            'kode_aset',
+        ];
+        $filters = [];
+
+        $columns = $request->input('columns', []);
+        if (!is_array($columns)) {
+            return $filters;
+        }
+
+        foreach ($columns as $column) {
+            if (!is_array($column)) {
+                continue;
+            }
+            $name = (string) ($column['name'] ?? $column['data'] ?? '');
+            if (!in_array($name, $whitelist, true)) {
+                continue;
+            }
+            $value = trim((string) ($column['search']['value'] ?? ''));
+            if ($value === '' || mb_strtolower($value) === 'semua') {
+                continue;
+            }
+            $filters[$name] = $value;
+        }
+
+        return $filters;
+    }
+
+    private function purgeDatatablesSearch(Request $request): void
+    {
+        $columns = $request->input('columns', []);
+        if (is_array($columns)) {
+            foreach ($columns as $index => $column) {
+                if (!is_array($column)) {
+                    continue;
+                }
+                $columns[$index]['search']['value'] = '';
+                $columns[$index]['search']['regex'] = 'false';
+            }
+        }
+
+        $request->merge([
+            'columns' => $columns,
+            'search' => ['value' => '', 'regex' => 'false'],
+        ]);
+    }
+
+    /**
+     * @param  array<string, string>  $filters
+     */
+    private function applyWhitelistedColumnFilters($query, array $filters): void
+    {
+        $exactMatch = ['jenis_peralatan', 'nama_kategori_pengujian', 'warna'];
+
+        foreach ($filters as $name => $value) {
+            if (in_array($name, $exactMatch, true)) {
+                $query->where($name, $value);
+                continue;
+            }
+
+            $query->where($name, 'like', '%' . $this->escapeLike($value) . '%');
+        }
+    }
+
+    private function escapeLike(string $value): string
+    {
+        return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
     }
 
     private function requestHasOrderableColumn(Request $request): bool

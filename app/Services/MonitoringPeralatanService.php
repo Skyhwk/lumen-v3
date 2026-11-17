@@ -11,6 +11,292 @@ class MonitoringPeralatanService
 {
     public const STATUS_SEDANG_DIGUNAKAN = 'Sedang Digunakan';
 
+    public const STATUS_TERSEDIA = 'Tersedia';
+
+    /**
+     * Status efektif per tanggal kalender D.
+     * Ber-periode: aktif hanya jika D dalam [start, end].
+     * Rusak/Tersedia point-in-time: berlaku sampai event pengganti.
+     * IO mengunci Sedang Digunakan untuk kode_aset pada tanggal D.
+     */
+    public static function buildContext(string $asOfDate): MonitoringPeralatanResolutionContext
+    {
+        $normalized = Carbon::parse($asOfDate)->format('Y-m-d');
+        $ctx = new MonitoringPeralatanResolutionContext($normalized);
+
+        if (Schema::hasTable('io_peralatan_tim')) {
+            $locked = IoPeralatanTimService::usedKodeAsetByTanggal($normalized, null, 1);
+            foreach ($locked['kodes'] ?? [] as $kode) {
+                $kode = trim((string) $kode);
+                if ($kode !== '') {
+                    $ctx->ioKodes[$kode] = true;
+                }
+            }
+            foreach ($locked['by_kode'] ?? [] as $kode => $owner) {
+                $ctx->ioKodeOwners[(string) $kode] = (string) $owner;
+            }
+        }
+
+        if (!Schema::hasTable('monitoring_peralatan')) {
+            return $ctx;
+        }
+
+        $endOfDay = $normalized . ' 23:59:59';
+        $rows = MonitoringPeralatan::query()
+            ->where('is_active', true)
+            ->whereNotNull('id_peralatan')
+            ->where('created_at', '<=', $endOfDay)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get([
+                'id',
+                'id_peralatan',
+                'status_alat',
+                'keterangan',
+                'start_date',
+                'end_date',
+                'created_at',
+            ]);
+
+        foreach ($rows as $row) {
+            $id = (int) $row->id_peralatan;
+            if ($id <= 0) {
+                continue;
+            }
+            $ctx->eventsByPeralatan[$id][] = $row;
+        }
+
+        return $ctx;
+    }
+
+    /**
+     * @return array{
+     *     status_alat: string,
+     *     keterangan: string|null,
+     *     start_date: string|null,
+     *     end_date: string|null,
+     *     id_monitoring: int|null,
+     *     source: string
+     * }
+     */
+    public static function resolveEffectiveStatus(
+        int $idPeralatan,
+        ?string $kodeAset,
+        MonitoringPeralatanResolutionContext $ctx
+    ): array {
+        $default = [
+            'status_alat' => self::STATUS_TERSEDIA,
+            'keterangan' => null,
+            'start_date' => null,
+            'end_date' => null,
+            'id_monitoring' => null,
+            'source' => 'default',
+        ];
+
+        $kode = trim((string) $kodeAset);
+        if ($kode !== '' && isset($ctx->ioKodes[$kode])) {
+            return [
+                'status_alat' => self::STATUS_SEDANG_DIGUNAKAN,
+                'keterangan' => $ctx->ioKodeOwners[$kode] ?? null,
+                'start_date' => $ctx->asOfDate,
+                'end_date' => $ctx->asOfDate,
+                'id_monitoring' => null,
+                'source' => 'io',
+            ];
+        }
+
+        $events = $ctx->eventsByPeralatan[$idPeralatan] ?? [];
+
+        foreach ($events as $event) {
+            if (self::eventCoversDate($event, $ctx->asOfDate)) {
+                return self::mapResolvedEvent($event, 'monitoring_period');
+            }
+        }
+
+        foreach ($events as $event) {
+            if (!MonitoringPeralatan::requiresPeriod((string) ($event->status_alat ?? ''))) {
+                return self::mapResolvedEvent($event, 'monitoring_point');
+            }
+        }
+
+        return $default;
+    }
+
+    /**
+     * @param  iterable<Peralatan>|null  $units
+     * @return array{
+     *     by_id: array<int, array<string, mixed>>,
+     *     group_counts: array<string, array{tersedia: int, belum: int}>,
+     *     ctx: MonitoringPeralatanResolutionContext
+     * }
+     */
+    public static function buildResolutionCache(string $asOfDate, ?int $idCabang, iterable $units = null): array
+    {
+        $ctx = self::buildContext($asOfDate);
+
+        if ($units === null) {
+            $query = Peralatan::query()->where('is_active', true);
+            if (Schema::hasColumn((new Peralatan())->getTable(), 'deleted_at')) {
+                $query->whereNull('deleted_at');
+            }
+            if ($idCabang !== null && $idCabang > 0) {
+                $query->where('id_cabang', $idCabang);
+            }
+            $units = $query->get([
+                'id',
+                'kode_aset',
+                'nama_alat',
+                'jenis_peralatan',
+                'nama_kategori_pengujian',
+                'warna',
+                'lokasi_penempatan_alat',
+            ]);
+        }
+
+        $byId = [];
+        foreach ($units as $unit) {
+            $id = (int) $unit->id;
+            $byId[$id] = self::resolveEffectiveStatus($id, $unit->kode_aset ?? null, $ctx);
+        }
+
+        return [
+            'by_id' => $byId,
+            'group_counts' => self::computeGroupCounts($units, $byId),
+            'ctx' => $ctx,
+        ];
+    }
+
+    /**
+     * @param  iterable<Peralatan>  $units
+     * @param  array<int, array<string, mixed>>  $byId
+     * @return array<string, array{tersedia: int, belum: int}>
+     */
+    public static function computeGroupCounts(iterable $units, array $byId): array
+    {
+        $groups = [];
+        foreach ($units as $unit) {
+            $key = self::buildGroupKey($unit);
+            if (!isset($groups[$key])) {
+                $groups[$key] = ['tersedia' => 0, 'belum' => 0];
+            }
+            $status = (string) ($byId[(int) $unit->id]['status_alat'] ?? self::STATUS_TERSEDIA);
+            if (strcasecmp($status, self::STATUS_TERSEDIA) === 0) {
+                $groups[$key]['tersedia']++;
+            } else {
+                $groups[$key]['belum']++;
+            }
+        }
+
+        return $groups;
+    }
+
+    public static function buildGroupKey($unit): string
+    {
+        return implode('||', [
+            mb_strtolower(trim((string) ($unit->jenis_peralatan ?? ''))),
+            mb_strtolower(trim((string) ($unit->nama_kategori_pengujian ?? ''))),
+            mb_strtolower(trim((string) ($unit->nama_alat ?? ''))),
+            mb_strtolower(trim((string) ($unit->warna ?? ''))),
+            mb_strtolower(trim((string) ($unit->lokasi_penempatan_alat ?? ''))),
+        ]);
+    }
+
+    /**
+     * @return list<int>
+     */
+    public static function idsMatchingEffectiveStatus(string $asOfDate, string $keyword, ?int $idCabang): array
+    {
+        $needle = mb_strtolower(trim($keyword));
+        if ($needle === '') {
+            return [];
+        }
+
+        $query = Peralatan::query()->where('is_active', true);
+        if (Schema::hasColumn((new Peralatan())->getTable(), 'deleted_at')) {
+            $query->whereNull('deleted_at');
+        }
+        if ($idCabang !== null && $idCabang > 0) {
+            $query->where('id_cabang', $idCabang);
+        }
+
+        $units = $query->get(['id', 'kode_aset']);
+        $cache = self::buildResolutionCache($asOfDate, null, $units);
+        $ids = [];
+
+        $knownStatuses = array_map(
+            static fn ($s) => mb_strtolower(trim((string) $s)),
+            MonitoringPeralatan::STATUS_ALAT
+        );
+        $exactMatch = in_array($needle, $knownStatuses, true);
+
+        foreach ($units as $unit) {
+            $status = mb_strtolower((string) ($cache['by_id'][(int) $unit->id]['status_alat'] ?? ''));
+            if ($status === '') {
+                continue;
+            }
+            if ($exactMatch ? $status === $needle : str_contains($status, $needle)) {
+                $ids[] = (int) $unit->id;
+            }
+        }
+
+        return $ids;
+    }
+
+    public static function eventCoversDate(object $event, string $asOfDate): bool
+    {
+        $status = (string) ($event->status_alat ?? '');
+        if (!MonitoringPeralatan::requiresPeriod($status)) {
+            return false;
+        }
+
+        $startRaw = $event->start_date ?? null;
+        if ($startRaw === null || $startRaw === '') {
+            if (strcasecmp($status, self::STATUS_SEDANG_DIGUNAKAN) === 0) {
+                $created = $event->created_at ?? null;
+                if ($created !== null && $created !== '') {
+                    return Carbon::parse($created)->format('Y-m-d') === $asOfDate;
+                }
+            }
+
+            return false;
+        }
+
+        $start = Carbon::parse($startRaw)->format('Y-m-d');
+        $endRaw = $event->end_date ?? null;
+        $end = ($endRaw !== null && $endRaw !== '')
+            ? Carbon::parse($endRaw)->format('Y-m-d')
+            : $start;
+
+        return $asOfDate >= $start && $asOfDate <= $end;
+    }
+
+    /**
+     * @return array{
+     *     status_alat: string,
+     *     keterangan: string|null,
+     *     start_date: string|null,
+     *     end_date: string|null,
+     *     id_monitoring: int|null,
+     *     source: string
+     * }
+     */
+    private static function mapResolvedEvent(object $event, string $source): array
+    {
+        $start = $event->start_date ?? null;
+        $end = $event->end_date ?? null;
+
+        return [
+            'status_alat' => (string) ($event->status_alat ?? self::STATUS_TERSEDIA),
+            'keterangan' => $event->keterangan !== null && $event->keterangan !== ''
+                ? (string) $event->keterangan
+                : null,
+            'start_date' => $start !== null && $start !== '' ? Carbon::parse($start)->format('Y-m-d') : null,
+            'end_date' => $end !== null && $end !== '' ? Carbon::parse($end)->format('Y-m-d') : null,
+            'id_monitoring' => isset($event->id) ? (int) $event->id : null,
+            'source' => $source,
+        ];
+    }
+
     /**
      * Sinkron status monitoring dari bawaan aktual IO (kode_aset → id_peralatan).
      *
