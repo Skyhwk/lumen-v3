@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\OrderDetail;
 use App\Models\OrderHeader;
 use App\Models\WsFinalApprovalDetail;
+use App\Http\Controllers\external\LHPHandleController;
 use Datatables;
 use Exception;
 
@@ -233,12 +234,82 @@ class LaporanTrackingOrderController extends Controller
                     }
 
                     $listJadwal = $jadwalQuery->get();
+
+                    $linkLhpBase = DB::table('link_lhp')
+                        ->where('no_order', $noOrder)
+                        ->where(function ($q) {
+                            $q->where('is_active', 1)->orWhereNull('is_active');
+                        });
+
+                    $linkLhp = null;
+                    $isKontrak = strtoupper((string) ($order->jenis_order ?? '')) === 'KONTRAK';
+
+                    // Kontrak: wajib match periode. Non-kontrak: coba periode dulu, fallback tanpa filter.
+                    if (!empty($periode)) {
+                        $linkLhp = (clone $linkLhpBase)
+                            ->where('periode', $periode)
+                            ->orderByDesc('id')
+                            ->first([
+                                'id',
+                                'no_order',
+                                'no_quotation',
+                                'periode',
+                                'jumlah_lhp',
+                                'jumlah_lhp_rilis',
+                                'list_lhp_rilis',
+                                'is_completed',
+                                'filename',
+                            ]);
+                    }
+
+                    if (!$linkLhp && !$isKontrak) {
+                        $linkLhp = (clone $linkLhpBase)
+                            ->orderByDesc('id')
+                            ->first([
+                                'id',
+                                'no_order',
+                                'no_quotation',
+                                'periode',
+                                'jumlah_lhp',
+                                'jumlah_lhp_rilis',
+                                'list_lhp_rilis',
+                                'is_completed',
+                                'filename',
+                            ]);
+                    }
+
+                    $lhpBundle = null;
+                    if ($linkLhp && !empty($linkLhp->filename) && (int) $linkLhp->is_completed === 1) {
+                        $lhpBundle = [
+                            'available' => true,
+                            'is_completed' => true,
+                            'filename' => $linkLhp->filename,
+                            'file_url' => 'laporan/hasil_pengujian/' . ltrim($linkLhp->filename, '/'),
+                            'periode' => $linkLhp->periode,
+                            'jumlah_lhp' => (int) $linkLhp->jumlah_lhp,
+                            'jumlah_lhp_rilis' => (int) $linkLhp->jumlah_lhp_rilis,
+                            'list_lhp_rilis' => json_decode($linkLhp->list_lhp_rilis ?: '[]', true),
+                        ];
+                    } else {
+                        $lhpBundle = [
+                            'available' => false,
+                            'is_completed' => (bool) ($linkLhp->is_completed ?? false),
+                            'filename' => $linkLhp->filename ?? null,
+                            'file_url' => null,
+                            'periode' => $linkLhp->periode ?? ($periode ?: null),
+                            'jumlah_lhp' => (int) ($linkLhp->jumlah_lhp ?? 0),
+                            'jumlah_lhp_rilis' => (int) ($linkLhp->jumlah_lhp_rilis ?? 0),
+                            'list_lhp_rilis' => json_decode($linkLhp->list_lhp_rilis ?? '[]', true),
+                        ];
+                    }
+
                     return response()->json([
                         'status' => 'success',
                         'message' => 'Detail Order Berhasil Ditemukan',
                         'data' => [
                             'order' => $order,
-                            'jadwal' => $listJadwal
+                            'jadwal' => $listJadwal,
+                            'lhp_bundle' => $lhpBundle,
                         ]
                     ], 200);
                 }
@@ -555,6 +626,33 @@ class LaporanTrackingOrderController extends Controller
                     return $itemArray;
                 });
 
+                $rekapPengujian = [];
+                $cfr = $orderDetail->cfr ?? $noLhp;
+                if ($cfr && $noOrder) {
+                    $orderBerjalan = DB::table('order_berjalan')
+                        ->where('no_order', $noOrder)
+                        ->first(['dataOrderDetail']);
+
+                    if ($orderBerjalan && !empty($orderBerjalan->dataOrderDetail)) {
+                        $dataOrder = json_decode($orderBerjalan->dataOrderDetail, true);
+                        $detailList = is_array($dataOrder) ? ($dataOrder[0]['detail'] ?? []) : [];
+
+                        foreach ($detailList as $rawDetail) {
+                            if (!is_array($rawDetail)) {
+                                continue;
+                            }
+                            if (($rawDetail['cfr'] ?? null) !== $cfr) {
+                                continue;
+                            }
+
+                            /** @var LHPHandleController $rekapBuilder */
+                            $rekapBuilder = app(LHPHandleController::class);
+                            $rekapPengujian = $rekapBuilder->getRekapPengujianFromOrderBerjalan($rawDetail);
+                            break;
+                        }
+                    }
+                }
+
                 return response()->json([
                     'status' => 'success',
                     'message' => 'Detail step analisa berhasil ditemukan',
@@ -565,7 +663,8 @@ class LaporanTrackingOrderController extends Controller
                         'no_lhp' => $orderDetail->cfr ?? $noLhp,
                         'kategori' => $orderDetail->kategori_3 ?? null,
                         'titik_lokasi' => $orderDetail->keterangan_1 ?? null,
-                        'analisa_detail' => $analisaDetailsFormatted
+                        'analisa_detail' => $analisaDetailsFormatted,
+                        'rekap_pengujian' => $rekapPengujian,
                     ]
                 ], 200);
             }
