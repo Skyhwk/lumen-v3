@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Services\SamplerTrackingService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 
@@ -434,6 +435,11 @@ class ChangeJadwalJob extends Job
 
             $logging[] = "Proses Final, Mematikan Jadwal yang tidak valid: " . json_encode($inactiveIds);
         }
+
+        app(SamplerTrackingService::class)->clearTrackingWithoutActiveSchedule(
+            [$no_qt_lama, $no_qt_baru],
+            'quotation_period_deactivated'
+        );
 
         if (!empty($logging)) {
             $messages = collect($logging)->flatten(1)->values()->toArray();

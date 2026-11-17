@@ -1924,6 +1924,129 @@ class SamplerTrackingSyncTest extends TestCase
         }
     }
 
+    public function testDisabledRevisionPeriodClearsOnlyThatSamplerAssignment(): void
+    {
+        $this->order('ISL/QTC/26-IX/10R1', 'ORD-10');
+        $this->order('ISL/QTC/26-IX/100R1', 'ORD-100');
+        $this->schedule([
+            'id_sampling' => 1,
+            'no_quotation' => 'ISL/QTC/26-IX/10R2',
+            'tanggal' => '2026-10-17',
+            'nama_perusahaan' => 'PT Hidup',
+        ]);
+        $this->schedule([
+            'id_sampling' => 2,
+            'no_quotation' => 'ISL/QTC/26-IX/10R2',
+            'tanggal' => '2026-09-17',
+            'nama_perusahaan' => 'PT Mati',
+            'is_active' => 0,
+        ]);
+        $this->schedule([
+            'id_sampling' => 9,
+            'no_quotation' => 'ISL/QTC/26-IX/100R1',
+            'tanggal' => '2026-09-17',
+            'nama_perusahaan' => 'PT Lain',
+            'is_active' => 0,
+        ]);
+
+        $kept = $this->trackingSession(1, 'ISL/QTC/26-IX/10R1', '2026-10-17', 'PT Hidup', 'ORD-10');
+        $dropped = $this->trackingSession(2, 'ISL/QTC/26-IX/10R1', '2026-09-17', 'PT Mati', 'ORD-10');
+        $other = $this->trackingSession(9, 'ISL/QTC/26-IX/100R1', '2026-09-17', 'PT Lain', 'ORD-100');
+
+        $this->service->clearTrackingWithoutActiveSchedule(
+            ['ISL/QTC/26-IX/10R1', 'ISL/QTC/26-IX/10R2'],
+            'quotation_period_deactivated'
+        );
+
+        $this->assertTrue((bool) $kept->fresh()->is_active);
+        $this->assertSame(1, $kept->activeMembers()->count());
+        $this->assertFalse((bool) $dropped->fresh()->is_active);
+        $this->assertSame(0, $dropped->members()->where('is_active', true)->count());
+        $this->assertTrue((bool) $other->fresh()->is_active);
+        $this->assertSame(1, $other->activeMembers()->count());
+    }
+
+    public function testSchedulePullClearsEverySessionOnThatOrder(): void
+    {
+        $this->order('ISL/QTC/26-IX/10R1', 'ORD-PULL');
+        $this->order('ISL/QTC/26-IX/100R1', 'ORD-LAIN');
+        $this->schedule([
+            'id_sampling' => 1,
+            'no_quotation' => 'ISL/QTC/26-IX/10R1',
+            'tanggal' => '2026-10-17',
+            'nama_perusahaan' => 'PT Tarik',
+        ]);
+        $covered = $this->trackingSession(1, 'ISL/QTC/26-IX/10R1', '2026-10-17', 'PT Tarik', 'ORD-PULL');
+        $otherPeriod = $this->trackingSession(2, 'ISL/QTC/26-IX/10R1', '2026-11-17', 'PT Tarik', 'ORD-PULL');
+        $otherOrder = $this->trackingSession(9, 'ISL/QTC/26-IX/100R1', '2026-10-17', 'PT Lain', 'ORD-LAIN');
+
+        $this->service->clearAllTrackingForQuotations(
+            ['ISL/QTC/26-IX/10R1', 'ISL/QTC/26-IX/10R2'],
+            'quotation_schedule_pulled'
+        );
+
+        $this->assertFalse((bool) $covered->fresh()->is_active);
+        $this->assertFalse((bool) $otherPeriod->fresh()->is_active);
+        $this->assertSame(0, $covered->members()->where('is_active', true)->count());
+        $this->assertTrue((bool) $otherOrder->fresh()->is_active);
+        $history = collect(json_decode($covered->fresh()->meta_history, true));
+        $this->assertSame('quotation_schedule_pulled', $history->last()['reason']);
+    }
+
+    public function testVoidQuotationClearsSamplerAssignment(): void
+    {
+        $this->order('ISL/QT/26-IX/10R1', 'ORD-VOID');
+        $this->order('ISL/QT/26-IX/99', 'ORD-LAIN');
+        $this->schedule([
+            'id_sampling' => 1,
+            'no_quotation' => 'ISL/QT/26-IX/10R1',
+            'nama_perusahaan' => 'PT Void',
+            'is_active' => 0,
+        ]);
+        $session = $this->trackingSession(1, 'ISL/QT/26-IX/10R1', '2026-09-17', 'PT Void', 'ORD-VOID');
+        $sameDate = $this->trackingSession(8, 'ISL/QT/26-IX/99', '2026-09-17', 'PT Lain', 'ORD-LAIN');
+
+        $this->service->clearTrackingWithoutActiveSchedule(['ISL/QT/26-IX/10R1'], 'quotation_voided');
+
+        $this->assertFalse((bool) $session->fresh()->is_active);
+        $this->assertSame(0, $session->members()->where('is_active', true)->count());
+        $this->assertTrue((bool) $sameDate->fresh()->is_active);
+        $history = collect(json_decode($session->fresh()->meta_history, true));
+        $this->assertSame('quotation_voided', $history->last()['reason']);
+    }
+
+    private function order($quotation, $noOrder)
+    {
+        $this->db->getConnection('mysql')->table('order_header')->insert([
+            'no_document' => $quotation,
+            'no_order' => $noOrder,
+            'is_active' => 1,
+        ]);
+    }
+
+    private function trackingSession($samplingId, $quotation, $date, $company, $noOrder)
+    {
+        $session = SamplerTrackingSession::create([
+            'team_key' => sha1($quotation . '|' . $samplingId . '|' . $date),
+            'id_sampling' => $samplingId,
+            'no_quotation' => $quotation,
+            'no_order' => $noOrder,
+            'tanggal_sampling' => $date,
+            'jam_mulai' => '08:00:00',
+            'jam_selesai' => '10:00:00',
+            'nama_perusahaan' => $company,
+            'is_active' => true,
+        ]);
+        SamplerTrackingMember::create([
+            'sampler_tracking_session_id' => $session->id,
+            'sampler_id' => 10,
+            'sampler_name' => 'Sampler A',
+            'is_active' => true,
+        ]);
+
+        return $session;
+    }
+
     private function schedule(array $values = [])
     {
         $id = $this->db->getConnection('mysql')->table('jadwal')->insertGetId(array_merge([

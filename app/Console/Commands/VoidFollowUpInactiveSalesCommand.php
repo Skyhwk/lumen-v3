@@ -10,6 +10,7 @@ use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
 use App\Services\QuotationService;
+use App\Services\SamplerTrackingService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -397,6 +398,11 @@ class VoidFollowUpInactiveSalesCommand extends Command
             $jadwalCount = Jadwal::where('no_quotation', $qt->no_document)
                 ->where('is_active', true)
                 ->update(['is_active' => false]);
+
+            app(SamplerTrackingService::class)->clearTrackingWithoutActiveSchedule(
+                [$qt->no_document],
+                'quotation_voided'
+            );
 
             $qt->flag_status = 'void';
             $qt->is_active = false;

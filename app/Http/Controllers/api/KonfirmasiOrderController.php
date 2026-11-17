@@ -18,6 +18,7 @@ use App\Models\SamplingPlan;
 use App\Models\MasterKaryawan;
 use App\Services\SamplingPlanServices;
 use App\Services\QuotationService;
+use App\Services\SamplerTrackingService;
 
 use App\Jobs\RenderSamplingPlan;
 use App\Models\AlasanVoidQt;
@@ -246,6 +247,10 @@ class KonfirmasiOrderController extends Controller
 				
 				$sampling_plan = SamplingPlan::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
 				$jadwal = Jadwal::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
+				app(SamplerTrackingService::class)->clearTrackingWithoutActiveSchedule(
+					[$data->no_document],
+					'quotation_voided'
+				);
 
 				$data->flag_status = 'void';
 				$data->is_active = false;
