@@ -166,6 +166,8 @@ class BeritaAcaraKejadianDocumentService
         }
 
         $qrImagePath = $this->resolveQrImageForPdf(trim((string) ($document->file_qr ?? '')));
+        $lampiranImages = $this->lampiranImagePaths($document->dokumentasi ?? null);
+        $showLampiranSection = $lampiranImages !== [];
 
         $refNumber = trim((string) $document->nomor_surat);
         $headerTitle = 'BERITA ACARA KEJADIAN';
@@ -199,6 +201,8 @@ class BeritaAcaraKejadianDocumentService
             'signatoryPosisi' => trim((string) ($document->penandatangan_jabatan ?? '')) ?: '-',
             'issueDateLong' => $issueDate->translatedFormat('d F Y'),
             'qrImagePath' => $qrImagePath,
+            'showLampiranSection' => $showLampiranSection,
+            'lampiranImages' => $lampiranImages,
         ])->render();
 
         $fontDirs = (new \Mpdf\Config\ConfigVariables())->getDefaults()['fontDir'];
@@ -300,6 +304,37 @@ class BeritaAcaraKejadianDocumentService
         }
 
         return is_file($svgPath) ? str_replace('\\', '/', $svgPath) : null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function lampiranImagePaths($raw): array
+    {
+        $items = is_array($raw) ? $raw : json_decode((string) $raw, true);
+        if (!is_array($items)) {
+            return [];
+        }
+
+        $images = [];
+        foreach ($items as $relative) {
+            $relative = str_replace('\\', '/', trim((string) $relative));
+            if ($relative === '' || strpos($relative, '..') !== false) {
+                continue;
+            }
+            if (strpos($relative, 'dokumen/disipliner/berita-acara-kejadian/dokumentasi/') !== 0) {
+                continue;
+            }
+            if (preg_match('/\.pdf$/i', $relative)) {
+                continue;
+            }
+            $full = public_path($relative);
+            if (is_file($full)) {
+                $images[] = str_replace('\\', '/', $full);
+            }
+        }
+
+        return $images;
     }
 
     private function formatSignatoryTempatTanggalLahir(string $tempat, string $tanggal): string
