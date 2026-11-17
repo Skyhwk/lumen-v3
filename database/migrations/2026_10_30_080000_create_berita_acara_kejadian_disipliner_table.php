@@ -36,6 +36,7 @@ return new class extends Migration
             $table->string('lampiran', 100)->nullable();
             $table->string('perihal', 200)->nullable();
             $table->longText('uraian_kejadian')->nullable()->comment('HTML dari TinyMCE');
+            $table->text('dokumentasi')->nullable()->comment('JSON path foto dokumentasi');
             $table->longText('catatan')->nullable();
             $table->string('status', 20)->default('draft');
             $table->string('nama_berkas', 255)->nullable();

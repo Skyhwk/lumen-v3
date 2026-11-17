@@ -375,17 +375,15 @@ class InformasiOperasionalController extends Controller
         ]));
         $warnaAllowed = JadwalMobilisasiService::resolveWarnaFilter($warna);
 
-        $durasiReq = (int) $request->input('durasi', 0);
-        $durasi = $durasiReq > 0
-            ? $durasiReq
-            : JadwalMobilisasiService::resolveDurasiFromBatchIds($batchIds);
         $tanggal = $request->input('tanggal');
+        // Kunci alat by tanggal sampling saja (tanpa durasi).
         $range = null;
         if ($tanggal) {
+            $tanggalNorm = Carbon::parse($tanggal)->format('Y-m-d');
             $range = [
-                'start' => Carbon::parse($tanggal)->format('Y-m-d'),
-                'end' => JadwalMobilisasiService::resolveEndDate($tanggal, $durasi),
-                'durasi' => max(1, $durasi),
+                'start' => $tanggalNorm,
+                'end' => $tanggalNorm,
+                'durasi' => 1,
             ];
         }
 
@@ -395,7 +393,7 @@ class InformasiOperasionalController extends Controller
                 $branchId,
                 $warna,
                 $excludeKey,
-                $durasi
+                1
             );
         } else {
             $data = JadwalMobilisasiService::getPeralatanAvailable(
@@ -413,7 +411,7 @@ class InformasiOperasionalController extends Controller
             'mode' => $mode === 'units' || $mode === 'kode_aset' ? 'units' : 'grouped',
             'warna' => $warna,
             'warna_allowed' => $warnaAllowed,
-            'durasi' => max(1, $durasi),
+            'durasi' => 1,
             'range' => $range,
             'data' => $data,
         ]);
@@ -689,15 +687,15 @@ class InformasiOperasionalController extends Controller
         }
 
         $petugasKey = IoPeralatanTimService::normalizePetugasKey($petugas);
-        $durasi = JadwalMobilisasiService::resolveDurasiFromBatchIds($flatBatchIds);
-        $tanggalEnd = JadwalMobilisasiService::resolveEndDate($tanggal, $durasi);
-        $locked = IoPeralatanTimService::usedKodeAsetByTanggal($tanggal, $petugasKey, $durasi);
+        // Kunci antar-tim & monitoring: tanggal sampling saja (tanpa durasi).
+        $tanggalEnd = $tanggal;
+        $locked = IoPeralatanTimService::usedKodeAsetByTanggal($tanggal, $petugasKey, 1);
         $lockedByKode = $locked['by_kode'] ?? [];
         foreach (array_keys($seenKode) as $kode) {
             if (isset($lockedByKode[$kode])) {
                 $owner = $lockedByKode[$kode];
                 return response()->json([
-                    'message' => "Kode aset {$kode} sudah dibawa tim lain ({$owner}) pada rentang {$tanggal} s/d {$tanggalEnd}.",
+                    'message' => "Kode aset {$kode} sudah dibawa tim lain ({$owner}) di tanggal {$tanggal}.",
                 ], 422);
             }
         }
@@ -706,6 +704,41 @@ class InformasiOperasionalController extends Controller
         $existingTim = IoPeralatanTimService::findActive($tanggal, $petugasKey);
         if ($existingTim) {
             $beforePeralatan = JadwalMobilisasiService::normalizePeralatanList($existingTim->peralatan ?? []);
+        }
+
+        $ownBeforeKodes = [];
+        foreach ($beforePeralatan as $beforeItem) {
+            foreach (($beforeItem['kode_aset_list'] ?? []) as $kode) {
+                $kode = trim((string) $kode);
+                if ($kode !== '') {
+                    $ownBeforeKodes[$kode] = true;
+                }
+            }
+        }
+
+        // Validasi monitoring: hanya status_alat (bukan start/end date).
+        $peralatanIds = MonitoringPeralatanService::resolvePeralatanIds($peralatan);
+        $monitoringById = MonitoringPeralatanService::latestMonitoringByPeralatanIds($peralatanIds);
+        $kodeById = [];
+        if ($peralatanIds !== []) {
+            $kodeById = \App\Models\Peralatan::query()
+                ->whereIn('id', $peralatanIds)
+                ->pluck('kode_aset', 'id')
+                ->mapWithKeys(fn ($kode, $id) => [(int) $id => trim((string) $kode)])
+                ->all();
+        }
+        foreach ($peralatanIds as $idPeralatan) {
+            $kode = $kodeById[$idPeralatan] ?? ('#' . $idPeralatan);
+            if (isset($ownBeforeKodes[$kode])) {
+                continue; // re-save bawaan tim sendiri
+            }
+            $monitoring = $monitoringById[$idPeralatan] ?? null;
+            if (MonitoringPeralatanService::isBusyOnTanggal($monitoring, $tanggal)) {
+                $status = $monitoring['status_alat'] ?? '-';
+                return response()->json([
+                    'message' => "Kode aset {$kode} berstatus {$status}; hanya status Tersedia yang bisa dipilih.",
+                ], 422);
+            }
         }
 
         $record = null;
@@ -738,13 +771,11 @@ class InformasiOperasionalController extends Controller
                 );
             }
 
-            // Monitoring per hari kalender: digunakan hanya pada tanggal IO ini, bukan rentang durasi jadwal.
+            // Monitoring: hanya status_alat (tanpa start_date / end_date).
             MonitoringPeralatanService::syncSedangDigunakanFromPeralatan(
                 $beforePeralatan,
                 $peralatan,
-                $this->karyawan,
-                $tanggal,
-                $tanggal
+                $this->karyawan
             );
         });
 
