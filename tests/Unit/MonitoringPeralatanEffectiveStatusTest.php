@@ -65,4 +65,22 @@ class MonitoringPeralatanEffectiveStatusTest extends TestCase
     {
         $this->assertTrue(MonitoringPeralatan::requiresPeriod('Sedang Digunakan'));
     }
+
+    public function testIsEffectivelyTersediaForRangeSkipsNonTersediaDay(): void
+    {
+        $byIdDay1 = [
+            3 => ['status_alat' => MonitoringPeralatanService::STATUS_TERSEDIA],
+        ];
+        $byIdDay2 = [
+            3 => ['status_alat' => 'Sedang Di-maintenance'],
+        ];
+
+        $caches = [
+            ['date' => '2026-11-16', 'by_id' => $byIdDay1],
+            ['date' => '2026-11-17', 'by_id' => $byIdDay2],
+        ];
+
+        $this->assertFalse(MonitoringPeralatanService::isEffectivelyTersediaForRange(3, $caches));
+        $this->assertTrue(MonitoringPeralatanService::isEffectivelyTersediaForRange(3, [['by_id' => $byIdDay1]]));
+    }
 }

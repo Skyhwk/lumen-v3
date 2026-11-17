@@ -202,6 +202,64 @@ class MonitoringPeralatanService
     }
 
     /**
+     * Cache status efektif per hari untuk rentang [start, start + durasi - 1].
+     *
+     * @return list<array{date: string, by_id: array<int, array<string, mixed>>}>
+     */
+    public static function buildByIdCachesForDateRange(?string $startDate, int $durasi = 1): array
+    {
+        if ($startDate === null || trim($startDate) === '' || !Schema::hasTable('monitoring_peralatan')) {
+            return [];
+        }
+
+        $durasi = max(1, $durasi);
+        $start = Carbon::parse($startDate);
+        $caches = [];
+
+        for ($i = 0; $i < $durasi; $i++) {
+            $day = $start->copy()->addDays($i)->format('Y-m-d');
+            $caches[] = [
+                'date' => $day,
+                'by_id' => self::buildResolutionCache($day, null)['by_id'],
+            ];
+        }
+
+        return $caches;
+    }
+
+    /**
+     * @param  list<array{date?: string, by_id: array<int, array<string, mixed>>}>  $byIdCachesPerDay
+     */
+    public static function isEffectivelyTersediaForRange(int $idPeralatan, array $byIdCachesPerDay): bool
+    {
+        if ($byIdCachesPerDay === []) {
+            return true;
+        }
+
+        foreach ($byIdCachesPerDay as $entry) {
+            $byId = is_array($entry['by_id'] ?? null) ? $entry['by_id'] : $entry;
+            $status = (string) ($byId[$idPeralatan]['status_alat'] ?? self::STATUS_TERSEDIA);
+            if (strcasecmp($status, self::STATUS_TERSEDIA) !== 0) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** Status efektif pada hari pertama rentang (untuk label API). */
+    public static function effectiveStatusOnFirstDay(int $idPeralatan, array $byIdCachesPerDay): string
+    {
+        if ($byIdCachesPerDay === []) {
+            return self::STATUS_TERSEDIA;
+        }
+
+        $byId = $byIdCachesPerDay[0]['by_id'] ?? [];
+
+        return (string) ($byId[$idPeralatan]['status_alat'] ?? self::STATUS_TERSEDIA);
+    }
+
+    /**
      * @return list<int>
      */
     public static function idsMatchingEffectiveStatus(string $asOfDate, string $keyword, ?int $idCabang): array
@@ -299,6 +357,8 @@ class MonitoringPeralatanService
 
     /**
      * Sinkron status monitoring dari bawaan aktual IO (kode_aset → id_peralatan).
+     * Status efektif per tanggal kalender: end_date selalu diset sama dengan start_date bila keduanya diisi
+     * (satu hari dipakai di IO = satu hari “Sedang Digunakan” di monitoring, besok bisa Tersedia lagi).
      *
      * @param  array<int, array>  $beforePeralatan
      * @param  array<int, array>  $afterPeralatan
@@ -330,7 +390,8 @@ class MonitoringPeralatanService
         $hasStart = Schema::hasColumn('monitoring_peralatan', 'start_date');
         $hasEnd = Schema::hasColumn('monitoring_peralatan', 'end_date');
         $start = $startDate ? Carbon::parse($startDate)->format('Y-m-d') : null;
-        $end = $endDate ? Carbon::parse($endDate)->format('Y-m-d') : $start;
+        // IO: status dipakai per hari kalender (start = end), bukan mengikuti durasi jadwal multi-hari.
+        $end = $start ?? ($endDate ? Carbon::parse($endDate)->format('Y-m-d') : null);
 
         foreach ($afterIds as $idPeralatan) {
             $existing = MonitoringPeralatan::query()

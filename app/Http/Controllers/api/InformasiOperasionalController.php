@@ -403,7 +403,8 @@ class InformasiOperasionalController extends Controller
                 $branchId,
                 $request->input('batch_id'),
                 $warna,
-                $excludeKey
+                $excludeKey,
+                max(1, $durasi)
             );
         }
 
@@ -737,13 +738,13 @@ class InformasiOperasionalController extends Controller
                 );
             }
 
-            // Status unit di monitoring_peralatan → Sedang Digunakan (ikut rentang jadwal).
+            // Monitoring per hari kalender: digunakan hanya pada tanggal IO ini, bukan rentang durasi jadwal.
             MonitoringPeralatanService::syncSedangDigunakanFromPeralatan(
                 $beforePeralatan,
                 $peralatan,
                 $this->karyawan,
                 $tanggal,
-                $tanggalEnd
+                $tanggal
             );
         });
 
