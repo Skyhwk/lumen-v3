@@ -133,7 +133,7 @@ class LaporanHarianController extends Controller
 
     public function reminder()
     {
-        if (!$this->user_id) {
+        if (!$this->user_id || !$this->isItProgrammingDivisionMember()) {
             return response()->json(['needs_reminder' => false]);
         }
 
