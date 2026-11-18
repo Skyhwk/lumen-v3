@@ -25,7 +25,6 @@ class MenuDataAccess extends Sector
         'DIREKSI' => 5,
         'DIRECTOR' => 5,
         'DIREKTUR' => 5,
-        'EXECUTIVE' => 6,
     ];
 
     /** Opsi kanonik untuk UI (tanpa alias). */
@@ -35,7 +34,6 @@ class MenuDataAccess extends Sector
         'MANAGER',
         'SENIOR MANAGER',
         'DIREKSI',
-        'EXECUTIVE',
     ];
 
     public static function normalizeGrade(?string $grade): string
