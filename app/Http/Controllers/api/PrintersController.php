@@ -41,6 +41,7 @@ class PrintersController extends Controller
 						'name' => $request->name,
 						'id_divisi' => $request->id_divisi,
 						'full_path' => $request->full_path,
+						'status' => $request->status,
 					]);
 		
 					return response()->json([
@@ -59,6 +60,7 @@ class PrintersController extends Controller
 					$printer->name = $request->name;
 					$printer->id_divisi = $request->id_divisi;
 					$printer->full_path = $request->full_path;
+					$printer->status = $request->status;
 					$printer->save();
 					return response()->json([
 					
