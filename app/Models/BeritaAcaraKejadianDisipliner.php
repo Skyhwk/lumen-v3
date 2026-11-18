@@ -8,6 +8,12 @@ class BeritaAcaraKejadianDisipliner extends Sector
     public const STATUS_ISSUED = 'issued';
     public const STATUS_CANCELLED = 'cancelled';
 
+    public const PROSES_PERMINTAAN = 'permintaan_dokumen';
+    public const PROSES_VERIFIKASI_ATASAN = 'verifikasi_atasan';
+    public const PROSES_MENUNGGU_DIPROSES = 'menunggu_diproses';
+    public const PROSES_SEDANG_DIPROSES = 'sedang_diproses';
+    public const PROSES_SUDAH_DIPROSES = 'sudah_diproses';
+
     protected $table = 'berita_acara_kejadian_disipliner';
 
     protected $guarded = ['id'];
