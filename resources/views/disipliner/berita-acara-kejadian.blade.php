@@ -16,6 +16,7 @@
     table.grid {
         width: 100%;
         border-collapse: collapse;
+        table-layout: fixed;
         margin: 0;
     }
     table.grid td {
@@ -25,17 +26,20 @@
         padding: 1.1mm 0 1.3mm;
     }
     td.k { white-space: nowrap; }
-    td.c { text-align: center; white-space: nowrap; }
-    td.v { border-bottom: 0.35mm solid #111; padding-right: 2mm; }
-    td.note {
-        font-size: 8pt;
-        color: #333;
-        text-align: right;
-        vertical-align: top;
+    td.c {
+        text-align: left;
         white-space: nowrap;
+        padding-left: 1mm;
+        padding-right: 2mm;
     }
+    td.v {
+        border-bottom: 0.2mm dotted #555;
+        padding-right: 2mm;
+        padding-left: 1.5mm;
+    }
+    td.v.noline { border-bottom: 0; }
     .u {
-        border-bottom: 0.35mm solid #111;
+        border-bottom: 0.2mm dotted #555;
         padding: 0 12mm 0 0;
     }
     .kronologi-block { margin: 1.5mm 0 3mm; text-align: left; }
@@ -74,75 +78,72 @@
 
 <table class="grid">
     <colgroup>
-        <col style="width:38mm">
-        <col style="width:3mm">
-        <col style="width:95mm">
-        <col style="width:46mm">
+        <col style="width:52mm">
+        <col style="width:8mm">
+        <col>
     </colgroup>
     <tr>
-        <td class="k">Perihal**</td>
+        <td class="k">Perihal</td>
         <td class="c">:</td>
-        <td class="v">@if($perihal !== ''){{ $perihal }}@else&nbsp;@endif</td>
-        <td class="note">*coret yang tidak perlu</td>
+        <td class="v noline">@if($perihal !== ''){{ $perihal }}@else&nbsp;@endif</td>
     </tr>
     <tr>
-        <td class="k">Lampiran**</td>
+        <td class="k">Lampiran</td>
         <td class="c">:</td>
-        <td class="v">@if($lampiran !== '-'){{ $lampiran }}@else&nbsp;@endif</td>
-        <td class="note">** diisi oleh HRD</td>
+        <td class="v noline">@if($lampiran !== '-'){{ $lampiran }}@else&nbsp;@endif</td>
     </tr>
 </table>
 
 <p class="section-heading">Yang bertanda tangan di bawah ini :</p>
 <table class="grid">
     <colgroup>
-        <col style="width:44mm">
-        <col style="width:3mm">
-        <col style="width:48mm">
-        <col style="width:38mm">
-        <col style="width:3mm">
-        <col style="width:46mm">
+        <col style="width:52mm">
+        <col style="width:8mm">
+        <col style="width:42mm">
+        <col style="width:28mm">
+        <col style="width:8mm">
+        <col>
     </colgroup>
     <tr>
         <td class="k">Nama Lengkap</td>
         <td class="c">:</td>
-        <td class="v">{{ $signatoryNama }}</td>
+        <td class="v">&nbsp;{{ $signatoryNama }}</td>
         <td class="k">NIK</td>
         <td class="c">:</td>
-        <td class="v">{{ $signatoryNik }}</td>
+        <td class="v">&nbsp;{{ $signatoryNik }}</td>
     </tr>
     <tr>
         <td class="k">Tempat, Tanggal Lahir</td>
         <td class="c">:</td>
-        <td class="v">{{ $signatoryTempatTanggalLahir }}</td>
+        <td class="v">&nbsp;{{ $signatoryTempatTanggalLahir }}</td>
         <td class="k">Divisi</td>
         <td class="c">:</td>
-        <td class="v">{{ $signatoryDivisi }}</td>
+        <td class="v">&nbsp;{{ $signatoryDivisi }}</td>
     </tr>
     <tr>
         <td class="k">Nomor HP</td>
         <td class="c">:</td>
-        <td class="v">{{ $signatoryNomorHp }}</td>
+        <td class="v">&nbsp;{{ $signatoryNomorHp }}</td>
         <td class="k">Posisi</td>
         <td class="c">:</td>
-        <td class="v">{{ $signatoryPosisi }}</td>
+        <td class="v">&nbsp;{{ $signatoryPosisi }}</td>
     </tr>
     <tr>
         <td class="k">Alamat Saat Ini</td>
         <td class="c">:</td>
-        <td class="v" colspan="4">{{ $signatoryAlamat }}</td>
+        <td class="v" colspan="4">&nbsp;{{ $signatoryAlamat }}</td>
     </tr>
 </table>
 
 <p class="section-heading">Dengan ini menerangkan bahwa pada :</p>
 <table class="grid">
     <colgroup>
-        <col style="width:44mm">
-        <col style="width:3mm">
-        <col style="width:48mm">
-        <col style="width:38mm">
-        <col style="width:3mm">
-        <col style="width:46mm">
+        <col style="width:52mm">
+        <col style="width:8mm">
+        <col style="width:42mm">
+        <col style="width:28mm">
+        <col style="width:8mm">
+        <col>
     </colgroup>
     <tr>
         <td class="k">Hari dan Tanggal</td>
@@ -150,7 +151,7 @@
         <td class="v">{{ $hariDanTanggal }}</td>
         <td class="k">Pukul</td>
         <td class="c">:</td>
-        <td><span class="u">{{ $pukulKejadian }}</span> <span style="font-size:9pt;"></span></td>
+        <td><span class="u">{{ $pukulKejadian }}</span></td>
     </tr>
     <tr>
         <td class="k">Telah Terjadi Kejadian</td>
@@ -164,21 +165,22 @@
     </tr>
 </table>
 
+@if($showDampakAset)
 <p class="section-heading">{{ $dampakAsetSectionTitle }}</p>
 <table class="grid">
     <colgroup>
-        <col style="width:44mm">
-        <col style="width:3mm">
-        <col style="width:48mm">
-        <col style="width:38mm">
-        <col style="width:3mm">
-        <col style="width:46mm">
+        <col style="width:52mm">
+        <col style="width:8mm">
+        <col style="width:42mm">
+        <col style="width:28mm">
+        <col style="width:8mm">
+        <col>
     </colgroup>
     <tr>
         <td class="k">Nama / Jenis Aset</td>
         <td class="c">:</td>
         <td class="v">@if($dampakAset['nama_jenis_aset'] !== ''){{ $dampakAset['nama_jenis_aset'] }}@else&nbsp;@endif</td>
-        <td class="k">No Aset** / No Plat</td>
+        <td class="k">No Aset / No Plat</td>
         <td class="c">:</td>
         <td class="v">@if($dampakNoAsetPlat !== '-'){{ $dampakNoAsetPlat }}@else&nbsp;@endif</td>
     </tr>
@@ -198,11 +200,11 @@
         <td class="c">:</td>
         <td style="white-space:nowrap;">
             @if($dampakJenisSebagian)
-                sebagian / <span class="strike">seluruhnya</span>*
+                sebagian / <span class="strike">seluruhnya</span>
             @elseif($dampakJenisSeluruhnya)
-                <span class="strike">sebagian</span> / seluruhnya*
+                <span class="strike">sebagian</span> / seluruhnya
             @else
-                sebagian / seluruhnya*
+                sebagian / seluruhnya
             @endif
         </td>
     </tr>
@@ -212,6 +214,7 @@
         <td class="v" colspan="4">@if($dampakAset['bagian_kerusakan_aset'] !== ''){{ $dampakAset['bagian_kerusakan_aset'] }}@else&nbsp;@endif</td>
     </tr>
 </table>
+@endif
 
 <p class="section-heading">
     Adapun kronologi kejadian sebagai berikut :
@@ -258,7 +261,7 @@
     </div>
 </div>
 
-@if(!empty($showLampiranSection))
+@if(!empty($showLampiranSection) && !empty($embedLampiranInMain))
 <div style="page-break-before: always;">
     <p class="section-heading">Lampiran</p>
     @foreach($lampiranImages as $imagePath)

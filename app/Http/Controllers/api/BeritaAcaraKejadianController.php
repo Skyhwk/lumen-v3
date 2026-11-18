@@ -5,10 +5,13 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\BeritaAcaraKejadianDisipliner;
 use App\Models\MasterKaryawan;
+use App\Services\BakAtasanWorkflowService;
 use App\Services\BeritaAcaraKejadianDocumentService;
+use App\Services\BeritaAcaraKejadianLampiranConvertService;
 use App\Services\DisiplinerPdfFixingService;
 use App\Services\GenerateQrDocumentBeritaAcaraKejadian;
 use App\Support\BeritaAcaraKejadianDampak;
+use App\Support\BeritaAcaraKejadianDokumentasiStorage;
 use App\Support\QrDocumentsStorage;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -27,18 +30,15 @@ class BeritaAcaraKejadianController extends Controller
                 $query->whereYear('bak.tanggal_kejadian', $periode);
             }
 
-            $workflowTab = strtolower(trim((string) $request->input('workflow_tab', 'pembuatan')));
-            if ($workflowTab === 'pengesahan') {
-                $query->where('bak.status', BeritaAcaraKejadianDisipliner::STATUS_DRAFT);
-            } else {
-                $query->whereIn('bak.status', [
-                    BeritaAcaraKejadianDisipliner::STATUS_DRAFT,
-                    BeritaAcaraKejadianDisipliner::STATUS_ISSUED,
-                ]);
-            }
+            $workflowTab = strtolower(trim((string) $request->input('workflow_tab', 'permintaan_dokumen')));
+            $this->applyWorkflowTabFilter($query, $workflowTab);
 
             if ($request->filled('status')) {
                 $query->where('bak.status', strtolower(trim((string) $request->status)));
+            }
+
+            if ($request->filled('proses_status')) {
+                $query->where('bak.proses_status', strtolower(trim((string) $request->proses_status)));
             }
 
             $data = $query->get()->map(fn ($row) => $this->decorate($row));
@@ -86,22 +86,234 @@ class BeritaAcaraKejadianController extends Controller
             $base->whereYear('tanggal_kejadian', $periode);
         }
 
-        $pembuatan = (clone $base)->whereIn('status', [
-            BeritaAcaraKejadianDisipliner::STATUS_DRAFT,
-            BeritaAcaraKejadianDisipliner::STATUS_ISSUED,
-        ])->count();
-
-        $pengesahan = (clone $base)
-            ->where('status', BeritaAcaraKejadianDisipliner::STATUS_DRAFT)
-            ->count();
-
         return response()->json([
             'success' => true,
             'data' => [
-                'pembuatan' => $pembuatan,
-                'pengesahan' => $pengesahan,
+                'permintaan_dokumen' => (clone $base)
+                    ->where('proses_status', BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN)
+                    ->count(),
+                'verifikasi_atasan' => (clone $base)
+                    ->where('proses_status', BeritaAcaraKejadianDisipliner::PROSES_VERIFIKASI_ATASAN)
+                    ->count(),
+                'menunggu_diproses' => (clone $base)
+                    ->where('proses_status', BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES)
+                    ->count(),
+                'sedang_diproses' => (clone $base)
+                    ->where('proses_status', BeritaAcaraKejadianDisipliner::PROSES_SEDANG_DIPROSES)
+                    ->count(),
+                'sudah_diproses' => (clone $base)
+                    ->where('proses_status', BeritaAcaraKejadianDisipliner::PROSES_SUDAH_DIPROSES)
+                    ->count(),
             ],
         ], 200);
+    }
+
+    public function ajukan(Request $request, BakAtasanWorkflowService $workflow)
+    {
+        DB::beginTransaction();
+
+        try {
+            $document = BeritaAcaraKejadianDisipliner::query()
+                ->where('id', $this->resolveId($request))
+                ->where('is_active', true)
+                ->first();
+
+            if ($document === null) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'BAK tidak ditemukan.',
+                ], 404);
+            }
+
+            if ($document->proses_status !== BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hanya permintaan dokumen yang dapat diajukan ke verifikasi atasan.',
+                ], 422);
+            }
+
+            $workflow->seedVerification($document);
+            $document->updated_by = $this->karyawan;
+            $document->updated_at = Carbon::now();
+            $document->save();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => $workflow->buildAjukanSuccessMessage($document),
+                'data' => $this->decorate($this->findActiveRecord($document->id)),
+            ], 200);
+        } catch (\Throwable $ex) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function approveAtasan(Request $request, BakAtasanWorkflowService $workflow)
+    {
+        DB::beginTransaction();
+
+        try {
+            $document = BeritaAcaraKejadianDisipliner::query()
+                ->where('id', $this->resolveId($request))
+                ->where('is_active', true)
+                ->first();
+
+            if ($document === null) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'BAK tidak ditemukan.',
+                ], 404);
+            }
+
+            $approver = MasterKaryawan::query()
+                ->where('id', (int) $this->user_id)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$approver) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data verifikator tidak ditemukan.',
+                ], 404);
+            }
+
+            $result = $workflow->markAtasanApproved($document, $approver);
+            $document = $result['document'];
+            $document->updated_by = $this->karyawan;
+            $document->updated_at = Carbon::now();
+            $document->save();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => $result['done']
+                    ? 'Verifikasi atasan selesai. BAK menunggu diproses.'
+                    : 'Verifikasi disimpan. Menunggu verifikator berikutnya.',
+                'data' => $this->decorate($this->findActiveRecord($document->id)),
+            ], 200);
+        } catch (\Throwable $ex) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function mulaiProses(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $document = BeritaAcaraKejadianDisipliner::query()
+                ->where('id', $this->resolveId($request))
+                ->where('is_active', true)
+                ->first();
+
+            if ($document === null) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'BAK tidak ditemukan.',
+                ], 404);
+            }
+
+            if ($document->proses_status !== BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'BAK tidak dalam status menunggu diproses.',
+                ], 422);
+            }
+
+            $document->proses_status = BeritaAcaraKejadianDisipliner::PROSES_SEDANG_DIPROSES;
+            $document->updated_by = $this->karyawan;
+            $document->updated_at = Carbon::now();
+            $document->save();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'BAK sedang diproses.',
+                'data' => $this->decorate($this->findActiveRecord($document->id)),
+            ], 200);
+        } catch (\Throwable $ex) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function selesaiProses(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $document = BeritaAcaraKejadianDisipliner::query()
+                ->where('id', $this->resolveId($request))
+                ->where('is_active', true)
+                ->first();
+
+            if ($document === null) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'BAK tidak ditemukan.',
+                ], 404);
+            }
+
+            if ($document->proses_status !== BeritaAcaraKejadianDisipliner::PROSES_SEDANG_DIPROSES) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'BAK tidak dalam status sedang diproses.',
+                ], 422);
+            }
+
+            $document->proses_status = BeritaAcaraKejadianDisipliner::PROSES_SUDAH_DIPROSES;
+            $document->updated_by = $this->karyawan;
+            $document->updated_at = Carbon::now();
+            $document->save();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'BAK sudah diproses.',
+                'data' => $this->decorate($this->findActiveRecord($document->id)),
+            ], 200);
+        } catch (\Throwable $ex) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
+        }
     }
 
     public function employeeMeta(Request $request)
@@ -139,7 +351,8 @@ class BeritaAcaraKejadianController extends Controller
                 return $validation;
             }
 
-            $penandatanganId = (int) $request->penandatangan_karyawan_id;
+            $createdBy = trim((string) $this->karyawan);
+            $penandatanganId = $this->resolveKaryawanIdFromCreatedBy($createdBy);
             $karyawanId = $this->resolveKaryawanIdForDocument($request, $penandatanganId);
             $dampakPayload = $this->encodeDampakAsetOrError($request);
             if ($dampakPayload instanceof \Illuminate\Http\JsonResponse) {
@@ -173,12 +386,7 @@ class BeritaAcaraKejadianController extends Controller
             }
 
             $tanggalKejadian = Carbon::parse($request->tanggal_kejadian)->format('Y-m-d');
-            $nomorData = $this->nomorSuratFromRequest($request, $tanggalKejadian);
-            if ($nomorData instanceof \Illuminate\Http\JsonResponse) {
-                DB::rollBack();
-
-                return $nomorData;
-            }
+            $nomorData = $this->generateNomorSurat($tanggalKejadian);
             $penandatanganSnapshot = $this->buildPenandatanganSnapshot($penandatanganId);
             $now = Carbon::now();
 
@@ -203,11 +411,15 @@ class BeritaAcaraKejadianController extends Controller
                 'lokasi_kejadian' => trim((string) $request->lokasi_kejadian),
                 'telah_terjadi_kejadian' => trim((string) ($request->telah_terjadi_kejadian ?? '')) ?: null,
                 'dampak_aset_perusahaan' => $dampakPayload,
-                'lampiran' => trim((string) ($request->lampiran ?? '')) ?: null,
+                'lampiran' => null,
                 'perihal' => trim((string) ($request->perihal ?? '')) ?: null,
                 'uraian_kejadian' => trim((string) ($request->uraian_kejadian ?? '')) ?: null,
                 'status' => BeritaAcaraKejadianDisipliner::STATUS_DRAFT,
-                'created_by' => $this->karyawan,
+                'proses_status' => BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN,
+                'approval_step' => 0,
+                'approval_chain' => null,
+                'approval_log' => null,
+                'created_by' => $createdBy !== '' ? $createdBy : $this->karyawan,
                 'is_active' => true,
                 'created_at' => $now,
             ]);
@@ -215,8 +427,10 @@ class BeritaAcaraKejadianController extends Controller
             $document->save();
             $document->timestamps = true;
 
-            $writtenDokumentasi = $this->storeDokumentasiFiles((int) $document->id, $uploads);
+            $writtenGroups = $this->storeDokumentasiFileGroups((int) $document->id, $uploads);
+            $writtenDokumentasi = $this->flattenDokumentasiGroups($writtenGroups);
             $document->dokumentasi = json_encode($writtenDokumentasi, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $document->lampiran = $this->formatLampiranCount($writtenDokumentasi);
             $document->timestamps = false;
             $document->save();
             $document->timestamps = true;
@@ -230,7 +444,9 @@ class BeritaAcaraKejadianController extends Controller
             ], 200);
         } catch (\Throwable $ex) {
             DB::rollBack();
-            $this->deleteDokumentasiFiles($writtenDokumentasi);
+            if (isset($document) && (int) $document->id > 0 && $writtenDokumentasi !== []) {
+                $this->deleteDokumentasiFiles((int) $document->id, $writtenDokumentasi);
+            }
 
             return response()->json([
                 'success' => false,
@@ -263,12 +479,13 @@ class BeritaAcaraKejadianController extends Controller
                 ], 404);
             }
 
-            if ($document->status !== BeritaAcaraKejadianDisipliner::STATUS_DRAFT) {
+            $workflow = app(BakAtasanWorkflowService::class);
+            if (!$workflow->canEditProses($document)) {
                 DB::rollBack();
 
                 return response()->json([
                     'success' => false,
-                    'message' => 'Hanya draf yang belum disahkan yang dapat diubah.',
+                    'message' => 'BAK yang sudah diproses tidak dapat diubah.',
                 ], 422);
             }
 
@@ -279,7 +496,10 @@ class BeritaAcaraKejadianController extends Controller
                 return $validation;
             }
 
-            $penandatanganId = (int) $request->penandatangan_karyawan_id;
+            $penandatanganId = (int) $document->penandatangan_karyawan_id;
+            if ($penandatanganId <= 0) {
+                $penandatanganId = $this->resolveKaryawanIdFromCreatedBy($document->created_by);
+            }
             $karyawanId = $this->resolveKaryawanIdForDocument($request, $penandatanganId);
             $dampakPayload = $this->encodeDampakAsetOrError($request);
             if ($dampakPayload instanceof \Illuminate\Http\JsonResponse) {
@@ -311,7 +531,7 @@ class BeritaAcaraKejadianController extends Controller
 
                 return response()->json([
                     'success' => false,
-                    'message' => 'Lampiran maksimal 10 gambar.',
+                    'message' => 'Lampiran maksimal 10 file.',
                 ], 422);
             }
 
@@ -324,8 +544,9 @@ class BeritaAcaraKejadianController extends Controller
                 ], 422);
             }
 
-            $writtenDokumentasi = $this->storeDokumentasiFiles((int) $document->id, $uploads);
-            $finalDokumentasi = array_values(array_merge($keptDokumentasi, $writtenDokumentasi));
+            $writtenGroups = $this->storeDokumentasiFileGroups((int) $document->id, $uploads);
+            $writtenDokumentasi = $this->flattenDokumentasiGroups($writtenGroups);
+            $finalDokumentasi = $this->mergeDokumentasiInOrder($request, $keptDokumentasi, $writtenGroups);
 
             $tanggalKejadian = Carbon::parse($request->tanggal_kejadian)->format('Y-m-d');
             $penandatanganSnapshot = $this->buildPenandatanganSnapshot($penandatanganId);
@@ -348,7 +569,7 @@ class BeritaAcaraKejadianController extends Controller
                 'lokasi_kejadian' => trim((string) $request->lokasi_kejadian),
                 'telah_terjadi_kejadian' => trim((string) ($request->telah_terjadi_kejadian ?? '')) ?: null,
                 'dampak_aset_perusahaan' => $dampakPayload,
-                'lampiran' => trim((string) ($request->lampiran ?? '')) ?: null,
+                'lampiran' => $this->formatLampiranCount($finalDokumentasi),
                 'perihal' => trim((string) ($request->perihal ?? '')) ?: null,
                 'uraian_kejadian' => trim((string) ($request->uraian_kejadian ?? '')) ?: null,
                 'dokumentasi' => json_encode($finalDokumentasi, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
@@ -360,7 +581,10 @@ class BeritaAcaraKejadianController extends Controller
             $documentService->invalidateStoredPdf($document);
 
             DB::commit();
-            $this->deleteDokumentasiFiles(array_values(array_diff($existingDokumentasi, $finalDokumentasi)));
+            $this->deleteDokumentasiFiles(
+                (int) $document->id,
+                array_values(array_diff($existingDokumentasi, $finalDokumentasi))
+            );
 
             return response()->json([
                 'success' => true,
@@ -369,7 +593,7 @@ class BeritaAcaraKejadianController extends Controller
             ], 200);
         } catch (\Throwable $ex) {
             DB::rollBack();
-            $this->deleteDokumentasiFiles($writtenDokumentasi);
+            $this->deleteDokumentasiFiles((int) $document->id, $writtenDokumentasi);
 
             return response()->json([
                 'success' => false,
@@ -657,6 +881,10 @@ class BeritaAcaraKejadianController extends Controller
                 'bak.dokumentasi',
                 'bak.catatan',
                 'bak.status',
+                'bak.proses_status',
+                'bak.approval_step',
+                'bak.approval_chain',
+                'bak.approval_log',
                 'bak.nama_berkas',
                 'bak.file_path',
                 'bak.file_size',
@@ -783,16 +1011,53 @@ class BeritaAcaraKejadianController extends Controller
             return null;
         }
 
-        $item->dokumentasi = $this->decodeDokumentasiList($item->dokumentasi ?? null);
+        $storedDokumentasi = BeritaAcaraKejadianDokumentasiStorage::decodeList($item->dokumentasi ?? null);
+        $item->dokumentasi = BeritaAcaraKejadianDokumentasiStorage::expandForApi((int) $item->id, $storedDokumentasi);
+        $dampakParsed = BeritaAcaraKejadianDampak::parse($item->dampak_aset_perusahaan ?? null);
+        $item->berdampak_pada_aset = trim((string) ($dampakParsed['nama_jenis_aset'] ?? '')) !== '' ? 'ya' : 'tidak';
         $item->nama_karyawan = $item->nama_lengkap ?: '-';
         $item->divisi = $item->nama_divisi ?: ($item->department ?: '-');
         $item->status_label = $this->mapStatusLabel($item->status);
+        $item->proses_status_label = $this->mapProsesStatusLabel($item->proses_status ?? BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN);
         $item->tanggal_kejadian_label = $item->tanggal_kejadian
             ? Carbon::parse($item->tanggal_kejadian)->format('d-m-Y')
             : '-';
         $item->has_document = !empty($item->file_path);
         $item->has_qr = !empty($item->file_qr);
-        $item->can_approve = $item->status === BeritaAcaraKejadianDisipliner::STATUS_DRAFT;
+
+        $workflow = app(BakAtasanWorkflowService::class);
+        $documentModel = new BeritaAcaraKejadianDisipliner();
+        $documentModel->exists = true;
+        $documentModel->forceFill([
+            'id' => $item->id,
+            'proses_status' => $item->proses_status ?? BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN,
+            'approval_step' => (int) ($item->approval_step ?? 0),
+            'approval_chain' => $item->approval_chain,
+            'is_active' => true,
+        ]);
+        $proses = $documentModel->proses_status;
+
+        $item->can_edit = $documentModel && $workflow->canEditProses($documentModel);
+        $item->can_ajukan = $documentModel
+            && $proses === BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN;
+        $item->can_approve_atasan = $documentModel
+            && $workflow->viewerCanApproveAtasan($documentModel, (int) $this->user_id);
+        $item->can_mulai_proses = $proses === BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES;
+        $item->can_selesai_proses = $proses === BeritaAcaraKejadianDisipliner::PROSES_SEDANG_DIPROSES;
+        $item->can_approve = $item->status === BeritaAcaraKejadianDisipliner::STATUS_DRAFT
+            && $proses === BeritaAcaraKejadianDisipliner::PROSES_SUDAH_DIPROSES;
+
+        $chain = $workflow->decodeChain($item->approval_chain ?? null);
+        $pendingId = $documentModel ? $workflow->currentPendingApproverId($documentModel) : null;
+        $item->verifikator_saat_ini = '-';
+        if ($pendingId) {
+            $pending = collect($chain)->first(fn ($c) => (int) ($c['karyawan_id'] ?? 0) === $pendingId);
+            $item->verifikator_saat_ini = $pending['nama'] ?? '-';
+        }
+        $item->jumlah_verifikasi_atasan = count($chain);
+        $item->verifikasi_atasan_ke = $proses === BeritaAcaraKejadianDisipliner::PROSES_VERIFIKASI_ATASAN
+            ? ((int) ($item->approval_step ?? 0) + 1)
+            : null;
         $item->dibuat_oleh_label = trim((string) ($item->created_by ?? '')) ?: '-';
         $updatedBy = trim((string) ($item->updated_by ?? ''));
         $item->was_edited = $updatedBy !== '';
@@ -819,18 +1084,48 @@ class BeritaAcaraKejadianController extends Controller
         return $map[$status] ?? (string) $status;
     }
 
+    private function mapProsesStatusLabel(?string $status): string
+    {
+        $map = [
+            BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN => 'Permintaan dokumen',
+            BeritaAcaraKejadianDisipliner::PROSES_VERIFIKASI_ATASAN => 'Verifikasi atasan',
+            BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES => 'Menunggu diproses',
+            BeritaAcaraKejadianDisipliner::PROSES_SEDANG_DIPROSES => 'Sedang diproses',
+            BeritaAcaraKejadianDisipliner::PROSES_SUDAH_DIPROSES => 'Sudah diproses',
+        ];
+
+        return $map[$status] ?? (string) $status;
+    }
+
+    private function applyWorkflowTabFilter($query, string $workflowTab): void
+    {
+        $map = [
+            'permintaan_dokumen' => BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN,
+            'verifikasi_atasan' => BeritaAcaraKejadianDisipliner::PROSES_VERIFIKASI_ATASAN,
+            'menunggu_diproses' => BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES,
+            'sedang_diproses' => BeritaAcaraKejadianDisipliner::PROSES_SEDANG_DIPROSES,
+            'sudah_diproses' => BeritaAcaraKejadianDisipliner::PROSES_SUDAH_DIPROSES,
+            // legacy tab keys
+            'pembuatan' => BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN,
+            'pengesahan' => BeritaAcaraKejadianDisipliner::PROSES_VERIFIKASI_ATASAN,
+        ];
+
+        $proses = $map[$workflowTab] ?? BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN;
+        $query->where('bak.proses_status', $proses);
+    }
+
     private function validatePayload(Request $request)
     {
         $this->validate($request, [
             'karyawan_id' => 'nullable|integer',
-            'penandatangan_karyawan_id' => 'required|integer',
+            'penandatangan_karyawan_id' => 'nullable|integer',
+            'berdampak_pada_aset' => 'required|in:ya,tidak',
             'dampak_aset_perusahaan' => 'nullable|array',
             'tanggal_kejadian' => 'required|date',
             'waktu_kejadian' => 'required|string|max:10',
             'lokasi_kejadian' => 'required|string|max:255',
             'telah_terjadi_kejadian' => 'nullable|string|max:500',
             'uraian_kejadian' => 'nullable|string',
-            'lampiran' => 'nullable|string|max:100',
             'perihal' => 'nullable|string|max:200',
         ]);
 
@@ -845,43 +1140,64 @@ class BeritaAcaraKejadianController extends Controller
         return true;
     }
 
-    /**
-     * @return array<string, int|string>|\Illuminate\Http\JsonResponse
-     */
-    private function nomorSuratFromRequest(Request $request, string $tanggalReferensi)
+    private function generateNomorSurat(string $tanggalReferensi): array
     {
         $month = date('m', strtotime($tanggalReferensi));
         $year = (int) date('Y', strtotime($tanggalReferensi));
-        $provided = strtoupper(trim((string) $request->input('nomor_surat', '')));
 
-        if ($provided === '') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Nomor surat wajib ada.',
-            ], 422);
+        for ($attempt = 0; $attempt < 8; $attempt++) {
+            $hex = strtoupper(bin2hex(random_bytes(3)));
+            $nomorSurat = 'ISL-' . $month . '-BAK-' . $hex;
+            $exists = BeritaAcaraKejadianDisipliner::query()
+                ->where('nomor_surat', $nomorSurat)
+                ->exists();
+            if (!$exists) {
+                return [
+                    'nomor_surat' => $nomorSurat,
+                    'tahun_nomor' => $year,
+                    'urutan_nomor' => hexdec($hex),
+                ];
+            }
         }
 
-        if (!preg_match('/^ISL-' . $month . '-BAK-[A-F0-9]{6}$/', $provided)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Format nomor surat tidak valid atau tidak sesuai bulan tanggal kejadian.',
-            ], 422);
+        throw new \RuntimeException('Gagal membuat nomor surat. Coba lagi.');
+    }
+
+    private function resolvePenandatanganId(Request $request): int
+    {
+        $fromRequest = (int) $request->input('penandatangan_karyawan_id', 0);
+        if ($fromRequest > 0) {
+            return $fromRequest;
         }
 
-        if (BeritaAcaraKejadianDisipliner::query()->where('nomor_surat', $provided)->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Nomor surat sudah digunakan. Tutup form dan buka lagi untuk nomor baru.',
-            ], 422);
+        return (int) $this->user_id;
+    }
+
+    /**
+     * Penandatangan di PDF = pembuat dokumen; nama di created_by di-resolve ke master_karyawan.
+     */
+    private function resolveKaryawanIdFromCreatedBy(?string $createdBy): int
+    {
+        $name = trim((string) $createdBy);
+        if ($name !== '') {
+            $id = MasterKaryawan::query()
+                ->where('is_active', true)
+                ->where('nama_lengkap', $name)
+                ->value('id');
+            if ($id) {
+                return (int) $id;
+            }
         }
 
-        $hex = substr($provided, -6);
+        return (int) $this->user_id;
+    }
 
-        return [
-            'nomor_surat' => $provided,
-            'tahun_nomor' => $year,
-            'urutan_nomor' => hexdec($hex),
-        ];
+  /** @param array<int, string> $paths */
+    private function formatLampiranCount(array $paths): ?string
+    {
+        $count = count($paths);
+
+        return $count > 0 ? (string) $count : null;
     }
 
     private function normalizeWaktu($value): ?string
@@ -951,18 +1267,18 @@ class BeritaAcaraKejadianController extends Controller
             $mime = strtolower((string) $file->getMimeType());
             $ext = strtolower((string) ($file->getClientOriginalExtension() ?: $file->extension()));
             $isImage = in_array($mime, $allowedImageMime, true) && in_array($ext, $allowedImageExt, true);
-
-            if (!$isImage) {
+            $isPdf = $ext === 'pdf' && in_array($mime, ['application/pdf', 'application/octet-stream', 'application/x-pdf'], true);
+            if (!$isImage && !$isPdf) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Lampiran harus berupa gambar JPG, PNG, atau WEBP.',
+                    'message' => 'Lampiran harus berupa gambar (JPG, PNG, WEBP) atau PDF.',
                 ], 422);
             }
 
-            if ((int) $file->getSize() > 5 * 1024 * 1024) {
+            if ((int) $file->getSize() > 2 * 1024 * 1024) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Ukuran tiap gambar lampiran maksimal 5 MB.',
+                    'message' => 'Ukuran tiap lampiran maksimal 2 MB.',
                 ], 422);
             }
 
@@ -972,7 +1288,7 @@ class BeritaAcaraKejadianController extends Controller
         if (count($valid) > 10) {
             return response()->json([
                 'success' => false,
-                'message' => 'Lampiran maksimal 10 gambar.',
+                'message' => 'Lampiran maksimal 10 file.',
             ], 422);
         }
 
@@ -981,23 +1297,7 @@ class BeritaAcaraKejadianController extends Controller
 
     private function decodeDokumentasiList($value): array
     {
-        if (is_array($value)) {
-            $items = $value;
-        } else {
-            $decoded = json_decode((string) $value, true);
-            $items = is_array($decoded) ? $decoded : [];
-        }
-
-        $paths = [];
-        foreach ($items as $item) {
-            $path = str_replace('\\', '/', trim((string) $item));
-            if ($path === '' || strpos($path, '..') !== false) {
-                continue;
-            }
-            $paths[] = $path;
-        }
-
-        return array_values(array_unique($paths));
+        return BeritaAcaraKejadianDokumentasiStorage::decodeList($value);
     }
 
     private function resolveKeptDokumentasi(Request $request, array $existing): array
@@ -1014,9 +1314,9 @@ class BeritaAcaraKejadianController extends Controller
         $allowed = array_fill_keys($existing, true);
         $kept = [];
         foreach ($decoded as $path) {
-            $path = str_replace('\\', '/', trim((string) $path));
-            if ($path !== '' && isset($allowed[$path])) {
-                $kept[] = $path;
+            $name = BeritaAcaraKejadianDokumentasiStorage::normalizeStoredName((string) $path);
+            if ($name !== '' && isset($allowed[$name])) {
+                $kept[] = $name;
             }
         }
 
@@ -1024,10 +1324,79 @@ class BeritaAcaraKejadianController extends Controller
     }
 
     /**
-     * @param array<int, \Illuminate\Http\UploadedFile> $files
+     * Gabungkan lampiran tersimpan + file baru sesuai urutan UI.
+     *
+     * @param array<int, string> $kept
+     * @param array<int, array<int, string>> $writtenGroups satu grup = satu file upload (PDF bisa banyak halaman JPG)
      * @return array<int, string>
      */
-    private function storeDokumentasiFiles(int $documentId, array $files): array
+    private function mergeDokumentasiInOrder(Request $request, array $kept, array $writtenGroups): array
+    {
+        $writtenFlat = $this->flattenDokumentasiGroups($writtenGroups);
+        $raw = json_decode((string) $request->input('dokumentasi_urutan_json', '[]'), true);
+        if (!is_array($raw) || $raw === []) {
+            return array_values(array_merge($kept, $writtenFlat));
+        }
+
+        $keptQueue = $kept;
+        $writtenQueue = $writtenGroups;
+        $result = [];
+
+        foreach ($raw as $entry) {
+            $kind = is_array($entry) ? (string) ($entry['kind'] ?? $entry['type'] ?? '') : '';
+            if ($kind === 'saved') {
+                $path = BeritaAcaraKejadianDokumentasiStorage::normalizeStoredName((string) ($entry['path'] ?? ''));
+                $idx = array_search($path, $keptQueue, true);
+                if ($idx === false) {
+                    continue;
+                }
+                $result[] = $keptQueue[$idx];
+                unset($keptQueue[$idx]);
+                $keptQueue = array_values($keptQueue);
+            } elseif ($kind === 'new' && $writtenQueue !== []) {
+                $group = array_shift($writtenQueue);
+                foreach ($group as $path) {
+                    $result[] = $path;
+                }
+            }
+        }
+
+        $tail = [];
+        foreach ($writtenQueue as $group) {
+            foreach ($group as $path) {
+                $tail[] = $path;
+            }
+        }
+
+        return array_values(array_merge($result, $keptQueue, $tail));
+    }
+
+    /**
+     * @param array<int, array<int, string>> $groups
+     * @return array<int, string>
+     */
+    private function flattenDokumentasiGroups(array $groups): array
+    {
+        $flat = [];
+        foreach ($groups as $group) {
+            if (!is_array($group)) {
+                continue;
+            }
+            foreach ($group as $path) {
+                $flat[] = $path;
+            }
+        }
+
+        return $flat;
+    }
+
+    /**
+     * PDF → JPG per halaman (Imagick) saat simpan; file PDF tidak disimpan.
+     *
+     * @param array<int, \Illuminate\Http\UploadedFile> $files
+     * @return array<int, array<int, string>>
+     */
+    private function storeDokumentasiFileGroups(int $documentId, array $files): array
     {
         if ($files === []) {
             return [];
@@ -1039,27 +1408,53 @@ class BeritaAcaraKejadianController extends Controller
             throw new \RuntimeException('Folder dokumentasi gagal dibuat.');
         }
 
-        $stored = [];
+        $converter = app(BeritaAcaraKejadianLampiranConvertService::class);
+        $groups = [];
+
         foreach ($files as $file) {
             $ext = strtolower((string) ($file->getClientOriginalExtension() ?: 'jpg'));
-            $name = uniqid('dok_', true) . '.' . $ext;
-            $file->move($directory, $name);
-            $stored[] = $relativeDir . '/' . $name;
-        }
+            $mime = strtolower((string) $file->getMimeType());
+            $isPdf = $ext === 'pdf'
+                && in_array($mime, ['application/pdf', 'application/octet-stream', 'application/x-pdf'], true);
 
-        return $stored;
-    }
+            if ($isPdf) {
+                $base = uniqid('dok_', true);
+                $tempPdfName = $base . '.pdf';
+                $file->move($directory, $tempPdfName);
+                $fullPdf = $directory . DIRECTORY_SEPARATOR . $tempPdfName;
 
-    private function deleteDokumentasiFiles(array $relativePaths): void
-    {
-        $prefix = 'dokumen/disipliner/berita-acara-kejadian/dokumentasi/';
-        foreach ($relativePaths as $relative) {
-            $relative = str_replace('\\', '/', trim((string) $relative));
-            if ($relative === '' || strpos($relative, '..') !== false || strpos($relative, $prefix) !== 0) {
+                try {
+                    $jpegFullPaths = $converter->convertPdfToJpegFiles($fullPdf, $directory, $base);
+                } finally {
+                    if (is_file($fullPdf)) {
+                        @unlink($fullPdf);
+                    }
+                }
+
+                $group = [];
+                foreach ($jpegFullPaths as $jpegFull) {
+                    $group[] = basename($jpegFull);
+                }
+                $groups[] = $group;
                 continue;
             }
-            $full = public_path($relative);
-            if (is_file($full)) {
+
+            $name = uniqid('dok_', true) . '.' . $ext;
+            $file->move($directory, $name);
+            $groups[] = [$name];
+        }
+
+        return $groups;
+    }
+
+    /**
+     * @param array<int, string> $storedNames nama file saja (atau path lama)
+     */
+    private function deleteDokumentasiFiles(int $documentId, array $storedNames): void
+    {
+        foreach ($storedNames as $stored) {
+            $full = BeritaAcaraKejadianDokumentasiStorage::fullPath($documentId, (string) $stored);
+            if ($full !== '' && is_file($full)) {
                 @unlink($full);
             }
         }
@@ -1070,6 +1465,17 @@ class BeritaAcaraKejadianController extends Controller
      */
     private function encodeDampakAsetOrError(Request $request)
     {
+        $flag = strtolower(trim((string) $request->input('berdampak_pada_aset', '')));
+        if ($flag === 'tidak') {
+            return null;
+        }
+        if ($flag !== 'ya') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pilih apakah berdampak pada aset (Ya atau Tidak).',
+            ], 422);
+        }
+
         $encoded = BeritaAcaraKejadianDampak::encodeFromRequest($request->input('dampak_aset_perusahaan'));
         if (!$encoded['ok']) {
             return response()->json([

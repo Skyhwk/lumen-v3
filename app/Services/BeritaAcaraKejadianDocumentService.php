@@ -4,12 +4,14 @@ namespace App\Services;
 
 use App\Models\BeritaAcaraKejadianDisipliner;
 use App\Support\BeritaAcaraKejadianDampak;
+use App\Support\BeritaAcaraKejadianDokumentasiStorage;
 use App\Models\MasterKaryawan;
 use App\Models\QrDocument;
 use App\Support\DisiplinerPdfHeader;
 use App\Support\DisiplinerPdfLayout;
 use App\Support\DokumenPageBackgroundWithNote;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
@@ -18,6 +20,12 @@ class BeritaAcaraKejadianDocumentService
     private const STORAGE_DIR = 'dokumen/disipliner/berita-acara-kejadian';
 
     private const PAGE_BACKGROUND = 'images/dokumen-karyawan-page-background.png';
+
+    /** Ukuran aman per panggilan WriteHTML (hindari pcre.backtrack_limit mPDF). */
+    private const MPDF_HTML_CHUNK_BYTES = 400_000;
+
+    /** @var array<int, string> */
+    private array $deferredLampiranTempDirs = [];
 
     public function invalidateStoredPdf(BeritaAcaraKejadianDisipliner $document): void
     {
@@ -52,17 +60,11 @@ class BeritaAcaraKejadianDocumentService
     }
 
     /**
-     * Ambil PDF dari arsip disk jika ada; jika tidak, render lalu simpan.
+     * Selalu render ulang agar preview/PDF mengikuti data & template terbaru (tanpa baca cache disk).
      */
     public function resolvePdfBinary(BeritaAcaraKejadianDisipliner $document, object $detailRow): string
     {
-        if ($this->hasStoredPdf($document)) {
-            return $this->readPdfBinary($document);
-        }
-
-        $this->generateAndStorePdf($document, $detailRow);
-
-        return $this->readPdfBinary($document->fresh());
+        return $this->renderPdf($document, $detailRow);
     }
 
     /** Paksa render ulang dari blade terbaru dan timpa arsip PDF di disk. */
@@ -132,6 +134,13 @@ class BeritaAcaraKejadianDocumentService
 
     public function renderPdf(BeritaAcaraKejadianDisipliner $document, object $detailRow): string
     {
+        $this->deferredLampiranTempDirs = [];
+
+        $backtrackLimit = (int) ini_get('pcre.backtrack_limit');
+        if ($backtrackLimit > 0 && $backtrackLimit < 5_000_000) {
+            @ini_set('pcre.backtrack_limit', '5000000');
+        }
+
         Carbon::setLocale('id');
 
         $issueDate = $document->tanggal_kejadian
@@ -142,7 +151,14 @@ class BeritaAcaraKejadianDocumentService
             ? Carbon::parse($document->tanggal_kejadian)->locale('id')
             : $issueDate->copy();
 
+        $lampiranPrepared = $this->prepareLampiranImages($document->dokumentasi ?? null, (int) $document->id);
+        $lampiranImages = $lampiranPrepared['srcs'];
+        $uploadedCount = $lampiranPrepared['file_count'];
+
         $lampiran = trim((string) ($document->lampiran ?? ''));
+        if ($lampiran === '' && $uploadedCount > 0) {
+            $lampiran = (string) $uploadedCount;
+        }
         if ($lampiran === '') {
             $lampiran = '-';
         }
@@ -159,6 +175,7 @@ class BeritaAcaraKejadianDocumentService
             $uraianHtml = '';
         }
         $dampakAset = BeritaAcaraKejadianDampak::parse($document->dampak_aset_perusahaan);
+        $showDampakAset = trim((string) ($dampakAset['nama_jenis_aset'] ?? '')) !== '';
         $dampakJenis = trim((string) ($dampakAset['jenis_kerusakan_aset'] ?? ''));
         $dampakNoAsetPlat = trim((string) ($dampakAset['no_aset_no_plat'] ?? ''));
         if ($dampakNoAsetPlat === '') {
@@ -166,7 +183,6 @@ class BeritaAcaraKejadianDocumentService
         }
 
         $qrImagePath = $this->resolveQrImageForPdf(trim((string) ($document->file_qr ?? '')));
-        $lampiranImages = $this->lampiranImagePaths($document->dokumentasi ?? null);
         $showLampiranSection = $lampiranImages !== [];
 
         $refNumber = trim((string) $document->nomor_surat);
@@ -183,6 +199,7 @@ class BeritaAcaraKejadianDocumentService
             'telahTerjadiKejadian' => $telahTerjadiKejadian,
             'perihal' => $perihal,
             'dampakAset' => $dampakAset,
+            'showDampakAset' => $showDampakAset,
             'dampakNoAsetPlat' => $dampakNoAsetPlat,
             'dampakJenisSebagian' => $dampakJenis === 'sebagian',
             'dampakJenisSeluruhnya' => $dampakJenis === 'seluruhnya',
@@ -203,12 +220,14 @@ class BeritaAcaraKejadianDocumentService
             'qrImagePath' => $qrImagePath,
             'showLampiranSection' => $showLampiranSection,
             'lampiranImages' => $lampiranImages,
+            'embedLampiranInMain' => false,
         ])->render();
 
         $fontDirs = (new \Mpdf\Config\ConfigVariables())->getDefaults()['fontDir'];
         $fontData = (new \Mpdf\Config\FontVariables())->getDefaults()['fontdata'];
 
         $pdf = new MpdfService(DisiplinerPdfLayout::mpdfPageConfig([
+            'tempDir' => storage_path('app/tmp'),
             'fontDir' => array_merge($fontDirs, [resource_path('fonts/Calibri')]),
             'fontdata' => $fontData + [
                 'calibri' => [
@@ -256,12 +275,56 @@ class BeritaAcaraKejadianDocumentService
             $pdf->showWatermarkImage = true;
         }
 
-        $pdf->WriteHTML($html);
+        $this->writeMpdfHtmlInChunks($pdf, $html);
+
+        if ($showLampiranSection) {
+            // Tutup halaman utama terakhir selagi watermark masih aktif, lalu matikan untuk halaman lampiran.
+            $pdf->AddPage();
+            $pdf->showWatermarkImage = false;
+            $this->writeLampiranPages($pdf, $lampiranImages);
+        }
 
         $output = $pdf->Output('', 'S');
         DokumenPageBackgroundWithNote::deleteIfTemporary($background, $backgroundSource);
+        $this->cleanupDeferredLampiranTempDirs();
 
         return $output;
+    }
+
+    /**
+     * @param array<int, string> $imagePaths path absolut (bukan base64)
+     */
+    private function writeLampiranPages(MpdfService $pdf, array $imagePaths): void
+    {
+        foreach ($imagePaths as $index => $imagePath) {
+            if ($index > 0) {
+                $pdf->AddPage();
+            }
+
+            $pageHtml = view('disipliner.berita-acara-kejadian-lampiran-page', [
+                'imageSrc' => $imagePath,
+                'showHeading' => $index === 0,
+            ])->render();
+
+            $pdf->WriteHTML($pageHtml);
+        }
+    }
+
+    private function writeMpdfHtmlInChunks(MpdfService $pdf, string $html): void
+    {
+        if (strlen($html) <= self::MPDF_HTML_CHUNK_BYTES) {
+            $pdf->WriteHTML($html);
+
+            return;
+        }
+
+        $offset = 0;
+        $length = strlen($html);
+
+        while ($offset < $length) {
+            $pdf->WriteHTML(substr($html, $offset, self::MPDF_HTML_CHUNK_BYTES));
+            $offset += self::MPDF_HTML_CHUNK_BYTES;
+        }
     }
 
     private function resolveQrImageForPdf(?string $qrFile): ?string
@@ -307,34 +370,112 @@ class BeritaAcaraKejadianDocumentService
     }
 
     /**
-     * @return array<int, string>
+     * Lampiran sudah JPG di disk (konversi PDF saat upload). PDF legacy dikonversi sekali saat render.
+     *
+     * @return array{srcs: array<int, string>, file_count: int}
      */
-    private function lampiranImagePaths($raw): array
+    private function prepareLampiranImages($raw, int $documentId): array
     {
-        $items = is_array($raw) ? $raw : json_decode((string) $raw, true);
-        if (!is_array($items)) {
+        $items = BeritaAcaraKejadianDokumentasiStorage::decodeList($raw);
+        if ($items === [] || $documentId <= 0) {
+            return ['srcs' => [], 'file_count' => 0];
+        }
+
+        $srcs = [];
+        $fileCount = count($items);
+
+        foreach ($items as $storedName) {
+            $full = BeritaAcaraKejadianDokumentasiStorage::fullPath($documentId, $storedName);
+            if ($full === '' || !is_file($full)) {
+                continue;
+            }
+            $normalized = str_replace('\\', '/', $full);
+
+            if (preg_match('/\.pdf$/i', $normalized)) {
+                $srcs = array_merge($srcs, $this->renderLegacyPdfLampiran($normalized));
+                continue;
+            }
+
+            $src = $this->mpdfImagePath($normalized);
+            if ($src !== null) {
+                $srcs[] = $src;
+            }
+        }
+
+        return ['srcs' => $srcs, 'file_count' => $fileCount];
+    }
+
+    /**
+     * @return array<int, string> path file JPG untuk mPDF
+     */
+    private function renderLegacyPdfLampiran(string $pdfPath): array
+    {
+        Log::warning('Lampiran PDF lama ditemukan — konversi Imagick saat render. Simpan ulang dokumen untuk konversi permanen.', [
+            'path' => $pdfPath,
+        ]);
+
+        $tempDir = storage_path('app/tmp-bak-lampiran/' . uniqid('legacy_', true));
+        if (!is_dir($tempDir) && !mkdir($tempDir, 0755, true) && !is_dir($tempDir)) {
             return [];
         }
+        try {
+            $converter = app(BeritaAcaraKejadianLampiranConvertService::class);
+            $jpegPaths = $converter->convertPdfToJpegFiles($pdfPath, $tempDir, 'legacy');
+            $srcs = [];
+            foreach ($jpegPaths as $jpegPath) {
+                $src = $this->mpdfImagePath($jpegPath);
+                if ($src !== null) {
+                    $srcs[] = $src;
+                }
+            }
 
-        $images = [];
-        foreach ($items as $relative) {
-            $relative = str_replace('\\', '/', trim((string) $relative));
-            if ($relative === '' || strpos($relative, '..') !== false) {
-                continue;
+            if ($srcs !== []) {
+                $this->deferredLampiranTempDirs[] = $tempDir;
+            } else {
+                $this->removeLampiranTempDir($tempDir);
             }
-            if (strpos($relative, 'dokumen/disipliner/berita-acara-kejadian/dokumentasi/') !== 0) {
-                continue;
-            }
-            if (preg_match('/\.pdf$/i', $relative)) {
-                continue;
-            }
-            $full = public_path($relative);
-            if (is_file($full)) {
-                $images[] = str_replace('\\', '/', $full);
+
+            return $srcs;
+        } catch (\Throwable $ex) {
+            Log::warning('Konversi lampiran PDF legacy gagal', ['path' => $pdfPath, 'message' => $ex->getMessage()]);
+            $this->removeLampiranTempDir($tempDir);
+
+            return [];
+        }
+    }
+
+    /** Path absolut dengan slash mPDF (tanpa base64 — HTML tetap kecil). */
+    private function mpdfImagePath(string $path): ?string
+    {
+        if (!is_file($path) || filesize($path) <= 0) {
+            return null;
+        }
+
+        return str_replace('\\', '/', $path);
+    }
+
+    private function cleanupDeferredLampiranTempDirs(): void
+    {
+        foreach ($this->deferredLampiranTempDirs as $tempDir) {
+            $this->removeLampiranTempDir($tempDir);
+        }
+
+        $this->deferredLampiranTempDirs = [];
+    }
+
+    private function removeLampiranTempDir(string $tempDir): void
+    {
+        if (!is_dir($tempDir)) {
+            return;
+        }
+
+        foreach (glob($tempDir . DIRECTORY_SEPARATOR . '*') ?: [] as $file) {
+            if (is_file($file)) {
+                @unlink($file);
             }
         }
 
-        return $images;
+        @rmdir($tempDir);
     }
 
     private function formatSignatoryTempatTanggalLahir(string $tempat, string $tanggal): string
