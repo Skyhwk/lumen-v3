@@ -449,7 +449,7 @@ class WaMessageTemplateVariants
                     . "*Ringkasan Penawaran:*\n"
                     . "- Posisi: {{posisi}}\n"
                     . "- Penawaran Gaji: {{gaji}}\n\n"
-                    . "Mohon periksa email Anda (termasuk folder spam) dan pelajari dokumen PDF yang kami lampirkan.\n"
+                    . "Mohon periksa email Anda (termasuk folder spam) dan pelajari rincian penawaran gaji yang kami kirimkan.\n"
                     . "Catatan: surat ini *bukan keputusan penerimaan kerja resmi* - keputusan final setelah tahapan administrasi berikutnya.\n\n"
                     . "Apabila ada pertanyaan, silakan hubungi tim HRD kami.\n\n"
                     . "Salam,\n*Tim Recruitment HRD*\n*PT Inti Surya Laboratorium*",
@@ -486,8 +486,8 @@ class WaMessageTemplateVariants
                     . "- Posisi: {{posisi}}\n"
                     . "- Gaji Pokok: {{gaji}}\n"
                     . "- Tanggal Mulai Kerja: {{tanggal_mulai}}\n\n"
-                    . "Surat Keputusan Penerimaan Kerja (Hiring Letter) PDF telah kami kirimkan ke email: *{{email}}*.\n\n"
-                    . "Mohon periksa email Anda (termasuk folder spam), unduh lampiran PDF, "
+                    . "Surat Keputusan Penerimaan Kerja (Hiring Letter) telah kami kirimkan ke email: *{{email}}*.\n\n"
+                    . "Mohon periksa email Anda (termasuk folder spam) "
                     . "dan berikan konfirmasi penerimaan paling lambat *1 x 24 jam* sejak surat diterima.\n\n"
                     . "Apabila ada pertanyaan, silakan hubungi tim HRD kami.\n\n"
                     . "Salam,\n*Tim Recruitment HRD*\n*PT Inti Surya Laboratorium*",

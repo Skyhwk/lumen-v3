@@ -260,11 +260,6 @@ class GenerateMessageAtsEmail
 
                         {$pencadanganNoteHtml}
 
-                        <!-- PDF Attachment Box -->
-                        <div style='background-color: #f0f9ff; border: 1px dashed #0284c7; border-radius: 8px; padding: 14px 18px; margin: 20px 0; font-size: 13px; color: #0369a1; line-height: 1.6;'>
-                            <strong>Dokumen Lampiran:</strong> Rincian resmi Surat Penawaran Gaji telah dilampirkan dalam format <strong>PDF (Surat Penawaran Gaji.pdf)</strong> pada email ini.
-                        </div>
-
                         <div style='background-color: #fff7ed; border: 1px solid #fdba74; border-radius: 8px; padding: 14px 18px; margin: 8px 0 18px 0; font-size: 13px; color: #9a3412; line-height: 1.65;'>
                             <strong>Masa berlaku sampai {$deadlineLabel}.</strong>
                             Penawaran ini berlaku hingga <strong>H+2 pukul 23.00 WIB</strong> (contoh: dikirim Senin pagi, tetap berlaku sampai Rabu malam jam 23.00).
@@ -373,7 +368,7 @@ class GenerateMessageAtsEmail
     }
 
     /**
-     * Email notifikasi ke kandidat saat approve — lampiran PDF Hiring Letter.
+     * Email notifikasi ke kandidat saat approve — Hiring Letter.
      *
      * @param object $data Kandidat (NewRecruitment atau object serupa)
      * @param object|null $letterData Payload surat (gaji, tanggal mulai, dll.)
@@ -445,13 +440,8 @@ class GenerateMessageAtsEmail
 
                         {$pencadanganNoteHtml}
 
-                        <!-- PDF Attachment Box -->
-                        <div style='background-color: #f0fdf4; border: 1px dashed #16a34a; border-radius: 8px; padding: 14px 18px; margin: 20px 0; font-size: 13px; color: #166534; line-height: 1.6;'>
-                            <strong>Dokumen Resmi:</strong> Surat Keputusan Penerimaan Kerja (Hiring Letter) resmi telah dilampirkan dalam format <strong>PDF (Hiring_Letter.pdf)</strong> pada email ini.
-                        </div>
-
                         <p style='font-size: 14px; line-height: 1.65; color: #334155; margin-top: 20px; margin-bottom: 0;'>
-                            Mohon unduh, pelajari dokumen lampiran tersebut, dan berikan konfirmasi penerimaan Anda paling lambat <strong>1 x 24 jam</strong> sejak email ini diterima.
+                            Mohon pelajari rincian keputusan di atas, dan berikan konfirmasi penerimaan Anda paling lambat <strong>1 x 24 jam</strong> sejak email ini diterima.
                         </p>
                     </td>
                 </tr>
@@ -464,7 +454,7 @@ class GenerateMessageAtsEmail
     }
 
     /**
-     * Kirim email Hiring Letter ke kandidat (body ATS + lampiran PDF).
+     * Kirim email Hiring Letter ke kandidat (body ATS, tanpa lampiran).
      *
      * @param \App\Models\NewRecruitment|object $applicant
      */
@@ -477,19 +467,15 @@ class GenerateMessageAtsEmail
 
         $subject = 'Surat Keputusan Penerimaan - PT Inti Surya Laboratorium';
         $bodyEmail = self::bodyEmailCandidateHiringLetter($applicant, $dataObj);
-        $pdfPath = self::generateHiringLetterPdfPath($dataObj);
 
         try {
-            $emailQuery = SendEmail::where('to', $applicant->email)
+            SendEmail::where('to', $applicant->email)
                 ->where('subject', $subject)
                 ->where('body', $bodyEmail)
-                ->where('karyawan', $sender);
-
-            if (!empty($pdfPath) && file_exists($pdfPath)) {
-                $emailQuery->where('attachment', [$pdfPath]);
-            }
-
-            $emailQuery->noReply('PT Inti Surya Laboratorium')->replyToAtsHrd()->send();
+                ->where('karyawan', $sender)
+                ->noReply('PT Inti Surya Laboratorium')
+                ->replyToAtsHrd()
+                ->send();
 
             self::sendCandidateHiringLetterWhatsapp($applicant, $dataObj);
 
@@ -503,15 +489,11 @@ class GenerateMessageAtsEmail
             self::sendCandidateHiringLetterWhatsapp($applicant, $dataObj);
 
             return false;
-        } finally {
-            if (!empty($pdfPath) && file_exists($pdfPath)) {
-                @unlink($pdfPath);
-            }
         }
     }
 
     /**
-     * Kirim email Salary Offering Letter ke kandidat (body ATS + lampiran PDF + tombol keputusan).
+     * Kirim email Salary Offering Letter ke kandidat (body ATS + tombol keputusan, tanpa lampiran).
      *
      * @param \App\Models\NewRecruitment|object $applicant
      */
@@ -525,19 +507,15 @@ class GenerateMessageAtsEmail
         $subject = 'Penawaran Gaji - PT Inti Surya Laboratorium';
         $btn = $btn ?? self::buildCandidateOfferingButtons($applicant);
         $bodyEmail = self::bodyEmailCandidateOfferingSalary($applicant, $btn, $dataObj);
-        $pdfPath = self::generateSalaryOfferingLetterPdfPath($dataObj);
 
         try {
-            $emailQuery = SendEmail::where('to', $applicant->email)
+            SendEmail::where('to', $applicant->email)
                 ->where('subject', $subject)
                 ->where('body', $bodyEmail)
-                ->where('karyawan', $sender);
-
-            if (!empty($pdfPath) && file_exists($pdfPath)) {
-                $emailQuery->where('attachment', [$pdfPath]);
-            }
-
-            $emailQuery->noReply('PT Inti Surya Laboratorium')->replyToAtsHrd()->send();
+                ->where('karyawan', $sender)
+                ->noReply('PT Inti Surya Laboratorium')
+                ->replyToAtsHrd()
+                ->send();
 
             self::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
 
@@ -551,10 +529,6 @@ class GenerateMessageAtsEmail
             self::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
 
             throw $e;
-        } finally {
-            if (!empty($pdfPath) && file_exists($pdfPath)) {
-                @unlink($pdfPath);
-            }
         }
     }
 
