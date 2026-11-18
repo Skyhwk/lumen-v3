@@ -107,16 +107,20 @@ class MonitoringPeralatanService
 
         $events = $ctx->eventsByPeralatan[$idPeralatan] ?? [];
 
+        // Newest-first: point-in-time (Tersedia/Rusak) supersedes older period events
+        // even when those periods still cover asOfDate. Period events that do not
+        // cover asOfDate are skipped so older history can still resolve.
         foreach ($events as $event) {
-            if (self::eventCoversDate($event, $ctx->asOfDate)) {
-                return self::mapResolvedEvent($event, 'monitoring_period');
-            }
-        }
+            $status = (string) ($event->status_alat ?? '');
+            if (MonitoringPeralatan::requiresPeriod($status)) {
+                if (self::eventCoversDate($event, $ctx->asOfDate)) {
+                    return self::mapResolvedEvent($event, 'monitoring_period');
+                }
 
-        foreach ($events as $event) {
-            if (!MonitoringPeralatan::requiresPeriod((string) ($event->status_alat ?? ''))) {
-                return self::mapResolvedEvent($event, 'monitoring_point');
+                continue;
             }
+
+            return self::mapResolvedEvent($event, 'monitoring_point');
         }
 
         return $default;
