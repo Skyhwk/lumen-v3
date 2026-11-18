@@ -42,67 +42,10 @@ return new class extends Migration
                 $table->index(['assigned_to', 'slot'], 'idx_follow_up_customer_assignee');
             });
         }
-
-        $this->addMarketingMenu();
     }
 
     public function down(): void
     {
         Schema::dropIfExists('follow_up_customer_account');
-        $this->removeMarketingMenu();
-    }
-
-    private function addMarketingMenu(): void
-    {
-        $row = DB::table('menu')->where('id', 110)->first();
-        if (!$row) {
-            $row = DB::table('menu')->where('menu', 'Marketing')->where('is_active', 1)->first();
-        }
-        if (!$row) {
-            return;
-        }
-
-        $submenu = json_decode($row->submenu ?? '[]', true);
-        if (!is_array($submenu)) {
-            $submenu = [];
-        }
-
-        foreach ($submenu as $item) {
-            $label = is_array($item) ? ($item['nama_inden_menu'] ?? '') : (string) $item;
-            if (strcasecmp(trim((string) $label), self::MENU) === 0) {
-                return;
-            }
-        }
-
-        $submenu[] = [
-            'nama_inden_menu' => self::MENU,
-            'sub_menu' => null,
-        ];
-
-        DB::table('menu')->where('id', $row->id)->update([
-            'submenu' => json_encode(array_values($submenu), JSON_UNESCAPED_UNICODE),
-        ]);
-    }
-
-    private function removeMarketingMenu(): void
-    {
-        $row = DB::table('menu')->where('menu', 'Marketing')->first();
-        if (!$row) {
-            return;
-        }
-
-        $submenu = json_decode($row->submenu ?? '[]', true);
-        if (!is_array($submenu)) {
-            return;
-        }
-
-        $submenu = array_values(array_filter($submenu, function ($item) {
-            $label = is_array($item) ? ($item['nama_inden_menu'] ?? '') : (string) $item;
-            return strcasecmp(trim((string) $label), self::MENU) !== 0;
-        }));
-
-        DB::table('menu')->where('id', $row->id)->update([
-            'submenu' => json_encode($submenu, JSON_UNESCAPED_UNICODE),
-        ]);
     }
 };
