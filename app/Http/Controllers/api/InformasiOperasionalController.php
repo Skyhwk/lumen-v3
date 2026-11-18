@@ -114,24 +114,28 @@ class InformasiOperasionalController extends Controller
             ->addColumn('lokasi_penempatan', function ($row) {
                 return $row->nama_cabang ?: 'HEAD OFFICE (Default)';
             })
-            ->addColumn('mobilisasi', function ($row) use ($timPeralatanMap) {
+            ->addColumn('mobilisasi', function ($row) use ($timPeralatanMap, $tanggal) {
                 if (empty($row->batch_id)) {
                     return null;
                 }
 
-                $mob = JadwalMobilisasiService::findActiveByBatchIds($row->batch_id);
-                if (!$mob) {
-                    return null;
-                }
-
+                // jadwal_mobilisasi bisa absen; bawaan aktual tetap dari io_peralatan_tim.
+                $mob = JadwalMobilisasiService::findActiveByBatchIds($row->batch_id) ?: [];
                 $peralatan = $this->decodePeralatan($mob['peralatan_sampling'] ?? []);
-                $petugasKey = IoPeralatanTimService::normalizePetugasKey($row->sampler ?? '');
-                $peralatanAktual = [];
-                if ($petugasKey !== '' && isset($timPeralatanMap[$petugasKey])) {
-                    $peralatanAktual = $timPeralatanMap[$petugasKey];
-                } elseif (!empty($mob['peralatan_aktual'])) {
-                    // fallback data lama yang sempat disimpan di jadwal_mobilisasi
-                    $peralatanAktual = $this->decodePeralatan($mob['peralatan_aktual']);
+
+                // Prioritas: irisan batch_id (akurat untuk tim multi-sampler),
+                // lalu petugas_key, lalu fallback kolom jadwal_mobilisasi.
+                $peralatanAktual = IoPeralatanTimService::resolvePeralatanForBatches(
+                    $tanggal,
+                    $row->batch_id
+                );
+                if ($peralatanAktual === []) {
+                    $petugasKey = IoPeralatanTimService::normalizePetugasKey($row->sampler ?? '');
+                    if ($petugasKey !== '' && isset($timPeralatanMap[$petugasKey])) {
+                        $peralatanAktual = $timPeralatanMap[$petugasKey];
+                    } elseif (!empty($mob['peralatan_aktual'])) {
+                        $peralatanAktual = $this->decodePeralatan($mob['peralatan_aktual']);
+                    }
                 }
 
                 $namaAlat = [];
@@ -145,16 +149,7 @@ class InformasiOperasionalController extends Controller
                     $jumlahAlat[] = (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0);
                 }
 
-                $namaAlatAktual = [];
-                $jumlahAlatAktual = [];
-                foreach ($peralatanAktual as $item) {
-                    $nama = trim((string) ($item['nama_alat'] ?? ''));
-                    if ($nama === '') {
-                        continue;
-                    }
-                    $namaAlatAktual[] = $nama;
-                    $jumlahAlatAktual[] = (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0);
-                }
+                $aktualDisplay = $this->buildAktualDisplayLists($peralatanAktual);
 
                 $ketOps = trim(html_entity_decode(strip_tags((string) ($mob['keterangan_operasional'] ?? $mob['keterangan_operasional_sp'] ?? '')), ENT_QUOTES, 'UTF-8'));
 
@@ -175,9 +170,10 @@ class InformasiOperasionalController extends Controller
                     'jumlah_alat_list' => $jumlahAlat,
                     'jumlah_alat' => $this->requestCount($peralatan),
                     'peralatan_aktual' => $peralatanAktual,
-                    'nama_alat_aktual' => $namaAlatAktual,
-                    'jumlah_alat_aktual' => $jumlahAlatAktual,
-                    'has_peralatan_aktual' => count($namaAlatAktual) > 0,
+                    'nama_alat_aktual' => $aktualDisplay['nama'],
+                    'jumlah_alat_aktual' => $aktualDisplay['jumlah'],
+                    'kode_aset_aktual' => $aktualDisplay['kode'],
+                    'has_peralatan_aktual' => count($aktualDisplay['nama']) > 0,
                 ];
             })
             ->addColumn('keterangan_qs', function ($row) {
@@ -375,17 +371,15 @@ class InformasiOperasionalController extends Controller
         ]));
         $warnaAllowed = JadwalMobilisasiService::resolveWarnaFilter($warna);
 
-        $durasiReq = (int) $request->input('durasi', 0);
-        $durasi = $durasiReq > 0
-            ? $durasiReq
-            : JadwalMobilisasiService::resolveDurasiFromBatchIds($batchIds);
         $tanggal = $request->input('tanggal');
+        // Kunci alat by tanggal sampling saja (tanpa durasi).
         $range = null;
         if ($tanggal) {
+            $tanggalNorm = Carbon::parse($tanggal)->format('Y-m-d');
             $range = [
-                'start' => Carbon::parse($tanggal)->format('Y-m-d'),
-                'end' => JadwalMobilisasiService::resolveEndDate($tanggal, $durasi),
-                'durasi' => max(1, $durasi),
+                'start' => $tanggalNorm,
+                'end' => $tanggalNorm,
+                'durasi' => 1,
             ];
         }
 
@@ -395,7 +389,7 @@ class InformasiOperasionalController extends Controller
                 $branchId,
                 $warna,
                 $excludeKey,
-                $durasi
+                1
             );
         } else {
             $data = JadwalMobilisasiService::getPeralatanAvailable(
@@ -413,7 +407,7 @@ class InformasiOperasionalController extends Controller
             'mode' => $mode === 'units' || $mode === 'kode_aset' ? 'units' : 'grouped',
             'warna' => $warna,
             'warna_allowed' => $warnaAllowed,
-            'durasi' => max(1, $durasi),
+            'durasi' => 1,
             'range' => $range,
             'data' => $data,
         ]);
@@ -540,6 +534,17 @@ class InformasiOperasionalController extends Controller
         }
 
         $petugasKey = IoPeralatanTimService::normalizePetugasKey($petugas);
+
+        // Safety net: lepaskan batch orphan / ownership stale (mis. sampler SP sudah diganti).
+        $reconcile = ['changed' => false, 'message' => null];
+        if ($tanggal) {
+            $reconcile = IoPeralatanTimService::reconcileStaleOwnershipForBatches(
+                $tanggal,
+                $flatBatchIdsForDurasi,
+                $this->karyawan
+            );
+        }
+
         $savedTim = ($tanggal && $petugasKey !== '')
             ? IoPeralatanTimService::findActive($tanggal, $petugasKey)
             : null;
@@ -589,6 +594,8 @@ class InformasiOperasionalController extends Controller
             'has_saved_aktual' => $savedAktual !== null,
             'snapshots' => ($savedTim && is_array($savedTim->snapshots)) ? $savedTim->snapshots : [],
             'storage' => 'io_peralatan_tim',
+            'ownership_reconciled' => (bool) ($reconcile['changed'] ?? false),
+            'ownership_reconcile_message' => $reconcile['message'] ?? null,
         ]);
     }
 
@@ -673,14 +680,11 @@ class InformasiOperasionalController extends Controller
             if ($idCabang === null && !empty($row['id_cabang'])) {
                 $idCabang = (int) $row['id_cabang'];
             }
-            if (is_array($batchIds)) {
-                foreach ($batchIds as $id) {
-                    $flatBatchIds[] = $id;
-                }
-            } else {
-                $flatBatchIds[] = $batchIds;
+            foreach (JadwalMobilisasiService::flattenBatchIds($batchIds) as $id) {
+                $flatBatchIds[] = (int) $id;
             }
         }
+        $flatBatchIds = array_values(array_unique(array_filter($flatBatchIds, fn ($id) => $id > 0)));
 
         if ($tanggal === null || trim($petugas) === '') {
             return response()->json([
@@ -688,16 +692,23 @@ class InformasiOperasionalController extends Controller
             ], 422);
         }
 
+        // Safety net sebelum validasi lock: stale ownership dari ganti sampler SP.
+        IoPeralatanTimService::reconcileStaleOwnershipForBatches(
+            $tanggal,
+            $flatBatchIds,
+            $this->karyawan
+        );
+
         $petugasKey = IoPeralatanTimService::normalizePetugasKey($petugas);
-        $durasi = JadwalMobilisasiService::resolveDurasiFromBatchIds($flatBatchIds);
-        $tanggalEnd = JadwalMobilisasiService::resolveEndDate($tanggal, $durasi);
-        $locked = IoPeralatanTimService::usedKodeAsetByTanggal($tanggal, $petugasKey, $durasi);
+        // Kunci antar-tim & monitoring: tanggal sampling saja (tanpa durasi).
+        $tanggalEnd = $tanggal;
+        $locked = IoPeralatanTimService::usedKodeAsetByTanggal($tanggal, $petugasKey, 1);
         $lockedByKode = $locked['by_kode'] ?? [];
         foreach (array_keys($seenKode) as $kode) {
             if (isset($lockedByKode[$kode])) {
                 $owner = $lockedByKode[$kode];
                 return response()->json([
-                    'message' => "Kode aset {$kode} sudah dibawa tim lain ({$owner}) pada rentang {$tanggal} s/d {$tanggalEnd}.",
+                    'message' => "Kode aset {$kode} sudah dibawa tim lain ({$owner}) di tanggal {$tanggal}.",
                 ], 422);
             }
         }
@@ -706,6 +717,41 @@ class InformasiOperasionalController extends Controller
         $existingTim = IoPeralatanTimService::findActive($tanggal, $petugasKey);
         if ($existingTim) {
             $beforePeralatan = JadwalMobilisasiService::normalizePeralatanList($existingTim->peralatan ?? []);
+        }
+
+        $ownBeforeKodes = [];
+        foreach ($beforePeralatan as $beforeItem) {
+            foreach (($beforeItem['kode_aset_list'] ?? []) as $kode) {
+                $kode = trim((string) $kode);
+                if ($kode !== '') {
+                    $ownBeforeKodes[$kode] = true;
+                }
+            }
+        }
+
+        // Validasi monitoring: hanya status_alat (bukan start/end date).
+        $peralatanIds = MonitoringPeralatanService::resolvePeralatanIds($peralatan);
+        $monitoringById = MonitoringPeralatanService::latestMonitoringByPeralatanIds($peralatanIds);
+        $kodeById = [];
+        if ($peralatanIds !== []) {
+            $kodeById = \App\Models\Peralatan::query()
+                ->whereIn('id', $peralatanIds)
+                ->pluck('kode_aset', 'id')
+                ->mapWithKeys(fn ($kode, $id) => [(int) $id => trim((string) $kode)])
+                ->all();
+        }
+        foreach ($peralatanIds as $idPeralatan) {
+            $kode = $kodeById[$idPeralatan] ?? ('#' . $idPeralatan);
+            if (isset($ownBeforeKodes[$kode])) {
+                continue; // re-save bawaan tim sendiri
+            }
+            $monitoring = $monitoringById[$idPeralatan] ?? null;
+            if (MonitoringPeralatanService::isBusyOnTanggal($monitoring, $tanggal)) {
+                $status = $monitoring['status_alat'] ?? '-';
+                return response()->json([
+                    'message' => "Kode aset {$kode} berstatus {$status}; hanya status Tersedia yang bisa dipilih.",
+                ], 422);
+            }
         }
 
         $record = null;
@@ -738,13 +784,11 @@ class InformasiOperasionalController extends Controller
                 );
             }
 
-            // Monitoring per hari kalender: digunakan hanya pada tanggal IO ini, bukan rentang durasi jadwal.
+            // Monitoring: hanya status_alat (tanpa start_date / end_date).
             MonitoringPeralatanService::syncSedangDigunakanFromPeralatan(
                 $beforePeralatan,
                 $peralatan,
-                $this->karyawan,
-                $tanggal,
-                $tanggal
+                $this->karyawan
             );
         });
 
@@ -1502,6 +1546,72 @@ class InformasiOperasionalController extends Controller
         }
 
         return [];
+    }
+
+    /**
+     * Gabung peralatan aktual per nama alat untuk tampilan IO.
+     * Kode + warna digabung ke 1 baris nama agar sejajar dengan jumlah.
+     *
+     * @param  array<int, array>  $items
+     * @return array{nama: list<string>, jumlah: list<int>, kode: list<list<string>>}
+     */
+    private function buildAktualDisplayLists(array $items): array
+    {
+        $byNama = [];
+        foreach (JadwalMobilisasiService::normalizePeralatanList($items) as $item) {
+            $nama = trim((string) ($item['nama_alat'] ?? ''));
+            if ($nama === '') {
+                continue;
+            }
+            $key = mb_strtolower($nama);
+            if (!isset($byNama[$key])) {
+                $byNama[$key] = [
+                    'nama_alat' => $nama,
+                    'kode_labels' => [],
+                    'kode_seen' => [],
+                    'jumlah_fallback' => 0,
+                ];
+            }
+
+            $qty = max(0, (int) ($item['jumlah_alat'] ?? $item['jumlah'] ?? 0));
+            if ($qty > $byNama[$key]['jumlah_fallback']) {
+                $byNama[$key]['jumlah_fallback'] = $qty;
+            }
+
+            $warna = trim((string) ($item['warna'] ?? ''));
+            $list = $item['kode_aset_list'] ?? [];
+            if (!is_array($list)) {
+                continue;
+            }
+            foreach ($list as $kodeRaw) {
+                $kode = trim((string) $kodeRaw);
+                if ($kode === '') {
+                    continue;
+                }
+                $kodeKey = mb_strtolower($kode);
+                if (isset($byNama[$key]['kode_seen'][$kodeKey])) {
+                    continue;
+                }
+                $byNama[$key]['kode_seen'][$kodeKey] = true;
+                $byNama[$key]['kode_labels'][] = $warna !== '' ? "{$kode} ({$warna})" : $kode;
+            }
+        }
+
+        $nama = [];
+        $jumlah = [];
+        $kode = [];
+        foreach ($byNama as $entry) {
+            $labels = $entry['kode_labels'];
+            $nama[] = $entry['nama_alat'];
+            $jumlah[] = count($labels) > 0 ? count($labels) : (int) $entry['jumlah_fallback'];
+            $kode[] = $labels;
+        }
+
+        return [
+            'nama' => $nama,
+            'jumlah' => $jumlah,
+            'kode' => $kode,
+        ];
     }
 
     private function requestSummary(array $items): string

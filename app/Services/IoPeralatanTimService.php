@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\IoPeralatanTim;
+use App\Models\Jadwal;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Schema;
 
@@ -14,19 +15,33 @@ class IoPeralatanTimService
      */
     public static function normalizePetugasKey(?string $raw): string
     {
-        if ($raw === null || trim($raw) === '') {
+        $names = self::petugasNameList($raw);
+        if ($names === []) {
             return '';
         }
-
-        $decoded = html_entity_decode($raw, ENT_QUOTES, 'UTF-8');
-        $names = array_values(array_filter(array_map(function ($name) {
-            return mb_strtolower(trim($name));
-        }, preg_split('/\s*,\s*/', $decoded) ?: [])));
 
         sort($names, SORT_STRING);
         $joined = implode('|', $names);
 
-        return $joined === '' ? '' : sha1($joined);
+        return sha1($joined);
+    }
+
+    /**
+     * Daftar nama petugas (lower+trim) dari string CSV / HTML entity.
+     *
+     * @return list<string>
+     */
+    public static function petugasNameList(?string $raw): array
+    {
+        if ($raw === null || trim($raw) === '') {
+            return [];
+        }
+
+        $decoded = html_entity_decode($raw, ENT_QUOTES, 'UTF-8');
+
+        return array_values(array_filter(array_map(function ($name) {
+            return mb_strtolower(trim($name));
+        }, preg_split('/\s*,\s*/', $decoded) ?: [])));
     }
 
     /**
@@ -55,6 +70,48 @@ class IoPeralatanTimService
         return $map;
     }
 
+    /**
+     * Ambil peralatan aktual aktif yang memuat salah satu batch_id (paling akurat untuk index IO).
+     * Lookup by petugas_key sering gagal karena sampler di jadwal = 1 orang, sementara IO = tim.
+     *
+     * @param  mixed  $batchIds
+     * @return array<int, array>
+     */
+    public static function resolvePeralatanForBatches(string $tanggal, $batchIds): array
+    {
+        if (!Schema::hasTable('io_peralatan_tim') || trim($tanggal) === '') {
+            return [];
+        }
+
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', JadwalMobilisasiService::flattenBatchIds($batchIds)),
+            fn ($id) => $id > 0
+        )));
+        if ($ids === []) {
+            return [];
+        }
+
+        $rows = IoPeralatanTim::query()
+            ->where('is_active', true)
+            ->whereDate('tanggal', Carbon::parse($tanggal)->format('Y-m-d'))
+            ->get(['batch_ids', 'peralatan']);
+
+        foreach ($rows as $row) {
+            $rowIds = array_values(array_unique(array_filter(
+                array_map('intval', JadwalMobilisasiService::flattenBatchIds($row->batch_ids ?? [])),
+                fn ($id) => $id > 0
+            )));
+            if ($rowIds === []) {
+                continue;
+            }
+            if (array_intersect($ids, $rowIds) !== []) {
+                return JadwalMobilisasiService::normalizePeralatanList($row->peralatan ?? []);
+            }
+        }
+
+        return [];
+    }
+
     public static function findActive(string $tanggal, string $petugasKey): ?IoPeralatanTim
     {
         if (!Schema::hasTable('io_peralatan_tim') || $petugasKey === '') {
@@ -65,6 +122,28 @@ class IoPeralatanTimService
             ->where('is_active', true)
             ->whereDate('tanggal', $tanggal)
             ->where('petugas_key', $petugasKey)
+            ->first();
+    }
+
+    /**
+     * Cari row by tanggal+petugas_key (aktif dulu, fallback inactive).
+     * Perlu untuk upsert: unique index tidak membedakan is_active.
+     */
+    public static function findByTanggalPetugas(string $tanggal, string $petugasKey): ?IoPeralatanTim
+    {
+        if (!Schema::hasTable('io_peralatan_tim') || $petugasKey === '') {
+            return null;
+        }
+
+        $active = self::findActive($tanggal, $petugasKey);
+        if ($active) {
+            return $active;
+        }
+
+        return IoPeralatanTim::query()
+            ->whereDate('tanggal', $tanggal)
+            ->where('petugas_key', $petugasKey)
+            ->orderByDesc('id')
             ->first();
     }
 
@@ -136,8 +215,8 @@ class IoPeralatanTimService
     }
 
     /**
-     * Daftar kode_aset yang sudah dibawa tim lain pada rentang tanggal yang overlap.
-     * Rentang = tanggal … tanggal+(durasi-1). Durasi diambil dari jadwal batch tim tersebut.
+     * Daftar kode_aset yang sudah dibawa tim lain di tanggal sampling yang sama.
+     * (Tanpa durasi — kunci hanya by tanggal.)
      *
      * @return array{kodes: list<string>, by_kode: array<string, string>, range: array{start: string, end: string, durasi: int}}
      */
@@ -147,12 +226,11 @@ class IoPeralatanTimService
         int $durasi = 1
     ): array {
         $start = Carbon::parse($tanggal)->format('Y-m-d');
-        $durasi = max(1, $durasi);
-        $end = JadwalMobilisasiService::resolveEndDate($start, $durasi);
+        // Param $durasi diabaikan (kompatibilitas signature); kunci hanya tanggal yang sama.
         $empty = [
             'kodes' => [],
             'by_kode' => [],
-            'range' => ['start' => $start, 'end' => $end, 'durasi' => $durasi],
+            'range' => ['start' => $start, 'end' => $start, 'durasi' => 1],
         ];
 
         if (!Schema::hasTable('io_peralatan_tim') || trim($tanggal) === '') {
@@ -160,31 +238,16 @@ class IoPeralatanTimService
         }
 
         $excludeKey = $excludePetugasKey !== null ? trim($excludePetugasKey) : '';
-        // Ambil kandidat di sekitar rentang (durasi jadwal max praktis ~8–14 hari).
-        $lookbackStart = Carbon::parse($start)->subDays(14)->format('Y-m-d');
         $rows = IoPeralatanTim::query()
             ->where('is_active', true)
-            ->whereDate('tanggal', '>=', $lookbackStart)
-            ->whereDate('tanggal', '<=', $end)
-            ->get(['petugas_key', 'petugas_sampling', 'peralatan', 'batch_ids', 'tanggal']);
+            ->whereDate('tanggal', $start)
+            ->get(['petugas_key', 'petugas_sampling', 'peralatan']);
 
         $kodes = [];
         $byKode = [];
         foreach ($rows as $row) {
             $key = (string) ($row->petugas_key ?? '');
             if ($excludeKey !== '' && $key === $excludeKey) {
-                continue;
-            }
-
-            $rowStart = $row->tanggal
-                ? Carbon::parse($row->tanggal)->format('Y-m-d')
-                : null;
-            if ($rowStart === null) {
-                continue;
-            }
-            $rowDurasi = JadwalMobilisasiService::resolveDurasiFromBatchIds($row->batch_ids ?? []);
-            $rowEnd = JadwalMobilisasiService::resolveEndDate($rowStart, $rowDurasi);
-            if (!JadwalMobilisasiService::dateRangesOverlap($start, $end, $rowStart, $rowEnd)) {
                 continue;
             }
 
@@ -209,7 +272,7 @@ class IoPeralatanTimService
         return [
             'kodes' => $kodes,
             'by_kode' => $byKode,
-            'range' => ['start' => $start, 'end' => $end, 'durasi' => $durasi],
+            'range' => ['start' => $start, 'end' => $start, 'durasi' => 1],
         ];
     }
 
@@ -344,8 +407,11 @@ class IoPeralatanTimService
         $normalized = JadwalMobilisasiService::normalizePeralatanList($peralatan);
         $now = Carbon::now()->format('Y-m-d H:i:s');
 
-        $record = self::findActive($tanggal, $petugasKey);
+        // Unique (tanggal, petugas_key) berlaku juga untuk row is_active=0 (hasil release).
+        // Jangan insert baru — reaktivasi / update row yang sudah ada.
+        $record = self::findByTanggalPetugas($tanggal, $petugasKey);
         $isCreate = !$record;
+        $wasInactive = $record && !(bool) $record->is_active;
         if (!$record) {
             $record = new IoPeralatanTim();
             $record->created_by = $actor;
@@ -353,17 +419,20 @@ class IoPeralatanTimService
             $record->is_active = true;
         }
 
-        $before = JadwalMobilisasiService::normalizePeralatanList($record->peralatan ?? []);
+        $before = $wasInactive
+            ? []
+            : JadwalMobilisasiService::normalizePeralatanList($record->peralatan ?? []);
         $diff = self::diffPeralatan($before, $normalized);
         $snapshots = is_array($record->snapshots) ? $record->snapshots : [];
 
-        // Catat snapshot jika create atau ada perubahan alat/qty.
-        if ($isCreate || $diff['has_changes']) {
+        // Catat snapshot jika create, reactivate, atau ada perubahan alat/qty.
+        if ($isCreate || $wasInactive || $diff['has_changes']) {
             if (Schema::hasColumn('io_peralatan_tim', 'snapshots')) {
+                $action = $isCreate ? 'create' : ($wasInactive ? 'reactivate' : 'update');
                 $snapshots[] = self::buildSnapshotEntry(
                     $before,
                     $normalized,
-                    $isCreate ? 'create' : 'update',
+                    $action,
                     $actor,
                     $petugasSampling,
                     $now
@@ -390,5 +459,332 @@ class IoPeralatanTimService
         $record->save();
 
         return $record->fresh();
+    }
+
+    /**
+     * Rekonsiliasi kepemilikan alat setelah sampler SP berubah.
+     * - Detach batch dari io_peralatan_tim milik tim lama (petugas_key ≠ newKey)
+     * - Jika batch_ids kosong → nonaktifkan row + release monitoring
+     * - Tim baru tidak auto-dapat alat
+     *
+     * @param  mixed  $batchIds  satu id atau list jadwal id
+     * @return array{detached: list<array>, released: list<array>, remapped: list<array>}
+     */
+    public static function reconcileBatchSamplerChange(
+        string $tanggal,
+        $batchIds,
+        ?string $newPetugasSampling = null,
+        ?string $actor = null
+    ): array {
+        $result = ['detached' => [], 'released' => [], 'remapped' => []];
+        if (!Schema::hasTable('io_peralatan_tim')) {
+            return $result;
+        }
+
+        $tanggalNorm = Carbon::parse($tanggal)->format('Y-m-d');
+        $ids = JadwalMobilisasiService::normalizeBatchIds($batchIds)['ids'] ?? [];
+        if ($ids === []) {
+            return $result;
+        }
+
+        $newKey = self::normalizePetugasKey($newPetugasSampling);
+        $now = Carbon::now()->format('Y-m-d H:i:s');
+
+        $rows = IoPeralatanTim::query()
+            ->where('is_active', true)
+            ->whereDate('tanggal', $tanggalNorm)
+            ->get();
+
+        foreach ($rows as $row) {
+            $rowBatches = array_values(array_unique(array_filter(
+                array_map('intval', JadwalMobilisasiService::flattenBatchIds($row->batch_ids ?? [])),
+                fn ($id) => $id > 0
+            )));
+            $overlap = array_values(array_intersect($rowBatches, $ids));
+            if ($overlap === []) {
+                continue;
+            }
+
+            $rowKey = (string) ($row->petugas_key ?? '');
+            // Tim sama dengan sampler baru → biarkan (tidak transfer diam-diam).
+            if ($newKey !== '' && $rowKey === $newKey) {
+                continue;
+            }
+
+            $beforePeralatan = JadwalMobilisasiService::normalizePeralatanList($row->peralatan ?? []);
+            $remaining = array_values(array_diff($rowBatches, $ids));
+            $action = $remaining === [] ? 'sampler_release' : 'sampler_detach';
+
+            $snapshots = is_array($row->snapshots) ? $row->snapshots : [];
+            if (Schema::hasColumn('io_peralatan_tim', 'snapshots')) {
+                $entry = self::buildSnapshotEntry(
+                    $beforePeralatan,
+                    $remaining === [] ? [] : $beforePeralatan,
+                    $action,
+                    $actor,
+                    (string) ($row->petugas_sampling ?? ''),
+                    $now
+                );
+                $entry['batch_ids_removed'] = $overlap;
+                $entry['batch_ids_remaining'] = $remaining;
+                $entry['new_petugas_sampling'] = trim((string) $newPetugasSampling);
+                $entry['new_petugas_key'] = $newKey;
+                $snapshots[] = $entry;
+            }
+
+            if ($remaining === []) {
+                $row->batch_ids = [];
+                $row->peralatan = [];
+                $row->is_active = false;
+                $row->updated_by = $actor;
+                $row->updated_at = $now;
+                if (Schema::hasColumn('io_peralatan_tim', 'snapshots')) {
+                    $row->snapshots = $snapshots;
+                }
+                $row->save();
+
+                MonitoringPeralatanService::syncSedangDigunakanFromPeralatan(
+                    $beforePeralatan,
+                    [],
+                    $actor
+                );
+
+                $result['released'][] = [
+                    'io_id' => (int) $row->id,
+                    'petugas_sampling' => (string) ($row->petugas_sampling ?? ''),
+                    'batch_ids_removed' => $overlap,
+                ];
+            } else {
+                $row->batch_ids = $remaining;
+                $row->updated_by = $actor;
+                $row->updated_at = $now;
+                if (Schema::hasColumn('io_peralatan_tim', 'snapshots')) {
+                    $row->snapshots = $snapshots;
+                }
+                $row->save();
+
+                $result['detached'][] = [
+                    'io_id' => (int) $row->id,
+                    'petugas_sampling' => (string) ($row->petugas_sampling ?? ''),
+                    'batch_ids_removed' => $overlap,
+                    'batch_ids_remaining' => $remaining,
+                ];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Hook SP: rekonsiliasi batch lama + baru (dan tanggal lama bila pindah hari).
+     *
+     * @param  mixed  $oldBatchIds
+     * @param  mixed  $newBatchIds
+     * @return array{tanggal: array, tanggal_lama: array|null}
+     */
+    public static function reconcileAfterSamplerScheduleChange(
+        string $tanggal,
+        $oldBatchIds,
+        $newBatchIds,
+        ?string $newPetugasSampling,
+        ?string $actor = null,
+        ?string $tanggalLama = null
+    ): array {
+        $out = [
+            'tanggal' => ['detached' => [], 'released' => [], 'remapped' => []],
+            'tanggal_lama' => null,
+        ];
+
+        $oldIds = JadwalMobilisasiService::normalizeBatchIds($oldBatchIds)['ids'] ?? [];
+        $newIds = JadwalMobilisasiService::normalizeBatchIds($newBatchIds)['ids'] ?? [];
+        // Batch yang perlu dicek di tanggal baru: lama (masih tercatat di IO) + baru.
+        $idsOnNewDate = array_values(array_unique(array_merge($oldIds, $newIds)));
+
+        if ($idsOnNewDate !== []) {
+            $out['tanggal'] = self::reconcileBatchSamplerChange(
+                $tanggal,
+                $idsOnNewDate,
+                $newPetugasSampling,
+                $actor
+            );
+        }
+
+        $tanggalLamaNorm = $tanggalLama ? Carbon::parse($tanggalLama)->format('Y-m-d') : null;
+        $tanggalNorm = Carbon::parse($tanggal)->format('Y-m-d');
+        if ($tanggalLamaNorm && $tanggalLamaNorm !== $tanggalNorm && $oldIds !== []) {
+            // Pindah tanggal: lepaskan batch lama dari IO di hari lama (sampler baru bukan pemilik hari lama).
+            $out['tanggal_lama'] = self::reconcileBatchSamplerChange(
+                $tanggalLamaNorm,
+                $oldIds,
+                null, // force detach dari siapa pun yang memegang batch lama
+                $actor
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * Safety net IO: detach batch yang sudah tidak match sampler jadwal aktif /
+     * batch jadwal sudah nonaktif (orphan setelah re-insert SP).
+     *
+     * @param  mixed  $batchIds  batch yang sedang dibuka di modal IO (konteks)
+     * @return array{changed: bool, detached: list<array>, released: list<array>, message: string|null}
+     */
+    public static function reconcileStaleOwnershipForBatches(
+        string $tanggal,
+        $batchIds = null,
+        ?string $actor = null
+    ): array {
+        $empty = [
+            'changed' => false,
+            'detached' => [],
+            'released' => [],
+            'message' => null,
+        ];
+        if (!Schema::hasTable('io_peralatan_tim')) {
+            return $empty;
+        }
+
+        $tanggalNorm = Carbon::parse($tanggal)->format('Y-m-d');
+        $contextIds = JadwalMobilisasiService::normalizeBatchIds($batchIds)['ids'] ?? [];
+
+        $rows = IoPeralatanTim::query()
+            ->where('is_active', true)
+            ->whereDate('tanggal', $tanggalNorm)
+            ->get();
+
+        $detached = [];
+        $released = [];
+        $now = Carbon::now()->format('Y-m-d H:i:s');
+
+        // Flatten batch ids (bisa tersimpan sebagai "175637,175638" per elemen).
+        $allBatchIds = [];
+        foreach ($rows as $row) {
+            foreach (JadwalMobilisasiService::flattenBatchIds($row->batch_ids ?? []) as $id) {
+                $allBatchIds[] = (int) $id;
+            }
+        }
+        $allBatchIds = array_values(array_unique(array_filter($allBatchIds, fn ($id) => $id > 0)));
+        if ($allBatchIds === []) {
+            return $empty;
+        }
+
+        // Map id jadwal aktif → nama sampler (bukan petugas_key tim).
+        // Jadwal.sampler = 1 orang; io petugas_key = hash seluruh tim → jangan dibanding hash-ke-hash.
+        $activeSamplerNameById = [];
+        if (Schema::hasTable('jadwal')) {
+            $jadwalRows = Jadwal::query()
+                ->whereIn('id', $allBatchIds)
+                ->where('is_active', true)
+                ->get(['id', 'sampler']);
+            foreach ($jadwalRows as $j) {
+                $names = self::petugasNameList($j->sampler ?? '');
+                $activeSamplerNameById[(int) $j->id] = $names[0] ?? '';
+            }
+        }
+
+        foreach ($rows as $row) {
+            $rowBatches = JadwalMobilisasiService::flattenBatchIds($row->batch_ids ?? []);
+            $rowBatches = array_values(array_unique(array_filter(array_map('intval', $rowBatches), fn ($id) => $id > 0)));
+            if ($rowBatches === []) {
+                continue;
+            }
+
+            $stale = [];
+            $teamNames = array_fill_keys(self::petugasNameList($row->petugas_sampling ?? ''), true);
+            foreach ($rowBatches as $bid) {
+                // Orphan: jadwal id sudah tidak aktif / tidak ada.
+                if (!isset($activeSamplerNameById[$bid])) {
+                    $stale[] = $bid;
+                    continue;
+                }
+                $samplerName = $activeSamplerNameById[$bid];
+                // Masih milik tim ini jika nama sampler ada di daftar petugas_sampling tim.
+                if ($teamNames !== [] && $samplerName !== '' && !isset($teamNames[$samplerName])) {
+                    $stale[] = $bid;
+                }
+            }
+            $stale = array_values(array_unique($stale));
+            if ($stale === []) {
+                continue;
+            }
+
+            // Hanya laporkan ke UI jika stale menyentuh batch konteks modal / semua bila konteks kosong.
+            $touchesContext = $contextIds === [] || array_intersect($stale, $contextIds) !== [];
+
+            $beforePeralatan = JadwalMobilisasiService::normalizePeralatanList($row->peralatan ?? []);
+            $remaining = array_values(array_diff($rowBatches, $stale));
+            $action = $remaining === [] ? 'sampler_release' : 'sampler_detach';
+
+            $snapshots = is_array($row->snapshots) ? $row->snapshots : [];
+            if (Schema::hasColumn('io_peralatan_tim', 'snapshots')) {
+                $entry = self::buildSnapshotEntry(
+                    $beforePeralatan,
+                    $remaining === [] ? [] : $beforePeralatan,
+                    $action,
+                    $actor,
+                    (string) ($row->petugas_sampling ?? ''),
+                    $now
+                );
+                $entry['batch_ids_removed'] = $stale;
+                $entry['batch_ids_remaining'] = $remaining;
+                $entry['reason'] = 'stale_ownership';
+                $snapshots[] = $entry;
+            }
+
+            if ($remaining === []) {
+                $row->batch_ids = [];
+                $row->peralatan = [];
+                $row->is_active = false;
+                $row->updated_by = $actor;
+                $row->updated_at = $now;
+                if (Schema::hasColumn('io_peralatan_tim', 'snapshots')) {
+                    $row->snapshots = $snapshots;
+                }
+                $row->save();
+                MonitoringPeralatanService::syncSedangDigunakanFromPeralatan(
+                    $beforePeralatan,
+                    [],
+                    $actor
+                );
+                if ($touchesContext) {
+                    $released[] = [
+                        'io_id' => (int) $row->id,
+                        'petugas_sampling' => (string) ($row->petugas_sampling ?? ''),
+                        'batch_ids_removed' => $stale,
+                    ];
+                }
+            } else {
+                $row->batch_ids = $remaining;
+                $row->updated_by = $actor;
+                $row->updated_at = $now;
+                if (Schema::hasColumn('io_peralatan_tim', 'snapshots')) {
+                    $row->snapshots = $snapshots;
+                }
+                $row->save();
+                if ($touchesContext) {
+                    $detached[] = [
+                        'io_id' => (int) $row->id,
+                        'petugas_sampling' => (string) ($row->petugas_sampling ?? ''),
+                        'batch_ids_removed' => $stale,
+                        'batch_ids_remaining' => $remaining,
+                    ];
+                }
+            }
+        }
+
+        $changed = $detached !== [] || $released !== [];
+        $message = null;
+        if ($changed) {
+            $message = 'Alat sempat tercatat di tim lama dan sudah dilepas otomatis. Silakan pilih ulang.';
+        }
+
+        return [
+            'changed' => $changed,
+            'detached' => $detached,
+            'released' => $released,
+            'message' => $message,
+        ];
     }
 }

@@ -18,6 +18,7 @@ use Carbon\Carbon;
 use Exception;
 use App\Services\SendEmail;
 use App\Services\JadwalMobilisasiService;
+use App\Services\IoPeralatanTimService;
 use App\Jobs\SendNotifPerubahanJadwalJob;
 use App\Jobs\SyncSamplerTrackingScheduleJob;
 
@@ -786,6 +787,19 @@ class JadwalServices
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
 
+            try {
+                IoPeralatanTimService::reconcileAfterSamplerScheduleChange(
+                    (string) $dataUpdate->tanggal,
+                    $dataUpdate->batch_id ?? [],
+                    !empty($newBatchIds) ? $newBatchIds : ($dataUpdate->batch_id ?? []),
+                    implode(',', $this->parseScheduleSamplerNames($dataUpdate->sampler)),
+                    $dataUpdate->karyawan ?? null,
+                    isset($dataUpdate->tanggal_lama) ? (string) $dataUpdate->tanggal_lama : null
+                );
+            } catch (\Throwable $th) {
+                throw new Exception('Gagal rekonsiliasi peralatan tim: ' . $th->getMessage(), 500);
+            }
+
             // Reconcile existing activity after all schedule branches and PSHEADER,
             // without changing the legacy selection/count used by lama == baru.
             DB::commit();
@@ -1039,6 +1053,20 @@ class JadwalServices
             } catch (\Throwable $th) {
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
+
+            try {
+                IoPeralatanTimService::reconcileAfterSamplerScheduleChange(
+                    (string) $dataUpdate->tanggal,
+                    $dataUpdate->batch_id ?? [],
+                    !empty($newBatchIds) ? $newBatchIds : ($dataUpdate->batch_id ?? []),
+                    implode(',', $this->parseScheduleSamplerNames($dataUpdate->sampler)),
+                    $dataUpdate->karyawan ?? null,
+                    isset($dataUpdate->tanggal_lama) ? (string) $dataUpdate->tanggal_lama : null
+                );
+            } catch (\Throwable $th) {
+                throw new Exception('Gagal rekonsiliasi peralatan tim: ' . $th->getMessage(), 500);
+            }
+
             // Run for both lama == baru and changed team size, even when PSHEADER
             // itself has no dirty fields. Do not create a new tracking session here.
             DB::commit();
