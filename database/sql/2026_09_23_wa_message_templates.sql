@@ -151,7 +151,7 @@ VALUES
    JSON_OBJECT('key','nama','label','Nama kandidat','required',true),
    JSON_OBJECT('key','posisi','label','Posisi dilamar','required',true),
    JSON_OBJECT('key','gaji','label','Penawaran gaji (Rp)','required',true),
-   JSON_OBJECT('key','email','label','Email tujuan PDF','required',false)
+   JSON_OBJECT('key','email','label','Email tujuan','required',false)
  ),
  'SalaryOfferingLetter', 'weighted_random', 72, 1, NOW(), NOW()),
 
@@ -162,7 +162,7 @@ VALUES
    JSON_OBJECT('key','posisi','label','Posisi dilamar','required',true),
    JSON_OBJECT('key','gaji','label','Gaji pokok','required',true),
    JSON_OBJECT('key','tanggal_mulai','label','Tanggal mulai kerja','required',true),
-   JSON_OBJECT('key','email','label','Email tujuan PDF','required',false)
+   JSON_OBJECT('key','email','label','Email tujuan','required',false)
  ),
  'HiringLetter', 'weighted_random', 72, 1, NOW(), NOW()),
 
