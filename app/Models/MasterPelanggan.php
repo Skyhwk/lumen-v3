@@ -137,4 +137,29 @@ class MasterPelanggan extends Sector
     {
         return $this->hasMany(QuotationKontrakH::class, 'pelanggan_ID', 'id_pelanggan');
     }
+
+    /**
+     * Cek apakah kode id_pelanggan sudah dipakai (master, blacklist, atau backup).
+     */
+    public static function idPelangganTaken(string $idPelanggan): bool
+    {
+        $idPelanggan = trim($idPelanggan);
+        if ($idPelanggan === '') {
+            return true;
+        }
+
+        if (static::where('id_pelanggan', $idPelanggan)->exists()) {
+            return true;
+        }
+
+        if (MasterPelangganBlacklist::where('id_pelanggan', $idPelanggan)->exists()) {
+            return true;
+        }
+
+        if (MasterPelangganBackup::where('id_pelanggan', $idPelanggan)->exists()) {
+            return true;
+        }
+
+        return false;
+    }
 }
