@@ -14,7 +14,7 @@ return new class extends Migration
 
         Schema::create('menu_data_access', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('menu_key', 100)->comment('Slug leaf menu (generic), contoh: rekap-bak');
+            $table->string('menu_key', 100)->comment('Slug leaf menu (generic), contoh: laporan-bak');
             $table->json('grades')->nullable()->comment('Array grade karyawan, contoh: ["STAFF","MANAGER"]');
             $table->boolean('is_active')->default(true);
             $table->string('created_by', 150)->nullable();

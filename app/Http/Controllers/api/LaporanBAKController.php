@@ -9,7 +9,7 @@ use DataTables;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
-class RekapBAKController extends Controller
+class LaporanBAKController extends Controller
 {
     public function index(Request $request)
     {
@@ -28,7 +28,7 @@ class RekapBAKController extends Controller
 
             MenuDataAccessService::applyKaryawanGradeFilter(
                 $query,
-                Str::slug('Rekap BAK'),
+                Str::slug('Laporan BAK'),
             );
 
             if ($isProcessed) {
