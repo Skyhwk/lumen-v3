@@ -10,12 +10,13 @@ use Illuminate\Support\Facades\Log;
 class GenerateMonthlyAbsensiCommand extends Command
 {
     protected $signature = 'absensi:generate-monthly
-                            {--bulan= : Periode YYYY-MM (default: bulan sebelumnya menurut WIB)}
+                            {--bulan= : Periode YYYY-MM (override semua grade; default per grade dari --as-of)}
                             {--as-of= : Tanggal acuan YYYY-MM-DD untuk hitung bulan target (default: hari ini WIB)}
+                            {--grade= : Batasi STAFF atau SUPERVISOR saja}
                             {--force : Generate ulang meski rekap aktif sudah ada}
                             {--dry-run : Simulasi — hitung rekap tanpa menulis database}';
 
-    protected $description = 'Generate rekap absensi bulanan otomatis untuk karyawan STAFF & SUPERVISOR (cron: tgl 1 jam 10:00 WIB, periode = bulan sebelumnya)';
+    protected $description = 'Generate rekap absensi bulanan STAFF (bulan kalender) & SUPERVISOR (16–15); cron staff tgl 1, SPV tgl 16';
 
     public function handle(MonthlyAbsensiGenerateOrchestrator $orchestrator): int
     {
@@ -23,24 +24,40 @@ class GenerateMonthlyAbsensiCommand extends Command
         $asOfOption = trim((string) $this->option('as-of'));
         $bulanOption = trim((string) $this->option('bulan'));
 
+        $bulanOverride = null;
         if ($bulanOption !== '') {
             if (!preg_match('/^\d{4}-\d{2}$/', $bulanOption)) {
                 $this->error('Format --bulan harus YYYY-MM.');
 
                 return 1;
             }
-            $bulanTarget = $bulanOption;
-        } else {
-            $asOfYmd = $asOfOption !== ''
-                ? Carbon::parse($asOfOption, $timezone)->toDateString()
-                : Carbon::now($timezone)->toDateString();
-            $bulanTarget = $orchestrator->resolveTargetBulanYm($asOfYmd);
+            $bulanOverride = $bulanOption;
         }
+
+        $gradeOption = trim((string) $this->option('grade'));
+        if ($gradeOption !== '' && !in_array(strtoupper($gradeOption), ['STAFF', 'SUPERVISOR', 'SPV'], true)) {
+            $this->error('Opsi --grade harus STAFF atau SUPERVISOR.');
+
+            return 1;
+        }
+
+        $asOfYmd = $asOfOption !== ''
+            ? Carbon::parse($asOfOption, $timezone)->toDateString()
+            : Carbon::now($timezone)->toDateString();
 
         $skipExisting = !(bool) $this->option('force');
         $dryRun = (bool) $this->option('dry-run');
 
-        $this->info('Generate absensi bulanan — periode: ' . $bulanTarget . ' (WIB)');
+        if ($bulanOverride !== null) {
+            $this->info('Generate absensi bulanan — periode override: ' . $bulanOverride . ' (semua grade, WIB)');
+        } else {
+            $this->info(sprintf(
+                'Generate absensi bulanan — STAFF: %s | SUPERVISOR: %s (as-of %s WIB)',
+                $orchestrator->resolveTargetBulanYm($asOfYmd),
+                \App\Services\Hr\AbsensiPeriodeService::resolveTargetBulanYmSupervisor($asOfYmd),
+                $asOfYmd
+            ));
+        }
         if ($dryRun) {
             $this->warn('Mode DRY-RUN: tidak ada insert/update ke rekap_masuk_kerja atau absensi.');
         }
@@ -48,20 +65,29 @@ class GenerateMonthlyAbsensiCommand extends Command
         $startedAt = microtime(true);
 
         Log::info('absensi:generate-monthly mulai', [
-            'bulan' => $bulanTarget,
+            'bulan_override' => $bulanOverride,
+            'grade_filter' => $gradeOption !== '' ? strtoupper($gradeOption) : null,
+            'as_of' => $asOfYmd,
             'skip_existing' => $skipExisting,
             'dry_run' => $dryRun,
             'started_at' => Carbon::now($timezone)->toDateTimeString(),
         ]);
 
         try {
-            $summary = $orchestrator->generateForStaffSupervisor($bulanTarget, $skipExisting, $dryRun);
+            $summary = $orchestrator->generateForStaffSupervisor(
+                $bulanOverride,
+                $skipExisting,
+                $dryRun,
+                $asOfYmd,
+                $gradeOption !== '' ? $gradeOption : null
+            );
         } catch (\Throwable $e) {
             $durationSeconds = round(microtime(true) - $startedAt, 2);
             $this->error($e->getMessage());
             Log::error('absensi:generate-monthly gagal total', [
                 'error' => $e->getMessage(),
-                'bulan' => $bulanTarget,
+                'bulan_override' => $bulanOverride,
+                'as_of' => $asOfYmd,
                 'duration_seconds' => $durationSeconds,
                 'duration_human' => $this->formatDurationHuman($durationSeconds),
             ]);
@@ -124,7 +150,8 @@ class GenerateMonthlyAbsensiCommand extends Command
         }
 
         Log::info('absensi:generate-monthly selesai', array_merge($summary, [
-            'bulan' => $bulanTarget,
+            'bulan_override' => $bulanOverride,
+            'as_of' => $asOfYmd,
             'duration_seconds' => $durationSeconds,
             'duration_human' => $this->formatDurationHuman($durationSeconds),
             'finished_at' => Carbon::now($timezone)->toDateTimeString(),

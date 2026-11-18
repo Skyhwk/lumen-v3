@@ -183,7 +183,7 @@ class WaMessageTemplateSeeder extends Seeder
                 'description' => 'SalaryOfferingLetter',
                 'variables' => array_merge($vBase, [
                     ['key' => 'gaji', 'label' => 'Penawaran gaji', 'required' => true],
-                    ['key' => 'email', 'label' => 'Email tujuan PDF', 'required' => false],
+                    ['key' => 'email', 'label' => 'Email tujuan', 'required' => false],
                 ]),
             ],
             [
@@ -194,7 +194,7 @@ class WaMessageTemplateSeeder extends Seeder
                 'variables' => array_merge($vBase, [
                     ['key' => 'gaji', 'label' => 'Gaji pokok', 'required' => true],
                     ['key' => 'tanggal_mulai', 'label' => 'Tanggal mulai kerja', 'required' => true],
-                    ['key' => 'email', 'label' => 'Email tujuan PDF', 'required' => false],
+                    ['key' => 'email', 'label' => 'Email tujuan', 'required' => false],
                 ]),
             ],
             [

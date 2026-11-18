@@ -315,7 +315,7 @@ class GenerateMessageAtsWhatsapp
             $msg .= "• Tunjangan Kerja: " . HrdEmailViewData::formatRupiah($tunjangan) . "\n";
         }
         $msg .= "\n";
-        $msg .= "Mohon periksa email Anda (termasuk folder spam) dan pelajari dokumen PDF yang kami lampirkan.\n";
+        $msg .= "Mohon periksa email Anda (termasuk folder spam) dan pelajari rincian penawaran gaji yang kami kirimkan.\n";
         $msg .= "Catatan: surat ini *bukan keputusan penerimaan kerja resmi* — keputusan final akan diberikan setelah tahapan administrasi berikutnya selesai.\n\n";
         $msg .= "Apabila ada pertanyaan, silakan hubungi tim HRD kami.\n\n";
         $msg .= "Salam,\n";
@@ -353,12 +353,12 @@ class GenerateMessageAtsWhatsapp
             $msg .= "• Tunjangan Kerja: " . HrdEmailViewData::formatRupiah($tunjangan) . "\n";
         }
         $msg .= "• Tanggal Mulai Kerja: " . $tglMulai . "\n\n";
-        $msg .= "Surat Keputusan Penerimaan Kerja (Hiring Letter) PDF telah kami kirimkan";
+        $msg .= "Surat Keputusan Penerimaan Kerja (Hiring Letter) telah kami kirimkan";
         if ($email !== '') {
             $msg .= " ke email: *" . $email . "*";
         }
         $msg .= ".\n\n";
-        $msg .= "Mohon periksa email Anda (termasuk folder spam), unduh lampiran PDF, dan berikan konfirmasi penerimaan paling lambat *1 x 24 jam* sejak surat diterima.\n\n";
+        $msg .= "Mohon periksa email Anda (termasuk folder spam) dan berikan konfirmasi penerimaan paling lambat *1 x 24 jam* sejak surat diterima.\n\n";
         $msg .= "Apabila ada pertanyaan, silakan hubungi tim HRD kami.\n\n";
         $msg .= "Salam,\n";
         $msg .= "*Tim Recruitment HRD*\n";

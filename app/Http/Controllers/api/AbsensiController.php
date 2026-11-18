@@ -248,21 +248,15 @@ class AbsensiController extends Controller
                 ], 404);
             }
 
-            $month = $periode['month'];
-            $year = $periode['year'];
-            $lastDay = self::daysInMonth((int) $month, (int) $year);
-
-            $data = self::buildMonthlyAbsensiData(
-                $cekKaryawan->id,
-                $year,
-                $month,
-                $lastDay,
-                $cekKaryawan->nik_karyawan,
-                $cekKaryawan->nama_lengkap
+            $bulanYm = sprintf('%s-%s', $periode['year'], str_pad((string) $periode['month'], 2, '0', STR_PAD_LEFT));
+            $data = (new MonthlyAbsensiDataBuilder())->buildForKaryawan(
+                (int) $cekKaryawan->id,
+                $bulanYm,
+                false
             );
 
             return response()->json([
-                'data' => $data
+                'data' => $data,
             ], 200);
         }
     }
