@@ -3,15 +3,33 @@
 namespace App\Support;
 
 /**
- * Lampiran BAK: di DB hanya nama file; path folder = dokumentasi/{id}/ (ditambah di backend).
+ * Lampiran BAK: di DB hanya nama file; folder = dokumentasi/bak/{nomor_surat}/.
  */
 class BeritaAcaraKejadianDokumentasiStorage
 {
-    public const PREFIX = 'dokumen/disipliner/berita-acara-kejadian/dokumentasi';
+    public const PREFIX = 'dokumentasi/bak';
 
-    public static function folderRelative(int $documentId): string
+    public static function nomorFolderSegment(string $nomorSurat): string
     {
-        return self::PREFIX . '/' . $documentId;
+        $safe = preg_replace('/[^A-Za-z0-9._-]+/', '_', trim($nomorSurat));
+
+        return $safe !== '' ? $safe : 'tanpa-nomor';
+    }
+
+    public static function folderRelative(string $nomorSurat): string
+    {
+        return self::PREFIX . '/' . self::nomorFolderSegment($nomorSurat);
+    }
+
+    public static function publicDirectory(string $nomorSurat): string
+    {
+        $relative = self::folderRelative($nomorSurat);
+        $dir = public_path(str_replace('/', DIRECTORY_SEPARATOR, $relative));
+        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            throw new \RuntimeException('Folder lampiran BAK gagal dibuat: ' . $relative);
+        }
+
+        return $dir;
     }
 
     public static function normalizeStoredName(string $item): string
@@ -28,19 +46,19 @@ class BeritaAcaraKejadianDokumentasiStorage
         return $item;
     }
 
-    public static function toRelativePath(int $documentId, string $stored): string
+    public static function toRelativePath(string $nomorSurat, string $stored): string
     {
         $name = self::normalizeStoredName($stored);
         if ($name === '') {
             return '';
         }
 
-        return self::folderRelative($documentId) . '/' . $name;
+        return self::folderRelative($nomorSurat) . '/' . $name;
     }
 
-    public static function fullPath(int $documentId, string $stored): string
+    public static function fullPath(string $nomorSurat, string $stored): string
     {
-        $relative = self::toRelativePath($documentId, $stored);
+        $relative = self::toRelativePath($nomorSurat, $stored);
         if ($relative === '') {
             return '';
         }
@@ -77,11 +95,11 @@ class BeritaAcaraKejadianDokumentasiStorage
      * @param array<int, string> $storedNames
      * @return array<int, string>
      */
-    public static function expandForApi(int $documentId, array $storedNames): array
+    public static function expandForApi(string $nomorSurat, array $storedNames): array
     {
         $paths = [];
         foreach ($storedNames as $stored) {
-            $rel = self::toRelativePath($documentId, (string) $stored);
+            $rel = self::toRelativePath($nomorSurat, (string) $stored);
             if ($rel !== '') {
                 $paths[] = $rel;
             }
