@@ -208,11 +208,19 @@ class GenerateMessageAtsEmail
     {
         $date = $data->tanggal_tes ?? $data->tgl_tes ?? null;
 
-        if (!$date && is_object($data) && method_exists($data, 'interviews')) {
-            try {
-                $date = $data->interviews()->whereNotNull('tgl_interview')->orderByDesc('tgl_interview')->value('tgl_interview');
-            } catch (\Throwable $e) {
-                $date = null;
+        if (!$date) {
+            $recruitmentId = $data->id ?? $data->new_recruitment_id ?? null;
+            if ($recruitmentId) {
+                try {
+                    $date = \Illuminate\Support\Facades\DB::table('assessment_sessions as s')
+                        ->join('assessment_attempts as a', 'a.id', '=', 's.assessment_attempt_id')
+                        ->where('a.recruitment_id', $recruitmentId)
+                        ->whereNotNull('s.started_at')
+                        ->orderBy('s.started_at')
+                        ->value('s.started_at');
+                } catch (\Throwable $e) {
+                    $date = null;
+                }
             }
         }
 
