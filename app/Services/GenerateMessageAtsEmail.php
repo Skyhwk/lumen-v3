@@ -347,7 +347,7 @@ class GenerateMessageAtsEmail
             </div>
             <p style='margin:0 0 6px 0;font-size:14px;font-weight:700;color:#0f172a;'>Catatan :</p>
             <p style='margin:0 0 8px 0;font-size:14px;line-height:1.7;color:#0f172a;font-weight:700;text-decoration:none;'>
-                <span style='text-decoration:none;'>1. Penawaran ini merupakan bagian dari </span><u>proses klarifikasi awal tahapan rekrutmen Perusahaan, dan bukan merupakan keputusan final Perusahaan maupun Surat Keputusan Penerimaan Resmi <em style='font-style:italic;'>(Hiring Letter)</em>.</u>
+                <span style='text-decoration:none;'>1. Penawaran ini merupakan bagian dari </span><u>proses klarifikasi awal tahapan rekrutmen Perusahaan, dan bukan merupakan keputusan final Perusahaan</u> maupun Surat Keputusan Penerimaan Resmi <em style='font-style:italic;'>(Hiring Letter)</em>.
             </p>
             <p style='margin:0;font-size:14px;line-height:1.7;color:#0f172a;font-weight:400;'>
                 2. Apabila Anda memerlukan penjelasan lebih lanjut, silakan menghubungi Tim HRD.
@@ -464,7 +464,7 @@ class GenerateMessageAtsEmail
             </p>
             {$profileRows}
             <p style='margin:0 0 14px 0;font-size:14px;line-height:1.7;color:#0f172a;'>
-                Dengan ini kami menyampaikan bahwa Anda <u><strong>DITERIMA</strong></u> untuk bergabung bekerja di <strong>PT Inti Surya Laboratorium</strong>, sesuai dengan besaran upah sebagaimana tercantum dalam Offering Letter elektronik yang telah Anda setujui pada sistem resmi perusahaan, dengan <u><strong>tanggal mulai bekerja</strong></u> :
+                Dengan ini kami menyampaikan bahwa <strong>Anda <u>DITERIMA</u> untuk bergabung bekerja di PT Inti Surya Laboratorium</strong>, sesuai dengan besaran upah sebagaimana tercantum dalam <em style='font-style:italic;'>Offering Letter</em> elektronik yang telah Anda setujui pada sistem resmi perusahaan, dengan <u><strong>tanggal mulai bekerja</strong></u> :
                 <strong>{$tglMulaiKerja}, pukul 08.00 WIB</strong>.
             </p>
             <p style='margin:0 0 14px 0;font-size:14px;line-height:1.7;color:#0f172a;'>
@@ -1713,7 +1713,7 @@ class GenerateMessageAtsEmail
             </p>
             {$profileRows}
             <p style='margin:0 0 14px 0;font-size:14px;line-height:1.7;color:#0f172a;'>
-                Dengan ini kami menyampaikan bahwa <strong>Anda <u>BELUM DAPAT DITERIMA</u></strong> proses rekrutmen di <strong>PT Inti Surya Laboratorium</strong>.
+                Dengan ini kami menyampaikan bahwa <strong>Anda <u>BELUM DAPAT DITERIMA</u> proses rekrutmen di PT Inti Surya Laboratorium</strong>.
             </p>
             <p style='margin:0 0 14px 0;font-size:14px;line-height:1.7;color:#334155;'>
                 Kandidat berkesempatan untuk melamar kerja kembali ke PT Inti Surya Laboratorium setelah melewati jangka waktu 6 (enam) bulan terhitung sejak tanggal e-mail ini dikirimkan.
