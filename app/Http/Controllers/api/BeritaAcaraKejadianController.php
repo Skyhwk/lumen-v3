@@ -468,7 +468,7 @@ class BeritaAcaraKejadianController extends Controller
             $document->save();
             $document->timestamps = true;
 
-            $writtenGroups = $this->storeDokumentasiFileGroups((int) $document->id, $uploads);
+            $writtenGroups = $this->storeDokumentasiFileGroups((string) $document->nomor_surat, $uploads);
             $writtenDokumentasi = $this->flattenDokumentasiGroups($writtenGroups);
             $document->dokumentasi = json_encode($writtenDokumentasi, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $document->lampiran = $this->formatLampiranCount($writtenDokumentasi);
@@ -486,7 +486,7 @@ class BeritaAcaraKejadianController extends Controller
         } catch (\Throwable $ex) {
             DB::rollBack();
             if (isset($document) && (int) $document->id > 0 && $writtenDokumentasi !== []) {
-                $this->deleteDokumentasiFiles((int) $document->id, $writtenDokumentasi);
+                $this->deleteDokumentasiFiles((string) $document->nomor_surat, $writtenDokumentasi);
             }
 
             return response()->json([
@@ -579,7 +579,7 @@ class BeritaAcaraKejadianController extends Controller
                 ], 422);
             }
 
-            $writtenGroups = $this->storeDokumentasiFileGroups((int) $document->id, $uploads);
+            $writtenGroups = $this->storeDokumentasiFileGroups((string) $document->nomor_surat, $uploads);
             $writtenDokumentasi = $this->flattenDokumentasiGroups($writtenGroups);
             $finalDokumentasi = $this->mergeDokumentasiInOrder($request, $keptDokumentasi, $writtenGroups);
 
@@ -617,7 +617,7 @@ class BeritaAcaraKejadianController extends Controller
 
             DB::commit();
             $this->deleteDokumentasiFiles(
-                (int) $document->id,
+                (string) $document->nomor_surat,
                 array_values(array_diff($existingDokumentasi, $finalDokumentasi))
             );
 
@@ -628,7 +628,7 @@ class BeritaAcaraKejadianController extends Controller
             ], 200);
         } catch (\Throwable $ex) {
             DB::rollBack();
-            $this->deleteDokumentasiFiles((int) $document->id, $writtenDokumentasi);
+            $this->deleteDokumentasiFiles((string) $document->nomor_surat, $writtenDokumentasi);
 
             return response()->json([
                 'success' => false,
@@ -1081,7 +1081,10 @@ class BeritaAcaraKejadianController extends Controller
         }
 
         $storedDokumentasi = BeritaAcaraKejadianDokumentasiStorage::decodeList($item->dokumentasi ?? null);
-        $item->dokumentasi = BeritaAcaraKejadianDokumentasiStorage::expandForApi((int) $item->id, $storedDokumentasi);
+        $item->dokumentasi = BeritaAcaraKejadianDokumentasiStorage::expandForApi(
+            (string) ($item->nomor_surat ?? ''),
+            $storedDokumentasi
+        );
         $dampakParsed = BeritaAcaraKejadianDampak::parse($item->dampak_aset_perusahaan ?? null);
         $item->berdampak_pada_aset = trim((string) ($dampakParsed['nama_jenis_aset'] ?? '')) !== '' ? 'ya' : 'tidak';
         $item->nama_karyawan = $item->nama_lengkap ?: '-';
@@ -1512,17 +1515,13 @@ class BeritaAcaraKejadianController extends Controller
      * @param array<int, \Illuminate\Http\UploadedFile> $files
      * @return array<int, array<int, string>>
      */
-    private function storeDokumentasiFileGroups(int $documentId, array $files): array
+    private function storeDokumentasiFileGroups(string $nomorSurat, array $files): array
     {
         if ($files === []) {
             return [];
         }
 
-        $relativeDir = 'dokumen/disipliner/berita-acara-kejadian/dokumentasi/' . $documentId;
-        $directory = public_path($relativeDir);
-        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
-            throw new \RuntimeException('Folder dokumentasi gagal dibuat.');
-        }
+        $directory = BeritaAcaraKejadianDokumentasiStorage::publicDirectory($nomorSurat);
 
         $converter = app(BeritaAcaraKejadianLampiranConvertService::class);
         $groups = [];
@@ -1566,10 +1565,10 @@ class BeritaAcaraKejadianController extends Controller
     /**
      * @param array<int, string> $storedNames nama file saja (atau path lama)
      */
-    private function deleteDokumentasiFiles(int $documentId, array $storedNames): void
+    private function deleteDokumentasiFiles(string $nomorSurat, array $storedNames): void
     {
         foreach ($storedNames as $stored) {
-            $full = BeritaAcaraKejadianDokumentasiStorage::fullPath($documentId, (string) $stored);
+            $full = BeritaAcaraKejadianDokumentasiStorage::fullPath($nomorSurat, (string) $stored);
             if ($full !== '' && is_file($full)) {
                 @unlink($full);
             }

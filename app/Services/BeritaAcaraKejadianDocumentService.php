@@ -151,7 +151,10 @@ class BeritaAcaraKejadianDocumentService
             ? Carbon::parse($document->tanggal_kejadian)->locale('id')
             : $issueDate->copy();
 
-        $lampiranPrepared = $this->prepareLampiranImages($document->dokumentasi ?? null, (int) $document->id);
+        $lampiranPrepared = $this->prepareLampiranImages(
+            $document->dokumentasi ?? null,
+            (string) ($document->nomor_surat ?? '')
+        );
         $lampiranImages = $lampiranPrepared['srcs'];
         $uploadedCount = $lampiranPrepared['file_count'];
 
@@ -427,10 +430,10 @@ class BeritaAcaraKejadianDocumentService
      *
      * @return array{srcs: array<int, string>, file_count: int}
      */
-    private function prepareLampiranImages($raw, int $documentId): array
+    private function prepareLampiranImages($raw, string $nomorSurat): array
     {
         $items = BeritaAcaraKejadianDokumentasiStorage::decodeList($raw);
-        if ($items === [] || $documentId <= 0) {
+        if ($items === [] || trim($nomorSurat) === '') {
             return ['srcs' => [], 'file_count' => 0];
         }
 
@@ -438,7 +441,7 @@ class BeritaAcaraKejadianDocumentService
         $fileCount = count($items);
 
         foreach ($items as $storedName) {
-            $full = BeritaAcaraKejadianDokumentasiStorage::fullPath($documentId, $storedName);
+            $full = BeritaAcaraKejadianDokumentasiStorage::fullPath($nomorSurat, $storedName);
             if ($full === '' || !is_file($full)) {
                 continue;
             }
