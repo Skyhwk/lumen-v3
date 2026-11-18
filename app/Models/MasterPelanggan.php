@@ -140,8 +140,10 @@ class MasterPelanggan extends Sector
 
     /**
      * Cek apakah kode id_pelanggan sudah dipakai (master, blacklist, atau backup).
+     *
+     * @param  int|null  $ignoreBackupMasterId  Abaikan baris backup ini (restore dari backup).
      */
-    public static function idPelangganTaken(string $idPelanggan): bool
+    public static function idPelangganTaken(string $idPelanggan, ?int $ignoreBackupMasterId = null): bool
     {
         $idPelanggan = trim($idPelanggan);
         if ($idPelanggan === '') {
@@ -156,7 +158,12 @@ class MasterPelanggan extends Sector
             return true;
         }
 
-        if (MasterPelangganBackup::where('id_pelanggan', $idPelanggan)->exists()) {
+        $backupQuery = MasterPelangganBackup::where('id_pelanggan', $idPelanggan);
+        if ($ignoreBackupMasterId !== null) {
+            $backupQuery->where('id', '!=', $ignoreBackupMasterId);
+        }
+
+        if ($backupQuery->exists()) {
             return true;
         }
 
