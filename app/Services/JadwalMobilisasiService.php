@@ -962,10 +962,11 @@ class JadwalMobilisasiService
             $idPeralatan = (int) $row->id;
             $isLockedIo = isset($lockedByKode[$kodeAset]);
             $monitoring = $monitoringById[$idPeralatan] ?? null;
+            // latest is_active=0 sudah di-normalize jadi Tersedia di service.
             $statusAlat = $monitoring['status_alat'] ?? MonitoringPeralatanService::STATUS_TERSEDIA;
             $isOwn = isset($ownKodes[$kodeAset]);
 
-            // Sibuk dari monitoring: status != Tersedia (tanggal start/end bukan ranah IO).
+            // Sibuk: is_active=1 + status != Tersedia. is_active=0 = tersedia.
             $isBusyMonitoring = MonitoringPeralatanService::isBusyOnTanggal(
                 $monitoring,
                 $tanggalNorm ?? ''

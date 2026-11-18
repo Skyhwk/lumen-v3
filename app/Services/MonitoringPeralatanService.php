@@ -435,10 +435,11 @@ class MonitoringPeralatanService
     }
 
     /**
-     * Map id_peralatan → monitoring terbaru (ORDER BY id DESC), tanpa filter is_active.
+     * Map id_peralatan → monitoring terbaru (ORDER BY id DESC).
+     * Aturan IO: record terakhir dengan is_active=0 = Tersedia (boleh dipilih).
      *
      * @param  list<int>  $peralatanIds
-     * @return array<int, array{status_alat: string, start_date: ?string, end_date: ?string}>
+     * @return array<int, array{status_alat: string, is_active: bool, start_date: ?string, end_date: ?string}>
      */
     public static function latestMonitoringByPeralatanIds(array $peralatanIds): array
     {
@@ -454,8 +455,6 @@ class MonitoringPeralatanService
         $latestIds = DB::table('monitoring_peralatan as mp')
             ->select(DB::raw('MAX(mp.id) as id'))
             ->whereIn('mp.id_peralatan', $peralatanIds)
-            ->whereNotNull('mp.status_alat')
-            ->whereRaw("TRIM(mp.status_alat) <> ''")
             ->groupBy('mp.id_peralatan')
             ->pluck('id')
             ->all();
@@ -464,9 +463,13 @@ class MonitoringPeralatanService
             return [];
         }
 
-        $select = ['id_peralatan', 'status_alat'];
+        $hasIsActive = Schema::hasColumn('monitoring_peralatan', 'is_active');
         $hasStart = Schema::hasColumn('monitoring_peralatan', 'start_date');
         $hasEnd = Schema::hasColumn('monitoring_peralatan', 'end_date');
+        $select = ['id_peralatan', 'status_alat'];
+        if ($hasIsActive) {
+            $select[] = 'is_active';
+        }
         if ($hasStart) {
             $select[] = 'start_date';
         }
@@ -481,10 +484,20 @@ class MonitoringPeralatanService
         $map = [];
         foreach ($rows as $row) {
             $id = (int) $row->id_peralatan;
-            $status = trim((string) ($row->status_alat ?? ''));
-            if ($id <= 0 || $status === '') {
+            if ($id <= 0) {
                 continue;
             }
+
+            // is_active=0 pada record terakhir = tersedia (aturan monitoring IO).
+            $isActive = $hasIsActive ? (bool) $row->is_active : true;
+            $status = trim((string) ($row->status_alat ?? ''));
+            if (!$isActive) {
+                $status = self::STATUS_TERSEDIA;
+            }
+            if ($status === '') {
+                $status = self::STATUS_TERSEDIA;
+            }
+
             $start = ($hasStart && $row->start_date)
                 ? Carbon::parse($row->start_date)->format('Y-m-d')
                 : null;
@@ -493,6 +506,7 @@ class MonitoringPeralatanService
                 : null;
             $map[$id] = [
                 'status_alat' => $status,
+                'is_active' => $isActive,
                 'start_date' => $start,
                 'end_date' => $end,
             ];
@@ -519,9 +533,9 @@ class MonitoringPeralatanService
 
     /**
      * Apakah alat masih "sibuk" untuk pemilihan IO.
-     * Hanya berdasarkan status_alat (start/end date bukan ranah IO):
-     * - Tersedia / kosong → bebas
-     * - Selain Tersedia → sibuk sampai status diubah jadi Tersedia
+     * - Record monitoring terakhir is_active=0 → tersedia (tidak sibuk)
+     * - status Tersedia / kosong → tidak sibuk
+     * - Selain itu (is_active=1 + status bukan Tersedia) → sibuk
      *
      * Param $tanggal dipertahankan untuk kompatibilitas pemanggilan lama (diabaikan).
      */
@@ -530,6 +544,10 @@ class MonitoringPeralatanService
         unset($tanggal);
 
         if ($monitoring === null) {
+            return false;
+        }
+
+        if (array_key_exists('is_active', $monitoring) && !(bool) $monitoring['is_active']) {
             return false;
         }
 
