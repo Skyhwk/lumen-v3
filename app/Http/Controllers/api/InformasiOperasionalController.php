@@ -114,24 +114,28 @@ class InformasiOperasionalController extends Controller
             ->addColumn('lokasi_penempatan', function ($row) {
                 return $row->nama_cabang ?: 'HEAD OFFICE (Default)';
             })
-            ->addColumn('mobilisasi', function ($row) use ($timPeralatanMap) {
+            ->addColumn('mobilisasi', function ($row) use ($timPeralatanMap, $tanggal) {
                 if (empty($row->batch_id)) {
                     return null;
                 }
 
-                $mob = JadwalMobilisasiService::findActiveByBatchIds($row->batch_id);
-                if (!$mob) {
-                    return null;
-                }
-
+                // jadwal_mobilisasi bisa absen; bawaan aktual tetap dari io_peralatan_tim.
+                $mob = JadwalMobilisasiService::findActiveByBatchIds($row->batch_id) ?: [];
                 $peralatan = $this->decodePeralatan($mob['peralatan_sampling'] ?? []);
-                $petugasKey = IoPeralatanTimService::normalizePetugasKey($row->sampler ?? '');
-                $peralatanAktual = [];
-                if ($petugasKey !== '' && isset($timPeralatanMap[$petugasKey])) {
-                    $peralatanAktual = $timPeralatanMap[$petugasKey];
-                } elseif (!empty($mob['peralatan_aktual'])) {
-                    // fallback data lama yang sempat disimpan di jadwal_mobilisasi
-                    $peralatanAktual = $this->decodePeralatan($mob['peralatan_aktual']);
+
+                // Prioritas: irisan batch_id (akurat untuk tim multi-sampler),
+                // lalu petugas_key, lalu fallback kolom jadwal_mobilisasi.
+                $peralatanAktual = IoPeralatanTimService::resolvePeralatanForBatches(
+                    $tanggal,
+                    $row->batch_id
+                );
+                if ($peralatanAktual === []) {
+                    $petugasKey = IoPeralatanTimService::normalizePetugasKey($row->sampler ?? '');
+                    if ($petugasKey !== '' && isset($timPeralatanMap[$petugasKey])) {
+                        $peralatanAktual = $timPeralatanMap[$petugasKey];
+                    } elseif (!empty($mob['peralatan_aktual'])) {
+                        $peralatanAktual = $this->decodePeralatan($mob['peralatan_aktual']);
+                    }
                 }
 
                 $namaAlat = [];
@@ -530,6 +534,17 @@ class InformasiOperasionalController extends Controller
         }
 
         $petugasKey = IoPeralatanTimService::normalizePetugasKey($petugas);
+
+        // Safety net: lepaskan batch orphan / ownership stale (mis. sampler SP sudah diganti).
+        $reconcile = ['changed' => false, 'message' => null];
+        if ($tanggal) {
+            $reconcile = IoPeralatanTimService::reconcileStaleOwnershipForBatches(
+                $tanggal,
+                $flatBatchIdsForDurasi,
+                $this->karyawan
+            );
+        }
+
         $savedTim = ($tanggal && $petugasKey !== '')
             ? IoPeralatanTimService::findActive($tanggal, $petugasKey)
             : null;
@@ -579,6 +594,8 @@ class InformasiOperasionalController extends Controller
             'has_saved_aktual' => $savedAktual !== null,
             'snapshots' => ($savedTim && is_array($savedTim->snapshots)) ? $savedTim->snapshots : [],
             'storage' => 'io_peralatan_tim',
+            'ownership_reconciled' => (bool) ($reconcile['changed'] ?? false),
+            'ownership_reconcile_message' => $reconcile['message'] ?? null,
         ]);
     }
 
@@ -663,20 +680,24 @@ class InformasiOperasionalController extends Controller
             if ($idCabang === null && !empty($row['id_cabang'])) {
                 $idCabang = (int) $row['id_cabang'];
             }
-            if (is_array($batchIds)) {
-                foreach ($batchIds as $id) {
-                    $flatBatchIds[] = $id;
-                }
-            } else {
-                $flatBatchIds[] = $batchIds;
+            foreach (JadwalMobilisasiService::flattenBatchIds($batchIds) as $id) {
+                $flatBatchIds[] = (int) $id;
             }
         }
+        $flatBatchIds = array_values(array_unique(array_filter($flatBatchIds, fn ($id) => $id > 0)));
 
         if ($tanggal === null || trim($petugas) === '') {
             return response()->json([
                 'message' => 'Tanggal / petugas sampling tim tidak ditemukan.',
             ], 422);
         }
+
+        // Safety net sebelum validasi lock: stale ownership dari ganti sampler SP.
+        IoPeralatanTimService::reconcileStaleOwnershipForBatches(
+            $tanggal,
+            $flatBatchIds,
+            $this->karyawan
+        );
 
         $petugasKey = IoPeralatanTimService::normalizePetugasKey($petugas);
         // Kunci antar-tim & monitoring: tanggal sampling saja (tanpa durasi).
