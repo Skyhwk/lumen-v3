@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BeritaAcaraKejadianDisipliner;
 use App\Models\MasterKaryawan;
 use App\Services\BakAtasanWorkflowService;
+use App\Services\BakDocumentVisibilityService;
 use App\Services\BeritaAcaraKejadianDocumentService;
 use App\Services\BeritaAcaraKejadianLampiranConvertService;
 use App\Services\DisiplinerPdfFixingService;
@@ -24,6 +25,7 @@ class BeritaAcaraKejadianController extends Controller
     {
         try {
             $query = $this->baseQuery();
+            $this->applyVisibilityScope($query);
 
             $periode = (int) $request->input('periode', date('Y'));
             if ($periode >= 2000) {
@@ -55,12 +57,12 @@ class BeritaAcaraKejadianController extends Controller
     public function detail(Request $request)
     {
         try {
-            $record = $this->findActiveRecord($this->resolveId($request));
+            $record = $this->findVisibleRecord($this->resolveId($request));
             if ($record === null) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Berita acara kejadian tidak ditemukan.',
-                ], 404);
+                    'message' => 'Anda tidak memiliki akses untuk melihat BAK ini.',
+                ], 403);
             }
 
             return response()->json([
@@ -80,29 +82,36 @@ class BeritaAcaraKejadianController extends Controller
         $periode = (int) $request->input('periode', date('Y'));
 
         $base = BeritaAcaraKejadianDisipliner::query()
-            ->where('is_active', true);
+            ->from('berita_acara_kejadian_disipliner as bak')
+            ->where('bak.is_active', true);
 
         if ($periode >= 2000) {
-            $base->whereYear('tanggal_kejadian', $periode);
+            $base->whereYear('bak.tanggal_kejadian', $periode);
         }
+
+        $visibility = app(BakDocumentVisibilityService::class);
+        $visibility->applyListScope($base, (int) $this->user_id);
+
+        $showTabCounts = $visibility->viewerShowsTabCounts((int) $this->user_id);
 
         return response()->json([
             'success' => true,
             'data' => [
+                'show_tab_counts' => $showTabCounts,
                 'permintaan_dokumen' => (clone $base)
-                    ->where('proses_status', BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN)
+                    ->where('bak.proses_status', BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN)
                     ->count(),
                 'verifikasi_atasan' => (clone $base)
-                    ->where('proses_status', BeritaAcaraKejadianDisipliner::PROSES_VERIFIKASI_ATASAN)
+                    ->where('bak.proses_status', BeritaAcaraKejadianDisipliner::PROSES_VERIFIKASI_ATASAN)
                     ->count(),
                 'menunggu_diproses' => (clone $base)
-                    ->where('proses_status', BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES)
+                    ->where('bak.proses_status', BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES)
                     ->count(),
                 'sedang_diproses' => (clone $base)
-                    ->where('proses_status', BeritaAcaraKejadianDisipliner::PROSES_SEDANG_DIPROSES)
+                    ->where('bak.proses_status', BeritaAcaraKejadianDisipliner::PROSES_SEDANG_DIPROSES)
                     ->count(),
                 'sudah_diproses' => (clone $base)
-                    ->where('proses_status', BeritaAcaraKejadianDisipliner::PROSES_SUDAH_DIPROSES)
+                    ->where('bak.proses_status', BeritaAcaraKejadianDisipliner::PROSES_SUDAH_DIPROSES)
                     ->count(),
             ],
         ], 200);
@@ -113,18 +122,12 @@ class BeritaAcaraKejadianController extends Controller
         DB::beginTransaction();
 
         try {
-            $document = BeritaAcaraKejadianDisipliner::query()
-                ->where('id', $this->resolveId($request))
-                ->where('is_active', true)
-                ->first();
+            $document = $this->findDocumentForViewer($this->resolveId($request));
 
             if ($document === null) {
                 DB::rollBack();
 
-                return response()->json([
-                    'success' => false,
-                    'message' => 'BAK tidak ditemukan.',
-                ], 404);
+                return $this->notFoundOrForbiddenResponse();
             }
 
             if ($document->proses_status !== BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN) {
@@ -141,12 +144,24 @@ class BeritaAcaraKejadianController extends Controller
             $document->updated_at = Carbon::now();
             $document->save();
 
+            $record = $this->findVisibleRecord($document->id);
+            if (
+                $record !== null
+                && $document->proses_status === BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES
+            ) {
+                app(BeritaAcaraKejadianDocumentService::class)->syncBakQrFromRecord(
+                    $document,
+                    $record,
+                    $this->karyawan
+                );
+            }
+
             DB::commit();
 
             return response()->json([
                 'success' => true,
                 'message' => $workflow->buildAjukanSuccessMessage($document),
-                'data' => $this->decorate($this->findActiveRecord($document->id)),
+                'data' => $this->decorate($this->findVisibleRecord($document->id)),
             ], 200);
         } catch (\Throwable $ex) {
             DB::rollBack();
@@ -158,23 +173,76 @@ class BeritaAcaraKejadianController extends Controller
         }
     }
 
-    public function approveAtasan(Request $request, BakAtasanWorkflowService $workflow)
+    public function rejectAtasan(Request $request, BakAtasanWorkflowService $workflow, BeritaAcaraKejadianDocumentService $documentService)
     {
         DB::beginTransaction();
 
         try {
-            $document = BeritaAcaraKejadianDisipliner::query()
-                ->where('id', $this->resolveId($request))
-                ->where('is_active', true)
-                ->first();
+            $document = $this->findDocumentForViewer($this->resolveId($request));
 
             if ($document === null) {
                 DB::rollBack();
 
+                return $this->notFoundOrForbiddenResponse();
+            }
+
+            $approver = MasterKaryawan::query()
+                ->where('id', (int) $this->user_id)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$approver) {
+                DB::rollBack();
+
                 return response()->json([
                     'success' => false,
-                    'message' => 'BAK tidak ditemukan.',
+                    'message' => 'Data verifikator tidak ditemukan.',
                 ], 404);
+            }
+
+            $reason = trim((string) $request->input('keterangan', $request->input('reason', '')));
+
+            $document = $workflow->markAtasanRejected($document, $approver, $reason);
+            $document->updated_by = $this->karyawan;
+            $document->updated_at = Carbon::now();
+            $document->save();
+
+            $record = $this->findVisibleRecord($document->id);
+            if ($record !== null) {
+                $documentService->invalidateStoredPdf($document->fresh());
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'BAK ditolak. Dokumen kembali ke permintaan dokumen dan dapat diperbaiki lalu diajukan ulang.',
+                'data' => $record ? $this->decorate($record) : null,
+            ], 200);
+        } catch (\Throwable $ex) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function approveAtasan(
+        Request $request,
+        BakAtasanWorkflowService $workflow,
+        BeritaAcaraKejadianDocumentService $documentService
+    ) {
+        DB::beginTransaction();
+
+        try {
+            $document = $this->findDocumentForViewer($this->resolveId($request));
+
+            if ($document === null) {
+                DB::rollBack();
+
+                return $this->notFoundOrForbiddenResponse();
             }
 
             $approver = MasterKaryawan::query()
@@ -197,6 +265,13 @@ class BeritaAcaraKejadianController extends Controller
             $document->updated_at = Carbon::now();
             $document->save();
 
+            if ($result['done']) {
+                $record = $this->findVisibleRecord($document->id);
+                if ($record !== null) {
+                    $documentService->syncBakQrFromRecord($document, $record, $this->karyawan);
+                }
+            }
+
             DB::commit();
 
             return response()->json([
@@ -204,7 +279,7 @@ class BeritaAcaraKejadianController extends Controller
                 'message' => $result['done']
                     ? 'Verifikasi atasan selesai. BAK menunggu diproses.'
                     : 'Verifikasi disimpan. Menunggu verifikator berikutnya.',
-                'data' => $this->decorate($this->findActiveRecord($document->id)),
+                'data' => $this->decorate($this->findVisibleRecord($document->id)),
             ], 200);
         } catch (\Throwable $ex) {
             DB::rollBack();
@@ -221,18 +296,12 @@ class BeritaAcaraKejadianController extends Controller
         DB::beginTransaction();
 
         try {
-            $document = BeritaAcaraKejadianDisipliner::query()
-                ->where('id', $this->resolveId($request))
-                ->where('is_active', true)
-                ->first();
+            $document = $this->findDocumentForViewer($this->resolveId($request));
 
             if ($document === null) {
                 DB::rollBack();
 
-                return response()->json([
-                    'success' => false,
-                    'message' => 'BAK tidak ditemukan.',
-                ], 404);
+                return $this->notFoundOrForbiddenResponse();
             }
 
             if ($document->proses_status !== BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES) {
@@ -254,7 +323,7 @@ class BeritaAcaraKejadianController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'BAK sedang diproses.',
-                'data' => $this->decorate($this->findActiveRecord($document->id)),
+                'data' => $this->decorate($this->findVisibleRecord($document->id)),
             ], 200);
         } catch (\Throwable $ex) {
             DB::rollBack();
@@ -271,18 +340,12 @@ class BeritaAcaraKejadianController extends Controller
         DB::beginTransaction();
 
         try {
-            $document = BeritaAcaraKejadianDisipliner::query()
-                ->where('id', $this->resolveId($request))
-                ->where('is_active', true)
-                ->first();
+            $document = $this->findDocumentForViewer($this->resolveId($request));
 
             if ($document === null) {
                 DB::rollBack();
 
-                return response()->json([
-                    'success' => false,
-                    'message' => 'BAK tidak ditemukan.',
-                ], 404);
+                return $this->notFoundOrForbiddenResponse();
             }
 
             if ($document->proses_status !== BeritaAcaraKejadianDisipliner::PROSES_SEDANG_DIPROSES) {
@@ -304,7 +367,7 @@ class BeritaAcaraKejadianController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'BAK sudah diproses.',
-                'data' => $this->decorate($this->findActiveRecord($document->id)),
+                'data' => $this->decorate($this->findVisibleRecord($document->id)),
             ], 200);
         } catch (\Throwable $ex) {
             DB::rollBack();
@@ -427,7 +490,7 @@ class BeritaAcaraKejadianController extends Controller
             $document->save();
             $document->timestamps = true;
 
-            $writtenGroups = $this->storeDokumentasiFileGroups((int) $document->id, $uploads);
+            $writtenGroups = $this->storeDokumentasiFileGroups((string) $document->nomor_surat, $uploads);
             $writtenDokumentasi = $this->flattenDokumentasiGroups($writtenGroups);
             $document->dokumentasi = json_encode($writtenDokumentasi, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $document->lampiran = $this->formatLampiranCount($writtenDokumentasi);
@@ -440,12 +503,12 @@ class BeritaAcaraKejadianController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Berita acara kejadian berhasil dibuat. Menunggu pengesahan.',
-                'data' => $this->decorate($this->findActiveRecord($document->id)),
+                'data' => $this->decorate($this->findVisibleRecord($document->id)),
             ], 200);
         } catch (\Throwable $ex) {
             DB::rollBack();
             if (isset($document) && (int) $document->id > 0 && $writtenDokumentasi !== []) {
-                $this->deleteDokumentasiFiles((int) $document->id, $writtenDokumentasi);
+                $this->deleteDokumentasiFiles((string) $document->nomor_surat, $writtenDokumentasi);
             }
 
             return response()->json([
@@ -465,18 +528,12 @@ class BeritaAcaraKejadianController extends Controller
                 'id' => 'required|integer',
             ]);
 
-            $document = BeritaAcaraKejadianDisipliner::query()
-                ->where('id', (int) $request->id)
-                ->where('is_active', true)
-                ->first();
+            $document = $this->findDocumentForViewer((int) $request->id);
 
             if ($document === null) {
                 DB::rollBack();
 
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Berita acara kejadian tidak ditemukan.',
-                ], 404);
+                return $this->notFoundOrForbiddenResponse();
             }
 
             $workflow = app(BakAtasanWorkflowService::class);
@@ -485,7 +542,7 @@ class BeritaAcaraKejadianController extends Controller
 
                 return response()->json([
                     'success' => false,
-                    'message' => 'BAK yang sudah diproses tidak dapat diubah.',
+                    'message' => 'BAK hanya dapat diubah pada tahap permintaan dokumen (sebelum diajukan ke verifikasi atasan).',
                 ], 422);
             }
 
@@ -544,7 +601,7 @@ class BeritaAcaraKejadianController extends Controller
                 ], 422);
             }
 
-            $writtenGroups = $this->storeDokumentasiFileGroups((int) $document->id, $uploads);
+            $writtenGroups = $this->storeDokumentasiFileGroups((string) $document->nomor_surat, $uploads);
             $writtenDokumentasi = $this->flattenDokumentasiGroups($writtenGroups);
             $finalDokumentasi = $this->mergeDokumentasiInOrder($request, $keptDokumentasi, $writtenGroups);
 
@@ -582,18 +639,18 @@ class BeritaAcaraKejadianController extends Controller
 
             DB::commit();
             $this->deleteDokumentasiFiles(
-                (int) $document->id,
+                (string) $document->nomor_surat,
                 array_values(array_diff($existingDokumentasi, $finalDokumentasi))
             );
 
             return response()->json([
                 'success' => true,
                 'message' => 'Berita acara kejadian berhasil diperbarui.',
-                'data' => $this->decorate($this->findActiveRecord($document->id)),
+                'data' => $this->decorate($this->findVisibleRecord($document->id)),
             ], 200);
         } catch (\Throwable $ex) {
             DB::rollBack();
-            $this->deleteDokumentasiFiles((int) $document->id, $writtenDokumentasi);
+            $this->deleteDokumentasiFiles((string) $document->nomor_surat, $writtenDokumentasi);
 
             return response()->json([
                 'success' => false,
@@ -604,20 +661,16 @@ class BeritaAcaraKejadianController extends Controller
 
     public function approve(
         Request $request,
-        BeritaAcaraKejadianDocumentService $documentService,
-        GenerateQrDocumentBeritaAcaraKejadian $qrService
+        BeritaAcaraKejadianDocumentService $documentService
     ) {
         DB::beginTransaction();
 
         try {
-            $record = $this->findActiveRecord($this->resolveId($request));
+            $record = $this->findVisibleRecord($this->resolveId($request));
             if ($record === null) {
                 DB::rollBack();
 
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Berita acara kejadian tidak ditemukan.',
-                ], 404);
+                return $this->notFoundOrForbiddenResponse();
             }
 
             $document = BeritaAcaraKejadianDisipliner::query()
@@ -634,29 +687,24 @@ class BeritaAcaraKejadianController extends Controller
                 ], 422);
             }
 
-            $qrFile = $qrService->sync($document, $record, $this->karyawan);
-
-            $svgPath = QrDocumentsStorage::svgPath($qrFile);
-            if (!is_file($svgPath)) {
-                throw new \RuntimeException('QR tidak tersimpan di: ' . $svgPath);
+            if (trim((string) ($document->file_qr ?? '')) === '') {
+                $documentService->syncBakQrFromRecord($document, $record, $this->karyawan);
+            } else {
+                GenerateQrDocumentBeritaAcaraKejadian::ensurePublicSvgForFile($document->file_qr);
             }
 
-            $document->file_qr = $qrFile;
             $document->status = BeritaAcaraKejadianDisipliner::STATUS_ISSUED;
             $document->published_by = $this->karyawan;
             $document->updated_by = $this->karyawan;
             $document->updated_at = Carbon::now();
             $document->save();
-            $document->refresh();
-
-            $documentService->invalidateStoredPdf($document);
 
             DB::commit();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Berita acara kejadian berhasil disahkan.',
-                'data' => $this->decorate($this->findActiveRecord($document->id)),
+                'data' => $this->decorate($this->findVisibleRecord($document->id)),
             ], 200);
         } catch (\Throwable $ex) {
             DB::rollBack();
@@ -675,12 +723,9 @@ class BeritaAcaraKejadianController extends Controller
     )
     {
         try {
-            $record = $this->findActiveRecord($this->resolveId($request));
+            $record = $this->findVisibleRecord($this->resolveId($request));
             if ($record === null) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Berita acara kejadian tidak ditemukan.',
-                ], 404);
+                return $this->notFoundOrForbiddenResponse();
             }
 
             $document = BeritaAcaraKejadianDisipliner::query()
@@ -689,10 +734,7 @@ class BeritaAcaraKejadianController extends Controller
                 ->first();
 
             if ($document === null) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Berita acara kejadian tidak ditemukan.',
-                ], 404);
+                return $this->notFoundOrForbiddenResponse();
             }
 
             $linked = trim((string) ($document->file_qr ?? ''));
@@ -744,18 +786,12 @@ class BeritaAcaraKejadianController extends Controller
         DB::beginTransaction();
 
         try {
-            $record = BeritaAcaraKejadianDisipliner::query()
-                ->where('id', $this->resolveId($request))
-                ->where('is_active', true)
-                ->first();
+            $record = $this->findDocumentForViewer($this->resolveId($request));
 
             if ($record === null) {
                 DB::rollBack();
 
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Berita acara kejadian tidak ditemukan.',
-                ], 404);
+                return $this->notFoundOrForbiddenResponse();
             }
 
             if ($record->status !== BeritaAcaraKejadianDisipliner::STATUS_DRAFT) {
@@ -816,12 +852,9 @@ class BeritaAcaraKejadianController extends Controller
     public function printPdf(Request $request, BeritaAcaraKejadianDocumentService $documentService)
     {
         try {
-            $record = $this->findActiveRecord($this->resolveId($request));
+            $record = $this->findVisibleRecord($this->resolveId($request));
             if ($record === null) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Berita acara kejadian tidak ditemukan.',
-                ], 404);
+                return $this->notFoundOrForbiddenResponse();
             }
 
             $document = BeritaAcaraKejadianDisipliner::find($record->id);
@@ -885,6 +918,10 @@ class BeritaAcaraKejadianController extends Controller
                 'bak.approval_step',
                 'bak.approval_chain',
                 'bak.approval_log',
+                'bak.reject_atasan_reason',
+                'bak.rejected_atasan_at',
+                'bak.rejected_atasan_by',
+                'bak.rejected_atasan_karyawan_id',
                 'bak.nama_berkas',
                 'bak.file_path',
                 'bak.file_size',
@@ -909,6 +946,54 @@ class BeritaAcaraKejadianController extends Controller
         }
 
         return $this->baseQuery()->where('bak.id', (int) $id)->first();
+    }
+
+    private function findVisibleRecord($id): ?object
+    {
+        $record = $this->findActiveRecord($id);
+        if ($record === null) {
+            return null;
+        }
+
+        $visibility = app(BakDocumentVisibilityService::class);
+        if (!$visibility->canViewRow($record, (int) $this->user_id)) {
+            return null;
+        }
+
+        return $record;
+    }
+
+    private function applyVisibilityScope($query): void
+    {
+        app(BakDocumentVisibilityService::class)->applyListScope(
+            $query,
+            (int) $this->user_id
+        );
+    }
+
+    private function assertDocumentVisible(BeritaAcaraKejadianDisipliner $document): void
+    {
+        app(BakDocumentVisibilityService::class)->assertCanViewRow($document, (int) $this->user_id);
+    }
+
+    private function findDocumentForViewer(int $id): ?BeritaAcaraKejadianDisipliner
+    {
+        if ($this->findVisibleRecord($id) === null) {
+            return null;
+        }
+
+        return BeritaAcaraKejadianDisipliner::query()
+            ->where('id', $id)
+            ->where('is_active', true)
+            ->first();
+    }
+
+    private function notFoundOrForbiddenResponse()
+    {
+        return response()->json([
+            'success' => false,
+            'message' => 'Anda tidak memiliki akses untuk melihat BAK ini.',
+        ], 403);
     }
 
     private function fetchEmployeeMetaRow(int $karyawanId)
@@ -1012,7 +1097,10 @@ class BeritaAcaraKejadianController extends Controller
         }
 
         $storedDokumentasi = BeritaAcaraKejadianDokumentasiStorage::decodeList($item->dokumentasi ?? null);
-        $item->dokumentasi = BeritaAcaraKejadianDokumentasiStorage::expandForApi((int) $item->id, $storedDokumentasi);
+        $item->dokumentasi = BeritaAcaraKejadianDokumentasiStorage::expandForApi(
+            (string) ($item->nomor_surat ?? ''),
+            $storedDokumentasi
+        );
         $dampakParsed = BeritaAcaraKejadianDampak::parse($item->dampak_aset_perusahaan ?? null);
         $item->berdampak_pada_aset = trim((string) ($dampakParsed['nama_jenis_aset'] ?? '')) !== '' ? 'ya' : 'tidak';
         $item->nama_karyawan = $item->nama_lengkap ?: '-';
@@ -1042,6 +1130,7 @@ class BeritaAcaraKejadianController extends Controller
             && $proses === BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN;
         $item->can_approve_atasan = $documentModel
             && $workflow->viewerCanApproveAtasan($documentModel, (int) $this->user_id);
+        $item->can_reject_atasan = $item->can_approve_atasan;
         $item->can_mulai_proses = $proses === BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES;
         $item->can_selesai_proses = $proses === BeritaAcaraKejadianDisipliner::PROSES_SEDANG_DIPROSES;
         $item->can_approve = $item->status === BeritaAcaraKejadianDisipliner::STATUS_DRAFT
@@ -1058,6 +1147,12 @@ class BeritaAcaraKejadianController extends Controller
         $item->verifikasi_atasan_ke = $proses === BeritaAcaraKejadianDisipliner::PROSES_VERIFIKASI_ATASAN
             ? ((int) ($item->approval_step ?? 0) + 1)
             : null;
+        $item->verifikator_tampilan = $this->buildVerifikatorTampilan(
+            $proses,
+            $chain,
+            $pendingId,
+            $item
+        );
         $item->dibuat_oleh_label = trim((string) ($item->created_by ?? '')) ?: '-';
         $updatedBy = trim((string) ($item->updated_by ?? ''));
         $item->was_edited = $updatedBy !== '';
@@ -1071,6 +1166,46 @@ class BeritaAcaraKejadianController extends Controller
             : '-';
 
         return $item;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $chain
+     */
+    private function buildVerifikatorTampilan(string $proses, array $chain, ?int $pendingId, object $item): string
+    {
+        $total = count($chain);
+
+        if ($proses === BeritaAcaraKejadianDisipliner::PROSES_VERIFIKASI_ATASAN && $pendingId) {
+            $pending = collect($chain)->first(fn ($c) => (int) ($c['karyawan_id'] ?? 0) === $pendingId);
+            $nama = trim((string) ($pending['nama'] ?? '')) ?: '-';
+            $step = (int) ($item->approval_step ?? 0) + 1;
+
+            return $total > 0 ? $nama . ' (' . $step . '/' . $total . ')' : $nama;
+        }
+
+        if ($chain !== []) {
+            $labels = [];
+            foreach ($chain as $index => $stepRow) {
+                $nama = trim((string) ($stepRow['nama'] ?? '')) ?: '-';
+                $state = strtolower(trim((string) ($stepRow['state'] ?? 'pending')));
+                if ($state === 'approved') {
+                    $labels[] = $nama . ' ✓';
+                } elseif ($state === 'rejected') {
+                    $labels[] = $nama . ' (tolak)';
+                } else {
+                    $labels[] = $nama;
+                }
+            }
+
+            return implode(', ', $labels);
+        }
+
+        $rejectedBy = trim((string) ($item->rejected_atasan_by ?? ''));
+        if ($rejectedBy !== '') {
+            return 'Ditolak: ' . $rejectedBy;
+        }
+
+        return '-';
     }
 
     private function mapStatusLabel(?string $status): string
@@ -1396,17 +1531,13 @@ class BeritaAcaraKejadianController extends Controller
      * @param array<int, \Illuminate\Http\UploadedFile> $files
      * @return array<int, array<int, string>>
      */
-    private function storeDokumentasiFileGroups(int $documentId, array $files): array
+    private function storeDokumentasiFileGroups(string $nomorSurat, array $files): array
     {
         if ($files === []) {
             return [];
         }
 
-        $relativeDir = 'dokumen/disipliner/berita-acara-kejadian/dokumentasi/' . $documentId;
-        $directory = public_path($relativeDir);
-        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
-            throw new \RuntimeException('Folder dokumentasi gagal dibuat.');
-        }
+        $directory = BeritaAcaraKejadianDokumentasiStorage::publicDirectory($nomorSurat);
 
         $converter = app(BeritaAcaraKejadianLampiranConvertService::class);
         $groups = [];
@@ -1450,10 +1581,10 @@ class BeritaAcaraKejadianController extends Controller
     /**
      * @param array<int, string> $storedNames nama file saja (atau path lama)
      */
-    private function deleteDokumentasiFiles(int $documentId, array $storedNames): void
+    private function deleteDokumentasiFiles(string $nomorSurat, array $storedNames): void
     {
         foreach ($storedNames as $stored) {
-            $full = BeritaAcaraKejadianDokumentasiStorage::fullPath($documentId, (string) $stored);
+            $full = BeritaAcaraKejadianDokumentasiStorage::fullPath($nomorSurat, (string) $stored);
             if ($full !== '' && is_file($full)) {
                 @unlink($full);
             }

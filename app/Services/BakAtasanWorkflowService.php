@@ -56,6 +56,8 @@ final class BakAtasanWorkflowService
             throw new \RuntimeException('Data penandatangan tidak ditemukan.');
         }
 
+        $this->clearRejectionFields($document);
+
         $chain = $this->buildApprovalChain($submitter);
 
         if ($chain === []) {
@@ -141,6 +143,66 @@ final class BakAtasanWorkflowService
         return ['done' => $done, 'document' => $document];
     }
 
+    public function markAtasanRejected(
+        BeritaAcaraKejadianDisipliner $document,
+        MasterKaryawan $approver,
+        string $reason
+    ): BeritaAcaraKejadianDisipliner {
+        if (!$this->viewerCanApproveAtasan($document, (int) $approver->id)) {
+            throw new \RuntimeException('Anda bukan verifikator pada tahap ini.');
+        }
+
+        $reason = trim($reason);
+        if ($reason === '') {
+            throw new \RuntimeException('Alasan penolakan wajib diisi.');
+        }
+
+        if ($document->proses_status !== BeritaAcaraKejadianDisipliner::PROSES_VERIFIKASI_ATASAN) {
+            throw new \RuntimeException('BAK tidak dalam tahap verifikasi atasan.');
+        }
+
+        $chain = $this->decodeChain($document->approval_chain);
+        $step = (int) $document->approval_step;
+        $now = Carbon::now()->toDateTimeString();
+        $actorName = trim((string) ($approver->nama_lengkap ?? '')) ?: '-';
+
+        if (isset($chain[$step])) {
+            $chain[$step]['state'] = 'rejected';
+            $chain[$step]['acted_at'] = $now;
+            $chain[$step]['actor_name'] = $actorName;
+            $chain[$step]['reason'] = $reason;
+        }
+
+        $log = $this->decodeLog($document->approval_log);
+        $log[] = [
+            'action' => 'reject_atasan',
+            'step' => $step,
+            'karyawan_id' => (int) $approver->id,
+            'nama' => $actorName,
+            'reason' => $reason,
+            'at' => $now,
+        ];
+
+        $document->approval_chain = json_encode($chain, JSON_UNESCAPED_UNICODE);
+        $document->approval_log = json_encode($log, JSON_UNESCAPED_UNICODE);
+        $document->approval_step = 0;
+        $document->proses_status = BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN;
+        $document->reject_atasan_reason = $reason;
+        $document->rejected_atasan_at = $now;
+        $document->rejected_atasan_by = $actorName;
+        $document->rejected_atasan_karyawan_id = (int) $approver->id;
+
+        return $document;
+    }
+
+    public function clearRejectionFields(BeritaAcaraKejadianDisipliner $document): void
+    {
+        $document->reject_atasan_reason = null;
+        $document->rejected_atasan_at = null;
+        $document->rejected_atasan_by = null;
+        $document->rejected_atasan_karyawan_id = null;
+    }
+
     /**
      * @return list<array<string, mixed>>
      */
@@ -171,7 +233,7 @@ final class BakAtasanWorkflowService
 
     public function canEditProses(BeritaAcaraKejadianDisipliner $document): bool
     {
-        return $document->proses_status !== BeritaAcaraKejadianDisipliner::PROSES_SUDAH_DIPROSES
+        return $document->proses_status === BeritaAcaraKejadianDisipliner::PROSES_PERMINTAAN
             && (bool) $document->is_active;
     }
 

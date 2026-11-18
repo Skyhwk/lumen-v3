@@ -1,7 +1,7 @@
 <style>
     body {
         font-family: calibri, sans-serif;
-        font-size: 10.5pt;
+        font-size: 10pt;
         color: #111;
         line-height: 1.3;
         text-align: justify;
@@ -13,6 +13,30 @@
         text-align: left;
     }
     .section-hint { font-weight: normal; font-size: 9pt; }
+    table.meta-line {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0 0 1mm 0;
+    }
+    table.meta-line td {
+        font-size: 10pt;
+        line-height: 1.25;
+        vertical-align: top;
+        padding: 1mm 0;
+    }
+    td.meta-label {
+        width: 18mm;
+        white-space: nowrap;
+    }
+    td.meta-sep {
+        width: 3.5mm;
+        white-space: nowrap;
+        text-align: left;
+    }
+    td.meta-val {
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
     table.grid {
         width: 100%;
         border-collapse: collapse;
@@ -20,24 +44,34 @@
         margin: 0;
     }
     table.grid td {
-        font-size: 10.5pt;
+        font-size: 10pt;
         line-height: 1.25;
-        vertical-align: bottom;
+        vertical-align: top;
         padding: 1.1mm 0 1.3mm;
     }
-    td.k { white-space: nowrap; }
+    td.k {
+        white-space: nowrap;
+        padding-right: 2.5mm;
+    }
+    td.k-long {
+        white-space: normal;
+        line-height: 1.2;
+        padding-right: 1.5mm;
+    }
     td.c {
         text-align: left;
         white-space: nowrap;
-        padding-left: 1mm;
+        width: 4mm;
+        padding-left: 0;
         padding-right: 2mm;
     }
     td.v {
         border-bottom: 0.2mm dotted #555;
         padding-right: 2mm;
         padding-left: 1.5mm;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
     }
-    td.v.noline { border-bottom: 0; }
     .u {
         border-bottom: 0.2mm dotted #555;
         padding: 0 12mm 0 0;
@@ -76,32 +110,27 @@
     .strike { text-decoration: line-through; }
 </style>
 
-<table class="grid">
-    <colgroup>
-        <col style="width:52mm">
-        <col style="width:8mm">
-        <col>
-    </colgroup>
+<table class="meta-line">
     <tr>
-        <td class="k">Perihal</td>
-        <td class="c">:</td>
-        <td class="v noline">@if($perihal !== ''){{ $perihal }}@else&nbsp;@endif</td>
+        <td class="meta-label" style="width: 18mm;">Perihal</td>
+        <td class="meta-sep" style="width: 3.5mm;">:</td>
+        <td class="meta-val">@if($perihal !== ''){{ $perihal }}@else&nbsp;@endif</td>
     </tr>
     <tr>
-        <td class="k">Lampiran</td>
-        <td class="c">:</td>
-        <td class="v noline">@if($lampiran !== '-'){{ $lampiran }}@else&nbsp;@endif</td>
+        <td class="meta-label" style="width: 18mm;">Lampiran</td>
+        <td class="meta-sep" style="width: 3.5mm;">:</td>
+        <td class="meta-val">@if($lampiran !== '-'){{ $lampiran }}@else&nbsp;@endif</td>
     </tr>
 </table>
 
 <p class="section-heading">Yang bertanda tangan di bawah ini :</p>
 <table class="grid">
     <colgroup>
-        <col style="width:52mm">
-        <col style="width:8mm">
-        <col style="width:42mm">
-        <col style="width:28mm">
-        <col style="width:8mm">
+        <col style="width:54mm">
+        <col style="width:5mm">
+        <col style="width:40mm">
+        <col style="width:30mm">
+        <col style="width:5mm">
         <col>
     </colgroup>
     <tr>
@@ -113,7 +142,7 @@
         <td class="v">&nbsp;{{ $signatoryNik }}</td>
     </tr>
     <tr>
-        <td class="k">Tempat, Tanggal Lahir</td>
+        <td class="k-long">Tempat, Tanggal Lahir</td>
         <td class="c">:</td>
         <td class="v">&nbsp;{{ $signatoryTempatTanggalLahir }}</td>
         <td class="k">Divisi</td>
@@ -138,15 +167,15 @@
 <p class="section-heading">Dengan ini menerangkan bahwa pada :</p>
 <table class="grid">
     <colgroup>
-        <col style="width:52mm">
-        <col style="width:8mm">
-        <col style="width:42mm">
-        <col style="width:28mm">
-        <col style="width:8mm">
+        <col style="width:54mm">
+        <col style="width:5mm">
+        <col style="width:40mm">
+        <col style="width:30mm">
+        <col style="width:5mm">
         <col>
     </colgroup>
     <tr>
-        <td class="k">Hari dan Tanggal</td>
+        <td class="k-long">Hari dan Tanggal</td>
         <td class="c">:</td>
         <td class="v">{{ $hariDanTanggal }}</td>
         <td class="k">Pukul</td>
@@ -154,7 +183,7 @@
         <td><span class="u">{{ $pukulKejadian }}</span></td>
     </tr>
     <tr>
-        <td class="k">Telah Terjadi Kejadian</td>
+        <td class="k-long">Telah Terjadi Kejadian</td>
         <td class="c">:</td>
         <td class="v" colspan="4">@if($telahTerjadiKejadian !== ''){{ $telahTerjadiKejadian }}@else&nbsp;@endif</td>
     </tr>
@@ -169,15 +198,15 @@
 <p class="section-heading">{{ $dampakAsetSectionTitle }}</p>
 <table class="grid">
     <colgroup>
-        <col style="width:52mm">
-        <col style="width:8mm">
-        <col style="width:42mm">
-        <col style="width:28mm">
-        <col style="width:8mm">
+        <col style="width:54mm">
+        <col style="width:5mm">
+        <col style="width:40mm">
+        <col style="width:30mm">
+        <col style="width:5mm">
         <col>
     </colgroup>
     <tr>
-        <td class="k">Nama / Jenis Aset</td>
+        <td class="k-long">Nama / Jenis Aset</td>
         <td class="c">:</td>
         <td class="v">@if($dampakAset['nama_jenis_aset'] !== ''){{ $dampakAset['nama_jenis_aset'] }}@else&nbsp;@endif</td>
         <td class="k">No Aset / No Plat</td>
