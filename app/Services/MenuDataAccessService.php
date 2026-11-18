@@ -135,19 +135,24 @@ class MenuDataAccessService
      * Filter query: hanya data yang relasi karyawan-nya punya grade
      * yang terdaftar di menu_data_access untuk menu_key tersebut.
      *
-     * Jika belum ada konfigurasi → query dikosongkan.
+     * Jika belum ada konfigurasi → tidak memfilter (semua data sesuai query dasar).
+     *
+     * @param  string  $karyawanRelation  Relasi Eloquent ke master_karyawan (mis. penandatangan pada BAK).
      */
-    public static function applyKaryawanGradeFilter(Builder $query, string $menuKey): Builder
-    {
+    public static function applyKaryawanGradeFilter(
+        Builder $query,
+        string $menuKey,
+        string $karyawanRelation = 'karyawan'
+    ): Builder {
         $allowedGrades = self::allowedGrades($menuKey);
 
         if ($allowedGrades === []) {
-            return $query->whereRaw('1 = 0');
+            return $query;
         }
 
         $placeholders = implode(',', array_fill(0, count($allowedGrades), '?'));
 
-        return $query->whereHas('karyawan', function (Builder $q) use ($allowedGrades, $placeholders) {
+        return $query->whereHas($karyawanRelation, function (Builder $q) use ($allowedGrades, $placeholders) {
             $q->whereRaw(
                 'UPPER(TRIM(`grade`)) IN (' . $placeholders . ')',
                 $allowedGrades
