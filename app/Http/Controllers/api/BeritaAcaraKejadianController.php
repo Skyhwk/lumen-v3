@@ -7,6 +7,7 @@ use App\Models\BeritaAcaraKejadianDisipliner;
 use App\Models\MasterKaryawan;
 use App\Services\BakAtasanWorkflowService;
 use App\Services\BakDocumentVisibilityService;
+use App\Services\BakLaporanService;
 use App\Services\BeritaAcaraKejadianDocumentService;
 use App\Services\BeritaAcaraKejadianLampiranConvertService;
 use App\Services\DisiplinerPdfFixingService;
@@ -1131,8 +1132,12 @@ class BeritaAcaraKejadianController extends Controller
         $item->can_approve_atasan = $documentModel
             && $workflow->viewerCanApproveAtasan($documentModel, (int) $this->user_id);
         $item->can_reject_atasan = $item->can_approve_atasan;
-        $item->can_mulai_proses = $proses === BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES;
-        $item->can_selesai_proses = $proses === BeritaAcaraKejadianDisipliner::PROSES_SEDANG_DIPROSES;
+        $linkedInvestigasi = BakLaporanService::isBeritaAcaraLinkedToInvestigasi((int) $item->id);
+        $item->proses_sinkron_investigasi = $linkedInvestigasi;
+        $item->can_mulai_proses = !$linkedInvestigasi
+            && $proses === BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES;
+        $item->can_selesai_proses = !$linkedInvestigasi
+            && $proses === BeritaAcaraKejadianDisipliner::PROSES_SEDANG_DIPROSES;
         $item->can_approve = $item->status === BeritaAcaraKejadianDisipliner::STATUS_DRAFT
             && $proses === BeritaAcaraKejadianDisipliner::PROSES_SUDAH_DIPROSES;
 

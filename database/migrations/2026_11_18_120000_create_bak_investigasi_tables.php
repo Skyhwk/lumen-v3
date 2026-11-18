@@ -76,10 +76,10 @@ return new class extends Migration
 
                 // G.1 Keputusan Tindak Lanjut
                 $table->enum('tindak_lanjut_awal', [
-                    'internal_hr_direv',
+                    'internal_disciplinary',
                     'komite_manajemen',
                     'tanpa_sanksi',
-                ])->nullable()->comment('Internal HR Direv | Komite Manajemen | Tanpa Sanksi');
+                ])->nullable()->comment('Internal Disciplinary | Komite Manajemen | Tanpa Sanksi');
                 $table->boolean('sanksi_st')->default(false)->comment('Surat Teguran');
                 $table->string('sanksi_st_detail', 255)->nullable();
                 $table->boolean('sanksi_sp')->default(false)->comment('Surat Peringatan');
