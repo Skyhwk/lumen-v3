@@ -95,9 +95,9 @@ class BackupMasterPelangganController extends Controller
             return response()->json(['message' => 'Data backup pelanggan tidak ditemukan.'], 404);
         }
 
-        if (MasterPelanggan::where('id_pelanggan', $backupMaster->id_pelanggan)->where('is_active', true)->exists()) {
+        if (MasterPelanggan::idPelangganTaken($backupMaster->id_pelanggan, (int) $backupMaster->id)) {
             return response()->json([
-                'message' => "Restore dibatalkan: ID Pelanggan {$backupMaster->id_pelanggan} sudah terdaftar di master pelanggan.",
+                'message' => "Restore dibatalkan: ID Pelanggan {$backupMaster->id_pelanggan} sudah dipakai (master, blacklist, atau backup).",
             ], 409);
         }
 
