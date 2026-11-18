@@ -144,6 +144,18 @@ class BeritaAcaraKejadianController extends Controller
             $document->updated_at = Carbon::now();
             $document->save();
 
+            $record = $this->findVisibleRecord($document->id);
+            if (
+                $record !== null
+                && $document->proses_status === BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES
+            ) {
+                app(BeritaAcaraKejadianDocumentService::class)->syncBakQrFromRecord(
+                    $document,
+                    $record,
+                    $this->karyawan
+                );
+            }
+
             DB::commit();
 
             return response()->json([
@@ -217,8 +229,11 @@ class BeritaAcaraKejadianController extends Controller
         }
     }
 
-    public function approveAtasan(Request $request, BakAtasanWorkflowService $workflow)
-    {
+    public function approveAtasan(
+        Request $request,
+        BakAtasanWorkflowService $workflow,
+        BeritaAcaraKejadianDocumentService $documentService
+    ) {
         DB::beginTransaction();
 
         try {
@@ -249,6 +264,13 @@ class BeritaAcaraKejadianController extends Controller
             $document->updated_by = $this->karyawan;
             $document->updated_at = Carbon::now();
             $document->save();
+
+            if ($result['done']) {
+                $record = $this->findVisibleRecord($document->id);
+                if ($record !== null) {
+                    $documentService->syncBakQrFromRecord($document, $record, $this->karyawan);
+                }
+            }
 
             DB::commit();
 
@@ -639,8 +661,7 @@ class BeritaAcaraKejadianController extends Controller
 
     public function approve(
         Request $request,
-        BeritaAcaraKejadianDocumentService $documentService,
-        GenerateQrDocumentBeritaAcaraKejadian $qrService
+        BeritaAcaraKejadianDocumentService $documentService
     ) {
         DB::beginTransaction();
 
@@ -666,22 +687,17 @@ class BeritaAcaraKejadianController extends Controller
                 ], 422);
             }
 
-            $qrFile = $qrService->sync($document, $record, $this->karyawan);
-
-            $svgPath = QrDocumentsStorage::svgPath($qrFile);
-            if (!is_file($svgPath)) {
-                throw new \RuntimeException('QR tidak tersimpan di: ' . $svgPath);
+            if (trim((string) ($document->file_qr ?? '')) === '') {
+                $documentService->syncBakQrFromRecord($document, $record, $this->karyawan);
+            } else {
+                GenerateQrDocumentBeritaAcaraKejadian::ensurePublicSvgForFile($document->file_qr);
             }
 
-            $document->file_qr = $qrFile;
             $document->status = BeritaAcaraKejadianDisipliner::STATUS_ISSUED;
             $document->published_by = $this->karyawan;
             $document->updated_by = $this->karyawan;
             $document->updated_at = Carbon::now();
             $document->save();
-            $document->refresh();
-
-            $documentService->invalidateStoredPdf($document);
 
             DB::commit();
 

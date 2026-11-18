@@ -4,9 +4,11 @@ namespace App\Services;
 
 use App\Models\BeritaAcaraKejadianDisipliner;
 use App\Support\BeritaAcaraKejadianDampak;
+use App\Services\GenerateQrDocumentBeritaAcaraKejadian;
 use App\Support\BeritaAcaraKejadianDokumentasiStorage;
 use App\Models\MasterKaryawan;
 use App\Models\QrDocument;
+use App\Support\QrDocumentsStorage;
 use App\Support\DisiplinerPdfHeader;
 use App\Support\DisiplinerPdfLayout;
 use App\Support\DokumenPageBackgroundWithNote;
@@ -26,6 +28,41 @@ class BeritaAcaraKejadianDocumentService
 
     /** @var array<int, string> */
     private array $deferredLampiranTempDirs = [];
+
+    /**
+     * Bentuk QR sekali saja; jika file_qr sudah ada, pakai yang sama (mis. setelah reject / ajukan ulang).
+     */
+    public function syncBakQrFromRecord(
+        BeritaAcaraKejadianDisipliner $document,
+        object $detailRow,
+        $generatedBy
+    ): BeritaAcaraKejadianDisipliner {
+        $linked = trim((string) ($document->file_qr ?? ''));
+        if ($linked !== '') {
+            GenerateQrDocumentDisipliner::ensurePublicSvgForFile($linked);
+
+            return $document;
+        }
+
+        $qrFile = app(GenerateQrDocumentBeritaAcaraKejadian::class)->sync(
+            $document,
+            $detailRow,
+            $generatedBy
+        );
+
+        $svgPath = QrDocumentsStorage::svgPath($qrFile);
+        if (!is_file($svgPath)) {
+            throw new RuntimeException('QR tidak tersimpan di: ' . $svgPath);
+        }
+
+        $document->file_qr = $qrFile;
+        $document->save();
+        $document->refresh();
+
+        $this->invalidateStoredPdf($document);
+
+        return $document;
+    }
 
     public function invalidateStoredPdf(BeritaAcaraKejadianDisipliner $document): void
     {
