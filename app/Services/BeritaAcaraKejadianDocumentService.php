@@ -182,7 +182,12 @@ class BeritaAcaraKejadianDocumentService
             $dampakNoAsetPlat = '-';
         }
 
-        $qrImagePath = $this->resolveQrImageForPdf(trim((string) ($document->file_qr ?? '')));
+        $linkedQr = trim((string) ($document->file_qr ?? ''));
+        if ($linkedQr !== '') {
+            GenerateQrDocumentDisipliner::ensurePublicSvgForFile($linkedQr);
+        }
+
+        $qrImagePath = $this->resolveQrImageForPdf($linkedQr);
         $showLampiranSection = $lampiranImages !== [];
 
         $refNumber = trim((string) $document->nomor_surat);
@@ -356,17 +361,65 @@ class BeritaAcaraKejadianDocumentService
                     return str_replace('\\', '/', $pngPath);
                 }
             } catch (\Throwable $th) {
-                // fallback SVG
+                Log::warning('BAK QR PNG gagal; coba SVG/Imagick', [
+                    'file_qr' => $qrFile,
+                    'message' => $th->getMessage(),
+                ]);
             }
         }
 
         try {
             $svgPath = \App\Support\QrDocumentsStorage::svgPath($qrFile);
         } catch (\InvalidArgumentException $e) {
+            Log::warning('BAK QR path tidak valid', ['file_qr' => $qrFile]);
+
             return null;
         }
 
-        return is_file($svgPath) ? str_replace('\\', '/', $svgPath) : null;
+        if (!is_file($svgPath)) {
+            Log::warning('BAK QR SVG tidak ada di disk', ['path' => $svgPath]);
+
+            return null;
+        }
+
+        $pngFromSvg = $this->convertQrSvgToPngForMpdf($svgPath);
+        if ($pngFromSvg !== null) {
+            return $pngFromSvg;
+        }
+
+        return str_replace('\\', '/', $svgPath);
+    }
+
+    private function convertQrSvgToPngForMpdf(string $svgPath): ?string
+    {
+        if (!extension_loaded('imagick') || !is_file($svgPath)) {
+            return null;
+        }
+
+        $tempDir = storage_path('app/tmp-bak-qr');
+        if (!is_dir($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
+
+        $pngPath = $tempDir . DIRECTORY_SEPARATOR . uniqid('bak_qr_svg_', true) . '.png';
+
+        try {
+            $imagick = new \Imagick();
+            $imagick->setBackgroundColor(new \ImagickPixel('white'));
+            $imagick->readImage($svgPath);
+            $imagick->setImageFormat('png');
+            $imagick->writeImage($pngPath);
+            $imagick->clear();
+
+            return is_file($pngPath) ? str_replace('\\', '/', $pngPath) : null;
+        } catch (\Throwable $th) {
+            Log::warning('BAK konversi QR SVG→PNG gagal', [
+                'svg' => $svgPath,
+                'message' => $th->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 
     /**
