@@ -22,6 +22,7 @@ use App\Jobs\CopyKontrakJob;
 use App\Services\Notification;
 use App\Services\GetAtasan;
 use App\Services\QuotationService;
+use App\Services\SamplerTrackingService;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\Hash;
@@ -678,6 +679,10 @@ class QtOrderedController extends Controller
 
                 $sampling_plan = SamplingPlan::where('no_quotation', $data->no_document)->update(['is_active' => false]);
                 $jadwal = Jadwal::where('no_quotation', $data->no_document)->update(['is_active' => false]);
+                app(SamplerTrackingService::class)->clearTrackingWithoutActiveSchedule(
+                    [$data->no_document],
+                    'quotation_voided'
+                );
 
                 $data->flag_status = 'void';
                 $data->is_active = false;

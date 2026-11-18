@@ -2317,6 +2317,11 @@ class RequestQuotationController extends Controller
                     SamplingPlan::where('no_quotation', $dataOld->no_document)->update(['is_active' => false]);
                     Jadwal::where('no_quotation', $dataOld->no_document)->update(['is_active' => false, 'canceled_by' => 'system']);
 
+                    app(\App\Services\SamplerTrackingService::class)->clearAllTrackingForQuotations(
+                        [$dataOld->no_document, $data->no_document],
+                        'quotation_schedule_pulled'
+                    );
+
                     $message = "Terjadi perubahan quotation $dataOld->no_document menjadi $data->no_document dan data yang sudah terjadwal akan di tarik otomatis oleh system dan menunggu request baru dari sales";
                 } else { //tidak merubah jadwal dalam arti update no doc dalam sp  if($data_lama->status_sp == 'false')
                     if (in_array($payload->data_wilayah->status_sampling, ['SD', 'SAR'])) {
@@ -5496,6 +5501,11 @@ class RequestQuotationController extends Controller
                         SamplingPlan::where('no_quotation', $dataOld->no_document)->update(['is_active' => false]);
                         Jadwal::where('no_quotation', $dataOld->no_document)->update(['is_active' => false, 'canceled_by' => 'system']);
 
+                        app(\App\Services\SamplerTrackingService::class)->clearAllTrackingForQuotations(
+                            [$dataOld->no_document, $dataH->no_document],
+                            'quotation_schedule_pulled'
+                        );
+
                         // SamplingPlan::where('no_quotation', $dataOld->no_document)->update(['is_active' => false]);
                         // Jadwal::where('no_quotation', $dataOld->no_document)->update(['is_active' => true]);
 
@@ -5550,6 +5560,11 @@ class RequestQuotationController extends Controller
 
                         $jobChangeJadwal = new ChangeJadwalJob($perubahan_periode, 'revisi', $qtArray, 'kontrak');
                         $this->dispatch($jobChangeJadwal);
+
+                        app(\App\Services\SamplerTrackingService::class)->clearTrackingWithoutActiveSchedule(
+                            [$dataOld->no_document, $dataH->no_document],
+                            'quotation_period_deactivated'
+                        );
 
                         // ========== END Perbaikan SP dan Jadwal By: Dedi ==========
                         $message = "Terjadi perubahan quotation $data_lama->no_qt menjadi $no_document dan silahkan di cek di bagian menu sampling plan dengan No QT $no_document apakah sudah sesuai atau belum untuk jumlah kategorinya demi ke-efisiensi penjadwalan sampler";

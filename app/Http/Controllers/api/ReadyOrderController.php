@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 use Exception;
 use Yajra\DataTables\DataTables;
 use Carbon\Carbon;
-use App\Services\{Notification, GetAtasan, ProcessAfterOrder, QuotationService, SendEmail};
+use App\Services\{Notification, GetAtasan, ProcessAfterOrder, QuotationService, SamplerTrackingService, SendEmail};
 use App\Services\SamplingPlanServices;
 use App\Models\SamplingPlan;
 use App\Models\QuotationNonKontrak;
@@ -318,6 +318,10 @@ class ReadyOrderController extends Controller
 
                 $sampling_plan = SamplingPlan::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
                 $jadwal = Jadwal::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
+                app(SamplerTrackingService::class)->clearTrackingWithoutActiveSchedule(
+                    [$data->no_document],
+                    'quotation_voided'
+                );
 
                 $data->flag_status = 'void';
                 $data->is_active = false;

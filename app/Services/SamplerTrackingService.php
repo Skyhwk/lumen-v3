@@ -468,6 +468,8 @@ class SamplerTrackingService
                 foreach ($group as $row) {
                     $this->deactivateSessionIfNoActiveJadwalForTeamKey($quotation, $row);
                 }
+
+                $this->deactivateOrphanSessionsForQuotationDate($quotation, $date);
             }
         }, 5);
     }
@@ -512,9 +514,12 @@ class SamplerTrackingService
 
         $stillActiveForTeam = Jadwal::where('no_quotation', $quotation)
             ->where('is_active', true)
+            ->whereDate('tanggal', $date)
             ->get()
-            ->contains(function ($jadwal) use ($teamKey) {
-                return $this->makeTeamKey($jadwal) === $teamKey;
+            ->contains(function ($jadwal) use ($teamKey, $legacyKey) {
+                return $this->makeTeamKey($jadwal) === $teamKey
+                    || $this->makeLegacyTeamKey($jadwal) === $teamKey
+                    || $this->makeTeamKey($jadwal) === $legacyKey;
             });
 
         if ($stillActiveForTeam) {
@@ -539,6 +544,195 @@ class SamplerTrackingService
             $session->save();
 
             $memberUpdate = $this->onlyExistingColumns((new SamplerTrackingMember())->getTable(), ['is_active' => false]);
+            if ($memberUpdate !== []) {
+                SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)->update($memberUpdate);
+            }
+            (new SamplerTrackingTroubleService())->deactivateForSessions([$session->id]);
+        }
+    }
+
+    /**
+     * Lepas assignment sampler untuk satu nomor order.
+     * Bukan sync harian: sync harian menyapu semua kunjungan di tanggal itu.
+     * Session order lain di tanggal yang sama tidak ikut.
+     */
+    public function clearTrackingWithoutActiveSchedule(array $quotations, string $reason): void
+    {
+        $orderNumbers = $this->orderNumbersForQuotations($quotations);
+        if ($orderNumbers->isEmpty()) {
+            return;
+        }
+
+        DB::transaction(function () use ($orderNumbers, $reason) {
+            $activeByOrder = [];
+            foreach ($orderNumbers as $noOrder) {
+                $activeByOrder[$noOrder] = $this->activeJadwalForOrder($noOrder);
+            }
+
+            $sessionIds = [];
+            SamplerTrackingSession::where('is_active', true)
+                ->whereIn('no_order', $orderNumbers->all())
+                ->get()
+                ->each(function ($session) use ($activeByOrder, &$sessionIds) {
+                    $active = $activeByOrder[$session->no_order] ?? collect();
+                    if ($this->scheduleStillCoversSession($session, $active)) {
+                        return;
+                    }
+                    $sessionIds[] = (int) $session->id;
+                });
+
+            $this->deactivateTrackingSessions($sessionIds, $reason);
+        }, 5);
+    }
+
+    /**
+     * Matikan seluruh tracking satu order.
+     * Dipakai saat revisi memilih merubah permintaan jadwal (status_sp true).
+     */
+    public function clearAllTrackingForQuotations(array $quotations, string $reason): void
+    {
+        $orderNumbers = $this->orderNumbersForQuotations($quotations);
+        if ($orderNumbers->isEmpty()) {
+            return;
+        }
+
+        DB::transaction(function () use ($orderNumbers, $reason) {
+            $sessionIds = SamplerTrackingSession::where('is_active', true)
+                ->whereIn('no_order', $orderNumbers->all())
+                ->pluck('id')
+                ->map(function ($id) {
+                    return (int) $id;
+                })
+                ->all();
+
+            $this->deactivateTrackingSessions($sessionIds, $reason);
+        }, 5);
+    }
+
+    protected function orderNumbersForQuotations(array $quotations)
+    {
+        $numbers = collect();
+        foreach (collect($quotations)->filter()->unique() as $quotation) {
+            $root = $this->quotationRoot((string) $quotation);
+            if ($root === '') {
+                continue;
+            }
+            $order = OrderHeader::where(function ($query) use ($root) {
+                    $query->where('no_document', $root)
+                        ->orWhere('no_document', 'like', $root . 'R%');
+                })
+                ->whereNotNull('no_order')
+                ->where('no_order', '!=', '')
+                ->orderByDesc('is_active')
+                ->orderByDesc('id')
+                ->value('no_order');
+            if ($order) {
+                $numbers->push($order);
+            }
+        }
+
+        return $numbers->unique()->values();
+    }
+
+    /** Jadwal aktif milik order ini, semua tanggal. Bukan jadwal orang lain di tanggal yang sama. */
+    protected function activeJadwalForOrder($noOrder)
+    {
+        $roots = OrderHeader::where('no_order', $noOrder)
+            ->pluck('no_document')
+            ->map(function ($document) {
+                return $this->quotationRoot((string) $document);
+            })
+            ->filter()
+            ->unique()
+            ->values();
+        if ($roots->isEmpty()) {
+            return collect();
+        }
+
+        return Jadwal::where('is_active', true)
+            ->where(function ($query) use ($roots) {
+                foreach ($roots as $root) {
+                    $query->orWhere('no_quotation', $root)
+                        ->orWhere('no_quotation', 'like', $root . 'R%');
+                }
+            })
+            ->get();
+    }
+
+    protected function scheduleStillCoversSession(SamplerTrackingSession $session, $activeJadwal): bool
+    {
+        return $activeJadwal->contains(function ($jadwal) use ($session) {
+            if ($this->makeTeamKey($jadwal) === $session->team_key
+                || $this->makeLegacyTeamKey($jadwal) === $session->team_key) {
+                return true;
+            }
+
+            return (int) $session->id_sampling > 0
+                && (int) $jadwal->id_sampling === (int) $session->id_sampling
+                && (string) ($jadwal->parsial ?? '') === (string) ($session->parsial ?? '');
+        });
+    }
+
+    protected function deactivateTrackingSessions(array $sessionIds, string $reason): void
+    {
+        $sessionIds = array_values(array_unique(array_filter($sessionIds)));
+        if ($sessionIds === []) {
+            return;
+        }
+
+        foreach (SamplerTrackingSession::whereIn('id', $sessionIds)->where('is_active', true)->get() as $session) {
+            SamplerTrackingHistory::append((int) $session->id, 'session_deactivated', [
+                'reason' => $reason,
+                'before' => SamplerTrackingHistory::snapshot($session),
+            ]);
+        }
+
+        $sessionUpdate = $this->onlyExistingColumns((new SamplerTrackingSession())->getTable(), ['is_active' => false]);
+        if ($sessionUpdate !== []) {
+            SamplerTrackingSession::whereIn('id', $sessionIds)->update($sessionUpdate);
+        }
+
+        $memberUpdate = $this->onlyExistingColumns((new SamplerTrackingMember())->getTable(), ['is_active' => false]);
+        if ($memberUpdate !== []) {
+            SamplerTrackingMember::whereIn('sampler_tracking_session_id', $sessionIds)->update($memberUpdate);
+        }
+        (new SamplerTrackingTroubleService())->deactivateForSessions($sessionIds);
+    }
+
+    protected function deactivateOrphanSessionsForQuotationDate(string $quotation, string $date): void
+    {
+        $activeJadwals = Jadwal::where('no_quotation', $quotation)
+            ->whereDate('tanggal', $date)
+            ->where('is_active', true)
+            ->get();
+
+        $activeKeys = [];
+        $activeVisits = [];
+        foreach ($activeJadwals as $jadwal) {
+            $activeKeys[$this->makeTeamKey($jadwal)] = true;
+            $activeKeys[$this->makeLegacyTeamKey($jadwal)] = true;
+            $activeVisits[$this->visitIdentity($jadwal)] = true;
+        }
+
+        $sessions = SamplerTrackingSession::where('no_quotation', $quotation)
+            ->whereDate('tanggal_sampling', $date)
+            ->where('is_active', true)
+            ->get();
+
+        $memberUpdate = $this->onlyExistingColumns((new SamplerTrackingMember())->getTable(), ['is_active' => false]);
+        foreach ($sessions as $session) {
+            $stillScheduled = isset($activeKeys[$session->team_key])
+                || isset($activeVisits[$this->visitIdentity($session)]);
+            if ($stillScheduled) {
+                continue;
+            }
+
+            SamplerTrackingHistory::append((int) $session->id, 'session_deactivated', [
+                'reason' => 'schedule_voided_orphan',
+                'before' => SamplerTrackingHistory::snapshot($session),
+            ]);
+            $session->fill($this->onlyExistingColumns($session->getTable(), ['is_active' => false]));
+            $session->save();
             if ($memberUpdate !== []) {
                 SamplerTrackingMember::where('sampler_tracking_session_id', $session->id)->update($memberUpdate);
             }
@@ -1291,19 +1485,31 @@ class SamplerTrackingService
 
     protected function visitIdentity($row)
     {
-        $date = isset($row->tanggal_sampling) && $row->tanggal_sampling
-            ? $row->tanggal_sampling
-            : (isset($row->tanggal) && $row->tanggal ? $row->tanggal : 'date-null');
+        $rawDate = $row->tanggal_sampling ?? $row->tanggal ?? null;
+        $date = $this->normalizeScheduleDate($rawDate) ?: 'date-null';
 
         return implode('|', [
             $row->id_sampling ?: 'sampling-null',
             $row->parsial ?: 'parsial-null',
             $this->resolveOrderNumber($row) ?: ('qt:' . ($row->no_quotation ?: 'null')),
             $date,
-            $row->jam_mulai ?: 'start-null',
-            $row->jam_selesai ?: 'end-null',
+            $this->normalizeClock($row->jam_mulai ?? null, 'start-null'),
+            $this->normalizeClock($row->jam_selesai ?? null, 'end-null'),
             mb_strtolower(trim((string) ($row->nama_perusahaan ?: 'company-null'))),
         ]);
+    }
+
+    protected function normalizeClock($value, string $empty = 'time-null'): string
+    {
+        if ($value === null || $value === '') {
+            return $empty;
+        }
+
+        try {
+            return Carbon::parse($value)->format('H:i:s');
+        } catch (\Throwable $exception) {
+            return (string) $value;
+        }
     }
 
     protected function quotationRoot(?string $quotation): string
