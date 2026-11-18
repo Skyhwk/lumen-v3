@@ -41,26 +41,32 @@ class MonthlyAbsensiDataBuilder
     }
 
     /**
+     * @param  bool  $usePayrollPeriod  false = tampilan absensi bulan kalender (1–akhir bulan) untuk semua grade
      * @return array<int, array<string, mixed>>
      */
-    public function buildForKaryawan(int $karyawanId, string $bulanYm): array
+    public function buildForKaryawan(int $karyawanId, string $bulanYm, bool $usePayrollPeriod = true): array
     {
-        $karyawan = MasterKaryawan::select('id', 'nik_karyawan', 'nama_lengkap')->find($karyawanId);
+        $karyawan = MasterKaryawan::select('id', 'nik_karyawan', 'nama_lengkap', 'grade')->find($karyawanId);
         if (!$karyawan) {
             return [];
         }
 
-        $nilai = explode('-', $bulanYm);
-        if (count($nilai) < 2) {
+        if (!preg_match('/^\d{4}-\d{2}$/', $bulanYm)) {
             return [];
         }
 
-        $year = $nilai[0];
-        $month = $nilai[1];
-        $lastDay = (int) date('t', mktime(0, 0, 0, (int) $month, 1, (int) $year));
+        $gradeForRange = $usePayrollPeriod
+            ? ($karyawan->grade ?? null)
+            : AbsensiPeriodeService::GRADE_STAFF;
 
-        $startDate = sprintf('%s-%s-01', $year, $month);
-        $endDate = sprintf('%s-%s-%02d', $year, $month, $lastDay);
+        try {
+            $range = AbsensiPeriodeService::resolveRange($bulanYm, $gradeForRange);
+        } catch (\InvalidArgumentException $e) {
+            return [];
+        }
+
+        $startDate = $range['start_ymd'];
+        $endDate = $range['end_ymd'];
         $rangeEnd = date('Y-m-d', strtotime($endDate . ' +1 day'));
 
         $shiftByDate = ShiftKaryawan::query()
@@ -83,8 +89,7 @@ class MonthlyAbsensiDataBuilder
         $excuseLabels = HrAttendanceDayExcuseLabels::forSingleKaryawan($karyawanId, $startDate, $endDate);
         $data = [];
 
-        for ($i = 1; $i <= $lastDay; $i++) {
-            $tanggal = sprintf('%s-%s-%02d', $year, $month, $i);
+        for ($tanggal = $startDate; $tanggal <= $endDate; $tanggal = date('Y-m-d', strtotime($tanggal . ' +1 day'))) {
             $rowsToday = $absensiByDate->get($tanggal, collect());
             $shiftRow = $shiftByDate->get($tanggal);
             $shift = $shiftRow ? (string) $shiftRow->shift : null;
