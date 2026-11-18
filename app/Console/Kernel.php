@@ -111,6 +111,7 @@ class Kernel extends ConsoleKernel
         Commands\ImportNearHo::class,
         Commands\BackupMasterPelangganDediWibowoCommand::class,
         Commands\AssignBankDataOrderedCommand::class,
+        Commands\ImportFollowUpCustomerAccountCommand::class,
         Commands\VoidFollowUpInactiveSalesCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
