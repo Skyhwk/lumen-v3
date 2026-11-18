@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Models\BeritaAcaraKejadianDisipliner;
 use App\Models\MasterKaryawan;
-use App\Services\Greatday\DynamicApprovalChainService;
+use App\Services\BakApprovalChainService;
 use Carbon\Carbon;
 
 final class BakAtasanWorkflowService
@@ -14,7 +14,7 @@ final class BakAtasanWorkflowService
      */
     public function buildApprovalChain(MasterKaryawan $submitter): array
     {
-        $approverIds = app(DynamicApprovalChainService::class)->orderedApproverIdsForBak($submitter);
+        $approverIds = app(BakApprovalChainService::class)->orderedApproverIds($submitter);
         $chain = [];
 
         foreach ($approverIds as $approverId) {
