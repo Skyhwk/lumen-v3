@@ -1,0 +1,13 @@
+This snap build of Ghostscript (gs) is experimental,
+
+=============
+USE WITH CARE
+=============
+
+
+To install this snap, run:
+
+sudo snap install --devmode gs_10.06.0_amd64.snap
+
+
+(--devmode is required because the snap is not from a snap store)

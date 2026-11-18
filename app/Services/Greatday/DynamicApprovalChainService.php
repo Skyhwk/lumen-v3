@@ -25,7 +25,34 @@ class DynamicApprovalChainService
      */
     public function orderedApproverIds(MasterKaryawan $submitter, ?array $initialAtasanIds = null): array
     {
-        $submitterRank = $this->submitterRankForChain($submitter);
+        return $this->buildApproverChain(
+            $submitter,
+            $initialAtasanIds,
+            $this->submitterRankForChain($submitter)
+        );
+    }
+
+    /**
+     * BAK: verifikasi atasan tanpa SPV — hanya Manager dan Senior Manager di hirarki penandatangan (jika ada).
+     *
+     * @return list<int>
+     */
+    public function orderedApproverIdsForBak(MasterKaryawan $submitter): array
+    {
+        $chain = $this->buildApproverChain($submitter, null, $this->submitterRankForChain($submitter));
+
+        return array_values(array_filter(
+            $chain,
+            fn (int $id): bool => in_array($this->gradeRank($this->loadGrade($id)), [2, 3], true)
+        ));
+    }
+
+    /**
+     * @param list<int>|null $initialAtasanIds
+     * @return list<int>
+     */
+    private function buildApproverChain(MasterKaryawan $submitter, ?array $initialAtasanIds, int $submitterRank): array
+    {
         $chain = [];
         $visited = [];
         $frontier = $initialAtasanIds !== null
@@ -77,7 +104,18 @@ class DynamicApprovalChainService
             $frontier = array_values(array_unique($nextFrontier));
         }
 
-        return array_values(array_unique($chain));
+        $unique = array_values(array_unique($chain));
+        usort($unique, function (int $a, int $b): int {
+            $ra = $this->gradeRank($this->loadGrade($a));
+            $rb = $this->gradeRank($this->loadGrade($b));
+            if ($ra !== $rb) {
+                return $ra <=> $rb;
+            }
+
+            return $a <=> $b;
+        });
+
+        return $unique;
     }
 
     /** @return list<int> */
@@ -126,7 +164,19 @@ class DynamicApprovalChainService
 
     private function isApproverGrade(string $grade): bool
     {
-        return in_array($grade, self::APPROVER_GRADES, true);
+        if (in_array($grade, self::APPROVER_GRADES, true)) {
+            return true;
+        }
+
+        if (preg_match('/^SUPERVISOR(\s|$)/', $grade) === 1) {
+            return true;
+        }
+
+        if (preg_match('/^MANAGER(\s|$)/', $grade) === 1) {
+            return true;
+        }
+
+        return preg_match('/^SENIOR\s+MANAGER(\s|$)/', $grade) === 1;
     }
 
     private function isBlockedGrade(string $grade): bool
@@ -142,13 +192,13 @@ class DynamicApprovalChainService
 
     private function gradeRank(string $grade): int
     {
-        if ($grade === 'SUPERVISOR') {
+        if ($grade === 'SUPERVISOR' || preg_match('/^SUPERVISOR(\s|$)/', $grade) === 1) {
             return 1;
         }
-        if ($grade === 'MANAGER') {
+        if ($grade === 'MANAGER' || preg_match('/^MANAGER(\s|$)/', $grade) === 1) {
             return 2;
         }
-        if ($grade === 'SENIOR MANAGER') {
+        if ($grade === 'SENIOR MANAGER' || preg_match('/^SENIOR\s+MANAGER(\s|$)/', $grade) === 1) {
             return 3;
         }
 
