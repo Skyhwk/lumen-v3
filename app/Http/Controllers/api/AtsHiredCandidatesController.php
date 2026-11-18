@@ -648,6 +648,7 @@ class AtsHiredCandidatesController extends Controller
             'potongan_bpjs_kes' => $bpjsKes,
             'potongan_bpjs_tk' => $bpjsTk,
             'sumber_potongan_bpjs_tk' => 'gaji_pokok',
+            'sumber_potongan_bpjs_kes' => 'gaji_pokok',
             'pot_pph21' => $pph21,
             'pencadangan_upah' => $pencadangan,
             'no_bpjs_ks' => optional($profile)->no_bpjs_ks,
@@ -996,6 +997,7 @@ class AtsHiredCandidatesController extends Controller
                 'no_bpjs' => $noBpjsKs,
                 'potongan_karyawan' => $rateKaryawanKes,
                 'nominal_potongan_karyawan' => $bpjsKes,
+                'sumber_potongan' => data_get($request, 'payroll.sumber_potongan_bpjs_kes'),
                 'potongan_kantor' => $rateKantorKes,
                 'nominal_potongan_kantor' => $gajiPokok * $rateKantorKes,
                 'bulan_efektif' => $effectiveMonth,
@@ -1405,6 +1407,13 @@ class AtsHiredCandidatesController extends Controller
         $sumberPotonganBpjsTk = trim((string) data_get($request, 'payroll.sumber_potongan_bpjs_tk', ''));
         if ($bpjsTkEnabled && !in_array($sumberPotonganBpjsTk, ['gaji_pokok', 'umr_kota', 'lainnya'], true)) {
             return 'Sumber potongan BPJS Ketenagakerjaan harus Gaji Pokok, UMR Kota, atau Lainnya.';
+        }
+
+        $adaBpjsKes = data_get($request, 'payroll.ada_bpjs_kes', 1);
+        $bpjsKesEnabled = !in_array($adaBpjsKes, [0, '0', false, 'false'], true);
+        $sumberPotonganBpjsKes = trim((string) data_get($request, 'payroll.sumber_potongan_bpjs_kes', ''));
+        if ($bpjsKesEnabled && !in_array($sumberPotonganBpjsKes, ['gaji_pokok', 'umr_kota', 'lainnya'], true)) {
+            return 'Sumber potongan BPJS Kesehatan harus Gaji Pokok, UMR Kota, atau Lainnya.';
         }
 
         $satuanJangkaWaktu = trim((string) data_get($request, 'payroll.satuan_jangka_waktu', ''));
