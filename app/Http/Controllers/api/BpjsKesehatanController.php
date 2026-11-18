@@ -31,7 +31,22 @@ class BpjsKesehatanController extends Controller
             })
             ->select('bpjs_kesehatan.*', 'master_karyawan.jabatan');
 
-        return Datatables::of($data)->make(true);
+        return Datatables::of($data)
+            ->editColumn('sumber_potongan', function ($row) {
+                $sumber = strtolower(trim((string) $row->sumber_potongan));
+                if ($sumber === 'umr_kota') {
+                    return 'UMR Kota';
+                }
+                if ($sumber === 'gaji_pokok') {
+                    return 'Gaji Pokok';
+                }
+                if ($sumber === 'lainnya') {
+                    return 'Lainnya';
+                }
+
+                return $row->sumber_potongan ?: '-';
+            })
+            ->make(true);
     }
 
     public function getKaryawan()
@@ -105,6 +120,15 @@ class BpjsKesehatanController extends Controller
             $BpjsKesehatan->nominal_potongan_karyawan = $BpjsKesehatan->potongan_karyawan * $BpjsKesehatan->gaji_pokok;
             $BpjsKesehatan->potongan_kantor = $request->potongan_kantor / 100;
             $BpjsKesehatan->nominal_potongan_kantor = $BpjsKesehatan->potongan_kantor * $BpjsKesehatan->gaji_pokok;
+
+            $sumberPotongan = strtolower(trim((string) $request->sumber_potongan));
+            if (!in_array($sumberPotongan, ['gaji_pokok', 'umr_kota', 'lainnya'], true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Sumber potongan harus Gaji Pokok, UMR Kota, atau Lainnya.',
+                ], 422);
+            }
+            $BpjsKesehatan->sumber_potongan = $sumberPotongan;
             $BpjsKesehatan->created_at = DATE('Y-m-d H:i:s');
 
             if ($request->id && in_array((int) $request->id_karyawan, array_map('intval', $existingKaryawan), true)) {
