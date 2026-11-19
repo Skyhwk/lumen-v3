@@ -7,6 +7,7 @@ use App\Models\BeritaAcaraKejadianDisipliner;
 use App\Models\MasterKaryawan;
 use App\Services\BakAtasanWorkflowService;
 use App\Services\BakDocumentVisibilityService;
+use App\Services\BakKejadianTimelineService;
 use App\Services\BakLaporanService;
 use App\Services\BeritaAcaraKejadianDocumentService;
 use App\Services\BeritaAcaraKejadianLampiranConvertService;
@@ -848,6 +849,29 @@ class BeritaAcaraKejadianController extends Controller
                 'message' => $ex->getMessage(),
             ], 422);
         }
+    }
+
+    /**
+     * Riwayat status BAK (dan investigasi terkait) untuk modal view PDF.
+     */
+    public function timeline(Request $request)
+    {
+        $id = (int) $request->input('id');
+        if ($id <= 0) {
+            return response()->json(['success' => false, 'message' => 'ID tidak valid.'], 422);
+        }
+
+        $document = $this->findDocumentForViewer($id);
+        if ($document === null) {
+            return $this->notFoundOrForbiddenResponse();
+        }
+
+        $logs = app(BakKejadianTimelineService::class)->buildMergedForBakView($id);
+
+        return response()->json([
+            'success' => true,
+            'data' => ['logs' => $logs],
+        ], 200);
     }
 
     public function printPdf(Request $request, BeritaAcaraKejadianDocumentService $documentService)
