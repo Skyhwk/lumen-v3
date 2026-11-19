@@ -14,4 +14,9 @@ class PenggunaanMobilDetail extends Sector
     {
         return $this->belongsTo(PenggunaanMobilHeader::class, 'header_id');
     }
+
+    public function mobil()
+    {
+        return $this->belongsTo(DaftarMobil::class, 'mobil_id');
+    }
 }

@@ -113,6 +113,9 @@ class DaftarMobilController extends Controller
                 $data->nomor_mesin = strtoupper(trim($request->nomor_mesin));
                 $data->warna_mobil = trim($request->warna_mobil);
                 $data->tahun_perakitan = $request->tahun_perakitan;
+                if ($request->filled('kepemilikan')) {
+                    $data->kepemilikan = $this->normalizeKepemilikan($request->kepemilikan);
+                }
                 if ($request->has('status_gps')) {
                     $data->status_gps = $this->toBoolean($request->status_gps);
                 }
@@ -135,6 +138,7 @@ class DaftarMobilController extends Controller
                 'warna_mobil' => trim($request->warna_mobil),
                 'tahun_perakitan' => $request->tahun_perakitan ? $request->tahun_perakitan : null,
                 'status_gps' => false,
+                'kepemilikan' => $this->normalizeKepemilikan($request->kepemilikan ?? 'internal'),
                 'is_active' => true,
                 'created_at' => date('Y-m-d H:i:s'),
                 'created_by' => $this->karyawan,
@@ -169,5 +173,12 @@ class DaftarMobilController extends Controller
     protected function toBoolean($value): bool
     {
         return $value === true || $value === 1 || $value === '1' || $value === 'true';
+    }
+
+    protected function normalizeKepemilikan($value): string
+    {
+        $value = strtolower(trim((string) $value));
+
+        return in_array($value, ['internal', 'external'], true) ? $value : 'internal';
     }
 }

@@ -17,6 +17,7 @@ class DaftarMobil extends Sector
         'warna_mobil',
         'tahun_perakitan',
         'status_gps',
+        'kepemilikan',
         'created_at',
         'created_by',
         'updated_at',
