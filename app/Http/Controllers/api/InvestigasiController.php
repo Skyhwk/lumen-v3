@@ -12,13 +12,11 @@ use App\Services\BeritaAcaraKejadianDocumentService;
 use App\Services\GenerateQrDocumentBeritaAcaraKejadian;
 use App\Services\InvestigasiAccessService;
 use App\Services\InvestigasiPengesahanService;
-use App\Services\MenuDataAccessService;
 use App\Support\InvestigasiAwalStatus;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 
 /**
  * Investigasi Awal (F1) — endpoint khusus modul investigasi.
@@ -42,12 +40,14 @@ class InvestigasiController extends Controller
         }
 
         if ($workflowTab === 'hasil') {
-            $query->where('status', InvestigasiAwalStatus::MENUNGGU_HASIL);
-        } elseif ($workflowTab === 'pengesahan') {
+            // G.1 + antrian Diketahui (belum terbit)
             $query->whereIn('status', [
-                InvestigasiAwalStatus::ISSUED,
+                InvestigasiAwalStatus::MENUNGGU_HASIL,
                 InvestigasiAwalStatus::MENUNGGU_PENGESAHAN,
             ]);
+        } elseif ($workflowTab === 'pengesahan') {
+            // Dokumen Terbit (F1): hanya yang sudah issued — UI hanya icon view
+            $query->where('status', InvestigasiAwalStatus::ISSUED);
         } else {
             $query->where('status', InvestigasiAwalStatus::DRAFT);
         }
@@ -75,14 +75,14 @@ class InvestigasiController extends Controller
                 ->count(),
             'hasil' => (int) DB::table('bak_investigasi')
                 ->where('is_active', true)
-                ->where('status', InvestigasiAwalStatus::MENUNGGU_HASIL)
+                ->whereIn('status', [
+                    InvestigasiAwalStatus::MENUNGGU_HASIL,
+                    InvestigasiAwalStatus::MENUNGGU_PENGESAHAN,
+                ])
                 ->count(),
             'pengesahan' => (int) DB::table('bak_investigasi')
                 ->where('is_active', true)
-                ->whereIn('status', [
-                    InvestigasiAwalStatus::ISSUED,
-                    InvestigasiAwalStatus::MENUNGGU_PENGESAHAN,
-                ])
+                ->where('status', InvestigasiAwalStatus::ISSUED)
                 ->count(),
         ];
 
@@ -413,12 +413,16 @@ class InvestigasiController extends Controller
                         : null;
                     $createdBy = trim((string) ($row->created_by ?? ''));
                     $creatorKey = mb_strtolower($createdBy);
+                    // 1) master_karyawan by nama created_by  2) snapshot penandatangan_divisi di BAK
+                    $divisiFromMaster = $divisiByCreator[$creatorKey] ?? '';
+                    $divisiFromBak = trim((string) ($row->penandatangan_divisi ?? ''));
+                    $createdByDivisi = $divisiFromMaster !== '' ? $divisiFromMaster : $divisiFromBak;
 
                     return [
                         'id' => (int) $row->id,
                         'nomor_surat' => (string) ($row->nomor_surat ?? ''),
                         'created_by' => $createdBy,
-                        'created_by_divisi' => $divisiByCreator[$creatorKey] ?? '',
+                        'created_by_divisi' => $createdByDivisi,
                         'perihal' => trim((string) ($row->perihal ?? '')),
                         'tanggal_kejadian' => $tanggal,
                         'created_at' => $createdAt,
@@ -911,50 +915,38 @@ class InvestigasiController extends Controller
                 'bak.nama_berkas',
                 'bak.file_path',
                 'bak.created_by',
+                'bak.penandatangan_divisi',
                 'bak.created_at'
             );
     }
 
+    /**
+     * Gate preview PDF = sama dengan opsi Select No BAK (bakOptionsQuery).
+     * Hindari filter grade terpisah yang bikin Select bisa tapi printPdf 403.
+     */
     private function findBakForInvestigasiPreview(int $bakId, int $investigasiId = 0): ?BeritaAcaraKejadianDisipliner
     {
         if ($bakId <= 0) {
             return null;
         }
 
-        if ($investigasiId > 0 && Schema::hasTable('bak_investigasi')) {
-            $invActive = DB::table('bak_investigasi')
-                ->where('id', $investigasiId)
-                ->where('is_active', true)
-                ->exists();
-            if ($invActive) {
-                $linked = $this->bakOptionsQuery($investigasiId)
-                    ->where('bak.id', $bakId)
-                    ->first();
-                if ($linked !== null) {
-                    return BeritaAcaraKejadianDisipliner::query()
-                        ->where('is_active', true)
-                        ->where('id', (int) $linked->id)
-                        ->first();
-                }
-            }
+        // Sama dengan listForInvestigasi: opsi BAK + status draft|issued
+        $linked = $this->bakOptionsQuery($investigasiId)
+            ->where('bak.id', $bakId)
+            ->whereIn('bak.status', [
+                BeritaAcaraKejadianDisipliner::STATUS_DRAFT,
+                BeritaAcaraKejadianDisipliner::STATUS_ISSUED,
+            ])
+            ->first();
+
+        if ($linked === null) {
+            return null;
         }
 
-        $query = BeritaAcaraKejadianDisipliner::query()
+        return BeritaAcaraKejadianDisipliner::query()
             ->where('is_active', true)
-            ->where('id', $bakId)
-            ->whereIn('proses_status', [
-                BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES,
-                BeritaAcaraKejadianDisipliner::PROSES_SEDANG_DIPROSES,
-                BeritaAcaraKejadianDisipliner::PROSES_SUDAH_DIPROSES,
-            ]);
-
-        MenuDataAccessService::applyKaryawanGradeFilter(
-            $query,
-            Str::slug('Investigasi Awal'),
-            'penandatangan',
-        );
-
-        return $query->first();
+            ->where('id', (int) $linked->id)
+            ->first();
     }
 
     private function resolveId(Request $request): int
