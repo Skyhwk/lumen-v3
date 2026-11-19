@@ -14,9 +14,20 @@ return new class extends Migration
             return;
         }
 
-        Schema::table('bak_investigasi', function (Blueprint $table) {
+        $afterAnalisisAnchor = null;
+        foreach (['dampak_catatan_khusus', 'analisis_kasus', 'kronologi_catatan_khusus'] as $candidate) {
+            if (Schema::hasColumn('bak_investigasi', $candidate)) {
+                $afterAnalisisAnchor = $candidate;
+                break;
+            }
+        }
+
+        Schema::table('bak_investigasi', function (Blueprint $table) use ($afterAnalisisAnchor) {
             if (!Schema::hasColumn('bak_investigasi', 'rekomendasi_alur')) {
-                $table->enum('rekomendasi_alur', ['internal_disciplinary', 'komite_manajemen'])->nullable()->after('dampak_catatan_khusus');
+                $col = $table->enum('rekomendasi_alur', ['internal_disciplinary', 'komite_manajemen'])->nullable();
+                if ($afterAnalisisAnchor !== null) {
+                    $col->after($afterAnalisisAnchor);
+                }
             }
             if (!Schema::hasColumn('bak_investigasi', 'keputusan_sanksi')) {
                 $table->enum('keputusan_sanksi', ['tanpa_sanksi', 'dengan_sanksi'])->nullable()->after('rekomendasi_alur');
