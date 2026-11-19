@@ -11,9 +11,15 @@ use App\Services\BakLaporanService;
 use App\Services\BeritaAcaraKejadianDocumentService;
 use App\Services\GenerateQrDocumentBeritaAcaraKejadian;
 use App\Services\InvestigasiAccessService;
+use App\Services\BakKejadianTimelineService;
+use App\Services\InvestigasiAwalLogService;
+use App\Services\InvestigasiAwalWorkflowService;
 use App\Services\InvestigasiPengesahanService;
 use App\Services\MenuDataAccessService;
+use App\Support\BeritaAcaraKejadianDokumentasiStorage;
 use App\Support\InvestigasiAwalStatus;
+use App\Support\InvestigasiBuktiPendukungStorage;
+use App\Services\BeritaAcaraKejadianLampiranConvertService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -104,6 +110,28 @@ class InvestigasiController extends Controller
         ], 200);
     }
 
+    /**
+     * Riwayat BAK terpilih (preview di form sebelum / tanpa simpan investigasi).
+     */
+    public function bakTimeline(Request $request)
+    {
+        $rawIds = $request->input('bak_ids', []);
+        $bakIds = is_array($rawIds) ? $rawIds : [];
+        $investigasiId = (int) $request->input('investigasi_id', $request->input('id', 0));
+
+        $service = app(BakKejadianTimelineService::class);
+        $bakLogs = $service->buildForBakIds($bakIds, $investigasiId);
+        $invLogs = $investigasiId > 0
+            ? $this->loadInvestigasiFormattedLogs($investigasiId)
+            : [];
+        $logs = BakKejadianTimelineService::mergeTimelineEntries($bakLogs, $invLogs);
+
+        return response()->json([
+            'success' => true,
+            'data' => ['logs' => $logs],
+        ], 200);
+    }
+
     public function detail(Request $request)
     {
         $id = (int) $request->input('id');
@@ -139,6 +167,15 @@ class InvestigasiController extends Controller
         $bakNomorByInvestigasi = $this->loadBakNomorByInvestigasiIds([$id]);
         $linkedBak = $this->loadLinkedBakRowsForInvestigasi($id);
 
+        $buktiPendukung = [];
+        if (Schema::hasColumn('bak_investigasi', 'bukti_pendukung')) {
+            $storedBukti = InvestigasiBuktiPendukungStorage::decodeList($row->bukti_pendukung ?? null);
+            $buktiPendukung = InvestigasiBuktiPendukungStorage::expandForApi(
+                (string) ($row->no_document ?? ''),
+                $storedBukti
+            );
+        }
+
         return response()->json([
             'success' => true,
             'data' => array_merge($this->formatInvestigasiRow($row, [], $bakNomorByInvestigasi), [
@@ -148,10 +185,12 @@ class InvestigasiController extends Controller
                 'pengesahan' => $pengesahan,
                 'bak_ids' => $bakIds,
                 'linked_bak' => $linkedBak,
+                'bukti_pendukung' => $buktiPendukung,
                 'can_approve_diketahui' => $this->user_id
                     ? app(InvestigasiPengesahanService::class)->viewerCanApproveDiketahui($id, (int) $this->user_id)
                     : false,
                 'is_legal_manager' => $this->viewerIsLegalManager($request),
+                'logs' => $this->loadStatusLogs($id),
             ]),
         ], 200);
     }
@@ -404,7 +443,11 @@ class InvestigasiController extends Controller
 
             $rows = $collection
                 ->map(function ($row) use ($divisiByCreator) {
-                    $dokumentasi = $this->decodeDokumentasiList($row->dokumentasi ?? null);
+                    $storedDok = BeritaAcaraKejadianDokumentasiStorage::decodeList($row->dokumentasi ?? null);
+                    $dokumentasi = BeritaAcaraKejadianDokumentasiStorage::expandForApi(
+                        (string) ($row->nomor_surat ?? ''),
+                        $storedDok
+                    );
                     $tanggal = $row->tanggal_kejadian
                         ? Carbon::parse($row->tanggal_kejadian)->format('Y-m-d')
                         : null;
@@ -493,6 +536,31 @@ class InvestigasiController extends Controller
             $bakIds = is_array($input['bak_ids'] ?? null) ? $input['bak_ids'] : [];
             BakLaporanService::syncInvestigasiLinks($id, $bakIds);
 
+            if (Schema::hasColumn('bak_investigasi', 'bukti_pendukung')) {
+                $buktiResult = $this->syncBuktiPendukungFiles($request, $noDocument, []);
+                if ($buktiResult instanceof \Illuminate\Http\JsonResponse) {
+                    DB::rollBack();
+
+                    return $buktiResult;
+                }
+                if ($buktiResult !== []) {
+                    DB::table('bak_investigasi')->where('id', $id)->update([
+                        'bukti_pendukung' => json_encode($buktiResult, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                        'updated_at' => Carbon::now(),
+                    ]);
+                }
+            }
+
+            InvestigasiAwalLogService::log(
+                $id,
+                null,
+                InvestigasiAwalStatus::DRAFT,
+                'create',
+                $this->user_id ? (int) $this->user_id : null,
+                $input['created_by'] ?? null,
+                null
+            );
+
             DB::commit();
 
             $row = DB::table('bak_investigasi')->where('id', $id)->first();
@@ -570,6 +638,24 @@ class InvestigasiController extends Controller
             $bakIds = is_array($input['bak_ids'] ?? null) ? $input['bak_ids'] : [];
             BakLaporanService::syncInvestigasiLinks($id, $bakIds);
 
+            if (Schema::hasColumn('bak_investigasi', 'bukti_pendukung')) {
+                $prevBukti = InvestigasiBuktiPendukungStorage::decodeList($existing->bukti_pendukung ?? null);
+                $buktiResult = $this->syncBuktiPendukungFiles(
+                    $request,
+                    (string) ($existing->no_document ?? ''),
+                    $prevBukti
+                );
+                if ($buktiResult instanceof \Illuminate\Http\JsonResponse) {
+                    DB::rollBack();
+
+                    return $buktiResult;
+                }
+                DB::table('bak_investigasi')->where('id', $id)->update([
+                    'bukti_pendukung' => json_encode($buktiResult, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'updated_at' => Carbon::now(),
+                ]);
+            }
+
             DB::commit();
 
             $row = DB::table('bak_investigasi')->where('id', $id)->first();
@@ -624,6 +710,16 @@ class InvestigasiController extends Controller
 
             BakLaporanService::syncBeritaAcaraProsesForInvestigasi($id);
 
+            InvestigasiAwalLogService::log(
+                $id,
+                InvestigasiAwalStatus::DRAFT,
+                InvestigasiAwalStatus::MENUNGGU_HASIL,
+                'submit',
+                (int) $actor->id,
+                $actor->nama_lengkap,
+                null
+            );
+
             DB::commit();
 
             $fresh = DB::table('bak_investigasi')->where('id', $id)->first();
@@ -661,6 +757,17 @@ class InvestigasiController extends Controller
 
         BakInvestigasiService::applyG1Fields($id, $g1);
 
+        $actor = $this->resolveActorKaryawan();
+        InvestigasiAwalLogService::log(
+            $id,
+            InvestigasiAwalStatus::MENUNGGU_HASIL,
+            InvestigasiAwalStatus::MENUNGGU_HASIL,
+            'save_g1',
+            $actor ? (int) $actor->id : null,
+            $actor ? $actor->nama_lengkap : null,
+            null
+        );
+
         return response()->json([
             'success' => true,
             'message' => 'Hasil investigasi (G.1) disimpan.',
@@ -692,6 +799,15 @@ class InvestigasiController extends Controller
             DB::beginTransaction();
             app(InvestigasiPengesahanService::class)->approveLegal($id, $actor, $g1);
             app(BakInvestigasiDocumentService::class)->issuePdf($id);
+            InvestigasiAwalLogService::log(
+                $id,
+                InvestigasiAwalStatus::MENUNGGU_HASIL,
+                InvestigasiAwalStatus::ISSUED,
+                'approve_legal',
+                (int) $actor->id,
+                $actor->nama_lengkap,
+                null
+            );
             DB::commit();
         } catch (\Throwable $ex) {
             DB::rollBack();
@@ -739,6 +855,19 @@ class InvestigasiController extends Controller
                     'updated_at' => Carbon::now(),
                 ]);
             }
+
+            $currentStatus = (string) (DB::table('bak_investigasi')->where('id', $id)->value('status')
+                ?: InvestigasiAwalStatus::ISSUED);
+            InvestigasiAwalLogService::log(
+                $id,
+                $currentStatus,
+                $currentStatus,
+                'approve_diketahui',
+                (int) $actor->id,
+                $actor->nama_lengkap,
+                null
+            );
+
             DB::commit();
         } catch (\Throwable $ex) {
             DB::rollBack();
@@ -765,11 +894,25 @@ class InvestigasiController extends Controller
         }
 
         $id = (int) $request->input('id');
+        $previousStatus = (string) (DB::table('bak_investigasi')->where('id', $id)->value('status') ?? '');
+        $reason = trim((string) $request->input('reason'));
+        $actor = $this->resolveActorKaryawan();
+
         DB::table('bak_investigasi')->where('id', $id)->update([
             'status' => InvestigasiAwalStatus::DRAFT,
-            'rejection_reason' => $request->input('reason'),
+            'rejection_reason' => $reason,
             'updated_at' => Carbon::now(),
         ]);
+
+        InvestigasiAwalLogService::log(
+            $id,
+            $previousStatus !== '' ? $previousStatus : null,
+            InvestigasiAwalStatus::DRAFT,
+            'reject_pengesahan',
+            $actor ? (int) $actor->id : null,
+            $actor ? $actor->nama_lengkap : null,
+            $reason !== '' ? $reason : 'Dikembalikan ke pembuat'
+        );
 
         return response()->json(['success' => true, 'message' => 'Dikembalikan ke pembuat.'], 200);
     }
@@ -931,30 +1074,50 @@ class InvestigasiController extends Controller
                     ->where('bak.id', $bakId)
                     ->first();
                 if ($linked !== null) {
-                    return BeritaAcaraKejadianDisipliner::query()
-                        ->where('is_active', true)
-                        ->where('id', (int) $linked->id)
-                        ->first();
+                    return $this->loadActiveBakById((int) $linked->id);
                 }
             }
         }
 
-        $query = BeritaAcaraKejadianDisipliner::query()
+        $eligible = $this->bakOptionsQuery($investigasiId)
+            ->where('bak.id', $bakId)
+            ->first();
+        if ($eligible !== null) {
+            return $this->loadActiveBakById((int) $eligible->id);
+        }
+
+        if (Schema::hasTable('bak_investigasi_berita_acara')) {
+            $linked = DB::table('bak_investigasi_berita_acara as link')
+                ->join('bak_investigasi as inv', 'inv.id', '=', 'link.bak_investigasi_id')
+                ->where('link.berita_acara_id', $bakId)
+                ->where('inv.is_active', true)
+                ->exists();
+            if ($linked) {
+                return $this->loadActiveBakById($bakId);
+            }
+        }
+
+        return BeritaAcaraKejadianDisipliner::query()
             ->where('is_active', true)
             ->where('id', $bakId)
             ->whereIn('proses_status', [
                 BeritaAcaraKejadianDisipliner::PROSES_MENUNGGU_DIPROSES,
                 BeritaAcaraKejadianDisipliner::PROSES_SEDANG_DIPROSES,
                 BeritaAcaraKejadianDisipliner::PROSES_SUDAH_DIPROSES,
-            ]);
+            ])
+            ->first();
+    }
 
-        MenuDataAccessService::applyKaryawanGradeFilter(
-            $query,
-            Str::slug('Investigasi Awal'),
-            'penandatangan',
-        );
+    private function loadActiveBakById(int $bakId): ?BeritaAcaraKejadianDisipliner
+    {
+        if ($bakId <= 0) {
+            return null;
+        }
 
-        return $query->first();
+        return BeritaAcaraKejadianDisipliner::query()
+            ->where('is_active', true)
+            ->where('id', $bakId)
+            ->first();
     }
 
     private function resolveId(Request $request): int
@@ -1110,6 +1273,56 @@ class InvestigasiController extends Controller
     }
 
     /**
+     * @return list<array<string, mixed>>
+     */
+    private function loadStatusLogs(int $investigasiId): array
+    {
+        if ($investigasiId <= 0) {
+            return [];
+        }
+
+        $bakLogs = app(BakKejadianTimelineService::class)->buildForInvestigasi($investigasiId);
+
+        if (!Schema::hasTable('bak_investigasi_status_logs')) {
+            return $bakLogs;
+        }
+
+        $logs = DB::table('bak_investigasi_status_logs')
+            ->where('bak_investigasi_id', $investigasiId)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        $invLogs = $this->loadInvestigasiFormattedLogs($investigasiId);
+
+        return BakKejadianTimelineService::mergeTimelineEntries($bakLogs, $invLogs);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function loadInvestigasiFormattedLogs(int $investigasiId): array
+    {
+        if ($investigasiId <= 0 || !Schema::hasTable('bak_investigasi_status_logs')) {
+            return [];
+        }
+
+        $logs = DB::table('bak_investigasi_status_logs')
+            ->where('bak_investigasi_id', $investigasiId)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        $formatted = InvestigasiAwalWorkflowService::formatLogs($logs);
+        foreach ($formatted as &$item) {
+            $item['timeline_source'] = 'investigasi';
+        }
+        unset($item);
+
+        return $formatted;
+    }
+
+    /**
      * Karyawan terlapor (BAK terkait + pihak terlapor) untuk filter opsi ST / SP.
      *
      * @return list<int>
@@ -1232,7 +1445,11 @@ class InvestigasiController extends Controller
             ]);
 
         return $rows->map(function ($row) {
-            $dokumentasi = $this->decodeDokumentasiList($row->dokumentasi ?? null);
+            $storedDok = BeritaAcaraKejadianDokumentasiStorage::decodeList($row->dokumentasi ?? null);
+            $dokumentasi = BeritaAcaraKejadianDokumentasiStorage::expandForApi(
+                (string) ($row->nomor_surat ?? ''),
+                $storedDok
+            );
 
             return [
                 'id' => (int) $row->id,
@@ -1248,22 +1465,181 @@ class InvestigasiController extends Controller
 
     private function decodeDokumentasiList($value): array
     {
-        if (is_array($value)) {
-            $items = $value;
-        } else {
-            $decoded = json_decode((string) $value, true);
-            $items = is_array($decoded) ? $decoded : [];
+        return BeritaAcaraKejadianDokumentasiStorage::decodeList($value);
+    }
+
+    /**
+     * @param array<int, string> $existingStored hanya nama file
+     * @return array<int, string>|\Illuminate\Http\JsonResponse
+     */
+    private function syncBuktiPendukungFiles(Request $request, string $noDocument, array $existingStored)
+    {
+        $noDocument = trim($noDocument);
+        if ($noDocument === '') {
+            return $existingStored;
         }
 
-        $paths = [];
-        foreach ($items as $item) {
-            $path = str_replace('\\', '/', trim((string) $item));
-            if ($path === '' || strpos($path, '..') !== false) {
+        $kept = $this->resolveKeptBuktiPendukung($request, $existingStored);
+        $removed = array_diff($existingStored, $kept);
+        if ($removed !== []) {
+            $this->deleteBuktiPendukungFiles($noDocument, array_values($removed));
+        }
+
+        $uploads = $this->collectBuktiPendukungUploads($request);
+        if ($uploads instanceof \Illuminate\Http\JsonResponse) {
+            return $uploads;
+        }
+
+        $newNames = $this->storeBuktiPendukungFiles($noDocument, $uploads);
+
+        return array_values(array_unique(array_merge($kept, $newNames)));
+    }
+
+    /**
+     * @param array<int, string> $existing
+     * @return array<int, string>
+     */
+    private function resolveKeptBuktiPendukung(Request $request, array $existing): array
+    {
+        if (!$request->exists('bukti_pendukung_tersimpan_json')) {
+            return $existing;
+        }
+
+        $decoded = json_decode((string) $request->input('bukti_pendukung_tersimpan_json', '[]'), true);
+        if (!is_array($decoded)) {
+            return $existing;
+        }
+
+        $allowed = array_fill_keys($existing, true);
+        $kept = [];
+        foreach ($decoded as $path) {
+            $name = InvestigasiBuktiPendukungStorage::normalizeStoredName((string) $path);
+            if ($name !== '' && isset($allowed[$name])) {
+                $kept[] = $name;
+            }
+        }
+
+        return array_values(array_unique($kept));
+    }
+
+    /**
+     * @return array<int, \Illuminate\Http\UploadedFile>|\Illuminate\Http\JsonResponse
+     */
+    private function collectBuktiPendukungUploads(Request $request)
+    {
+        $files = $request->file('bukti_pendukung', []);
+        if ($files instanceof \Illuminate\Http\UploadedFile) {
+            $files = [$files];
+        }
+        if (!is_array($files)) {
+            $files = [];
+        }
+
+        $allowedImageMime = ['image/jpeg', 'image/png', 'image/webp', 'image/pjpeg'];
+        $allowedImageExt = ['jpg', 'jpeg', 'png', 'webp'];
+        $valid = [];
+
+        foreach ($files as $file) {
+            if (!$file instanceof \Illuminate\Http\UploadedFile) {
                 continue;
             }
-            $paths[] = $path;
+            if (!$file->isValid()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File bukti pendukung gagal diunggah.',
+                ], 422);
+            }
+
+            $mime = strtolower((string) $file->getMimeType());
+            $ext = strtolower((string) ($file->getClientOriginalExtension() ?: $file->extension()));
+            $isImage = in_array($mime, $allowedImageMime, true) && in_array($ext, $allowedImageExt, true);
+            $isPdf = $ext === 'pdf'
+                && in_array($mime, ['application/pdf', 'application/octet-stream', 'application/x-pdf'], true);
+            if (!$isImage && !$isPdf) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Bukti pendukung harus gambar (JPG, PNG, WEBP) atau PDF.',
+                ], 422);
+            }
+
+            if ((int) $file->getSize() > 2 * 1024 * 1024) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ukuran tiap bukti pendukung maksimal 2 MB.',
+                ], 422);
+            }
+
+            $valid[] = $file;
         }
 
-        return array_values(array_unique($paths));
+        if (count($valid) > 10) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bukti pendukung maksimal 10 file.',
+            ], 422);
+        }
+
+        return $valid;
+    }
+
+    /**
+     * @param array<int, \Illuminate\Http\UploadedFile> $files
+     * @return array<int, string> nama file tersimpan
+     */
+    private function storeBuktiPendukungFiles(string $noDocument, array $files): array
+    {
+        if ($files === []) {
+            return [];
+        }
+
+        $directory = InvestigasiBuktiPendukungStorage::publicDirectory($noDocument);
+        $converter = app(BeritaAcaraKejadianLampiranConvertService::class);
+        $stored = [];
+
+        foreach ($files as $file) {
+            $ext = strtolower((string) ($file->getClientOriginalExtension() ?: 'jpg'));
+            $mime = strtolower((string) $file->getMimeType());
+            $isPdf = $ext === 'pdf'
+                && in_array($mime, ['application/pdf', 'application/octet-stream', 'application/x-pdf'], true);
+
+            if ($isPdf) {
+                $base = uniqid('inv_', true);
+                $tempPdfName = $base . '.pdf';
+                $file->move($directory, $tempPdfName);
+                $fullPdf = $directory . DIRECTORY_SEPARATOR . $tempPdfName;
+
+                try {
+                    $jpegFullPaths = $converter->convertPdfToJpegFiles($fullPdf, $directory, $base);
+                } finally {
+                    if (is_file($fullPdf)) {
+                        @unlink($fullPdf);
+                    }
+                }
+
+                foreach ($jpegFullPaths as $jpegFull) {
+                    $stored[] = basename($jpegFull);
+                }
+                continue;
+            }
+
+            $name = uniqid('inv_', true) . '.' . $ext;
+            $file->move($directory, $name);
+            $stored[] = $name;
+        }
+
+        return $stored;
+    }
+
+    /**
+     * @param array<int, string> $storedNames
+     */
+    private function deleteBuktiPendukungFiles(string $noDocument, array $storedNames): void
+    {
+        foreach ($storedNames as $stored) {
+            $full = InvestigasiBuktiPendukungStorage::fullPath($noDocument, (string) $stored);
+            if ($full !== '' && is_file($full)) {
+                @unlink($full);
+            }
+        }
     }
 }

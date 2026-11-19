@@ -59,6 +59,7 @@ final class BakInvestigasiService
             'no_bak_terakhir' => $input['no_bak_terakhir'] ?? null,
             'jumlah_bukti' => isset($input['jumlah_bukti']) ? (int) $input['jumlah_bukti'] : null,
             'jenis_bukti' => $input['jenis_bukti'] ?? null,
+            'kronologi_ringkasan' => $input['kronologi_ringkasan'] ?? null,
             'kronologi_what' => $input['kronologi_what'] ?? null,
             'kronologi_who' => $input['kronologi_who'] ?? null,
             'kronologi_when' => $input['kronologi_when'] ?? null,
