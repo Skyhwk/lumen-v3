@@ -111,7 +111,7 @@ class EmployeeDocumentController extends Controller
     {
         $this->validate($request, [
             'karyawan_id' => 'required|integer',
-            'document_type' => 'required|string|max:50',
+            'document_type' => 'nullable|string|max:50',
         ]);
 
         if (!$request->hasFile('file')) {

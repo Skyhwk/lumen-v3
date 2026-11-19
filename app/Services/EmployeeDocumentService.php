@@ -91,18 +91,25 @@ class EmployeeDocumentService
             throw new \RuntimeException('Ukuran dokumen maksimal 5 MB.');
         }
 
-        $documentType = strtoupper(trim((string) $documentType));
-        if ($documentType === '') {
-            throw new \RuntimeException('Jenis dokumen wajib diisi.');
-        }
-
-        [$documentNumber, $year, $sequenceNumber] = $this->nextDocumentNumber($documentType);
-
         $originalName = $file->getClientOriginalName();
         $mimeType = $file->getClientMimeType();
-        $safeNumber = preg_replace('/[^a-zA-Z0-9._-]+/', '-', $documentNumber);
-        $fileName = $safeNumber . '.' . $extension;
         $directory = $this->ensureDirectory($karyawanId);
+
+        $documentType = strtoupper(trim((string) $documentType));
+        $manualWithoutNumbering = $documentType === '';
+
+        if ($manualWithoutNumbering) {
+            $documentType = 'MANUAL';
+            $documentNumber = null;
+            $year = null;
+            $sequenceNumber = null;
+            $fileName = $this->uniqueStoredFileName($directory, $originalName, $extension);
+        } else {
+            [$documentNumber, $year, $sequenceNumber] = $this->nextDocumentNumber($documentType);
+            $safeNumber = preg_replace('/[^a-zA-Z0-9._-]+/', '-', $documentNumber);
+            $fileName = $safeNumber . '.' . $extension;
+        }
+
         $file->move($directory, $fileName);
 
         $relativePath = $this->relativePath($karyawanId, $fileName);
@@ -221,6 +228,26 @@ class EmployeeDocumentService
         ]);
 
         return true;
+    }
+
+    private function uniqueStoredFileName($directory, $originalName, $extension)
+    {
+        $baseName = pathinfo((string) $originalName, PATHINFO_FILENAME);
+        $baseName = preg_replace('/[^a-zA-Z0-9._-]+/', '-', $baseName) ?: 'dokumen';
+        $baseName = trim($baseName, '.-') ?: 'dokumen';
+        $extension = strtolower((string) $extension) ?: 'bin';
+
+        $candidate = $baseName . '.' . $extension;
+        if (!is_file($directory . DIRECTORY_SEPARATOR . $candidate)) {
+            return $candidate;
+        }
+
+        $counter = 1;
+        while (is_file($directory . DIRECTORY_SEPARATOR . $baseName . '-' . $counter . '.' . $extension)) {
+            $counter++;
+        }
+
+        return $baseName . '-' . $counter . '.' . $extension;
     }
 
     private function nextDocumentNumber($documentType)
