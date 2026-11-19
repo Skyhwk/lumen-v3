@@ -92,6 +92,7 @@ class EmployeeDocumentService
         }
 
         $originalName = $file->getClientOriginalName();
+        $storedFileName = $this->sanitizeStoredDocumentName($originalName);
         $mimeType = $file->getClientMimeType();
         $directory = $this->ensureDirectory($karyawanId);
 
@@ -122,7 +123,7 @@ class EmployeeDocumentService
             'document_number' => $documentNumber,
             'sequence_year' => $year,
             'sequence_number' => $sequenceNumber,
-            'file_name' => $originalName ?: $fileName,
+            'file_name' => $storedFileName ?: $fileName,
             'file_path' => $relativePath,
             'mime_type' => $mimeType ?: ($extension === 'pdf' ? 'application/pdf' : 'image/' . $extension),
             'file_size' => @filesize($directory . DIRECTORY_SEPARATOR . $fileName) ?: null,
@@ -230,9 +231,32 @@ class EmployeeDocumentService
         return true;
     }
 
+    private function sanitizeStoredDocumentName($fileName)
+    {
+        $fileName = trim((string) $fileName);
+        if ($fileName === '') {
+            return $fileName;
+        }
+
+        $baseName = pathinfo($fileName, PATHINFO_FILENAME);
+        $extension = pathinfo($fileName, PATHINFO_EXTENSION);
+        $baseName = preg_replace('/\s+/', '-', (string) $baseName);
+        $baseName = trim($baseName, '-');
+        if ($baseName === '') {
+            $baseName = 'dokumen';
+        }
+
+        if ($extension === '') {
+            return $baseName;
+        }
+
+        return $baseName . '.' . strtolower($extension);
+    }
+
     private function uniqueStoredFileName($directory, $originalName, $extension)
     {
         $baseName = pathinfo((string) $originalName, PATHINFO_FILENAME);
+        $baseName = preg_replace('/\s+/', '-', (string) $baseName);
         $baseName = preg_replace('/[^a-zA-Z0-9._-]+/', '-', $baseName) ?: 'dokumen';
         $baseName = trim($baseName, '.-') ?: 'dokumen';
         $extension = strtolower((string) $extension) ?: 'bin';
