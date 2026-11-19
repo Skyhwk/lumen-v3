@@ -19,6 +19,7 @@ use Exception;
 use App\Services\SendEmail;
 use App\Jobs\SendNotifPerubahanJadwalJob;
 use App\Jobs\SyncSamplerTrackingScheduleJob;
+use App\Services\KendaraanSamplingAvailabilityService;
 
 
 class JadwalServices
@@ -455,6 +456,8 @@ class JadwalServices
         if ($dataUpdate->sampler == null) {
             throw new Exception('Sampler is required', 401);
         }
+        app(KendaraanSamplingAvailabilityService::class)
+            ->assertSelectionAvailable($dataUpdate->kendaraan, $dataUpdate->tanggal);
         // if ($dataUpdate->driver == null) {
         //     throw new Exception('Driver is required', 401);
         // }
@@ -788,6 +791,8 @@ class JadwalServices
             }
         }
 
+        app(KendaraanSamplingAvailabilityService::class)
+            ->assertSelectionAvailable($dataUpdate->kendaraan, $dataUpdate->tanggal);
 
         // ===============================SEARCH DATA======================
         $data = Jadwal::where('no_quotation', $dataUpdate->no_quotation)
@@ -1028,6 +1033,11 @@ class JadwalServices
             throw new Exception("Alamat is required when add jadwal", 401);
         }
 
+        $kendaraanList = is_array($dataAdd->kendaraan ?? null) ? $dataAdd->kendaraan : [$dataAdd->kendaraan ?? null];
+        $tanggalList = is_array($dataAdd->tanggal) ? $dataAdd->tanggal : [$dataAdd->tanggal];
+        app(KendaraanSamplingAvailabilityService::class)
+            ->assertSelectionsAvailable($kendaraanList, $tanggalList);
+
         DB::beginTransaction();
         try {
             $tracking = app(SamplerTrackingService::class);
@@ -1241,6 +1251,9 @@ class JadwalServices
             throw new Exception("id, id_sampling, totkateg, kategori, no_quotation, nama_perusahaan, wilayah, alamat, tanggal, note, durasi, status, urutan, karyawan, kendaraan is required", 401);
         }
 
+        app(KendaraanSamplingAvailabilityService::class)
+            ->assertSelectionAvailable($dataParsial->kendaraan, $dataParsial->tanggal);
+
         DB::beginTransaction();
         try {
             $tracking = app(SamplerTrackingService::class);
@@ -1420,6 +1433,9 @@ class JadwalServices
         ) {
             throw new Exception("id, id_sampling, totkateg, kategori, no_quotation, nama_perusahaan, wilayah, alamat, tanggal, durasi, status, karyawan, kendaraan is required", 401);
         }
+
+        app(KendaraanSamplingAvailabilityService::class)
+            ->assertSelectionAvailable($dataParsial->kendaraan, $dataParsial->tanggal);
 
         DB::beginTransaction();
         try {

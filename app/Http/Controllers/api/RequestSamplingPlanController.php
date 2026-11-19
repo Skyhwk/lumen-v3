@@ -343,48 +343,62 @@ class RequestSamplingPlanController extends Controller
 
     public function addJadwal(Request $request)
     {
+        try {
+            $ObjectData = (object) [
+                "no_quotation" => $request->no_quotation,
+                "no_document" => $request->no_document,
+                "quotation_id" => $request->quotation_id,
+                "id_sampling" => $request->id_sampling,
+                "nama_perusahaan" => $request->nama_perusahaan,
+                "alamat" => $request->alamat,
+                "tanggal" => $request->tanggal,
+                "id_cabang" => $request->id_cabang,
+                "kategori" => $request->kategori,
+                "jam_mulai" => $request->jam_mulai,
+                "jam_selesai" => $request->jam_selesai,
+                "note" => $request->note,
+                "warna" => $request->warna,
+                "sampler" => $request->sampler,
+                "durasi" => $request->durasi,
+                "status" => $request->status,
+                "kendaraan" => $request->kendaraan,
+                "periode" => $request->periode_kontrak != "" ? $request->periode_kontrak : null,
+                "karyawan" => $this->karyawan,
+                'driver' => $request->driver ?? null,
+                "isokinetic" => (int)$request->isokinetic,
+                "pendampingan_k3" => (int)$request->pendampingan_k3,
+                "durasi_personal" => $request->durasi_personal,
+            ];
 
-        $ObjectData = (object) [
-            "no_quotation" => $request->no_quotation,
-            "no_document" => $request->no_document,
-            "quotation_id" => $request->quotation_id,
-            "id_sampling" => $request->id_sampling,
-            "nama_perusahaan" => $request->nama_perusahaan,
-            "alamat" => $request->alamat,
-            "tanggal" => $request->tanggal,
-            "id_cabang" => $request->id_cabang,
-            "kategori" => $request->kategori,
-            "jam_mulai" => $request->jam_mulai,
-            "jam_selesai" => $request->jam_selesai,
-            "note" => $request->note,
-            "warna" => $request->warna,
-            "sampler" => $request->sampler,
-            "durasi" => $request->durasi,
-            "status" => $request->status,
-            "kendaraan" => $request->kendaraan,
-            "periode" => $request->periode_kontrak != "" ? $request->periode_kontrak : null,
-            "karyawan" => $this->karyawan,
-            'driver' => $request->driver ?? null,
-            "isokinetic" => (int)$request->isokinetic,
-            "pendampingan_k3" => (int)$request->pendampingan_k3,
-            "durasi_personal" => $request->durasi_personal,
-        ];
-        
-        $addJadwal = JadwalServices::on('addJadwal', $ObjectData)->addJadwalSP();
+            $addJadwal = JadwalServices::on('addJadwal', $ObjectData)->addJadwalSP();
 
-        if ($addJadwal) {
-            // Tracking is reconciled atomically inside JadwalServices.
+            if ($addJadwal) {
+                $type = explode("/", $request->no_quotation)[1];
+                if ($type == 'QTC') {
+                    $job = new RenderSamplingPlan($request->quotation_id, 'kontrak');
+                } else if ($type == 'QT') {
+                    $job = new RenderSamplingPlan($request->quotation_id, 'non_kontrak');
+                }
 
-            $type = explode("/", $request->no_quotation)[1];
-            if ($type == 'QTC') {
-                $job = new RenderSamplingPlan($request->quotation_id, 'kontrak');
-            } else if ($type == 'QT') {
-                $job = new RenderSamplingPlan($request->quotation_id, 'non_kontrak');
+                $this->dispatch($job);
+
+                return response()->json(['message' => 'Berhasil menambah jadwal sampling.', 'status' => 'success'], 200);
             }
 
-            $this->dispatch($job);
-
-            return response()->json(['message' => 'Berhasil menambah jadwal sampling.', 'status' => 'success'], 200);
+            return response()->json(['message' => 'Gagal menambah jadwal sampling.', 'status' => 'error'], 400);
+        } catch (\Throwable $e) {
+            Log::channel('sampling')->error("=== addJadwal ===", [
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+            ]);
+            $code = (int) ($e->getCode() ?: 400);
+            if ($code < 400 || $code > 599) {
+                $code = 400;
+            }
+            return response()->json([
+                'message' => $e->getMessage(),
+                'status' => 'error',
+            ], $code);
         }
     }
 
@@ -429,95 +443,22 @@ class RequestSamplingPlanController extends Controller
         }
     }
 
-    public function kendaraanAvalible(Request $request){
-    
-        $tanggal = $request->tanggal;
-        // $jamMulai = $request->jam_mulai;
-        // $jamSelesai = $request->jam_selesai;
-        $idSamplingEdit = $request->id_sampling; 
-
-        // --- 1. Ambil Semua Daftar Kendaraan dari API Eksternal ---
-        $masterKendaraan = [];
-        $url = 'https://apps.intilab.com/api/devices';
-
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET"); 
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Authorization: Bearer RzBFAiAsSMLm1ORiB2hH9KQvaGjNSN-1jHrV7nK_WIf1cF4CnwIhAMjtQNnyRNrpy4NogP8qHJWdv_5KVyiWcTLVt7JKSsN2eyJ1IjozLCJlIjoiMjA2MC0wNy0wN1QxNzowMDowMC4wMDArMDA6MDAifQ', 
-            'Accept: application/json',
-            'Content-Type: application/json'
-        ]);
-        
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-        curl_close($ch);
-
-        if ($httpCode == 200 && $response) {
-            $resBody = json_decode($response, true);
-            $masterKendaraan = array_column($resBody, 'name');
-        } else {
+    public function kendaraanAvalible(Request $request)
+    {
+        try {
+            $service = app(\App\Services\KendaraanSamplingAvailabilityService::class);
+            return response()->json(
+                $service->availableByTanggal($request->tanggal, $request->id_sampling)
+            );
+        } catch (\Throwable $th) {
+            \Illuminate\Support\Facades\Log::channel('sampling')->error("=== kendaraanAvalible ===", [
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+            ]);
             return response()->json([
-                'message' => 'Gagal mengambil data kendaraan dari API.',
-                'error' => $curlError
+                'message' => $th->getMessage(),
+                'status' => false,
             ], 500);
         }
-        
-        // --- 2. Cari Semua Jadwal yang Bentrok ---
-        $queryBentrok = DB::table('jadwal')
-            ->select('kendaraan', 'sampler', 'jam_mulai', 'created_at', 'updated_at')
-            ->where('tanggal', $tanggal)
-            ->whereNotNull('kendaraan')
-            ->where('is_active', 1);
-            // ->where(function($query) use ($jamMulai, $jamSelesai) {
-            //     // Rumus Overlap
-            //     $query->where('jam_mulai', '<', $jamSelesai)
-            //         ->where('jam_selesai', '>', $jamMulai);
-            // });
-
-        if ($idSamplingEdit) {
-            $queryBentrok->where('id_sampling', '!=', $idSamplingEdit);
-        }
-
-        $dataBentrok = $queryBentrok->get();
-
-        // --- 3. Filter Konflik Sesuai Aturan (Paling awal jamnya, lalu created/updated_at) ---
-        $detailKonflik = [];
-
-        foreach ($dataBentrok as $row) {
-            $veh = $row->kendaraan;
-
-            // Jika kendaraan ini belum masuk daftar konflik, masukkan.
-            if (!isset($detailKonflik[$veh])) {
-                $detailKonflik[$veh] = $row;
-            } else {
-                // Jika sudah ada, bandingkan jam_mulai-nya
-                $existing = $detailKonflik[$veh];
-
-                if ($row->jam_mulai < $existing->jam_mulai) {
-                    // Jam lebih awal menang
-                    $detailKonflik[$veh] = $row;
-                } elseif ($row->jam_mulai == $existing->jam_mulai) {
-                    // Jika jamnya sama, adu created_at atau updated_at
-                    $waktuRow = $row->created_at ? strtotime($row->created_at) : strtotime($row->updated_at);
-                    $waktuExisting = $existing->created_at ? strtotime($existing->created_at) : strtotime($existing->updated_at);
-
-                    if ($waktuRow && $waktuExisting && $waktuRow < $waktuExisting) {
-                        $detailKonflik[$veh] = $row;
-                    }
-                }
-            }
-        }
-
-        // --- 4. Return Format JSON ---
-        return response()->json([
-            'status'    => true,
-            // Karena kita mau nampilin semua mobil, 'data' isinya $masterKendaraan murni
-            'data'      => array_map(function($name) { return ['id' => $name, 'text' => $name]; }, $masterKendaraan), 
-            // Kirim detail konflik sebagai referensi Frontend
-            'conflicts' => $detailKonflik 
-        ]);
     }
 }
