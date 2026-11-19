@@ -184,9 +184,12 @@
     <span class="sec-hint">&nbsp;(Wajib diisi secara lengkap dan objektif)</span>
 </p>
 <table width="100%" style="border-collapse:collapse;margin:0.5mm 0 1.2mm 0;">
-    <tr><td style="width:2mm;border:none;"></td><td style="border:none;border-bottom:0.25mm dotted #000;height:4.3mm;">&nbsp;</td></tr>
-    <tr><td style="width:2mm;border:none;"></td><td style="border:none;border-bottom:0.25mm dotted #000;height:4.3mm;">&nbsp;</td></tr>
-    <tr><td style="width:2mm;border:none;"></td><td style="border:none;border-bottom:0.25mm dotted #000;height:4.3mm;">&nbsp;</td></tr>
+    <tr>
+        <td style="width:2mm;border:none;"></td>
+        <td style="border:none;padding:1mm 0;line-height:1.35;text-align:justify;">
+            {!! $valOrNbsp($kronologiRingkasan) !!}
+        </td>
+    </tr>
 </table>
 
 <table class="form-lines" style="margin-bottom:1.5mm;">
@@ -432,7 +435,7 @@
         <td style="width:36mm;padding:0.6mm 0 0.6mm 4mm;font-weight:bold;vertical-align:top;">Tindak Lanjut Awal</td>
         <td style="width:3.5mm;text-align:center;vertical-align:top;padding:0.6mm 0;">:</td>
         <td style="width:42mm;padding:0.6mm 0;font-weight:bold;vertical-align:top;">
-            {!! $box(!empty($tlFlags['internalHr'])) !!}&nbsp;Internal HR Direv
+            {!! $box(!empty($tlFlags['internalHr'])) !!}&nbsp;Internal Disciplinary
         </td>
         <td colspan="3" style="padding:0.6mm 0;font-weight:bold;vertical-align:top;">
             {!! $box(!empty($tlFlags['komiteManajemen'])) !!}&nbsp;Komite Manajemen
@@ -526,13 +529,7 @@
             <td style="font-size:8.8pt;">{!! $valOrNbsp($row['nama']) !!}</td>
             <td style="font-size:8.3pt;">{!! $valOrNbsp($row['jabatan']) !!}</td>
             <td style="text-align:center;font-size:8.8pt;">{!! $valOrNbsp($row['tanggal']) !!}</td>
-            <td style="text-align:center;vertical-align:middle;font-size:7.8pt;">
-                @if(!empty($row['signed']))
-                    <span style="color:#1f2937;font-style:italic;">Approved (Digital)</span>
-                @else
-                    &nbsp;
-                @endif
-            </td>
+            <td style="text-align:center;vertical-align:middle;font-size:7.8pt;">&nbsp;</td>
         </tr>
     @endforeach
 </table>

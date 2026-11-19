@@ -3,11 +3,13 @@
 namespace App\Services;
 
 use App\Models\BeritaAcaraKejadianDisipliner;
+use App\Services\GenerateQrDocumentBeritaAcaraKejadian;
 use App\Support\InvestigasiAwalStatus;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -171,16 +173,99 @@ final class BakLaporanService
         }
 
         $next = self::resolveProsesStatusFromLinkedInvestigasi($beritaAcaraId);
-        if ($next === null || $next === $current) {
+        if ($next !== null && $next !== $current) {
+            DB::table('berita_acara_kejadian_disipliner')
+                ->where('id', $beritaAcaraId)
+                ->update([
+                    'proses_status' => $next,
+                    'updated_at' => Carbon::now(),
+                ]);
+            $current = $next;
+        }
+
+        if (!self::linkedInvestigasiHasIssued($beritaAcaraId)) {
             return;
         }
 
-        DB::table('berita_acara_kejadian_disipliner')
+        if ($current !== BeritaAcaraKejadianDisipliner::PROSES_SUDAH_DIPROSES) {
+            DB::table('berita_acara_kejadian_disipliner')
+                ->where('id', $beritaAcaraId)
+                ->update([
+                    'proses_status' => BeritaAcaraKejadianDisipliner::PROSES_SUDAH_DIPROSES,
+                    'updated_at' => Carbon::now(),
+                ]);
+        }
+
+        self::syncBeritaAcaraIssuedWhenInvestigasiTerbit($beritaAcaraId);
+    }
+
+    public static function linkedInvestigasiHasIssued(int $beritaAcaraId): bool
+    {
+        if (
+            $beritaAcaraId <= 0
+            || !Schema::hasTable('bak_investigasi_berita_acara')
+            || !Schema::hasTable('bak_investigasi')
+        ) {
+            return false;
+        }
+
+        return DB::table('bak_investigasi_berita_acara as link')
+            ->join('bak_investigasi as inv', 'inv.id', '=', 'link.bak_investigasi_id')
+            ->where('link.berita_acara_id', $beritaAcaraId)
+            ->where('inv.is_active', true)
+            ->where('inv.status', InvestigasiAwalStatus::ISSUED)
+            ->exists();
+    }
+
+    /**
+     * Saat Investigasi F1 terbit, status dokumen BAK di Pembuatan BAK ikut Terbit (selaras panduan Sudah Diproses).
+     */
+    public static function syncBeritaAcaraIssuedWhenInvestigasiTerbit(int $beritaAcaraId): void
+    {
+        if ($beritaAcaraId <= 0 || !self::linkedInvestigasiHasIssued($beritaAcaraId)) {
+            return;
+        }
+
+        $document = BeritaAcaraKejadianDisipliner::query()
             ->where('id', $beritaAcaraId)
-            ->update([
-                'proses_status' => $next,
-                'updated_at' => Carbon::now(),
+            ->where('is_active', true)
+            ->first();
+
+        if ($document === null || $document->status !== BeritaAcaraKejadianDisipliner::STATUS_DRAFT) {
+            return;
+        }
+
+        $publishedBy = trim((string) (DB::table('bak_investigasi_berita_acara as link')
+            ->join('bak_investigasi as inv', 'inv.id', '=', 'link.bak_investigasi_id')
+            ->where('link.berita_acara_id', $beritaAcaraId)
+            ->where('inv.is_active', true)
+            ->where('inv.status', InvestigasiAwalStatus::ISSUED)
+            ->orderByDesc('inv.published_at')
+            ->orderByDesc('inv.id')
+            ->value('inv.published_by') ?? ''));
+
+        if ($publishedBy === '') {
+            $publishedBy = 'Sistem (Investigasi F1 terbit)';
+        }
+
+        try {
+            $documentService = app(BeritaAcaraKejadianDocumentService::class);
+            if (trim((string) ($document->file_qr ?? '')) === '') {
+                $documentService->syncBakQrFromRecord($document, $document, $publishedBy);
+            } else {
+                GenerateQrDocumentBeritaAcaraKejadian::ensurePublicSvgForFile($document->file_qr);
+            }
+        } catch (\Throwable $ex) {
+            Log::warning('BAK auto-terbit dari F1: QR dilewati — ' . $ex->getMessage(), [
+                'berita_acara_id' => $beritaAcaraId,
             ]);
+        }
+
+        $document->status = BeritaAcaraKejadianDisipliner::STATUS_ISSUED;
+        $document->published_by = $publishedBy;
+        $document->updated_by = $publishedBy;
+        $document->updated_at = Carbon::now();
+        $document->save();
     }
 
     private static function resolveProsesStatusFromLinkedInvestigasi(int $beritaAcaraId): ?string

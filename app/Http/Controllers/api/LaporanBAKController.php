@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\BeritaAcaraKejadianDisipliner;
+use App\Services\BakKejadianTimelineService;
 use App\Services\BakLaporanService;
 use App\Services\BeritaAcaraKejadianDocumentService;
 use App\Services\GenerateQrDocumentBeritaAcaraKejadian;
@@ -62,6 +63,33 @@ class LaporanBAKController extends Controller
             return response()->json([
                 'success' => true,
                 'data' => $this->toDetailPayload($record),
+            ], 200);
+        } catch (\Throwable $ex) {
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function timeline(Request $request)
+    {
+        try {
+            $this->validate($request, ['id' => 'required|integer']);
+
+            $record = $this->findAccessibleRecord($this->resolveId($request));
+            if ($record === null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data tidak ditemukan atau Anda tidak memiliki akses.',
+                ], 403);
+            }
+
+            $logs = app(BakKejadianTimelineService::class)->buildMergedForBakView((int) $record->id);
+
+            return response()->json([
+                'success' => true,
+                'data' => ['logs' => $logs],
             ], 200);
         } catch (\Throwable $ex) {
             return response()->json([

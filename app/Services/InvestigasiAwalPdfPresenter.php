@@ -74,6 +74,7 @@ final class InvestigasiAwalPdfPresenter
             'jumlahBukti' => $row->jumlah_bukti !== null ? (string) (int) $row->jumlah_bukti : '',
             'jenisBukti' => self::field($row->jenis_bukti),
             'pihakRows' => self::padPihakRows(self::mapPihakRows($pihak), 4),
+            'kronologiRingkasan' => self::field($row->kronologi_ringkasan ?? null, true),
             'kronologi' => self::kronologiRows($row),
             'kronologiCatatan' => self::field($row->kronologi_catatan_khusus, true),
             'penyebabRows' => self::penyebabRows($analisis),
@@ -170,7 +171,7 @@ final class InvestigasiAwalPdfPresenter
     private static function tindakLanjutAwalMaster(?string $statusCase): array
     {
         return [
-            ['label' => 'Internal HR Direv', 'on' => in_array($statusCase, [
+            ['label' => 'Internal Disciplinary', 'on' => in_array($statusCase, [
                 InvestigasiStatusCase::DSC_TANPA_SANKSI,
                 InvestigasiStatusCase::DSC_DENGAN_SANKSI,
             ], true)],
