@@ -5,13 +5,17 @@ namespace App\Http\Controllers\api;
 use App\Helpers\MasterKaryawanAgamaHelper;
 use App\Helpers\ShioElemenHelper;
 use App\Http\Controllers\Controller;
+use App\Models\AsetKaryawan;
 use App\Models\KeahlianBahasaKaryawan;
 use App\Models\KeahlianKaryawan;
+use App\Models\MasterAsetKaryawan;
+use App\Services\HrAset\HrGaAssetLinkService;
 use App\Models\MasterKaryawan;
 use App\Models\MedicalCheckup;
 use App\Models\NewRecruitment;
 use App\Models\PendidikanKaryawan;
 use App\Models\PengalamanKerjaKaryawan;
+use App\Models\RfidCard;
 use App\Models\SertifikatKaryawan;
 use App\Models\User;
 use App\Services\GenerateDokumenKaryawanService;
@@ -368,6 +372,84 @@ class AtsHiredCandidatesController extends Controller
         ]);
     }
 
+    /**
+     * Options master aset karyawan untuk section aset di modal migrasi FE.
+     */
+    public function getMasterAsetKaryawanOptions(Request $request)
+    {
+        if (!Schema::hasTable('master_aset_karyawan')) {
+            return response()->json([
+                'status' => true,
+                'message' => 'Options loaded successfully',
+                'data' => [],
+            ], 200);
+        }
+
+        $data = MasterAsetKaryawan::where('is_active', true)
+            ->whereRaw('LOWER(TRIM(nama)) <> ?', ['id card'])
+            ->orderBy('nama')
+            ->get(['id', 'nama'])
+            ->map(function ($item) {
+                $label = $item->nama;
+                if (
+                    Schema::hasColumn('master_aset_karyawan', 'sub_kategori_aset_id')
+                    && !empty($item->sub_kategori_aset_id)
+                ) {
+                    $label .= ' [GA mapped]';
+                }
+
+                return [
+                    'id' => $item->id,
+                    'nama' => $item->nama,
+                    'text' => $label,
+                    'sub_kategori_aset_id' => $item->sub_kategori_aset_id ?? null,
+                    'ga_link_status' => $item->ga_link_status ?? null,
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Options loaded successfully',
+            'data' => $data,
+        ], 200);
+    }
+
+    /**
+     * Options RFID Card Available untuk section aset migrasi.
+     */
+    public function getAvailableRfidCardOptions(Request $request)
+    {
+        if (!Schema::hasTable('rfid_card')) {
+            return response()->json([
+                'status' => true,
+                'message' => 'Options loaded successfully',
+                'data' => [],
+            ], 200);
+        }
+
+        $data = RfidCard::where('status', 0)
+            ->where(function ($query) {
+                $query->whereNull('userid')->orWhere('userid', '');
+            })
+            ->orderBy('kode_kartu')
+            ->get(['id', 'kode_kartu'])
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'kode_kartu' => $item->kode_kartu,
+                    'text' => $item->kode_kartu,
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Options loaded successfully',
+            'data' => $data,
+        ], 200);
+    }
+
     public function migrateToMasterKaryawan(Request $request)
     {
         $tipePengembalian = data_get($request, 'payroll.tipe_pengembalian');
@@ -648,6 +730,7 @@ class AtsHiredCandidatesController extends Controller
             'potongan_bpjs_kes' => $bpjsKes,
             'potongan_bpjs_tk' => $bpjsTk,
             'sumber_potongan_bpjs_tk' => 'gaji_pokok',
+            'sumber_potongan_bpjs_kes' => 'gaji_pokok',
             'pot_pph21' => $pph21,
             'pencadangan_upah' => $pencadangan,
             'no_bpjs_ks' => optional($profile)->no_bpjs_ks,
@@ -811,6 +894,7 @@ class AtsHiredCandidatesController extends Controller
             'skill' => 0,
             'languages' => 0,
             'supporting_info_answers' => 0,
+            'assets' => 0,
         ];
 
         $medicalData = [
@@ -996,6 +1080,7 @@ class AtsHiredCandidatesController extends Controller
                 'no_bpjs' => $noBpjsKs,
                 'potongan_karyawan' => $rateKaryawanKes,
                 'nominal_potongan_karyawan' => $bpjsKes,
+                'sumber_potongan' => data_get($request, 'payroll.sumber_potongan_bpjs_kes'),
                 'potongan_kantor' => $rateKantorKes,
                 'nominal_potongan_kantor' => $gajiPokok * $rateKantorKes,
                 'bulan_efektif' => $effectiveMonth,
@@ -1055,6 +1140,14 @@ class AtsHiredCandidatesController extends Controller
             ], $now);
             $payrollCounts['pencadangan_upah'] = 1;
         }
+
+        // ------ ASET KARYAWAN ------
+        $savedCounts['assets'] = $this->saveAsetKaryawanFromMigration(
+            $karyawan,
+            $recruitment,
+            $request,
+            $timestamp
+        );
 
         $arsipService = new KaryawanArsipDokumenService();
         $archivedDocuments = $arsipService->migrateFromCandidateDocuments($recruitment->id, $karyawan->id, $this->karyawan);
@@ -1407,6 +1500,13 @@ class AtsHiredCandidatesController extends Controller
             return 'Sumber potongan BPJS Ketenagakerjaan harus Gaji Pokok, UMR Kota, atau Lainnya.';
         }
 
+        $adaBpjsKes = data_get($request, 'payroll.ada_bpjs_kes', 1);
+        $bpjsKesEnabled = !in_array($adaBpjsKes, [0, '0', false, 'false'], true);
+        $sumberPotonganBpjsKes = trim((string) data_get($request, 'payroll.sumber_potongan_bpjs_kes', ''));
+        if ($bpjsKesEnabled && !in_array($sumberPotonganBpjsKes, ['gaji_pokok', 'umr_kota', 'lainnya'], true)) {
+            return 'Sumber potongan BPJS Kesehatan harus Gaji Pokok, UMR Kota, atau Lainnya.';
+        }
+
         $satuanJangkaWaktu = trim((string) data_get($request, 'payroll.satuan_jangka_waktu', ''));
         if (!in_array($satuanJangkaWaktu, ['bulan', 'tahun'], true)) {
             return 'Jangka waktu perjanjian harus Bulanan atau Tahunan.';
@@ -1607,6 +1707,124 @@ class AtsHiredCandidatesController extends Controller
         }
 
         return [];
+    }
+
+    /**
+     * Simpan aset yang diterima karyawan saat migrasi Hired Candidate.
+     * Request shape: assets[] = {
+     *   is_id_card?: bool,
+     *   master_aset_karyawan_id?,  // wajib jika bukan ID Card
+     *   rfid_card_id?,             // wajib jika is_id_card
+     *   qty?, satuan?
+     * }
+     * ID Card dikontrol dari FE.
+     * satuan disimpan di aset_karyawan (bukan master).
+     */
+    private function saveAsetKaryawanFromMigration($karyawan, $recruitment, Request $request, $timestamp): int
+    {
+        if (!Schema::hasTable('aset_karyawan') || !Schema::hasTable('master_aset_karyawan')) {
+            return 0;
+        }
+
+        $assets = $this->normalizeRequestArray(data_get($request, 'assets'));
+        if ($assets === []) {
+            return 0;
+        }
+
+        $saved = 0;
+        $usedRfidIds = [];
+
+        foreach ($assets as $asset) {
+            $isIdCard = filter_var($asset['is_id_card'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            $rfidCardId = !empty($asset['rfid_card_id']) ? (int) $asset['rfid_card_id'] : null;
+
+            // ID Card: assign RFID + simpan baris aset_karyawan (master ID Card).
+            if ($isIdCard) {
+                if (!$rfidCardId) {
+                    throw new Exception('ID Card wajib memilih RFID Card yang Available.');
+                }
+
+                if (in_array($rfidCardId, $usedRfidIds, true)) {
+                    throw new Exception('RFID Card yang sama tidak boleh digunakan lebih dari sekali dalam satu migrasi.');
+                }
+
+                $rfid = RfidCard::where('id', $rfidCardId)
+                    ->where('status', 0)
+                    ->where(function ($query) {
+                        $query->whereNull('userid')->orWhere('userid', '');
+                    })
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$rfid) {
+                    throw new Exception('RFID Card tidak tersedia / sudah terpakai.');
+                }
+
+                // Pola link menu RFID: userid = master_karyawan.id
+                $rfid->userid = $karyawan->id;
+                $rfid->save();
+                $usedRfidIds[] = $rfidCardId;
+
+                $masterIdCard = MasterAsetKaryawan::where('is_active', true)
+                    ->whereRaw('LOWER(TRIM(nama)) = ?', ['id card'])
+                    ->first();
+
+                if (!$masterIdCard) {
+                    $masterIdCard = MasterAsetKaryawan::create([
+                        'nama' => 'ID Card',
+                        'created_by' => $this->karyawan,
+                        'created_at' => $timestamp,
+                        'is_active' => true,
+                    ]);
+                }
+
+                AsetKaryawan::create([
+                    'master_karyawan_id' => $karyawan->id,
+                    'new_recruitment_id' => $recruitment->id,
+                    'master_aset_karyawan_id' => $masterIdCard->id,
+                    'rfid_card_id' => $rfid->id,
+                    'qty' => max(1, (int) ($asset['qty'] ?? 1)),
+                    'satuan' => trim((string) ($asset['satuan'] ?? '')) ?: 'Pcs',
+                    'ga_link_status' => HrGaAssetLinkService::ROW_STATUS_NOT_APPLICABLE,
+                    'created_by' => $this->karyawan,
+                    'created_at' => $timestamp,
+                    'is_active' => true,
+                ]);
+
+                $saved++;
+                continue;
+            }
+
+            $masterAsetId = (int) ($asset['master_aset_karyawan_id'] ?? 0);
+            if ($masterAsetId <= 0) {
+                continue;
+            }
+
+            $masterAset = MasterAsetKaryawan::where('id', $masterAsetId)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$masterAset) {
+                throw new Exception('Master aset karyawan tidak ditemukan atau tidak aktif.');
+            }
+
+            AsetKaryawan::create([
+                'master_karyawan_id' => $karyawan->id,
+                'new_recruitment_id' => $recruitment->id,
+                'master_aset_karyawan_id' => $masterAset->id,
+                'rfid_card_id' => null,
+                'qty' => max(1, (int) ($asset['qty'] ?? 1)),
+                'satuan' => trim((string) ($asset['satuan'] ?? '')) ?: null,
+                'ga_link_status' => HrGaAssetLinkService::ROW_STATUS_UNLINKED,
+                'created_by' => $this->karyawan,
+                'created_at' => $timestamp,
+                'is_active' => true,
+            ]);
+
+            $saved++;
+        }
+
+        return $saved;
     }
 
     private function normalizeStringArray($value)

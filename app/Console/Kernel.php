@@ -111,7 +111,9 @@ class Kernel extends ConsoleKernel
         Commands\ImportNearHo::class,
         Commands\BackupMasterPelangganDediWibowoCommand::class,
         Commands\AssignBankDataOrderedCommand::class,
+        Commands\ImportFollowUpCustomerAccountCommand::class,
         Commands\VoidFollowUpInactiveSalesCommand::class,
+        Commands\SyncPrinterStatusCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,
@@ -144,6 +146,12 @@ class Kernel extends ConsoleKernel
             ->dailyAt('23:30')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping(30);
+        $schedule->command('printers:sync-status')
+            ->everyFiveMinutes()
+            ->timezone('Asia/Jakarta')
+            ->between('7:00', '21:00')
+            ->days([Schedule::MONDAY, Schedule::TUESDAY, Schedule::WEDNESDAY, Schedule::THURSDAY, Schedule::FRIDAY, Schedule::SATURDAY])
+            ->withoutOverlapping(8);
         // $schedule->command('customers:deactivate-trial')
         //     ->dailyAt('23:30')
         //     ->timezone('Asia/Jakarta')
@@ -156,8 +164,12 @@ class Kernel extends ConsoleKernel
         //     ->everyFiveMinutes()
         //     ->timezone('Asia/Jakarta')
         //     ->withoutOverlapping(10);
-        // $schedule->command('absensi:generate-monthly')
+        // $schedule->command('absensi:generate-monthly --grade=STAFF')
         //     ->monthlyOn(1, '10:00')
+        //     ->timezone('Asia/Jakarta')
+        //     ->withoutOverlapping(180);
+        // $schedule->command('absensi:generate-monthly --grade=SUPERVISOR')
+        //     ->monthlyOn(16, '10:00')
         //     ->timezone('Asia/Jakarta')
         //     ->withoutOverlapping(180);
 
