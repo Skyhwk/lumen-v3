@@ -15,6 +15,10 @@ class AsetKaryawan extends Sector
         'rfid_card_id',
         'qty',
         'satuan',
+        'ga_asset_id',
+        'ga_link_status',
+        'ga_linked_at',
+        'ga_linked_by',
         'created_at',
         'created_by',
         'updated_at',
@@ -49,5 +53,10 @@ class AsetKaryawan extends Sector
     public function recruitment()
     {
         return $this->belongsTo(NewRecruitment::class, 'new_recruitment_id');
+    }
+
+    public function gaAsset()
+    {
+        return $this->belongsTo(GaAsset::class, 'ga_asset_id');
     }
 }

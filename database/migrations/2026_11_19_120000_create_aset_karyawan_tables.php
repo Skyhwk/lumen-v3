@@ -72,14 +72,23 @@ return new class extends Migration
         }
 
         $now = date('Y-m-d H:i:s');
+        // Katalog mengacu SPPA penerimaan aset (contoh: TC, Analyst, Sampling — Nov 2026).
         $names = [
-            'Laptop',
-            'Mouse',
-            'Keyboard',
-            'Seragam',
+            'Jas Laboratorium',
+            'Kacamata Googles Lab',
+            'Kacamata Medicon',
+            'Respirator',
+            'Catridge Respirator',
+            'Filter Catridge Respirator',
+            'Earplugg',
+            'Earmuff',
+            'Sarung Tangan Bintik Kuning',
+            'Helm Safety',
             'Sepatu Safety',
-            'Tas Kerja',
-            'Handphone Dinas',
+            'Baju Sampling',
+            'Tas Sampling',
+            'Handphone',
+            'Handphone Sampling',
         ];
 
         foreach ($names as $nama) {

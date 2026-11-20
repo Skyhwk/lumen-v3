@@ -7,6 +7,7 @@ use App\Models\AsetKaryawan;
 use App\Models\MasterAsetKaryawan;
 use App\Models\MasterKaryawan;
 use App\Models\RfidCard;
+use App\Services\HrAset\HrGaAssetLinkService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\Request;
@@ -110,7 +111,7 @@ class AsetKaryawanController extends Controller
             ], 404);
         }
 
-        $rows = AsetKaryawan::with(['masterAset', 'rfidCard'])
+        $rows = AsetKaryawan::with(['masterAset', 'rfidCard', 'gaAsset'])
             ->where('master_karyawan_id', $karyawanId)
             ->where('is_active', true)
             ->orderBy('id')
@@ -120,6 +121,8 @@ class AsetKaryawanController extends Controller
             $namaMaster = strtolower(trim((string) optional($row->masterAset)->nama));
             $isIdCard = $namaMaster === 'id card' || !empty($row->rfid_card_id);
 
+            $gaAsset = $row->gaAsset;
+
             return [
                 'id' => $row->id,
                 'is_id_card' => $isIdCard,
@@ -128,6 +131,10 @@ class AsetKaryawanController extends Controller
                 'rfid_kode_kartu' => optional($row->rfidCard)->kode_kartu,
                 'qty' => max(1, (int) ($row->qty ?? 1)),
                 'satuan' => $row->satuan,
+                'ga_asset_id' => $row->ga_asset_id ? (int) $row->ga_asset_id : null,
+                'ga_link_status' => $row->ga_link_status,
+                'ga_asset_code' => $gaAsset ? ($gaAsset->cs_code ?: $gaAsset->asset_code) : null,
+                'ga_asset_name' => $gaAsset ? $gaAsset->name : null,
             ];
         })->values();
 
@@ -307,6 +314,7 @@ class AsetKaryawanController extends Controller
                     'rfid_card_id' => $rfid->id,
                     'qty' => max(1, (int) ($asset['qty'] ?? 1)),
                     'satuan' => trim((string) ($asset['satuan'] ?? '')) ?: 'Pcs',
+                    'ga_link_status' => HrGaAssetLinkService::ROW_STATUS_NOT_APPLICABLE,
                     'created_by' => $this->karyawan,
                     'created_at' => $now,
                     'is_active' => true,
@@ -337,6 +345,7 @@ class AsetKaryawanController extends Controller
                 'rfid_card_id' => null,
                 'qty' => max(1, (int) ($asset['qty'] ?? 1)),
                 'satuan' => trim((string) ($asset['satuan'] ?? '')) ?: null,
+                'ga_link_status' => HrGaAssetLinkService::ROW_STATUS_UNLINKED,
                 'created_by' => $this->karyawan,
                 'created_at' => $now,
                 'is_active' => true,
@@ -493,6 +502,101 @@ class AsetKaryawanController extends Controller
                 'rfid' => $rfid,
             ],
         ], 200);
+    }
+
+    public function searchAssignableGaAssets(Request $request, HrGaAssetLinkService $linkService)
+    {
+        $this->validate($request, [
+            'aset_karyawan_id' => 'required|integer',
+            'keyword' => 'nullable|string|max:120',
+        ]);
+
+        $row = AsetKaryawan::with('masterAset')
+            ->where('id', (int) $request->aset_karyawan_id)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$row || !$row->masterAset) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Baris aset tidak ditemukan.',
+            ], 404);
+        }
+
+        $subId = (int) ($row->masterAset->sub_kategori_aset_id ?? 0);
+        if ($subId <= 0) {
+            return response()->json([
+                'status' => true,
+                'message' => 'Master belum di-mapping ke sub kategori GA.',
+                'data' => [],
+            ]);
+        }
+
+        $data = $linkService->searchAssignableGaAssets(
+            $subId,
+            (int) $row->master_karyawan_id,
+            $request->input('keyword'),
+            50
+        );
+
+        return response()->json([
+            'status' => true,
+            'data' => $data,
+        ]);
+    }
+
+    public function linkGaAsset(Request $request, HrGaAssetLinkService $linkService)
+    {
+        $this->validate($request, [
+            'aset_karyawan_id' => 'required|integer',
+            'ga_asset_id' => 'required|integer',
+        ]);
+
+        try {
+            $row = $linkService->linkAsetKaryawanRowToGaUnit(
+                (int) $request->aset_karyawan_id,
+                (int) $request->ga_asset_id,
+                $this->karyawan
+            );
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Unit GA berhasil di-link ke aset karyawan.',
+                'data' => $row->load('gaAsset'),
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function unlinkGaAsset(Request $request, HrGaAssetLinkService $linkService)
+    {
+        $this->validate($request, [
+            'aset_karyawan_id' => 'required|integer',
+            'clear_pic' => 'nullable|boolean',
+        ]);
+
+        try {
+            $row = $linkService->unlinkAsetKaryawanRowFromGaUnit(
+                (int) $request->aset_karyawan_id,
+                $this->karyawan,
+                filter_var($request->input('clear_pic', false), FILTER_VALIDATE_BOOLEAN)
+            );
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Link unit GA dilepas.',
+                'data' => $row,
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
     }
 
     public function destroy(Request $request)

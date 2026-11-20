@@ -10,6 +10,10 @@ class MasterAsetKaryawan extends Sector
 
     protected $fillable = [
         'nama',
+        'sub_kategori_aset_id',
+        'ga_link_status',
+        'ga_linked_at',
+        'ga_linked_by',
         'created_at',
         'created_by',
         'updated_at',
@@ -28,5 +32,10 @@ class MasterAsetKaryawan extends Sector
     public function asetKaryawan()
     {
         return $this->hasMany(AsetKaryawan::class, 'master_aset_karyawan_id');
+    }
+
+    public function subKategoriGa()
+    {
+        return $this->belongsTo(MasterSubKategoriAset::class, 'sub_kategori_aset_id');
     }
 }

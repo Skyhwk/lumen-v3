@@ -9,6 +9,7 @@ use App\Models\AsetKaryawan;
 use App\Models\KeahlianBahasaKaryawan;
 use App\Models\KeahlianKaryawan;
 use App\Models\MasterAsetKaryawan;
+use App\Services\HrAset\HrGaAssetLinkService;
 use App\Models\MasterKaryawan;
 use App\Models\MedicalCheckup;
 use App\Models\NewRecruitment;
@@ -389,10 +390,20 @@ class AtsHiredCandidatesController extends Controller
             ->orderBy('nama')
             ->get(['id', 'nama'])
             ->map(function ($item) {
+                $label = $item->nama;
+                if (
+                    Schema::hasColumn('master_aset_karyawan', 'sub_kategori_aset_id')
+                    && !empty($item->sub_kategori_aset_id)
+                ) {
+                    $label .= ' [GA mapped]';
+                }
+
                 return [
                     'id' => $item->id,
                     'nama' => $item->nama,
-                    'text' => $item->nama,
+                    'text' => $label,
+                    'sub_kategori_aset_id' => $item->sub_kategori_aset_id ?? null,
+                    'ga_link_status' => $item->ga_link_status ?? null,
                 ];
             })
             ->values();
@@ -1774,6 +1785,7 @@ class AtsHiredCandidatesController extends Controller
                     'rfid_card_id' => $rfid->id,
                     'qty' => max(1, (int) ($asset['qty'] ?? 1)),
                     'satuan' => trim((string) ($asset['satuan'] ?? '')) ?: 'Pcs',
+                    'ga_link_status' => HrGaAssetLinkService::ROW_STATUS_NOT_APPLICABLE,
                     'created_by' => $this->karyawan,
                     'created_at' => $timestamp,
                     'is_active' => true,
@@ -1803,6 +1815,7 @@ class AtsHiredCandidatesController extends Controller
                 'rfid_card_id' => null,
                 'qty' => max(1, (int) ($asset['qty'] ?? 1)),
                 'satuan' => trim((string) ($asset['satuan'] ?? '')) ?: null,
+                'ga_link_status' => HrGaAssetLinkService::ROW_STATUS_UNLINKED,
                 'created_by' => $this->karyawan,
                 'created_at' => $timestamp,
                 'is_active' => true,
