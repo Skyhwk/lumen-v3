@@ -13,7 +13,6 @@ class ServiceMobilLog extends Sector
         'nilai_sebelum',
         'nilai_sesudah',
         'alasan',
-        'catatan',
         'created_by',
         'created_at',
     ];

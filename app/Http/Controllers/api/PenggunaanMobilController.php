@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Services\ServiceMobilAvailabilityService;
 use App\Models\DaftarMobil;
 use App\Models\MasterDriver;
 use App\Models\MasterKaryawan;
@@ -149,9 +150,20 @@ class PenggunaanMobilController extends Controller
     if (Schema::hasColumn('daftar_mobil', 'kepemilikan')) {
       $mobilQuery->where('kepemilikan', 'internal');
     }
-    $mobil = $mobilQuery->orderBy('plat_mobil')
-      ->get()
-      ->map(function ($item) {
+    $collection = $mobilQuery->orderBy('plat_mobil')->get();
+
+    $rangeStart = $request->input('tanggal_mulai');
+    $rangeEnd = $request->input('tanggal_selesai');
+    if ($rangeStart && $rangeEnd) {
+      $availability = app(ServiceMobilAvailabilityService::class);
+      $collection = $collection->filter(function ($item) use ($availability, $rangeStart, $rangeEnd) {
+        return $availability
+          ->findOverlappingActiveServices((int) $item->id, $rangeStart, $rangeEnd)
+          ->isEmpty();
+      })->values();
+    }
+
+    $mobil = $collection->map(function ($item) {
         return [
           'id' => $item->id,
           'text' => trim($item->plat_mobil . ' - ' . $item->merk_mobil . ' ' . $item->tipe_mobil),
@@ -206,13 +218,14 @@ class PenggunaanMobilController extends Controller
     foreach ($schedule['items'] as $item) {
       $dates = $this->buildDateRange($item['tanggal_mulai'], $item['tanggal_selesai']);
       $conflicts = $this->getConflicts($item['mobil_id'], $dates, $request->id);
-      if ($conflicts->isNotEmpty()) {
-        $mobil = DaftarMobil::find($item['mobil_id']);
-        $mobilLabel = $mobil
-          ? trim($mobil->plat_mobil . ' - ' . $mobil->merk_mobil . ' ' . $mobil->tipe_mobil)
-          : (string) $item['mobil_id'];
+      $mobil = DaftarMobil::find($item['mobil_id']);
+      $mobilLabel = $mobil
+        ? trim($mobil->plat_mobil . ' - ' . $mobil->merk_mobil . ' ' . $mobil->tipe_mobil)
+        : (string) $item['mobil_id'];
 
+      if ($conflicts->isNotEmpty()) {
         $allConflicts[] = [
+          'jenis' => 'penggunaan',
           'mobil_id' => $item['mobil_id'],
           'mobil_label' => $mobilLabel,
           'tanggal_mulai' => $item['tanggal_mulai'],
@@ -220,6 +233,23 @@ class PenggunaanMobilController extends Controller
           'periode_label' => $this->formatIndoDateRange($item['tanggal_mulai'], $item['tanggal_selesai']),
           'message' => $this->buildConflictMessage($mobilLabel, $conflicts),
           'conflicts' => $conflicts,
+        ];
+      }
+
+      $serviceConflicts = app(ServiceMobilAvailabilityService::class)
+        ->serviceConflictsForUsageDates((int) $item['mobil_id'], $dates);
+
+      if ($serviceConflicts->isNotEmpty()) {
+        $allConflicts[] = [
+          'jenis' => 'service',
+          'mobil_id' => $item['mobil_id'],
+          'mobil_label' => $mobilLabel,
+          'tanggal_mulai' => $item['tanggal_mulai'],
+          'tanggal_selesai' => $item['tanggal_selesai'],
+          'periode_label' => $this->formatIndoDateRange($item['tanggal_mulai'], $item['tanggal_selesai']),
+          'message' => app(ServiceMobilAvailabilityService::class)
+            ->buildServiceConflictMessage($mobilLabel, $serviceConflicts),
+          'conflicts' => $serviceConflicts,
         ];
       }
     }
@@ -285,6 +315,22 @@ class PenggunaanMobilController extends Controller
         return response()->json([
           'message' => $this->buildConflictMessage($label, $conflicts),
           'data' => $conflicts,
+        ], 422);
+      }
+
+      $serviceConflicts = app(ServiceMobilAvailabilityService::class)
+        ->serviceConflictsForUsageDates((int) $item['mobil_id'], $dates);
+
+      if ($serviceConflicts->isNotEmpty()) {
+        $mobil = $mobil ?? DaftarMobil::find($item['mobil_id']);
+        $label = $mobil
+          ? trim($mobil->plat_mobil . ' - ' . $mobil->merk_mobil . ' ' . $mobil->tipe_mobil)
+          : (string) $item['mobil_id'];
+
+        return response()->json([
+          'message' => app(ServiceMobilAvailabilityService::class)
+            ->buildServiceConflictMessage($label, $serviceConflicts),
+          'data' => $serviceConflicts,
         ], 422);
       }
     }
