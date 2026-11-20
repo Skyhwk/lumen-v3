@@ -11,6 +11,7 @@ use App\Services\GetBawahan;
 use App\Services\RecruitmentStatusService;
 use App\Services\ScaleScoringService;
 use App\Services\AtsNotificationService;
+use App\Services\OllamaAiHttp;
 
 class AssessmentController extends Controller
 {
@@ -1830,7 +1831,7 @@ class AssessmentController extends Controller
             $ch = curl_init($endpoint);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, OllamaAiHttp::jsonRequestHeaders());
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
             curl_setopt($ch, CURLOPT_TIMEOUT, 120);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);

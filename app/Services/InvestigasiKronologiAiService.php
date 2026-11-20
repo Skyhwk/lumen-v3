@@ -211,7 +211,7 @@ final class InvestigasiKronologiAiService
             $ch = curl_init($endpoint);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, OllamaAiHttp::jsonRequestHeaders());
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
             curl_setopt($ch, CURLOPT_TIMEOUT, 180);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);

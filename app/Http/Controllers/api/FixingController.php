@@ -61,6 +61,7 @@ use App\Services\GenerateAssessmentDocumentService;
 use App\Services\CandidateDocumentAttachmentService;
 use App\Services\GenerateMessageAtsEmail;
 use App\Services\GenerateToken;
+use App\Services\OllamaAiHttp;
 use App\Services\SallaryOfferService;
 use App\Services\SendEmail;
 // end model LHP
@@ -2822,7 +2823,7 @@ class FixingController extends Controller
             $ch = curl_init($endpoint);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, OllamaAiHttp::jsonRequestHeaders());
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
             curl_setopt($ch, CURLOPT_TIMEOUT, 120);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
