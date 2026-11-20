@@ -1568,7 +1568,7 @@ class AssessmentController extends Controller
 
             // Formulate Prompt String for AI Ollama Server
             $promptText = sprintf(
-                "Analisis kecocokan kandidat terhadap posisi yang dilamar.\n\nKandidat:\n- Pendidikan: %s\n- Pengalaman: %s\n- Skill: %s\n- Hasil assessment: %s\n\nPosisi: %s\nKebutuhan pendidikan: %s\nKebutuhan pengalaman: %s\nKebutuhan skill: %s\n\nBerikan skor kecocokan 0-100 (integer) dan alasan singkat dalam Bahasa Indonesia.",
+                "Analisis kecocokan kandidat terhadap posisi yang dilamar, Analisis kecocokan kandidat terhadap posisi yang dilamar, buat penilaian objective, prioritas utama karakter kemudian penunjangnya baru logika, penalaran dan ketelitian, gunakan bahasa Indonesia dan bahasa yang mudah dimengerti orang awam, jika persentase langsung sajikan dalam bentuk persen (%), buat penilaian senatural mungkin dan berbobot.\n\nKandidat:\n- Pendidikan: %s\n- Pengalaman: %s\n- Skill: %s\n- Hasil assessment: %s\n\nPosisi: %s\nKebutuhan pendidikan: %s\nKebutuhan pengalaman: %s\nKebutuhan skill: %s\n\nBerikan skor kecocokan 0-100 (integer) dan alasan singkat dalam Bahasa Indonesia, format return harus json dengan key 'score' dan 'reasoning'.",
                 $candidateEduStr,
                 $candidateExpStr,
                 $candidateSkillsStr,
