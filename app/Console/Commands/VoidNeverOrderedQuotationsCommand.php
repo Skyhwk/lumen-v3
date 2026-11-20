@@ -24,6 +24,7 @@ use Throwable;
  *   php artisan quotation:void-never-ordered --year=2025 --dry-run
  *   php artisan quotation:void-never-ordered --year=2025 --filter=with-jadwal --dry-run
  *   php artisan quotation:void-never-ordered --year=2025 --tipe=non_kontrak --execute --force
+ *   php artisan quotation:void-never-ordered --year=2025 --execute --alasan="BELUM PERNAH ORDER 2025"
  */
 class VoidNeverOrderedQuotationsCommand extends Command
 {
