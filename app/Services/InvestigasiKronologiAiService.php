@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -49,6 +50,8 @@ final class InvestigasiKronologiAiService
                 'bak.perihal',
                 'bak.uraian_kejadian',
                 'bak.tanggal_kejadian',
+                'bak.waktu_kejadian',
+                'bak.lokasi_kejadian',
             ]);
 
         if ($rows->isEmpty()) {
@@ -69,20 +72,32 @@ final class InvestigasiKronologiAiService
                 $uraian = 'Uraian kejadian tidak diisi pada dokumen BAK ini.';
             }
 
+            $hariDanTanggal = self::formatHariDanTanggalKejadian(
+                $row->tanggal_kejadian ?? null,
+                $row->waktu_kejadian ?? null
+            );
+            $tempatKejadian = trim((string) ($row->lokasi_kejadian ?? '')) ?: 'Tidak dicantumkan pada BAK';
+
             $structuredBak[] = [
                 'bak_id' => (int) $row->id,
                 'nomor_surat' => $nomor,
                 'pengaju_bak' => $pengaju,
                 'perihal' => $perihal,
+                'hari_dan_tanggal_kejadian' => $hariDanTanggal,
+                'tempat_kejadian' => $tempatKejadian,
                 'uraian_kejadian' => $uraian,
                 'tanggal_kejadian' => $row->tanggal_kejadian,
+                'waktu_kejadian' => $row->waktu_kejadian,
+                'lokasi_kejadian' => $row->lokasi_kejadian,
             ];
 
             $bakBlocks[] = sprintf(
-                "=== BAK: %s ===\nPengaju BAK: %s\nPerihal: %s\nUraian kejadian:\n%s",
+                "=== BAK: %s ===\nPengaju BAK: %s\nPerihal: %s\nHari dan tanggal kejadian: %s\nTempat kejadian: %s\nUraian kejadian:\n%s",
                 $nomor,
                 $pengaju,
                 $perihal,
+                $hariDanTanggal,
+                $tempatKejadian,
                 $uraian
             );
         }
@@ -93,6 +108,7 @@ final class InvestigasiKronologiAiService
             . "Susun:\n"
             . "- kronologi_ringkasan: paragraf naratif yang menggabungkan semua BAK (jika lebih dari satu, jelaskan hubungannya).\n"
             . "- kronologi_what, kronologi_who, kronologi_when, kronologi_where, kronologi_why, kronologi_how: isi 5W+1H sesuai standar investigasi.\n"
+            . "- Gunakan \"Hari dan tanggal kejadian\" serta \"Tempat kejadian\" pada tiap BAK untuk mengisi kronologi_when dan kronologi_where (jika beberapa BAK, gabungkan secara jelas).\n"
             . "- kronologi_catatan_khusus: kosongkan string jika tidak ada catatan khusus; jika ada perbedaan antar BAK, ringkas di sini.\n\n"
             . "Data BAK:\n\n"
             . implode("\n\n", $bakBlocks);
@@ -153,6 +169,37 @@ final class InvestigasiKronologiAiService
             'kronologi' => $kronologi,
             'meta' => $structuredData,
         ];
+    }
+
+    private static function formatHariDanTanggalKejadian($tanggal, ?string $waktu): string
+    {
+        $tanggalStr = trim((string) ($tanggal ?? ''));
+        $waktuStr = trim((string) ($waktu ?? ''));
+        if ($waktuStr !== '') {
+            $waktuStr = preg_replace('/\s*(WIB|WITA|WIT)\s*$/i', '', $waktuStr);
+        }
+
+        if ($tanggalStr === '') {
+            return $waktuStr !== ''
+                ? "Tanggal tidak dicantumkan, pukul {$waktuStr}"
+                : 'Tidak dicantumkan pada BAK';
+        }
+
+        try {
+            $incidentDate = Carbon::parse($tanggalStr)->locale('id');
+            $hariTanggal = $incidentDate->translatedFormat('l')
+                . ', '
+                . $incidentDate->translatedFormat('d F Y');
+            if ($waktuStr !== '') {
+                return "{$hariTanggal}, pukul {$waktuStr}";
+            }
+
+            return $hariTanggal;
+        } catch (\Throwable $e) {
+            return $waktuStr !== ''
+                ? "{$tanggalStr}, pukul {$waktuStr}"
+                : $tanggalStr;
+        }
     }
 
     private static function plainUraian(?string $html): string
