@@ -113,6 +113,7 @@ class Kernel extends ConsoleKernel
         Commands\AssignBankDataOrderedCommand::class,
         Commands\ImportFollowUpCustomerAccountCommand::class,
         Commands\VoidFollowUpInactiveSalesCommand::class,
+        Commands\VoidNeverOrderedQuotationsCommand::class,
         Commands\SyncPrinterStatusCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
