@@ -8,96 +8,112 @@ use Illuminate\Support\Facades\DB;
 
 class FollowUpPortalService
 {
-    public function releaseOpenAssignments(int $karyawanId): void
+    public function clearExpiredPreviews(): void
     {
+        $now = Carbon::now();
         FollowUpCustomerAccount::query()
-            ->where('assigned_to', $karyawanId)
             ->whereNull('followed_at')
+            ->whereNotNull('preview_until')
+            ->where('preview_until', '<', $now)
             ->update([
-                'assigned_to' => null,
-                'slot' => null,
-                'assigned_at' => null,
-                'updated_at' => Carbon::now(),
+                'preview_by_id' => null,
+                'preview_until' => null,
+                'updated_at' => $now,
             ]);
     }
 
-    public function currentFor(int $karyawanId): ?FollowUpCustomerAccount
+    public function activePreviewFor(int $karyawanId): ?FollowUpCustomerAccount
+    {
+        $this->clearExpiredPreviews();
+
+        $now = Carbon::now();
+
+        return FollowUpCustomerAccount::query()
+            ->where('preview_by_id', $karyawanId)
+            ->whereNull('followed_at')
+            ->whereNotNull('preview_until')
+            ->where('preview_until', '>', $now)
+            ->orderBy('id')
+            ->first();
+    }
+
+    public function previewFor(int $karyawanId): ?FollowUpCustomerAccount
     {
         return DB::transaction(function () use ($karyawanId) {
-            $open = FollowUpCustomerAccount::query()
-                ->where('assigned_to', $karyawanId)
+            $this->clearExpiredPreviews();
+
+            $active = FollowUpCustomerAccount::query()
+                ->where('preview_by_id', $karyawanId)
                 ->whereNull('followed_at')
+                ->whereNotNull('preview_until')
+                ->where('preview_until', '>', Carbon::now())
                 ->lockForUpdate()
-                ->get();
+                ->first();
 
-            $current = $open->firstWhere('slot', 'current');
-            $next = $open->firstWhere('slot', 'next');
-
-            if (!$current && $next) {
-                $next->slot = 'current';
-                $next->assigned_at = Carbon::now();
-                $next->updated_at = Carbon::now();
-                $next->save();
-                $current = $next;
-                $next = null;
+            if ($active) {
+                return $active;
             }
 
-            if (!$current) {
-                $current = $this->claim($karyawanId, 'current');
-            }
-
-            if (!$next) {
-                $this->claim($karyawanId, 'next');
-            }
-
-            return $current;
+            return $this->allocatePreview($karyawanId);
         }, 5);
     }
 
-    public function submit(int $karyawanId, string $karyawanName, int $id, string $keputusan, string $keterangan): ?FollowUpCustomerAccount
+    public function releasePreview(int $karyawanId, ?int $id = null): void
+    {
+        $now = Carbon::now();
+        $query = FollowUpCustomerAccount::query()
+            ->where('preview_by_id', $karyawanId)
+            ->whereNull('followed_at');
+
+        if ($id !== null && $id > 0) {
+            $query->where('id', $id);
+        }
+
+        $query->update([
+            'preview_by_id' => null,
+            'preview_until' => null,
+            'updated_at' => $now,
+        ]);
+    }
+
+    public function submit(int $karyawanId, string $karyawanName, int $id, string $keputusan, string $keterangan): bool
     {
         return DB::transaction(function () use ($karyawanId, $karyawanName, $id, $keputusan, $keterangan) {
-            $current = FollowUpCustomerAccount::query()
-                ->where('id', $id)
-                ->where('assigned_to', $karyawanId)
-                ->where('slot', 'current')
-                ->whereNull('followed_at')
-                ->lockForUpdate()
-                ->first();
-
-            if (!$current) {
-                return null;
-            }
-
+            $this->clearExpiredPreviews();
             $now = Carbon::now();
-            $current->keputusan = $keputusan;
-            $current->keterangan = $keterangan;
-            $current->followed_by_id = $karyawanId;
-            $current->followed_by = $karyawanName;
-            $current->followed_at = $now;
-            $current->slot = null;
-            $current->updated_at = $now;
-            $current->save();
 
-            $next = FollowUpCustomerAccount::query()
-                ->where('assigned_to', $karyawanId)
-                ->where('slot', 'next')
+            $row = FollowUpCustomerAccount::query()
+                ->where('id', $id)
                 ->whereNull('followed_at')
                 ->lockForUpdate()
                 ->first();
 
-            if ($next) {
-                $next->slot = 'current';
-                $next->assigned_at = $now;
-                $next->updated_at = $now;
-                $next->save();
-            } else {
-                $next = $this->claim($karyawanId, 'current');
+            if (!$row) {
+                return false;
             }
 
-            $this->claim($karyawanId, 'next');
+            if ((int) $row->preview_by_id !== $karyawanId) {
+                return false;
+            }
 
-            return $next;
+            if ($row->preview_until === null || $row->preview_until <= $now) {
+                return false;
+            }
+
+            $row->keputusan = $keputusan;
+            $row->keterangan = $keterangan;
+            $row->followed_by_id = $karyawanId;
+            $row->followed_by = $karyawanName;
+            $row->followed_at = $now;
+            $row->preview_by_id = null;
+            $row->preview_until = null;
+            $row->assigned_to = null;
+            $row->slot = null;
+            $row->assigned_at = null;
+            $row->updated_at = $now;
+            $row->save();
+
+            return true;
         }, 5);
     }
 
@@ -117,6 +133,11 @@ class FollowUpPortalService
             return null;
         }
 
+        $previewUntil = $row->preview_until;
+        if ($previewUntil !== null && !$previewUntil instanceof Carbon) {
+            $previewUntil = Carbon::parse($previewUntil);
+        }
+
         return [
             'id' => (int) $row->id,
             'id_pelanggan' => $row->id_pelanggan,
@@ -130,44 +151,61 @@ class FollowUpPortalService
             'pic_jabatan' => $row->pic_jabatan,
             'pic_telepon' => $row->pic_telepon,
             'pic_email' => $row->pic_email,
+            'preview_until' => $previewUntil ? $previewUntil->format('Y-m-d H:i:s') : null,
         ];
     }
 
-    private function claim(int $karyawanId, string $slot): ?FollowUpCustomerAccount
+    private function allocatePreview(int $karyawanId): ?FollowUpCustomerAccount
     {
-        for ($attempt = 0; $attempt < 5; $attempt++) {
-            $row = FollowUpCustomerAccount::query()
-                ->whereNull('assigned_to')
+        $now = Carbon::now();
+        $until = $now->copy()->addSeconds($this->previewTtlSeconds());
+
+        for ($attempt = 0; $attempt < 8; $attempt++) {
+            $candidate = FollowUpCustomerAccount::query()
                 ->whereNull('followed_at')
+                ->where(function ($query) use ($now) {
+                    $query->whereNull('preview_by_id')
+                        ->orWhere('preview_until', '<=', $now)
+                        ->orWhereNull('preview_until');
+                })
                 ->orderBy('id')
                 ->lock('for update skip locked')
                 ->first();
 
-            if (!$row) {
+            if (!$candidate) {
                 return null;
             }
 
-            $now = Carbon::now();
-            $taken = FollowUpCustomerAccount::query()
-                ->where('id', $row->id)
-                ->whereNull('assigned_to')
+            $updated = FollowUpCustomerAccount::query()
+                ->where('id', $candidate->id)
                 ->whereNull('followed_at')
+                ->where(function ($query) use ($now) {
+                    $query->whereNull('preview_by_id')
+                        ->orWhere('preview_until', '<=', $now)
+                        ->orWhereNull('preview_until');
+                })
                 ->update([
-                    'assigned_to' => $karyawanId,
-                    'slot' => $slot,
-                    'assigned_at' => $now,
+                    'preview_by_id' => $karyawanId,
+                    'preview_until' => $until,
                     'updated_at' => $now,
                 ]);
 
-            if ($taken === 1) {
-                $row->assigned_to = $karyawanId;
-                $row->slot = $slot;
-                $row->assigned_at = $now;
-                $row->updated_at = $now;
-                return $row;
+            if ($updated === 1) {
+                $candidate->preview_by_id = $karyawanId;
+                $candidate->preview_until = $until;
+                $candidate->updated_at = $now;
+
+                return $candidate;
             }
         }
 
         return null;
+    }
+
+    private function previewTtlSeconds(): int
+    {
+        $ttl = (int) env('FOLLOW_UP_PORTAL_PREVIEW_TTL', 3600);
+
+        return max(60, min($ttl, 86400));
     }
 }

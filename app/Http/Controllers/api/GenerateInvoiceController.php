@@ -221,10 +221,14 @@ class GenerateInvoiceController extends Controller
                 DB::raw('SUM(invoice.nilai_tagihan) AS nilai_tagihan'),
                 DB::raw('MAX(order_header.is_revisi) AS is_revisi'),
                 DB::raw('GROUP_CONCAT(invoice.no_order) AS no_orders'),
-                DB::raw('GROUP_CONCAT(CONCAT(order_header.no_document, "_", invoice.no_order)) AS document_order')
+                DB::raw('GROUP_CONCAT(CONCAT(order_header.no_document, "_", invoice.no_order)) AS document_order'),
+                DB::raw('MAX(rq_non.kode_promo) AS kode_promo_non_kontrak'),
+                DB::raw('MAX(rq_kon.kode_promo) AS kode_promo_kontrak')
             )
                 ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
                 ->leftJoin('summary_invoice', 'invoice.no_invoice', '=', 'summary_invoice.no_invoice')
+                ->leftJoin('request_quotation as rq_non', 'invoice.no_quotation', '=', 'rq_non.no_document')
+                ->leftJoin('request_quotation_kontrak_H as rq_kon', 'invoice.no_quotation', '=', 'rq_kon.no_document')
                 ->groupBy('invoice.no_invoice');
 
             // 🔥 FILTER STATUS LUNAS (FIX TOTAL)
@@ -240,6 +244,17 @@ class GenerateInvoiceController extends Controller
                 ->orderBy('invoice.no_invoice', 'DESC');
 
             return Datatables::of($data)
+                ->filterColumn('kode_promo_non_kontrak', function ($query, $keyword) {
+                    $like = '%' . strtolower($keyword) . '%';
+                    $query->where(function ($inner) use ($like) {
+                        $inner->whereRaw('LOWER(rq_non.kode_promo) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(rq_kon.kode_promo) LIKE ?', [$like]);
+                    });
+                })
+                ->orderColumn('kode_promo_non_kontrak', function ($query, $direction) {
+                    $direction = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+                    $query->orderByRaw('MAX(COALESCE(rq_non.kode_promo, rq_kon.kode_promo)) ' . $direction);
+                })
                 ->filterColumn('nama_customer', function ($query, $keyword) {
                     $query->whereRaw('LOWER(invoice.nama_perusahaan) LIKE ?', ['%' . strtolower($keyword) . '%']);
                 })
@@ -256,7 +271,9 @@ class GenerateInvoiceController extends Controller
                 })
                 ->make(true);
         } catch (\Throwable $th) {
-            dd($th);
+            return response()->json([
+                'message' => $th->getMessage(),
+            ], 500);
         }
     }
 

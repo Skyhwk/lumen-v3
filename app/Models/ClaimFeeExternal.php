@@ -12,4 +12,8 @@ class ClaimFeeExternal extends Sector
     public $timestamps = false;
 
     protected $guarded = [];
+
+    protected $casts = [
+        'required_sales_stages' => 'array',
+    ];
 }

@@ -14,7 +14,8 @@ use App\Models\MasterSubKategori;
 use App\Models\Parameter;
 use App\Services\PromoPengujianAvailability;
 
-class PromoPengujianController extends Controller {
+class PromoPengujianController extends Controller
+{
     public function options(Request $request)
     {
         PromoPengujianAvailability::syncExpired();
@@ -49,9 +50,11 @@ class PromoPengujianController extends Controller {
             throw new \InvalidArgumentException("Promo ini membutuhkan minimal {$minimum} data pengujian.");
         }
         foreach ($items as &$item) {
-            if (!is_array($item) || empty($item['kategori_1']) || empty($item['kategori_2']) || empty($item['parameter'])
+            if (
+                !is_array($item) || empty($item['kategori_1']) || empty($item['kategori_2']) || empty($item['parameter'])
                 || !isset($item['jumlah_titik']) || !ctype_digit((string) $item['jumlah_titik']) || (int) $item['jumlah_titik'] < 1
-                || !isset($item['harga_paket']) || !is_numeric($item['harga_paket']) || $item['harga_paket'] < 0) {
+                || !isset($item['harga_paket']) || !is_numeric($item['harga_paket']) || $item['harga_paket'] < 0
+            ) {
                 throw new \InvalidArgumentException('Lengkapi kategori, parameter, jumlah titik bulat positif, dan harga paket minimal 0.');
             }
             $item['is_promo'] = true;
@@ -117,12 +120,29 @@ class PromoPengujianController extends Controller {
         return ['nominal' => +$nominal];
     }
 
-    public function index(Request $request) {
+    private function normalizeKetentuanPromo($value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $html = trim($value);
+        $plain = trim(preg_replace(
+            '/\s+/u',
+            ' ',
+            html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8')
+        ));
+
+        return $plain === '' ? null : $html;
+    }
+
+    public function index(Request $request)
+    {
         PromoPengujianAvailability::syncExpired();
         $status = $this->normalizeStatus($request->input('status_tab', $request->input('status')), 'aktif');
 
         $query = DB::table('promo_pengujian')
-            ->select('id', 'kode_promo', 'metode', 'nama_diskon', 'konfigurasi', 'status', 'masa_berlaku', 'berlaku_dari', 'berlaku_sampai')
+            ->select('id', 'kode_promo', 'metode', 'nama_diskon', 'ketentuan_promo', 'konfigurasi', 'status', 'masa_berlaku', 'berlaku_dari', 'berlaku_sampai')
             ->where('status', $status)
             ->when($request->filled('metode'), function ($q) use ($request) {
                 $q->where('metode', $request->metode);
@@ -146,10 +166,14 @@ class PromoPengujianController extends Controller {
                         ->orWhere('berlaku_sampai', 'like', "%{$keyword}%");
                 });
             })
+            ->filterColumn('ketentuan_promo', function ($q, $keyword) {
+                $q->where('ketentuan_promo', 'like', "%{$keyword}%");
+            })
             ->make(true);
     }
 
-    public function create (Request $request) {
+    public function create(Request $request)
+    {
         $kodePromo = $request->input('kode_promo');
         $metode = $request->input('metode');
         $namaDiskon = $request->input('nama_diskon');
@@ -172,7 +196,7 @@ class PromoPengujianController extends Controller {
                     'message' => 'Kode promo, metode, dan nama diskon tidak boleh kosong'
                 ]);
             }
-            
+
             if (empty($dasarDiskon) || empty($persentase)) {
                 return response()->json([
                     'message' => 'Dasar diskon dan persentase tidak boleh kosong'
@@ -220,7 +244,7 @@ class PromoPengujianController extends Controller {
             } catch (\InvalidArgumentException $e) {
                 return response()->json(['message' => $e->getMessage()], 422);
             }
-        } 
+        }
         // else if ($metode === 'pengujian_free_pengujian') {
         //     $pemicu = $request->input('pemicu');
         //     if (is_string($pemicu)) {
@@ -327,14 +351,15 @@ class PromoPengujianController extends Controller {
         }
 
         DB::table('promo_pengujian')->insert([
-            'kode_promo'   => $kodePromo,
-            'metode'       => $metode,
-            'nama_diskon'  => $namaDiskon,
-            'konfigurasi'  => json_encode($konfigurasi),
-            'status'       => 'draft',
-            'created_by'   => $this->karyawan,
-            'created_at'   => Carbon::now(),
-            'updated_at'   => Carbon::now(),
+            'kode_promo'      => $kodePromo,
+            'metode'          => $metode,
+            'nama_diskon'     => $namaDiskon,
+            'ketentuan_promo' => $this->normalizeKetentuanPromo($request->input('ketentuan_promo')),
+            'konfigurasi'     => json_encode($konfigurasi),
+            'status'          => 'draft',
+            'created_by'      => $this->karyawan,
+            'created_at'      => Carbon::now(),
+            'updated_at'      => Carbon::now(),
         ]);
 
         return response()->json([
@@ -360,7 +385,8 @@ class PromoPengujianController extends Controller {
         ]);
     }
 
-    public function update (Request $request) {
+    public function update(Request $request)
+    {
         $id = $request->input('id');
 
         if (empty($id)) {
@@ -379,6 +405,12 @@ class PromoPengujianController extends Controller {
         $kodePromo = $request->input('kode_promo', $data->kode_promo);
         $metode = $request->input('metode', $data->metode);
         $namaDiskon = $request->input('nama_diskon', $data->nama_diskon);
+        $masaBerlaku = $request->input('masa_berlaku', $data->masa_berlaku ?? null);
+        $berlakuDari = $request->input('berlaku_dari', $data->berlaku_dari ?? null);
+        $berlakuSampai = $request->input('berlaku_sampai', $data->berlaku_sampai ?? null);
+        $ketentuanPromo = $request->exists('ketentuan_promo')
+            ? $this->normalizeKetentuanPromo($request->input('ketentuan_promo'))
+            : ($data->ketentuan_promo ?? null);
 
         $konfigurasi = json_decode($data->konfigurasi, true) ?? [];
 
@@ -391,7 +423,7 @@ class PromoPengujianController extends Controller {
                     'message' => 'Kode promo, metode, dan nama diskon tidak boleh kosong'
                 ]);
             }
-            
+
             if (empty($dasarDiskon) || empty($persentase)) {
                 return response()->json([
                     'message' => 'Dasar diskon dan persentase tidak boleh kosong'
@@ -437,7 +469,7 @@ class PromoPengujianController extends Controller {
             } catch (\InvalidArgumentException $e) {
                 return response()->json(['message' => $e->getMessage()], 422);
             }
-        } 
+        }
         // else if ($metode === 'pengujian_free_pengujian') {
         //     $pemicu = $request->input('pemicu');
         //     if (is_string($pemicu)) {
@@ -549,12 +581,16 @@ class PromoPengujianController extends Controller {
         }
 
         DB::table('promo_pengujian')->where('id', $id)->update([
-            'kode_promo'   => $kodePromo,
-            'metode'       => $metode,
-            'nama_diskon'  => $namaDiskon,
-            'konfigurasi'  => json_encode($konfigurasi),
-            'updated_by'   => $this->karyawan,
-            'updated_at'   => Carbon::now(),
+            'kode_promo'      => $kodePromo,
+            'metode'          => $metode,
+            'nama_diskon'     => $namaDiskon,
+            'ketentuan_promo' => $ketentuanPromo,
+            'konfigurasi'     => json_encode($konfigurasi),
+            'masa_berlaku'    => $masaBerlaku ?: $data->masa_berlaku,
+            'berlaku_dari'    => $berlakuDari ? Carbon::parse($berlakuDari)->toDateString() : null,
+            'berlaku_sampai'  => $berlakuSampai ? Carbon::parse($berlakuSampai)->toDateString() : null,
+            'updated_by'      => $this->karyawan,
+            'updated_at'      => Carbon::now(),
         ]);
 
         return response()->json([
@@ -897,4 +933,3 @@ class PromoPengujianController extends Controller {
         ];
     }
 }
-
