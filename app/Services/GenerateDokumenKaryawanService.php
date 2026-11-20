@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AsetKaryawan;
 use App\Models\BpjsKesehatan;
 use App\Models\BpjsTk;
 use App\Models\EmployeeDocument;
@@ -13,6 +14,7 @@ use App\Models\PencadanganUpah;
 use App\Models\PenanggungJawabDokumenKaryawan;
 use App\Models\PPH21;
 use App\Models\RekeningKaryawan;
+use App\Models\RfidCard;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -44,6 +46,7 @@ class GenerateDokumenKaryawanService
             'pkkp' => $this->generatePkkp($data),
             'spkb' => $this->generateSpkb($data),
             'spny' => $this->generateSpny($data),
+            'sppa' => $this->generateSpny($data, 'SPPA', 'DokumenKaryawan.penerimaan-aset'),
             'nda' => $this->isPosisiStaff($data) ? $this->generateNda($data) : null,
             'nda_spv' => $this->isPosisiAtasan($data) ? $this->generateNda($data, 'NDA-SPV', 'DokumenKaryawan.nda-spv') : null,
             'pkpp' => $this->isPosisiSampler($data) ? null : $this->generateSpny($data, 'PKPP', 'DokumenKaryawan.pkpp'),
@@ -640,7 +643,10 @@ class GenerateDokumenKaryawanService
         string $noDokumen,
         string $view = 'DokumenKaryawan.spny'
     ): MpdfService {
-        $html = view($view, $this->buildSpnyViewData($data, $noDokumen))->render();
+        $viewData = $view === 'DokumenKaryawan.penerimaan-aset'
+            ? $this->buildSppaViewData($data, $noDokumen)
+            : $this->buildSpnyViewData($data, $noDokumen);
+        $html = view($view, $viewData)->render();
 
         $fontDirs = (new \Mpdf\Config\ConfigVariables())->getDefaults()['fontDir'];
         $fontData = (new \Mpdf\Config\FontVariables())->getDefaults()['fontdata'];
@@ -1436,6 +1442,111 @@ class GenerateDokumenKaryawanService
             'namaKaryawan' => $view['namaKaryawan'],
             'jabatanKaryawan' => $posisi ?: '-',
         ];
+    }
+
+    private function buildSppaViewData(array $data, string $noDokumen): array
+    {
+        $view = $this->buildSpnyViewData($data, $noDokumen);
+        $karyawan = $data['karyawan'];
+        $penanggungJawab = $data['penanggung_jawab'] ?? [];
+        $jabatanPj = $penanggungJawab['jabatan'] ?? null;
+        if (is_object($jabatanPj)) {
+            $jabatanPj = $jabatanPj->nama_jabatan ?? null;
+        }
+        $jabatanPj = $this->camelCaseTeks($jabatanPj);
+        $namaPj = $this->camelCaseTeks($penanggungJawab['nama'] ?? null);
+
+        // Fallback master penanggung jawab dokumen jika belum terisi dari PR / input.
+        if ($namaPj === null || $namaPj === '') {
+            $fallbackPj = PenanggungJawabDokumenKaryawan::query()
+                ->where('is_active', 1)
+                ->orderByDesc('id')
+                ->first();
+            if ($fallbackPj) {
+                $namaPj = $this->camelCaseTeks($fallbackPj->nama_karyawan);
+                $jabatanPj = $this->camelCaseTeks($fallbackPj->jabatan);
+            }
+        }
+
+        $posisi = $view['posisi'] ?? $this->jabatanDokumen($karyawan);
+        $divisi = $view['divisi'] ?? null;
+        $divisiPosisi = $divisi && $posisi ? $divisi . ' / ' . $posisi : ($divisi ?: $posisi);
+        $penempatan = optional($karyawan->cabang)->nama_cabang
+            ?: ($karyawan->getAttributes()['cabang'] ?? null);
+
+        return [
+            'noDokumen' => $noDokumen,
+            'namaNik' => $view['namaNik'],
+            'divisiPosisi' => $divisiPosisi ?: '-',
+            'penempatan' => $this->camelCaseTeks($penempatan) ?: '-',
+            'asetItems' => $this->collectAsetItemsForDokumen($karyawan),
+            'tanggalPengesahan' => $view['tanggalPengesahan'],
+            'namaKaryawan' => $view['namaKaryawan'] ?: '-',
+            'jabatanKaryawan' => $posisi ?: '-',
+            'namaPenanggungJawab' => $namaPj ?: '-',
+            'jabatanPenanggungJawab' => $jabatanPj ?: '-',
+        ];
+    }
+
+    /**
+     * Rincian aset untuk SPPA: RFID ter-link sebagai ID Card + aset_karyawan aktif.
+     */
+    private function collectAsetItemsForDokumen($karyawan): array
+    {
+        $items = [];
+        $karyawanId = (int) $karyawan->id;
+
+        if (Schema::hasTable('rfid_card')) {
+            $hasRfid = RfidCard::where('userid', $karyawanId)
+                ->where('status', 0)
+                ->exists();
+
+            if ($hasRfid) {
+                $items[] = [
+                    'nama' => 'ID Card',
+                    'jumlah' => '1 Pcs',
+                ];
+            }
+        }
+
+        if (!Schema::hasTable('aset_karyawan')) {
+            return $items;
+        }
+
+        $rows = AsetKaryawan::with('masterAset')
+            ->where('master_karyawan_id', $karyawanId)
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($rows as $row) {
+            $nama = trim((string) optional($row->masterAset)->nama);
+            if ($nama === '') {
+                $nama = 'Aset';
+            }
+
+            // Hindari duplikat ID Card jika sudah dari RFID.
+            if (
+                $items !== []
+                && strcasecmp($nama, 'ID Card') === 0
+                && ($items[0]['nama'] ?? '') === 'ID Card'
+            ) {
+                continue;
+            }
+
+            $qty = max(1, (int) ($row->qty ?? 1));
+            $satuan = trim((string) ($row->satuan ?? ''));
+            if ($satuan === '') {
+                $satuan = 'Pcs';
+            }
+
+            $items[] = [
+                'nama' => $nama,
+                'jumlah' => $qty . ' ' . $satuan,
+            ];
+        }
+
+        return $items;
     }
 
     private function buildNdaViewData(array $data, string $noDokumen): array
