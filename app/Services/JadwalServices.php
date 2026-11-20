@@ -53,6 +53,10 @@ class JadwalServices
         $this->timestamp = Carbon::now()->format('Y-m-d H:i:s');
     }
 
+    /**
+     * Normalisasi kendaraan untuk disimpan — selalu plat bersih.
+     * Info tebeng disimpan di kolom terpisah `tebeng_dengan` (jangan sentuh note).
+     */
     public static function normalizeKendaraan($kendaraan)
     {
         if (is_array($kendaraan)) {
@@ -68,7 +72,61 @@ class JadwalServices
             return $kendaraan === null ? null : '';
         }
 
-        return trim((string) preg_replace('/\s*\(Tebeng Transportasi\)$/i', '', $value));
+        return self::basePlatKendaraan($value);
+    }
+
+    /** Plat dasar tanpa suffix Tebeng (untuk match ketersediaan / konflik). */
+    public static function basePlatKendaraan($kendaraan)
+    {
+        $value = trim((string) ($kendaraan ?? ''));
+        if ($value === '') {
+            return '';
+        }
+
+        return trim((string) preg_replace(
+            '/\s*\(Tebeng Transportasi(?:\s*[-:]\s*(?:Tim\s+)?[^)]*)?\)\s*$/i',
+            '',
+            $value
+        ));
+    }
+
+    /** Key konsisten untuk map konflik (huruf besar + spasi dirapikan). */
+    public static function normalizePlatKey($kendaraan)
+    {
+        $base = self::basePlatKendaraan($kendaraan);
+        if ($base === '') {
+            return '';
+        }
+
+        $base = preg_replace('/\s+/', ' ', $base);
+
+        return strtoupper(trim((string) $base));
+    }
+
+    /**
+     * Nama tim yang ditumpangi (Tebeng Transportasi). Null/empty = tidak tebeng.
+     * Simpan nama saja, mis. "Farhan Fauzi" (UI: "Sama dengan Tim Farhan Fauzi").
+     */
+    public static function normalizeTebengDengan($value)
+    {
+        if (is_array($value)) {
+            $normalized = [];
+            foreach ($value as $key => $item) {
+                $normalized[$key] = self::normalizeTebengDengan($item);
+            }
+            return $normalized;
+        }
+
+        $text = trim((string) ($value ?? ''));
+        if ($text === '') {
+            return null;
+        }
+
+        // Buang prefix UI jika ikut terkirim
+        $text = preg_replace('/^Sama dengan Tim\s+/i', '', $text);
+        $text = trim((string) $text);
+
+        return $text === '' ? null : mb_substr($text, 0, 255);
     }
 
     public function __call($method, $arguments)
@@ -609,6 +667,7 @@ class JadwalServices
                         'notif' => 0,
                         'urutan' => $dataUpdate->urutan,
                         'kendaraan' => self::normalizeKendaraan($dataUpdate->kendaraan),
+                        'tebeng_dengan' => self::normalizeTebengDengan($dataUpdate->tebeng_dengan ?? null),
                         'parsial' => !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : null,
                         'updated_at' => $this->timestamp,
                         'updated_by' => $dataUpdate->karyawan,
@@ -669,6 +728,7 @@ class JadwalServices
                         'updated_by' => $dataUpdate->karyawan,
                         'updated_at' => $this->timestamp,
                         'kendaraan' => self::normalizeKendaraan($dataUpdate->kendaraan),
+                        'tebeng_dengan' => self::normalizeTebengDengan($dataUpdate->tebeng_dengan ?? null),
                         'parsial' => !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : null,
                         'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
@@ -949,6 +1009,7 @@ class JadwalServices
                     $val->notif = 0;
                     $val->urutan = $dataUpdate->urutan;
                     $val->kendaraan = $dataUpdate->kendaraan;
+                    $val->tebeng_dengan = self::normalizeTebengDengan($dataUpdate->tebeng_dengan ?? null);
                     $val->parsial = !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : NULL;
                     $val->updated_at = $this->timestamp;
                     $val->updated_by = $dataUpdate->karyawan;
@@ -1006,6 +1067,7 @@ class JadwalServices
                         'updated_by' => $dataUpdate->karyawan,
                         'updated_at' => $this->timestamp,
                         'kendaraan' => self::normalizeKendaraan($dataUpdate->kendaraan),
+                        'tebeng_dengan' => self::normalizeTebengDengan($dataUpdate->tebeng_dengan ?? null),
                         'parsial' => !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : NULL,
                         'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
@@ -1201,6 +1263,11 @@ class JadwalServices
                     "created_by" => $dataAdd->karyawan,
                     "created_at" => $this->timestamp,
                     "kendaraan" => self::normalizeKendaraan($dataAdd->kendaraan[$i] ?? null),
+                    "tebeng_dengan" => self::normalizeTebengDengan(
+                        is_array($dataAdd->tebeng_dengan ?? null)
+                            ? ($dataAdd->tebeng_dengan[$i] ?? null)
+                            : ($dataAdd->tebeng_dengan ?? null)
+                    ),
                     "wilayah" => $wilayah,
                     "isokinetic" => $dataAdd->isokinetic[$i] ?? 0,
                     "pendampingan_k3" => $dataAdd->pendampingan_k3[$i] ?? 0,
@@ -1242,6 +1309,7 @@ class JadwalServices
                             'created_at' => $val['created_at'],
                             'note' => $val['note'],
                             'kendaraan' => self::normalizeKendaraan($val['kendaraan'] ?? null),
+                            'tebeng_dengan' => self::normalizeTebengDengan($val['tebeng_dengan'] ?? null),
                             'id_sampling' => $val['id_sampling'],
                             'id_cabang' => $val['id_cabang'][$keys],
                             'wilayah' => $val['wilayah'],
@@ -1278,6 +1346,7 @@ class JadwalServices
                             'created_at' => $val['created_at'],
                             'note' => $val['note'],
                             'kendaraan' => self::normalizeKendaraan($val['kendaraan'] ?? null),
+                            'tebeng_dengan' => self::normalizeTebengDengan($val['tebeng_dengan'] ?? null),
                             'id_sampling' => $val['id_sampling'],
                             'id_cabang' => $val['id_cabang'][$keys],
                             'wilayah' => $val['wilayah'],
@@ -1489,6 +1558,7 @@ class JadwalServices
                     'notif' => 0,
                     'urutan' => $dataParsial->urutan,
                     'kendaraan' => self::normalizeKendaraan($dataParsial->kendaraan),
+                    'tebeng_dengan' => self::normalizeTebengDengan($dataParsial->tebeng_dengan ?? null),
                     'pendampingan_k3' => $dataParsial->pendampingan_k3,
                     'isokinetic' => $dataParsial->isokinetic,
                     'parsial' => $dataParsial->id,
@@ -1675,6 +1745,7 @@ class JadwalServices
                     'created_by' => $dataParsial->karyawan,
                     'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                     'kendaraan' => self::normalizeKendaraan($dataParsial->kendaraan),
+                    'tebeng_dengan' => self::normalizeTebengDengan($dataParsial->tebeng_dengan ?? null),
                     'parsial' => $dataParsial->id,
                     'id_sampling' => $dataParsial->id_sampling,
                     'id_cabang' => $dataParsial->id_cabang,

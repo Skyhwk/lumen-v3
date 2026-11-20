@@ -158,7 +158,7 @@ class BantuanController extends Controller
                         continue; // Jika badword ditemukan, lanjutkan dengan mencoba ID lain
                     }
 
-                    if (!MasterPelanggan::where('id_pelanggan', $generatedId)->exists()) {
+                    if (!MasterPelanggan::idPelangganTaken($generatedId)) {
                         $idPelanggan = $generatedId;
                         break; // Jika ditemukan ID yang valid, keluar dari loop
                     }

@@ -305,6 +305,13 @@ return [
             'days' => 30,
         ],
 
+        'investigasi_kronologi_ai' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/investigasi_kronologi_ai/log.log'),
+            'level' => 'info',
+            'days' => 30,
+        ],
+
         'telegram' => [
             'driver' => 'daily',
             'path' => storage_path('logs/telegram/log.log'),

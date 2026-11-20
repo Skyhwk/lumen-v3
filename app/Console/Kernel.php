@@ -113,6 +113,8 @@ class Kernel extends ConsoleKernel
         Commands\AssignBankDataOrderedCommand::class,
         Commands\ImportFollowUpCustomerAccountCommand::class,
         Commands\VoidFollowUpInactiveSalesCommand::class,
+        Commands\VoidNeverOrderedQuotationsCommand::class,
+        Commands\SyncPrinterStatusCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,
@@ -145,6 +147,12 @@ class Kernel extends ConsoleKernel
             ->dailyAt('23:30')
             ->timezone('Asia/Jakarta')
             ->withoutOverlapping(30);
+        $schedule->command('printers:sync-status')
+            ->everyFiveMinutes()
+            ->timezone('Asia/Jakarta')
+            ->between('7:00', '21:00')
+            ->days([Schedule::MONDAY, Schedule::TUESDAY, Schedule::WEDNESDAY, Schedule::THURSDAY, Schedule::FRIDAY, Schedule::SATURDAY])
+            ->withoutOverlapping(8);
         // $schedule->command('customers:deactivate-trial')
         //     ->dailyAt('23:30')
         //     ->timezone('Asia/Jakarta')

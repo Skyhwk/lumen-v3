@@ -14,22 +14,23 @@ class PrintingController extends Controller
     public function index(Request $request)
     {
 
-        if($this->department != 7){
-            $data = Printers::select(
-                'id',
-                'full_path as description',
-                'full_path as destination',
-                'is_default as state',
-                DB::raw("'Online' as computer_state")
-            )->where('id_divisi', $this->department)->get();
-        }else{
-            $data = Printers::select(
-                'id',
-                'full_path as description',
-                'full_path as destination',
-                'is_default as state',
-                DB::raw("'Online' as computer_state")
-            )->get();
+        $printerSelect = [
+            'id',
+            'full_path as description',
+            'full_path as destination',
+            'is_default as state',
+            'server',
+            'share_name',
+            'status',
+            DB::raw("COALESCE(NULLIF(TRIM(status), ''), 'Tidak diketahui') as computer_state"),
+        ];
+
+        if ($this->department != 7) {
+            $data = Printers::select($printerSelect)
+                ->where('id_divisi', $this->department)
+                ->get();
+        } else {
+            $data = Printers::select($printerSelect)->get();
         }
         return response()->json(['data' => $data], 200);
     }

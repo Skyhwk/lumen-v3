@@ -363,6 +363,7 @@ class RequestSamplingPlanController extends Controller
             "durasi" => $request->durasi,
             "status" => $request->status,
             "kendaraan" => JadwalServices::normalizeKendaraan($request->kendaraan),
+            "tebeng_dengan" => JadwalServices::normalizeTebengDengan($request->tebeng_dengan),
             "periode" => $request->periode_kontrak != "" ? $request->periode_kontrak : null,
             "karyawan" => $this->karyawan,
             'driver' => $request->driver ?? null,
@@ -491,33 +492,8 @@ class RequestSamplingPlanController extends Controller
 
         $dataBentrok = $queryBentrok->get();
 
-        // --- 3. Filter Konflik Sesuai Aturan (Paling awal jamnya, lalu created/updated_at) ---
-        $detailKonflik = [];
-
-        foreach ($dataBentrok as $row) {
-            $veh = JadwalServices::normalizeKendaraan($row->kendaraan);
-
-            // Jika kendaraan ini belum masuk daftar konflik, masukkan.
-            if (!isset($detailKonflik[$veh])) {
-                $detailKonflik[$veh] = $row;
-            } else {
-                // Jika sudah ada, bandingkan jam_mulai-nya
-                $existing = $detailKonflik[$veh];
-
-                if ($row->jam_mulai < $existing->jam_mulai) {
-                    // Jam lebih awal menang
-                    $detailKonflik[$veh] = $row;
-                } elseif ($row->jam_mulai == $existing->jam_mulai) {
-                    // Jika jamnya sama, adu created_at atau updated_at
-                    $waktuRow = $row->created_at ? strtotime($row->created_at) : strtotime($row->updated_at);
-                    $waktuExisting = $existing->created_at ? strtotime($existing->created_at) : strtotime($existing->updated_at);
-
-                    if ($waktuRow && $waktuExisting && $waktuRow < $waktuExisting) {
-                        $detailKonflik[$veh] = $row;
-                    }
-                }
-            }
-        }
+        // --- 3. Filter Konflik: plat dinormalisasi; pemilik = jam paling awal ---
+        $detailKonflik = \App\Services\KendaraanConflictHelper::buildDetailKonflik($dataBentrok);
 
         // --- 4. Return Format JSON ---
         return response()->json([
