@@ -49,6 +49,7 @@ class SamplingPlanController extends Controller
                 'isokinetic', 'pendampingan_k3', 'tanggal', 'periode',
                 'jam_mulai', 'jam_selesai', 'kategori', 'durasi',
                 'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah','kendaraan',
+                DB::raw('MAX(tebeng_dengan) as tebeng_dengan'),
                 DB::raw('group_concat(sampler) as sampler'),
                 DB::raw('group_concat(id) as batch_id'),
                 DB::raw('group_concat(userid) as batch_user'),
@@ -742,6 +743,7 @@ class SamplingPlanController extends Controller
                 'batch_id'        => $request->batch_id,
                 'urutan'          => $request->urutan != '' ? $request->urutan : null,
                 'kendaraan'       => JadwalServices::normalizeKendaraan($request->kendaraan),
+                'tebeng_dengan'   => JadwalServices::normalizeTebengDengan($request->tebeng_dengan),
                 'sampling'        => $request->sampling,
                 'karyawan'        => $this->karyawan,
                 'jadwal_id'       => $request->id,
@@ -872,6 +874,7 @@ class SamplingPlanController extends Controller
                 'urutan'          => $request->urutan != '' ? $request->urutan : null,
                 'karyawan'        => $this->karyawan,
                 'kendaraan'       => JadwalServices::normalizeKendaraan($request->kendaraan),
+                'tebeng_dengan'   => JadwalServices::normalizeTebengDengan($request->tebeng_dengan),
                 'sampler'         => $request->sampler,
                 'driver'          => $request->driver,
                 'pendampingan_k3' => $request->pendampingan_k3,
@@ -1361,33 +1364,7 @@ class SamplingPlanController extends Controller
 
         $dataBentrok = $queryBentrok->get();
 
-        // --- 3. Filter Konflik Sesuai Aturan (Paling awal jamnya, lalu created/updated_at) ---
-        $detailKonflik = [];
-
-        foreach ($dataBentrok as $row) {
-            $veh = JadwalServices::normalizeKendaraan($row->kendaraan);
-
-            // Jika kendaraan ini belum masuk daftar konflik, masukkan.
-            if (!isset($detailKonflik[$veh])) {
-                $detailKonflik[$veh] = $row;
-            } else {
-                // Jika sudah ada, bandingkan jam_mulai-nya
-                $existing = $detailKonflik[$veh];
-
-                if ($row->jam_mulai < $existing->jam_mulai) {
-                    // Jam lebih awal menang
-                    $detailKonflik[$veh] = $row;
-                } elseif ($row->jam_mulai == $existing->jam_mulai) {
-                    // Jika jamnya sama, adu created_at atau updated_at
-                    $waktuRow = $row->created_at ? strtotime($row->created_at) : strtotime($row->updated_at);
-                    $waktuExisting = $existing->created_at ? strtotime($existing->created_at) : strtotime($existing->updated_at);
-
-                    if ($waktuRow && $waktuExisting && $waktuRow < $waktuExisting) {
-                        $detailKonflik[$veh] = $row;
-                    }
-                }
-            }
-        }
+        $detailKonflik = \App\Services\KendaraanConflictHelper::buildDetailKonflik($dataBentrok);
 
         // --- 4. Return Format JSON ---
         return response()->json([
