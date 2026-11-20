@@ -123,15 +123,9 @@ class DaftarMobilController extends Controller
                 $data->nomor_mesin = strtoupper(trim($request->nomor_mesin));
                 $data->warna_mobil = trim($request->warna_mobil);
                 $data->tahun_perakitan = $request->tahun_perakitan;
-<<<<<<< HEAD
-                $data->kepemilikan = $kepemilikan;
-                $data->tanggal_mulai_sewa = $tanggalMulaiSewa;
-                $data->tanggal_akhir_sewa = $tanggalAkhirSewa;
-=======
                 if ($request->filled('kepemilikan')) {
                     $data->kepemilikan = $this->normalizeKepemilikan($request->kepemilikan);
                 }
->>>>>>> 7601959f91d08ac158317dab3d4db5cba0ed5d9f
                 if ($request->has('status_gps')) {
                     $data->status_gps = $this->toBoolean($request->status_gps);
                 }
