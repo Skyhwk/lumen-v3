@@ -76,24 +76,16 @@ class StatementPdfService
 
         return '<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="font-family: serif; font-size: 10.5pt; color:#1a1a1a; line-height:1.5;">
+' . $this->fieldTable([
+            ['Nomor', '<b>' . $this->e($payload['nomor_dokumen'] ?? '') . '</b>'],
+            ['Perihal', '<b>Pendaftaran Akun Portal Pelanggan Intilab</b>'],
+        ], '14px') . '
 <p style="margin:0 0 8px;">Yang bertanda tangan di bawah ini:</p>
-<table width="100%" style="border-collapse:collapse;margin:0 0 12px;border:none;">
-<tr>
-<td style="width:38mm;padding:1px 0;border:none;vertical-align:baseline;">Nama Lengkap</td>
-<td style="width:10px;padding:1px 0;border:none;vertical-align:baseline;">:</td>
-<td style="padding:1px 0 1px 8px;border:none;vertical-align:baseline;">' . $this->e($payload['nama_pic']) . '</td>
-</tr>
-<tr>
-<td style="padding:1px 0;border:none;vertical-align:baseline;">Nomor Kontak</td>
-<td style="padding:1px 0;border:none;vertical-align:baseline;">:</td>
-<td style="padding:1px 0 1px 8px;border:none;vertical-align:baseline;">' . $this->e($payload['no_kontak'] ?: '-') . '</td>
-</tr>
-<tr>
-<td style="padding:1px 0;border:none;vertical-align:baseline;">Alamat <i>Email</i></td>
-<td style="padding:1px 0;border:none;vertical-align:baseline;">:</td>
-<td style="padding:1px 0 1px 8px;border:none;vertical-align:baseline;">' . $this->e($payload['email']) . '</td>
-</tr>
-</table>
+' . $this->fieldTable([
+            ['Nama Lengkap', $this->e($payload['nama_pic'])],
+            ['Nomor Kontak', $this->e($payload['no_kontak'] ?: '-')],
+            ['Alamat <i>Email</i>', $this->e($payload['email'])],
+        ], '12px') . '
 
 <p style="margin:0 0 8px;">dalam kapasitas sebagai <i>Person in Charge</i> (<i>PIC</i>) yang mewakili perusahaan berikut:</p>
 <table width="100%" style="border-collapse:collapse;margin:0 0 12px;background:transparent;">
@@ -146,7 +138,7 @@ Yang membuat pernyataan,<br>
             'mode' => 'utf-8',
             'format' => 'A4',
             'orientation' => 'P',
-            'margin_top' => 38,
+            'margin_top' => 32,
             'margin_header' => 8,
             'margin_bottom' => 30,
             'margin_footer' => 4,
@@ -177,14 +169,8 @@ Yang membuat pernyataan,<br>
 
         return '<table width="100%" style="border-collapse:collapse;">
 <tr>
-<td style="width:28%;vertical-align:middle;">' . $logo . '</td>
-<td style="width:36%;text-align:center;vertical-align:middle;">
-<div style="font-size:12pt;font-weight:bold;color:#111;letter-spacing:0.6px;">SURAT PERNYATAAN</div>
-<div style="font-size:8pt;font-weight:bold;color:#333;margin-top:2px;">PENDAFTARAN DAN PENGGUNAAN AKUN</div>
-<div style="font-size:8pt;color:#333;">PORTAL PELANGGAN INTILAB</div>
-<div style="font-size:8pt;margin-top:3px;">Nomor: <b>' . $this->e($payload['nomor_dokumen'] ?? '') . '</b></div>
-</td>
-<td style="width:36%;text-align:right;vertical-align:middle;font-size:7.5pt;line-height:1.35;color:#222;">
+<td style="width:48%;vertical-align:middle;">' . $logo . '</td>
+<td style="width:52%;text-align:right;vertical-align:middle;font-size:7.5pt;line-height:1.35;color:#222;">
 <b>PT INTI SURYA LABORATORIUM</b><br>
 Ruko Icon Business Park blok O no 5 - 6, BSD City<br>
 Jl. Raya Cisauk, Sampora, Cisauk, Kab. Tangerang<br>
@@ -202,7 +188,6 @@ www.intilab.com
             . 'dan memiliki kekuatan hukum sesuai UU No. 11 Tahun 2008 tentang Informasi dan Transaksi Elektronik beserta perubahannya. '
             . 'No. Dokumen: ' . $this->e($payload['nomor_dokumen'] ?? '')
             . ' | Ditandatangani: ' . $this->e($payload['timestamp_wib'] ?? '-')
-            . ' | IP: ' . $this->e($payload['ip_address'] ?? '-')
             . ' | Kode Verifikasi: ' . $this->e($payload['dokumen_hash'] ?? '-');
 
         $generatedAt = $payload['generated_at'] ?? $payload['timestamp_wib'] ?? '-';
@@ -251,6 +236,20 @@ Halaman {PAGENO} dari {nbpg}
         }
 
         return '<div style="font-size:14pt;font-weight:bold;color:' . self::NAVY . ';">INTILAB</div>';
+    }
+
+    private function fieldTable(array $rows, $marginBottom)
+    {
+        $html = '<table style="width:1px;border-collapse:collapse;margin:0 0 ' . $marginBottom . ';line-height:1.25;"><tbody>';
+        foreach ($rows as $row) {
+            $html .= '<tr>'
+                . '<td style="border:none;padding:0 4mm 0 0;white-space:nowrap;vertical-align:top;">' . $row[0] . '</td>'
+                . '<td style="border:none;padding:0;width:4mm;white-space:nowrap;vertical-align:top;">:&nbsp;</td>'
+                . '<td style="border:none;padding:0;white-space:nowrap;vertical-align:top;">' . $row[1] . '</td>'
+                . '</tr>';
+        }
+
+        return $html . '</tbody></table>';
     }
 
     private function e($value)

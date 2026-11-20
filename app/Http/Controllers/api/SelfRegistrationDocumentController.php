@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\SelfRegistration\StatementPdfService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class SelfRegistrationDocumentController extends Controller
 {
@@ -48,14 +49,22 @@ class SelfRegistrationDocumentController extends Controller
             return response()->json(['message' => 'registration_id tidak valid'], 422);
         }
 
-        $row = DB::table('self_registration_customer')->where('id', $id)->first();
-        if (!$row || empty($row->pdf_path)) {
-            return response()->json(['message' => 'Dokumen tidak ditemukan'], 404);
+        $pdfRel = 'self-registration/' . $id . '/surat-pernyataan.pdf';
+        try {
+            $row = DB::table($this->produksiDb() . '.self_registration_customer')->where('id', $id)->first();
+            if ($row && !empty($row->pdf_path)) {
+                $pdfRel = $row->pdf_path;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('self_registration_fetch_db', [
+                'id' => $id,
+                'message' => $e->getMessage(),
+            ]);
         }
 
-        $binary = (new StatementPdfService())->readPdf($row->pdf_path);
+        $binary = (new StatementPdfService())->readPdf($pdfRel);
         if ($binary === null || $binary === '') {
-            return response()->json(['message' => 'File dokumen tidak ada di penyimpanan'], 404);
+            return response()->json(['message' => 'Dokumen tidak ditemukan'], 404);
         }
 
         return response()->json([
@@ -64,6 +73,11 @@ class SelfRegistrationDocumentController extends Controller
             'mime' => 'application/pdf',
             'content_base64' => base64_encode($binary),
         ]);
+    }
+
+    private function produksiDb()
+    {
+        return env('DB_2024', env('DB_DATABASE', 'intilab_produksi'));
     }
 
     private function decodeBinary($value)

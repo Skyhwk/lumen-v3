@@ -13,7 +13,7 @@ class Utf8Sanitizer
         // === 1. Sanitasi Request Input ===
         $input = $request->all();
         array_walk_recursive($input, function (&$item, $key) {
-            if (is_string($item)) {
+            if (is_string($item) && !$this->skipKey($key)) {
                 $item = $this->sanitizeString($item, $key, 'request');
             }
         });
@@ -29,7 +29,7 @@ class Utf8Sanitizer
             // Perbaikan: handle jika $data adalah string, bukan array
             if (is_array($data)) {
                 array_walk_recursive($data, function (&$item, $key) {
-                    if (is_string($item)) {
+                    if (is_string($item) && !$this->skipKey($key)) {
                         $item = $this->sanitizeString($item, $key, 'response');
                     }
                 });
@@ -46,6 +46,11 @@ class Utf8Sanitizer
         }
 
         return $response;
+    }
+
+    private function skipKey($key)
+    {
+        return is_string($key) && substr($key, -7) === '_base64';
     }
 
     private function sanitizeString($item, $key, $context)
