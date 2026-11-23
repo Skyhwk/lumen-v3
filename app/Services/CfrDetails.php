@@ -36,8 +36,12 @@ class CfrDetails
                 ->first();
 
             $dataOrder = $orderBerjalan ? json_decode($orderBerjalan->dataOrderDetail, true) : null;
+            $periodeGroup = !empty($periode)
+                ? collect($dataOrder)->firstWhere('periode', $periode)
+                : ($dataOrder[0] ?? null);
+            $details = $periodeGroup['detail'] ?? [];
 
-            if (empty($dataOrder) || !isset($dataOrder[0]['detail'])) {
+            if (!is_array($details) || empty($details)) {
                 return collect((new GroupedCfrByLhp($orderHeader, $periode))->get())
                     ->map(function ($item) {
                         $item = is_array($item) ? $item : (array) $item;
@@ -51,7 +55,7 @@ class CfrDetails
 
             $dataOrderDetails = [];
 
-            foreach ($dataOrder[0]['detail'] as $rawDetail) {
+            foreach ($details as $rawDetail) {
                 $value = $rawDetail;
                 $orderDetails = [];
                 $normalizedSteps = LhpStepSequence::normalize($value['steps'] ?? []);
