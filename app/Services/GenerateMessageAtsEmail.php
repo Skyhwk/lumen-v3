@@ -533,7 +533,6 @@ class GenerateMessageAtsEmail
     public static function sendCandidateOfferingSalaryEmail($applicant, object $dataObj, string $sender = 'HRD', $btn = null): bool
     {
         if (empty($applicant->email)) {
-            self::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
             return false;
         }
 
@@ -549,20 +548,25 @@ class GenerateMessageAtsEmail
                 ->noReply('PT Inti Surya Laboratorium')
                 ->replyToAtsHrd()
                 ->send();
-
-            self::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
-
-            return true;
         } catch (\Throwable $e) {
             \Log::warning('Candidate salary offering email failed', [
                 'recruitment_id' => $applicant->id ?? null,
                 'message'        => $e->getMessage(),
             ]);
 
-            self::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
-
             throw $e;
         }
+
+        try {
+            self::sendCandidateOfferingSalaryWhatsapp($applicant, $dataObj);
+        } catch (\Throwable $e) {
+            \Log::warning('Candidate salary offering WhatsApp notification failed', [
+                'recruitment_id' => $applicant->id ?? null,
+                'message'        => $e->getMessage(),
+            ]);
+        }
+
+        return true;
     }
 
     public static function sendCandidateOfferingSalaryWhatsapp($applicant, object $dataObj): bool

@@ -150,7 +150,6 @@ VALUES
    JSON_OBJECT('key','sapaan','label','Sapaan waktu','required',true),
    JSON_OBJECT('key','nama','label','Nama kandidat','required',true),
    JSON_OBJECT('key','posisi','label','Posisi dilamar','required',true),
-   JSON_OBJECT('key','gaji','label','Penawaran gaji (Rp)','required',true),
    JSON_OBJECT('key','email','label','Email tujuan','required',false)
  ),
  'SalaryOfferingLetter', 'weighted_random', 72, 1, NOW(), NOW()),
@@ -235,11 +234,11 @@ JOIN (
     CONCAT('*{{nama}}*,\n\nTerima kasih atas lamaran *{{posisi}}*. Mohon maaf, proses belum dapat kami lanjutkan.\n\nSukses selalu.\n\nHormat kami,\n*HRD Recruitment — PT Inti Surya Laboratorium*')
 
   UNION ALL SELECT 'salary_offering_letter', 'v01 formal',
-    CONCAT('{{sapaan}}, Yth. Bapak/Ibu *{{nama}}*\n\n*Surat Penawaran Gaji* untuk posisi *{{posisi}}* telah dikirim ke email *{{email}}*.\n\n- Posisi: {{posisi}}\n- Penawaran: {{gaji}}\n\nMohon cek email (termasuk spam). Ini belum keputusan penerimaan resmi.\n\nSalam,\n*Tim Recruitment HRD*\n*PT Inti Surya Laboratorium*')
+    CONCAT('{{sapaan}}, Yth. Bapak/Ibu *{{nama}}*\n\n*Surat Penawaran Gaji* untuk posisi *{{posisi}}* telah dikirim ke email *{{email}}*.\n\nMohon periksa kotak masuk dan folder spam email Anda untuk membaca rincian penawaran gaji.\n\nSalam,\n*Tim Recruitment HRD*\n*PT Inti Surya Laboratorium*')
   UNION ALL SELECT 'salary_offering_letter', 'v02 ringkas',
-    CONCAT('{{sapaan}} *{{nama}}*,\n\nPenawaran gaji *{{posisi}}* ({{gaji}}) sudah dikirim ke {{email}}.\n\nSilakan tinjau dokumen PDF-nya.\n\nHormat kami,\n*HRD Recruitment — PT Inti Surya Laboratorium*')
+    CONCAT('{{sapaan}} *{{nama}}*,\n\nSurat Penawaran Gaji untuk posisi *{{posisi}}* sudah dikirim ke *{{email}}*. Silakan periksa email Anda untuk membaca rinciannya.\n\nHormat kami,\n*HRD Recruitment — PT Inti Surya Laboratorium*')
   UNION ALL SELECT 'salary_offering_letter', 'v03 tegas',
-    CONCAT('{{sapaan}} {{nama}},\n\nOffering Letter *{{posisi}}* — {{gaji}} — telah kami emailkan ke {{email}}.\n\nMohon dibaca dan ditindaklanjuti.\n\nTerima kasih.\n*Recruitment Team*\n*PT Inti Surya Laboratorium*')
+    CONCAT('{{sapaan}} {{nama}},\n\nOffering Letter untuk posisi *{{posisi}}* telah kami kirim ke *{{email}}*. Mohon cek email Anda untuk membaca dan menindaklanjuti penawaran tersebut.\n\nTerima kasih.\n*Recruitment Team*\n*PT Inti Surya Laboratorium*')
 
   UNION ALL SELECT 'hiring_letter', 'v01 formal',
     CONCAT('{{sapaan}}, Yth. Bapak/Ibu *{{nama}}*\n\nSelamat! Anda *diterima* di *PT Inti Surya Laboratorium* posisi *{{posisi}}*.\n\n- Gaji Pokok: {{gaji}}\n- Mulai Kerja: {{tanggal_mulai}}\n\nHiring Letter dikirim ke *{{email}}*. Konfirmasi paling lambat *1 x 24 jam*.\n\nSalam,\n*Tim Recruitment HRD*\n*PT Inti Surya Laboratorium*')
