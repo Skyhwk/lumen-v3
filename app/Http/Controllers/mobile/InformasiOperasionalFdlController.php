@@ -4,17 +4,21 @@ namespace App\Http\Controllers\mobile;
 
 use App\Http\Controllers\Controller;
 use App\Models\Jadwal;
+use App\Models\OrderHeader;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
+use App\Models\SamplerTrackingSession;
 use App\Services\IoPeralatanTimService;
 use App\Services\JadwalMobilisasiService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 
 class InformasiOperasionalFdlController extends Controller
 {
     public function index(Request $request)
     {
-        $samplerLogin = mb_strtolower(trim((string) $this->karyawan));
+        $samplerLogin = mb_strtolower($this->cleanMemberName((string) $this->karyawan));
         $seeAllSchedules = $this->isItProgrammingDivisionMember();
         if ($samplerLogin === '' && !$seeAllSchedules) {
             return response()->json(['data' => [], 'tanggal' => $request->input('tanggal')]);
@@ -23,13 +27,12 @@ class InformasiOperasionalFdlController extends Controller
         $tanggal = $request->input('tanggal') ?: date('Y-m-d', strtotime('+1 day'));
         $timPeralatanMap = IoPeralatanTimService::mapByTanggal($tanggal);
 
+        // Identitas keberangkatan mengikuti groupBy pada InformasiOperasionalController (web).
         $rows = Jadwal::query()
             ->select(
                 'id',
-                'parsial',
                 'no_quotation',
                 'nama_perusahaan',
-                'tanggal',
                 'periode',
                 'jam_mulai',
                 'jam_selesai',
@@ -40,101 +43,44 @@ class InformasiOperasionalFdlController extends Controller
                 'sampler',
                 'note'
             )
+            ->selectRaw('MIN(id) OVER (PARTITION BY id_sampling, parsial, no_quotation, nama_perusahaan,
+                tanggal, periode, jam_mulai, jam_selesai, kategori, durasi, status, warna, note, driver,
+                id_cabang, wilayah, kendaraan) AS trip_id')
             ->where('is_active', true)
             ->whereNotNull('no_quotation')
             ->whereDate('tanggal', $tanggal)
-            ->orderByRaw('kendaraan ASC')
             ->orderBy('jam_mulai')
+            ->orderBy('id')
+            ->toBase()
             ->get();
 
-        if (!$seeAllSchedules) {
-            $rows = $rows->filter(function ($item) use ($samplerLogin) {
-                return $this->rowBelongsToSampler($item, $samplerLogin);
-            });
-        }
+        $mapsLookup = $this->buildGoogleMapsLookup($rows, $tanggal);
 
-        if ($rows->isEmpty()) {
-            return response()->json([
-                'data' => [],
-                'tanggal' => $tanggal,
-            ]);
-        }
-
-        $data = $rows
-            ->groupBy(fn ($row) => (string) ($row->kendaraan ?? '0'))
-            ->map(function ($group) use ($tanggal, $timPeralatanMap) {
-                $first = $group->first();
-                $batchIds = $group->pluck('id')->filter()->values()->all();
-
+        $data = $this->groupTripsByTeam($rows, $samplerLogin, $seeAllSchedules)
+            ->map(function (Collection $group, string $teamKey) use ($tanggal, $timPeralatanMap, $mapsLookup) {
+                $batchIds = JadwalMobilisasiService::flattenBatchIds($group->pluck('batch_id')->all());
                 $peralatanAktual = IoPeralatanTimService::resolvePeralatanForBatches($tanggal, $batchIds);
                 if ($peralatanAktual === []) {
-                    $samplerCsv = $group->pluck('sampler')->filter()->unique()->implode(', ');
-                    $petugasKey = IoPeralatanTimService::normalizePetugasKey($samplerCsv);
-                    if ($petugasKey !== '' && isset($timPeralatanMap[$petugasKey])) {
-                        $peralatanAktual = $timPeralatanMap[$petugasKey];
+                    $peralatanAktual = $timPeralatanMap[$teamKey] ?? [];
+                }
+
+                $listPt = $group->map(function ($trip) use (&$peralatanAktual, $mapsLookup) {
+                    $mob = JadwalMobilisasiService::findActiveByBatchIds($trip->batch_id) ?: [];
+                    if ($peralatanAktual === []) {
+                        $peralatanAktual = $this->decodePeralatan($mob['peralatan_aktual'] ?? null);
                     }
-                }
-
-                $mobSample = JadwalMobilisasiService::findActiveByBatchIds($batchIds) ?: [];
-                if ($peralatanAktual === [] && !empty($mobSample['peralatan_aktual'])) {
-                    $peralatanAktual = $this->decodePeralatan($mobSample['peralatan_aktual']);
-                }
-
+                    return $this->buildTripPayload($trip, $mob, $mapsLookup);
+                })->values();
                 $peralatanDisplay = $this->buildAktualDisplayLists($peralatanAktual);
 
-                $timSampler = $this->buildTimSamplerLabel($group);
-                $jamMulaiTim = $this->earliestJamMulai($group);
-
-                $listPt = $group->map(function ($item) {
-                    $quotation = $this->resolveQuotation($item->no_quotation);
-                    $mob = JadwalMobilisasiService::findActiveByBatchIds($item->id) ?: [];
-                    $ketOps = trim(strip_tags(html_entity_decode(
-                        (string) ($mob['keterangan_operasional'] ?? $mob['keterangan_operasional_sp'] ?? ''),
-                        ENT_QUOTES,
-                        'UTF-8'
-                    )));
-                    $waktuBerangkat = $this->resolveJamBerangkat(
-                        $item->jam_mulai,
-                        $mob['waktu_berangkat'] ?? null,
-                        (int) ($mob['estimasi_jam'] ?? 0),
-                        (int) ($mob['estimasi_menit'] ?? 0)
-                    );
-
-                    return [
-                        'jadwal_id' => (int) $item->id,
-                        'no_quotation' => $item->no_quotation,
-                        'nama_perusahaan' => $item->nama_perusahaan,
-                        'wilayah' => $item->wilayah,
-                        'jam_mulai' => $item->jam_mulai,
-                        'jam_selesai' => $item->jam_selesai,
-                        'durasi' => $item->durasi,
-                        'periode' => $item->periode,
-                        'note' => $item->note,
-                        'pic_nama' => $quotation->nama_pic_sampling ?? null,
-                        'pic_telp' => $quotation->no_tlp_pic_sampling ?? null,
-                        'alamat_sampling' => $quotation->alamat_sampling ?? null,
-                        'keterangan_operasional' => $ketOps,
-                        'status_rilis_io' => $mob['status_rilis_io'] ?? 'draft',
-                        'waktu_berangkat' => $waktuBerangkat,
-                    ];
-                })->values();
-
-                $waktuBerangkatTim = $this->resolveJamBerangkat(
-                    $jamMulaiTim,
-                    $mobSample['waktu_berangkat'] ?? null,
-                    (int) ($mobSample['estimasi_jam'] ?? 0),
-                    (int) ($mobSample['estimasi_menit'] ?? 0)
-                );
+                $singleTrip = $listPt->count() === 1 ? $listPt->first() : null;
 
                 return [
-                    'kendaraan' => $first->kendaraan,
-                    'tim_sampler' => $timSampler,
-                    'jadwal_mobil' => [
-                        'waktu_berangkat' => $waktuBerangkatTim,
-                        'estimasi_jam' => (int) ($mobSample['estimasi_jam'] ?? 0),
-                        'estimasi_menit' => (int) ($mobSample['estimasi_menit'] ?? 0),
-                        'rute_perjalanan' => $mobSample['rute_perjalanan'] ?? null,
-                    ],
+                    'kendaraan' => $singleTrip['kendaraan'] ?? null,
+                    'tim_sampler' => $this->buildTimSamplerLabel($group),
+                    'jadwal_mobil' => $singleTrip ? Arr::only($singleTrip, [
+                        'waktu_berangkat', 'estimasi_jam', 'estimasi_menit', 'estimasi_perjalanan', 'rute_perjalanan',
+                    ]) : null,
                     'peralatan_aktual' => $peralatanDisplay['items'],
                     'has_peralatan_aktual' => count($peralatanDisplay['items']) > 0,
                     'list_pt' => $listPt,
@@ -146,6 +92,65 @@ class InformasiOperasionalFdlController extends Controller
             'data' => $data,
             'tanggal' => $tanggal,
         ]);
+    }
+
+    private function groupTripsByTeam(Collection $rows, string $samplerLogin, bool $seeAllSchedules): Collection
+    {
+        return $rows
+            ->groupBy('trip_id')
+            ->map(function (Collection $tripRows) {
+                $trip = $tripRows->first();
+                $trip->batch_id = $tripRows->pluck('id')->implode(',');
+                $trip->team_members = $this->tripMembers($tripRows->pluck('sampler')->implode(','), $trip->driver);
+                return $trip;
+            })
+            ->filter(fn ($trip) => $seeAllSchedules || isset($trip->team_members[$samplerLogin]))
+            ->groupBy(function ($trip) {
+                $teamKey = IoPeralatanTimService::normalizePetugasKey(implode(', ', $trip->team_members));
+                return $teamKey ?: 'trip:' . $trip->trip_id;
+            });
+    }
+
+    private function buildTripPayload(object $trip, array $mob, array $mapsLookup = []): array
+    {
+        $quotation = $this->resolveQuotation($trip->no_quotation);
+        $googleMapsUrl = $this->resolveGoogleMapsUrlForTrip(
+            $trip->no_quotation ?? null,
+            $mapsLookup
+        );
+        $ketOps = trim(strip_tags(html_entity_decode(
+            (string) ($mob['keterangan_operasional'] ?? $mob['keterangan_operasional_sp'] ?? ''),
+            ENT_QUOTES,
+            'UTF-8'
+        )));
+        $estimasiJam = (int) ($mob['estimasi_jam'] ?? 0);
+        $estimasiMenit = (int) ($mob['estimasi_menit'] ?? 0);
+        $estimasiPerjalanan = trim((string) ($mob['estimasi_perjalanan'] ?? ''));
+
+        return [
+            'jadwal_id' => (int) $trip->trip_id,
+            'batch_id' => $trip->batch_id,
+            'no_quotation' => $trip->no_quotation,
+            'nama_perusahaan' => $trip->nama_perusahaan,
+            'wilayah' => $trip->wilayah,
+            'kendaraan' => $trip->kendaraan,
+            'jam_mulai' => $trip->jam_mulai,
+            'jam_selesai' => $trip->jam_selesai,
+            'durasi' => $trip->durasi,
+            'periode' => $trip->periode,
+            'note' => $trip->note,
+            'pic_nama' => $quotation->nama_pic_sampling ?? null,
+            'pic_telp' => $quotation->no_tlp_pic_sampling ?? null,
+            'alamat_sampling' => $quotation->alamat_sampling ?? null,
+            'google_maps_url' => $googleMapsUrl,
+            'keterangan_operasional' => $ketOps,
+            'status_rilis_io' => $mob['status_rilis_io'] ?? 'draft',
+            'waktu_berangkat' => $this->resolveJamBerangkat($trip->jam_mulai, $mob['waktu_berangkat'] ?? null, $estimasiJam, $estimasiMenit),
+            'estimasi_jam' => $estimasiJam,
+            'estimasi_menit' => $estimasiMenit,
+            'estimasi_perjalanan' => $estimasiPerjalanan !== '' ? $estimasiPerjalanan : null,
+            'rute_perjalanan' => $mob['rute_perjalanan'] ?? null,
+        ];
     }
 
     private function resolveJamBerangkat(?string $jamMulai, $waktuBerangkat, int $estimasiJam = 0, int $estimasiMenit = 0): ?string
@@ -227,54 +232,151 @@ class InformasiOperasionalFdlController extends Controller
         return null;
     }
 
-    private function earliestJamMulai($group): ?string
+    private function cleanMemberName(string $name): string
     {
-        $earliest = null;
-        $earliestMenit = null;
+        $name = html_entity_decode($name, ENT_QUOTES, 'UTF-8');
+        return trim(preg_replace('/\s*\(driver\)\s*$/i', '', $name));
+    }
 
-        foreach ($group as $item) {
-            $menit = $this->parseJamKeMenit($item->jam_mulai ?? null);
-            if ($menit === null) {
-                continue;
-            }
-            if ($earliestMenit === null || $menit < $earliestMenit) {
-                $earliestMenit = $menit;
-                $earliest = $item->jam_mulai;
+    private function tripMembers(string $samplerCsv, ?string $driver): array
+    {
+        $members = [];
+        $names = explode(',', $samplerCsv);
+        $names[] = $driver ?? '';
+        foreach ($names as $value) {
+            $name = $this->cleanMemberName($value);
+            if ($name !== '') {
+                $members[mb_strtolower($name)] ??= $name;
             }
         }
 
-        return $earliest;
+        return $members;
     }
 
-    private function rowBelongsToSampler($item, string $samplerLogin): bool
+    private function buildTimSamplerLabel(Collection $group): string
     {
-        $samplers = collect(explode(',', (string) ($item->sampler ?? '')))
-            ->map(fn ($name) => mb_strtolower(trim($name)));
+        $drivers = $group->pluck('driver')
+            ->map(fn ($driver) => mb_strtolower($this->cleanMemberName((string) $driver)))
+            ->flip();
 
-        if ($samplers->contains($samplerLogin)) {
-            return true;
-        }
-
-        return mb_strtolower(trim((string) ($item->driver ?? ''))) === $samplerLogin;
+        return collect($group->first()->team_members)
+            ->map(fn ($name, $key) => $drivers->has($key) ? $name . ' (Driver)' : $name)
+            ->implode(', ');
     }
 
-    private function buildTimSamplerLabel($group): string
+    /**
+     * @return array{no_order_by_qt: array<string, string>, by_order: array<string, string>, by_qt: array<string, string>}
+     */
+    private function buildGoogleMapsLookup(Collection $rows, string $tanggal): array
     {
-        return $group
-            ->flatMap(function ($item) {
-                $names = collect(explode(',', (string) ($item->sampler ?? '')))
-                    ->map(fn ($n) => trim($n))
-                    ->filter();
-
-                if ($item->driver) {
-                    $names->push(trim((string) $item->driver) . ' (Driver)');
-                }
-
-                return $names;
-            })
+        $quotationNos = $rows->pluck('no_quotation')
+            ->map(fn ($value) => trim((string) $value))
+            ->filter()
             ->unique()
             ->values()
-            ->implode(', ');
+            ->all();
+
+        if ($quotationNos === []) {
+            return ['no_order_by_qt' => [], 'by_order' => [], 'by_qt' => []];
+        }
+
+        $noOrderByQt = $this->resolveNoOrdersByQuotation($quotationNos);
+        $noOrders = array_values(array_unique(array_filter(array_values($noOrderByQt))));
+
+        $sessions = SamplerTrackingSession::query()
+            ->whereDate('tanggal_sampling', $tanggal)
+            ->where('is_active', true)
+            ->whereNotNull('google_maps_url')
+            ->where('google_maps_url', '!=', '')
+            ->where(function ($query) use ($noOrders, $quotationNos) {
+                if ($noOrders !== []) {
+                    $query->whereIn('no_order', $noOrders);
+                }
+                if ($quotationNos !== []) {
+                    $method = $noOrders !== [] ? 'orWhereIn' : 'whereIn';
+                    $query->{$method}('no_quotation', $quotationNos);
+                }
+            })
+            ->orderByDesc('id')
+            ->get(['no_order', 'no_quotation', 'google_maps_url']);
+
+        $byOrder = [];
+        $byQt = [];
+        foreach ($sessions as $session) {
+            $url = trim((string) $session->google_maps_url);
+            if ($url === '') {
+                continue;
+            }
+
+            $orderKey = trim((string) $session->no_order);
+            if ($orderKey !== '' && !isset($byOrder[$orderKey])) {
+                $byOrder[$orderKey] = $url;
+            }
+
+            $qtKey = trim((string) $session->no_quotation);
+            if ($qtKey !== '' && !isset($byQt[$qtKey])) {
+                $byQt[$qtKey] = $url;
+            }
+        }
+
+        return [
+            'no_order_by_qt' => $noOrderByQt,
+            'by_order' => $byOrder,
+            'by_qt' => $byQt,
+        ];
+    }
+
+    /**
+     * @param  list<string>  $quotationNos
+     * @return array<string, string>
+     */
+    private function resolveNoOrdersByQuotation(array $quotationNos): array
+    {
+        $map = [];
+        try {
+            $headers = OrderHeader::query()
+                ->whereIn('no_document', $quotationNos)
+                ->where('is_active', true)
+                ->get(['no_document', 'no_order']);
+            foreach ($headers as $header) {
+                $qt = trim((string) $header->no_document);
+                $order = trim((string) $header->no_order);
+                if ($qt !== '' && $order !== '') {
+                    $map[$qt] = $order;
+                }
+            }
+        } catch (\Throwable $e) {
+            $map = [];
+        }
+
+        foreach ($quotationNos as $qt) {
+            $qt = trim((string) $qt);
+            if ($qt === '' || !empty($map[$qt])) {
+                continue;
+            }
+            $segments = preg_split('/[\/]/', $qt);
+            $fallback = $segments ? trim((string) end($segments)) : $qt;
+            if ($fallback !== '') {
+                $map[$qt] = $fallback;
+            }
+        }
+
+        return $map;
+    }
+
+    private function resolveGoogleMapsUrlForTrip(?string $noQt, array $mapsLookup): ?string
+    {
+        $noQt = trim((string) $noQt);
+        if ($noQt === '') {
+            return null;
+        }
+
+        $noOrder = trim((string) ($mapsLookup['no_order_by_qt'][$noQt] ?? ''));
+        if ($noOrder !== '' && !empty($mapsLookup['by_order'][$noOrder])) {
+            return $mapsLookup['by_order'][$noOrder];
+        }
+
+        return $mapsLookup['by_qt'][$noQt] ?? null;
     }
 
     private function resolveQuotation(?string $noQt)
