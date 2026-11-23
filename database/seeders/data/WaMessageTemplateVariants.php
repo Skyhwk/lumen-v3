@@ -445,8 +445,7 @@ class WaMessageTemplateVariants
                 'label' => 'ref_original_ats',
                 'body' => "{{sapaan}}, Yth. {{saudara}} *{{nama}}*\n\n"
                     . "Terima kasih atas partisipasi Anda dalam proses rekrutmen posisi *{{posisi}}* di *PT Inti Surya Laboratorium*.\n\n"
-                    . "Kami informasikan bahwa *Surat Penawaran Gaji (Salary Offering Letter)* telah kami kirimkan ke email: *{{email}}*.\n\n"
-                    . "Mohon periksa kotak masuk dan folder spam email Anda untuk membaca rincian penawaran gaji.\n"
+                    . "Untuk membaca *Surat Penawaran Gaji (Salary Offering Letter)*, mohon periksa kotak masuk dan folder spam email *{{email}}*.\n\n"
                     . "Catatan: surat ini *bukan keputusan penerimaan kerja resmi* - keputusan final setelah tahapan administrasi berikutnya.\n\n"
                     . "Apabila ada pertanyaan, silakan hubungi tim HRD kami.\n\n"
                     . "Salam,\n*Tim Recruitment HRD*\n*PT Inti Surya Laboratorium*",
@@ -454,18 +453,18 @@ class WaMessageTemplateVariants
         ];
 
         $mids = [
-            "Terima kasih atas partisipasi {{saudara}} pada rekrutmen *{{posisi}}*.\n\nSurat Penawaran Gaji telah dikirim ke *{{email}}*. Mohon periksa kotak masuk dan folder spam email Anda.\n\n",
-            "Surat Penawaran Gaji untuk posisi *{{posisi}}* telah dikirim ke *{{email}}*. Mohon periksa email dan pelajari isi surat sebelum memberikan tanggapan.\n\n",
-            "Kami telah mengirimkan Surat Penawaran Gaji untuk posisi *{{posisi}}*. Silakan cek email *{{email}}* untuk membaca rinciannya.\n\n",
-            "Rincian penawaran gaji untuk posisi *{{posisi}}* telah kami kirim ke *{{email}}*. Silakan periksa email Anda. Tim HRD siap membantu bila ada pertanyaan.\n\n",
-            "Surat Penawaran Gaji untuk posisi *{{posisi}}* telah kami kirim ke *{{email}}*. Mohon cek kotak masuk dan folder spam.\n\n",
-            "Sehubungan dengan proses rekrutmen *{{posisi}}*, kami telah mengirimkan Surat Penawaran Gaji. Silakan periksa email *{{email}}* untuk membaca surat tersebut.\n\n",
-            "Kami informasikan bahwa Surat Penawaran Gaji untuk posisi *{{posisi}}* telah terkirim. Mohon cek email *{{email}}*.\n\n",
+            "Terima kasih atas partisipasi {{saudara}} pada rekrutmen *{{posisi}}*.\n\nMohon periksa kotak masuk dan folder spam email *{{email}}* untuk membaca Surat Penawaran Gaji.\n\n",
+            "Mohon periksa email *{{email}}* untuk membaca Surat Penawaran Gaji posisi *{{posisi}}*. Silakan pelajari isi surat sebelum memberikan tanggapan.\n\n",
+            "Silakan cek email *{{email}}* untuk membaca rincian Surat Penawaran Gaji posisi *{{posisi}}*.\n\n",
+            "Silakan periksa email *{{email}}* untuk rincian penawaran gaji posisi *{{posisi}}*. Tim HRD siap membantu bila ada pertanyaan.\n\n",
+            "Untuk membaca Surat Penawaran Gaji posisi *{{posisi}}*, mohon cek kotak masuk dan folder spam email *{{email}}*.\n\n",
+            "Sehubungan dengan proses rekrutmen *{{posisi}}*, silakan periksa email *{{email}}* untuk meninjau Surat Penawaran Gaji.\n\n",
+            "Mohon cek email *{{email}}* untuk informasi penawaran gaji posisi *{{posisi}}*.\n\n",
             "Mohon periksa email *{{email}}* untuk membaca Surat Penawaran Gaji posisi *{{posisi}}* sebelum memberikan tanggapan.\n\n",
             "Silakan cek kotak masuk email *{{email}}* untuk membaca penawaran gaji posisi *{{posisi}}*. Periksa juga folder spam bila email belum terlihat.\n\n",
-            "Kami telah mengirimkan Salary Offering Letter untuk posisi *{{posisi}}* ke *{{email}}*. Mohon periksa email Anda untuk meninjau penawaran tersebut.\n\n",
-            "Silakan periksa email *{{email}}* untuk meninjau Surat Penawaran Gaji yang kami kirim untuk posisi *{{posisi}}*.\n\n",
-            "Tim HRD telah mengirimkan Surat Penawaran Gaji untuk posisi *{{posisi}}*. Mohon periksa email *{{email}}* dan berikan tanggapan melalui petunjuk di email tersebut.\n\n",
+            "Untuk meninjau Salary Offering Letter posisi *{{posisi}}*, mohon periksa email *{{email}}*.\n\n",
+            "Silakan periksa email *{{email}}* untuk meninjau Surat Penawaran Gaji posisi *{{posisi}}*.\n\n",
+            "Mohon periksa email *{{email}}* untuk Surat Penawaran Gaji posisi *{{posisi}}*. Silakan berikan tanggapan sesuai petunjuk di email tersebut.\n\n",
         ];
 
         return self::fromParts($refs, self::opensCorporate(), $mids, self::closesCorporate());

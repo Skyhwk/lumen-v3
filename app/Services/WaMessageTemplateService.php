@@ -42,24 +42,12 @@ class WaMessageTemplateService
                 return null;
             }
 
-            $isSalaryOffering = strcasecmp($template->code, 'salary_offering_letter') === 0;
-            if ($isSalaryOffering) {
-                $variables = array_intersect_key($variables, array_flip(['sapaan', 'saudara', 'nama', 'posisi', 'email']));
-            }
-
             $replace = [];
             foreach ($variables as $key => $value) {
                 $replace['{{' . $key . '}}'] = (string) $value;
             }
 
-            $message = strtr($variant->body, $replace);
-
-            // Use the notification in code when a persisted variant still expects salary fields.
-            if ($isSalaryOffering && strpos($message, '{{') !== false) {
-                return null;
-            }
-
-            return $message;
+            return strtr($variant->body, $replace);
         } catch (\Throwable $e) {
             Log::warning('WA database template unavailable; using legacy message.', [
                 'template_code' => $code,

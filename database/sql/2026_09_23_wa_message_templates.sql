@@ -234,11 +234,11 @@ JOIN (
     CONCAT('*{{nama}}*,\n\nTerima kasih atas lamaran *{{posisi}}*. Mohon maaf, proses belum dapat kami lanjutkan.\n\nSukses selalu.\n\nHormat kami,\n*HRD Recruitment — PT Inti Surya Laboratorium*')
 
   UNION ALL SELECT 'salary_offering_letter', 'v01 formal',
-    CONCAT('{{sapaan}}, Yth. Bapak/Ibu *{{nama}}*\n\n*Surat Penawaran Gaji* untuk posisi *{{posisi}}* telah dikirim ke email *{{email}}*.\n\nMohon periksa kotak masuk dan folder spam email Anda untuk membaca rincian penawaran gaji.\n\nSalam,\n*Tim Recruitment HRD*\n*PT Inti Surya Laboratorium*')
+    CONCAT('{{sapaan}}, Yth. Bapak/Ibu *{{nama}}*\n\nUntuk membaca *Surat Penawaran Gaji* posisi *{{posisi}}*, mohon periksa kotak masuk dan folder spam email *{{email}}*.\n\nSalam,\n*Tim Recruitment HRD*\n*PT Inti Surya Laboratorium*')
   UNION ALL SELECT 'salary_offering_letter', 'v02 ringkas',
-    CONCAT('{{sapaan}} *{{nama}}*,\n\nSurat Penawaran Gaji untuk posisi *{{posisi}}* sudah dikirim ke *{{email}}*. Silakan periksa email Anda untuk membaca rinciannya.\n\nHormat kami,\n*HRD Recruitment — PT Inti Surya Laboratorium*')
+    CONCAT('{{sapaan}} *{{nama}}*,\n\nSilakan periksa email *{{email}}* untuk membaca rincian Surat Penawaran Gaji posisi *{{posisi}}*.\n\nHormat kami,\n*HRD Recruitment — PT Inti Surya Laboratorium*')
   UNION ALL SELECT 'salary_offering_letter', 'v03 tegas',
-    CONCAT('{{sapaan}} {{nama}},\n\nOffering Letter untuk posisi *{{posisi}}* telah kami kirim ke *{{email}}*. Mohon cek email Anda untuk membaca dan menindaklanjuti penawaran tersebut.\n\nTerima kasih.\n*Recruitment Team*\n*PT Inti Surya Laboratorium*')
+    CONCAT('{{sapaan}} {{nama}},\n\nMohon cek email *{{email}}* untuk membaca dan menindaklanjuti Offering Letter posisi *{{posisi}}*.\n\nTerima kasih.\n*Recruitment Team*\n*PT Inti Surya Laboratorium*')
 
   UNION ALL SELECT 'hiring_letter', 'v01 formal',
     CONCAT('{{sapaan}}, Yth. Bapak/Ibu *{{nama}}*\n\nSelamat! Anda *diterima* di *PT Inti Surya Laboratorium* posisi *{{posisi}}*.\n\n- Gaji Pokok: {{gaji}}\n- Mulai Kerja: {{tanggal_mulai}}\n\nHiring Letter dikirim ke *{{email}}*. Konfirmasi paling lambat *1 x 24 jam*.\n\nSalam,\n*Tim Recruitment HRD*\n*PT Inti Surya Laboratorium*')
