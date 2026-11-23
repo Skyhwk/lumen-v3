@@ -182,7 +182,6 @@ class WaMessageTemplateSeeder extends Seeder
                 'module' => 'hrd',
                 'description' => 'SalaryOfferingLetter',
                 'variables' => array_merge($vBase, [
-                    ['key' => 'gaji', 'label' => 'Penawaran gaji', 'required' => true],
                     ['key' => 'email', 'label' => 'Email tujuan', 'required' => false],
                 ]),
             ],

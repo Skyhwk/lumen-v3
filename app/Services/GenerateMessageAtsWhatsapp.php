@@ -285,37 +285,21 @@ class GenerateMessageAtsWhatsapp
     {
         $namaLengkap = \ucwords($this->data->nama_lengkap ?? 'Kandidat');
         $posisi = $this->posisiLabel();
-        $gaji = HrdEmailViewData::formatRupiah(
-            $this->data->gaji_pokok
-                ?? $this->data->sallary_offer_hrd
-                ?? $this->data->ekspetasi_gaji
-                ?? 0
-        );
         $email = trim((string) ($this->data->email ?? ''));
         $databaseMessage = $this->databaseTemplate('salary_offering_letter', [
             'sapaan' => $this->sapaan(), 'nama' => $namaLengkap, 'posisi' => $posisi,
-            'gaji' => $gaji, 'email' => $email,
+            'email' => $email !== '' ? $email : 'Anda',
         ]);
-        if ($databaseMessage !== null) {
+        // Older variants still contain salary placeholders and use the message below.
+        if ($databaseMessage !== null && strpos($databaseMessage, '{{') === false) {
             return $databaseMessage;
         }
 
         $msg = $this->sapaan() . ", " . $this->candidateSalutationLine($namaLengkap) . "\n\n";
         $msg .= "Terima kasih atas partisipasi Anda dalam proses rekrutmen posisi *" . $posisi . "* di *PT Inti Surya Laboratorium*.\n\n";
-        $msg .= "Kami informasikan bahwa *Surat Penawaran Gaji (Salary Offering Letter)* telah kami kirimkan";
-        if ($email !== '') {
-            $msg .= " ke email: *" . $email . "*";
-        }
-        $msg .= ".\n\n";
-        $tunjangan = max(0, (float) ($this->data->tunjangan_kerja ?? 0));
-        $msg .= "*Ringkasan Penawaran:*\n";
-        $msg .= "• Posisi: " . $posisi . "\n";
-        $msg .= "• Gaji Pokok: " . $gaji . "\n";
-        if ($tunjangan > 0) {
-            $msg .= "• Tunjangan Kerja: " . HrdEmailViewData::formatRupiah($tunjangan) . "\n";
-        }
-        $msg .= "\n";
-        $msg .= "Mohon periksa email Anda (termasuk folder spam) dan pelajari rincian penawaran gaji yang kami kirimkan.\n";
+        $msg .= "Untuk membaca *Surat Penawaran Gaji (Salary Offering Letter)*, mohon periksa kotak masuk dan folder spam email";
+        $msg .= $email !== '' ? " *" . $email . "*." : " Anda.";
+        $msg .= "\n\n";
         $msg .= "Catatan: surat ini *bukan keputusan penerimaan kerja resmi* — keputusan final akan diberikan setelah tahapan administrasi berikutnya selesai.\n\n";
         $msg .= "Apabila ada pertanyaan, silakan hubungi tim HRD kami.\n\n";
         $msg .= "Salam,\n";
