@@ -79,7 +79,7 @@ class InformasiOperasionalFdlController extends Controller
                     'kendaraan' => $singleTrip['kendaraan'] ?? null,
                     'tim_sampler' => $this->buildTimSamplerLabel($group),
                     'jadwal_mobil' => $singleTrip ? Arr::only($singleTrip, [
-                        'waktu_berangkat', 'estimasi_jam', 'estimasi_menit', 'rute_perjalanan',
+                        'waktu_berangkat', 'estimasi_jam', 'estimasi_menit', 'estimasi_perjalanan', 'rute_perjalanan',
                     ]) : null,
                     'peralatan_aktual' => $peralatanDisplay['items'],
                     'has_peralatan_aktual' => count($peralatanDisplay['items']) > 0,
@@ -125,6 +125,7 @@ class InformasiOperasionalFdlController extends Controller
         )));
         $estimasiJam = (int) ($mob['estimasi_jam'] ?? 0);
         $estimasiMenit = (int) ($mob['estimasi_menit'] ?? 0);
+        $estimasiPerjalanan = trim((string) ($mob['estimasi_perjalanan'] ?? ''));
 
         return [
             'jadwal_id' => (int) $trip->trip_id,
@@ -147,6 +148,7 @@ class InformasiOperasionalFdlController extends Controller
             'waktu_berangkat' => $this->resolveJamBerangkat($trip->jam_mulai, $mob['waktu_berangkat'] ?? null, $estimasiJam, $estimasiMenit),
             'estimasi_jam' => $estimasiJam,
             'estimasi_menit' => $estimasiMenit,
+            'estimasi_perjalanan' => $estimasiPerjalanan !== '' ? $estimasiPerjalanan : null,
             'rute_perjalanan' => $mob['rute_perjalanan'] ?? null,
         ];
     }
