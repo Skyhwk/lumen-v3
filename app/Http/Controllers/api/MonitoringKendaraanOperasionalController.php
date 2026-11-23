@@ -117,12 +117,14 @@ class MonitoringKendaraanOperasionalController extends Controller
             })
             ->groupBy('j.kendaraan');
 
+        // merk/tipe sudah tidak ada di service_mobil (phase_a); sumbernya daftar_mobil.
+        // Branch ini khusus plat yang TIDAK ada di master → merk/tipe NULL.
         $serviceMissing = DB::table('service_mobil as sm')
             ->select([
                 DB::raw("CONCAT('s', MAX(sm.id)) as id"),
                 'sm.plat_mobil',
-                DB::raw('MAX(sm.merk_mobil) as merk_mobil'),
-                DB::raw('MAX(sm.tipe_mobil) as tipe_mobil'),
+                DB::raw('NULL as merk_mobil'),
+                DB::raw('NULL as tipe_mobil'),
                 DB::raw('NULL as warna_mobil'),
                 DB::raw('NULL as tahun_perakitan'),
                 DB::raw('NULL as nomor_rangka'),
