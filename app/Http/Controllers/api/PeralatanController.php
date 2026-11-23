@@ -11,6 +11,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
+use PhpOffice\PhpSpreadsheet\Cell\Cell;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use Yajra\Datatables\Datatables;
 
 class PeralatanController extends Controller
@@ -99,7 +102,23 @@ class PeralatanController extends Controller
             ->orderBy('p.kode_aset')
             ->orderBy('p.id');
 
-        return Datatables::of($data)->make(true);
+        $datatable = Datatables::of($data);
+        $searchableColumns = [
+            'nama_alat' => 'p.nama_alat',
+            'jenis_peralatan' => 'p.jenis_peralatan',
+            'nama_kategori_pengujian' => 'p.nama_kategori_pengujian',
+            'warna' => 'p.warna',
+            'lokasi_penempatan_alat' => 'p.lokasi_penempatan_alat',
+            'kode_aset' => 'p.kode_aset',
+            'status_alat' => 'mp.status_alat',
+        ];
+        foreach ($searchableColumns as $column => $sqlColumn) {
+            $datatable->filterColumn($column, function ($query, $keyword) use ($sqlColumn) {
+                $query->where($sqlColumn, 'like', '%' . $keyword . '%');
+            });
+        }
+
+        return $datatable->make(true);
     }
 
     public function getNames()
@@ -198,6 +217,20 @@ class PeralatanController extends Controller
         $isUpdate = $request->filled('id');
         $details = [];
         $kodeSeen = [];
+
+        $kodeIsExists = Peralatan::query()
+            ->where('is_active', true)
+            ->whereIn('kode_aset', array_column($rawDetails, 'kode_aset'))
+            ->pluck('kode_aset')
+            ->toArray();
+
+        if (!empty($kodeIsExists)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kode aset ' . implode(', ', $kodeIsExists) . ' sudah terdaftar',
+            ], 422);
+        }
+
         foreach ($rawDetails as $item) {
             if (!is_array($item)) {
                 continue;
@@ -469,5 +502,509 @@ class PeralatanController extends Controller
         }
 
         return date('Y-m-d', $timestamp);
+    }
+
+    public function import(Request $request)
+    {
+        if (!$request->hasFile('file') || !$request->file('file')->isValid()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'File Excel wajib diunggah.',
+            ], 422);
+        }
+
+        $file = $request->file('file');
+        $extension = strtolower($file->getClientOriginalExtension());
+        if (!in_array($extension, ['xlsx', 'xls'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Format file harus .xlsx atau .xls.',
+            ], 422);
+        }
+        if ($file->getSize() > 8 * 1024 * 1024) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Ukuran file maksimal 8 MB.',
+            ], 422);
+        }
+
+        try {
+            $spreadsheet = IOFactory::load($file->getRealPath());
+        } catch (\Throwable $exception) {
+            return response()->json([
+                'success' => false,
+                'message' => 'File Excel tidak dapat dibaca.',
+            ], 422);
+        }
+
+        $sheet = $this->resolveImportSheet($spreadsheet);
+        $headerMap = $this->resolveImportHeaderMap($sheet);
+        $missingHeaders = array_diff(
+            ['nama_alat', 'jenis_peralatan', 'nama_kategori_pengujian', 'warna', 'lokasi', 'kode_aset', 'status_alat'],
+            array_keys($headerMap)
+        );
+        if (!empty($missingHeaders)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Header Excel tidak lengkap. Wajib ada Nama Alat, Jenis Peralatan, Kategori Pengujian, Warna, Lokasi Penempatan Alat, Kode Aset, dan Status Alat.',
+            ], 422);
+        }
+
+        $parsed = $this->parseImportRows($sheet, $headerMap);
+        if (empty($parsed['rows']) && empty($parsed['skipped'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'File tidak memiliki baris data.',
+            ], 422);
+        }
+
+        $cabangByName = $this->importCabangMap();
+        $existingByKode = $this->importExistingPeralatanMap();
+
+        $ready = [];
+        $skipped = $parsed['skipped'];
+        foreach ($parsed['rows'] as $item) {
+            $error = $this->validateImportRow($item, $cabangByName);
+            if ($error !== null) {
+                $skipped[] = [
+                    'row' => $item['row'],
+                    'kode_aset' => $item['kode_aset'],
+                    'message' => $error,
+                ];
+                continue;
+            }
+            $ready[] = $item;
+        }
+
+        $created = 0;
+        $updated = 0;
+        $now = date('Y-m-d H:i:s');
+
+        DB::beginTransaction();
+        try {
+            foreach ($ready as $item) {
+                $key = mb_strtolower($item['kode_aset']);
+                $existing = $existingByKode[$key] ?? null;
+
+                if ($existing) {
+                    $this->applyImportedPeralatan($existing, $item, $now, false);
+                    $existingByKode[$key] = $existing;
+                    $updated++;
+                    continue;
+                }
+
+                $row = new Peralatan();
+                $this->applyImportedPeralatan($row, $item, $now, true);
+                $existingByKode[$key] = $row;
+                $created++;
+            }
+
+            DB::commit();
+        } catch (\Throwable $exception) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Import gagal disimpan: ' . $exception->getMessage(),
+            ], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Import selesai. ' . $created . ' data dibuat, ' . $updated . ' data diubah, ' . count($skipped) . ' baris dilewati.',
+            'created' => $created,
+            'updated' => $updated,
+            'skipped_count' => count($skipped),
+            'warnings' => $parsed['warnings'],
+            'skipped' => $skipped,
+        ]);
+    }
+
+    private function resolveImportSheet($spreadsheet): Worksheet
+    {
+        $named = $spreadsheet->getSheetByName('1');
+        if ($named) {
+            return $named;
+        }
+
+        foreach ($spreadsheet->getWorksheetIterator() as $candidate) {
+            if ($candidate->getSheetState() === Worksheet::SHEETSTATE_VISIBLE) {
+                return $candidate;
+            }
+        }
+
+        return $spreadsheet->getActiveSheet();
+    }
+
+    private function resolveImportHeaderMap(Worksheet $sheet): array
+    {
+        $aliases = [
+            'nama alat' => 'nama_alat',
+            'jenis peralatan' => 'jenis_peralatan',
+            'kategori pengujian' => 'nama_kategori_pengujian',
+            'warna sp' => 'warna',
+            'warna' => 'warna',
+            'lokasi penempatan alat' => 'lokasi',
+            'kode aset' => 'kode_aset',
+            'kode asset' => 'kode_aset',
+            'status alat' => 'status_alat',
+            'keterangan' => 'keterangan',
+            'tanggal mulai' => 'start_date',
+            'tanggal berakhir' => 'end_date',
+        ];
+
+        $map = [];
+        $highestColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestDataColumn());
+        for ($column = 1; $column <= $highestColumn; $column++) {
+            $label = $this->normalizeImportLabel($this->readImportCell($sheet->getCellByColumnAndRow($column, 1)));
+            if ($label === '' || !isset($aliases[$label]) || isset($map[$aliases[$label]])) {
+                continue;
+            }
+            $map[$aliases[$label]] = $column;
+        }
+
+        return $map;
+    }
+
+    private function parseImportRows(Worksheet $sheet, array $headerMap): array
+    {
+        $rows = [];
+        $skipped = [];
+        $warnings = [];
+        $rowOfKode = [];
+        $highestRow = $sheet->getHighestDataRow();
+
+        for ($rowNumber = 2; $rowNumber <= $highestRow; $rowNumber++) {
+            $read = function ($field) use ($sheet, $headerMap, $rowNumber) {
+                if (!isset($headerMap[$field])) {
+                    return '';
+                }
+                return $this->readImportCell($sheet->getCellByColumnAndRow($headerMap[$field], $rowNumber));
+            };
+
+            $kodeAset = $read('kode_aset');
+            $namaAlat = $read('nama_alat');
+            $jenis = $read('jenis_peralatan');
+            $kategori = $read('nama_kategori_pengujian');
+            $warna = $read('warna');
+            $lokasi = $read('lokasi');
+            $status = $read('status_alat');
+            $keterangan = $read('keterangan');
+
+            if ($kodeAset === '' && $namaAlat === '' && $jenis === '' && $kategori === '' && $lokasi === '' && $status === '') {
+                continue;
+            }
+
+            if ($kodeAset === '') {
+                $skipped[] = [
+                    'row' => $rowNumber,
+                    'kode_aset' => '',
+                    'message' => 'Kode aset kosong.',
+                ];
+                continue;
+            }
+
+            $key = mb_strtolower($kodeAset);
+            if (isset($rowOfKode[$key])) {
+                $warnings[] = [
+                    'row' => $rowOfKode[$key],
+                    'kode_aset' => $kodeAset,
+                    'message' => 'Kode aset yang sama muncul lagi di baris ' . $rowNumber . '. Baris terakhir yang dipakai.',
+                ];
+            }
+            $rowOfKode[$key] = $rowNumber;
+
+            $rows[$key] = [
+                'row' => $rowNumber,
+                'kode_aset' => $kodeAset,
+                'nama_alat' => $namaAlat,
+                'jenis_peralatan' => $this->canonicalJenisPeralatan($jenis),
+                'nama_kategori_pengujian' => $kategori,
+                'warna' => $this->canonicalWarna($warna),
+                'lokasi' => $lokasi,
+                'status_alat' => $this->canonicalStatusAlat($status),
+                'keterangan' => $keterangan,
+                'start_date' => $this->normalizeDate($read('start_date')),
+                'end_date' => $this->normalizeDate($read('end_date')),
+            ];
+        }
+
+        return [
+            'rows' => array_values($rows),
+            'skipped' => $skipped,
+            'warnings' => $warnings,
+        ];
+    }
+
+    private function validateImportRow(array $item, array $cabangByName): ?string
+    {
+        if ($item['nama_alat'] === '') {
+            return 'Nama alat wajib diisi.';
+        }
+        if (mb_strlen($item['nama_alat']) > 255) {
+            return 'Nama alat melebihi 255 karakter.';
+        }
+        if ($item['jenis_peralatan'] === '') {
+            return 'Jenis peralatan wajib diisi.';
+        }
+        if (mb_strlen($item['jenis_peralatan']) > 255) {
+            return 'Jenis peralatan melebihi 255 karakter.';
+        }
+        if ($item['nama_kategori_pengujian'] === '') {
+            return 'Kategori pengujian wajib diisi.';
+        }
+        if (mb_strlen($item['nama_kategori_pengujian']) > 70) {
+            return 'Kategori pengujian melebihi 70 karakter.';
+        }
+        if (!in_array($item['warna'], ['Merah', 'Biru', 'Hitam'], true)) {
+            return 'Warna harus Merah, Biru, atau Hitam.';
+        }
+
+        $lokasiKey = $this->normalizeImportLabel($item['lokasi']);
+        if ($lokasiKey === '' || !isset($cabangByName[$lokasiKey])) {
+            return 'Lokasi penempatan alat tidak ditemukan di master cabang.';
+        }
+        if ($item['status_alat'] === '') {
+            return 'Status alat wajib diisi.';
+        }
+        if (!in_array($item['status_alat'], MonitoringPeralatan::STATUS_ALAT, true)) {
+            return 'Status alat tidak dikenali.';
+        }
+        if (MonitoringPeralatan::requiresPeriod($item['status_alat']) && (empty($item['start_date']) || empty($item['end_date']))) {
+            return 'Status ' . $item['status_alat'] . ' wajib punya tanggal mulai dan tanggal berakhir.';
+        }
+
+        return null;
+    }
+
+    private function applyImportedPeralatan(Peralatan $row, array $item, string $now, bool $isNew): void
+    {
+        $cabang = $this->importCabangMap()[$this->normalizeImportLabel($item['lokasi'])];
+        $kategoriByName = $this->importKategoriMap();
+        $kategoriKey = $this->normalizeImportLabel($item['nama_kategori_pengujian']);
+        $kategori = $kategoriByName[$kategoriKey] ?? $item['nama_kategori_pengujian'];
+
+        $this->fillPeralatanMaster(
+            $row,
+            $item['nama_alat'],
+            $item['jenis_peralatan'],
+            $kategori,
+            $cabang,
+            $item['warna'],
+            $item['kode_aset']
+        );
+
+        if ($isNew) {
+            $row->is_active = true;
+            $row->created_by = $this->karyawan;
+            $row->created_at = $now;
+            $row->save();
+            $this->createMonitoringHistory($row->id, [
+                'status_alat' => $item['status_alat'],
+                'keterangan' => $item['keterangan'],
+                'start_date' => MonitoringPeralatan::requiresPeriod($item['status_alat']) ? $item['start_date'] : null,
+                'end_date' => MonitoringPeralatan::requiresPeriod($item['status_alat']) ? $item['end_date'] : null,
+            ], $now);
+            return;
+        }
+
+        $row->is_active = true;
+        $row->deleted_at = null;
+        $row->deleted_by = null;
+        $row->updated_by = $this->karyawan;
+        $row->updated_at = $now;
+        $row->save();
+
+        if ($this->importedMonitoringChanged($row->id, $item)) {
+            $this->createMonitoringHistory($row->id, [
+                'status_alat' => $item['status_alat'],
+                'keterangan' => $item['keterangan'],
+                'start_date' => MonitoringPeralatan::requiresPeriod($item['status_alat']) ? $item['start_date'] : null,
+                'end_date' => MonitoringPeralatan::requiresPeriod($item['status_alat']) ? $item['end_date'] : null,
+            ], $now);
+        }
+    }
+
+    private function importedMonitoringChanged(int $peralatanId, array $item): bool
+    {
+        $latest = MonitoringPeralatan::query()
+            ->where('id_peralatan', $peralatanId)
+            ->where('is_active', true)
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$latest) {
+            return true;
+        }
+
+        $currentStatus = trim((string) $latest->status_alat);
+        $currentNote = trim((string) $latest->keterangan);
+        if ($currentStatus !== $item['status_alat'] || $currentNote !== $item['keterangan']) {
+            return true;
+        }
+
+        if (!MonitoringPeralatan::requiresPeriod($item['status_alat'])) {
+            return false;
+        }
+
+        $currentStart = $this->formatMonitoringDate($latest->start_date);
+        $currentEnd = $this->formatMonitoringDate($latest->end_date);
+
+        return $currentStart !== $item['start_date'] || $currentEnd !== $item['end_date'];
+    }
+
+    private function formatMonitoringDate($value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        return $this->normalizeDate($value);
+    }
+
+    private function importCabangMap(): array
+    {
+        static $map = null;
+        if ($map !== null) {
+            return $map;
+        }
+
+        $map = [];
+        $rows = MasterCabang::query()
+            ->where('is_active', true)
+            ->whereNotNull('nama_cabang')
+            ->get(['id', 'nama_cabang']);
+
+        foreach ($rows as $row) {
+            $key = $this->normalizeImportLabel((string) $row->nama_cabang);
+            if ($key !== '' && !isset($map[$key])) {
+                $map[$key] = $row;
+            }
+        }
+
+        return $map;
+    }
+
+    private function importKategoriMap(): array
+    {
+        static $map = null;
+        if ($map !== null) {
+            return $map;
+        }
+
+        $map = [];
+        $names = MasterKategori::query()
+            ->where('is_active', true)
+            ->whereNotNull('nama_kategori')
+            ->pluck('nama_kategori');
+
+        foreach ($names as $name) {
+            $text = trim((string) $name);
+            $key = $this->normalizeImportLabel($text);
+            if ($key !== '' && !isset($map[$key])) {
+                $map[$key] = $text;
+            }
+        }
+
+        return $map;
+    }
+
+    private function importExistingPeralatanMap(): array
+    {
+        $map = [];
+        $rows = Peralatan::query()
+            ->whereNotNull('kode_aset')
+            ->where('kode_aset', '!=', '')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($rows as $row) {
+            $key = mb_strtolower(trim((string) $row->kode_aset));
+            if ($key === '') {
+                continue;
+            }
+            if (!isset($map[$key])) {
+                $map[$key] = $row;
+                continue;
+            }
+            $current = $map[$key];
+            $rowActive = (bool) $row->is_active;
+            $currentActive = (bool) $current->is_active;
+            if (($rowActive && !$currentActive) || ($rowActive === $currentActive && $row->id > $current->id)) {
+                $map[$key] = $row;
+            }
+        }
+
+        return $map;
+    }
+
+    private function readImportCell(Cell $cell): string
+    {
+        $raw = $cell->getValue();
+        $text = '';
+
+        if (is_string($raw) && isset($raw[0]) && $raw[0] === '=') {
+            $cached = $cell->getOldCalculatedValue();
+            if ($cached !== null && $cached !== '') {
+                $text = (string) $cached;
+            }
+        } elseif ($raw !== null) {
+            $text = (string) $raw;
+        }
+
+        $text = trim((string) preg_replace('/\s+/u', ' ', $text));
+        if ($text === '' || preg_match('/^#(NAME\?|REF!|N\/A|VALUE!|DIV\/0!)$/i', $text)) {
+            return '';
+        }
+
+        return $text;
+    }
+
+    private function normalizeImportLabel(string $value): string
+    {
+        $value = str_replace(['_', '-'], ' ', $value);
+        $value = trim((string) preg_replace('/\s+/u', ' ', mb_strtolower($value)));
+
+        return $value;
+    }
+
+    private function canonicalJenisPeralatan(string $value): string
+    {
+        $key = $this->normalizeImportLabel($value);
+        $map = [
+            'alat pengambilan sampel' => 'Alat Pengambilan Sampel',
+            'alat pengukuran' => 'Alat Pengukuran',
+            'alat pendukung' => 'Alat Pendukung',
+            'alat pelindung diri' => 'Alat Pelindung Diri',
+        ];
+
+        return $map[$key] ?? trim($value);
+    }
+
+    private function canonicalWarna(string $value): string
+    {
+        $key = $this->normalizeImportLabel($value);
+        $map = [
+            'merah' => 'Merah',
+            'biru' => 'Biru',
+            'hitam' => 'Hitam',
+        ];
+
+        return $map[$key] ?? trim($value);
+    }
+
+    private function canonicalStatusAlat(string $value): string
+    {
+        $key = $this->normalizeImportLabel($value);
+        foreach (MonitoringPeralatan::STATUS_ALAT as $status) {
+            if ($this->normalizeImportLabel($status) === $key) {
+                return $status;
+            }
+        }
+
+        return trim($value);
     }
 }
