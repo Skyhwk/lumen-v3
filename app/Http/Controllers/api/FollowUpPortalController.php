@@ -70,7 +70,7 @@ class FollowUpPortalController extends Controller
         $keterangan = trim((string) $request->input('keterangan'));
         $id = (int) $request->input('id');
 
-        if (!in_array($keputusan, ['bersedia', 'tidak_bersedia', 'tidak_dapat_terhubung'], true)) {
+        if (!in_array($keputusan, ['bersedia', 'tidak_bersedia', 'tidak_terhubung'], true)) {
             return response()->json(['message' => 'Pilih salah satu keputusan'], 422);
         }
         if ($keterangan === '') {
