@@ -4,8 +4,10 @@ namespace App\Http\Controllers\mobile;
 
 use App\Http\Controllers\Controller;
 use App\Models\Jadwal;
+use App\Models\OrderHeader;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
+use App\Models\SamplerTrackingSession;
 use App\Services\IoPeralatanTimService;
 use App\Services\JadwalMobilisasiService;
 use Illuminate\Http\Request;
@@ -52,20 +54,22 @@ class InformasiOperasionalFdlController extends Controller
             ->toBase()
             ->get();
 
+        $mapsLookup = $this->buildGoogleMapsLookup($rows, $tanggal);
+
         $data = $this->groupTripsByTeam($rows, $samplerLogin, $seeAllSchedules)
-            ->map(function (Collection $group, string $teamKey) use ($tanggal, $timPeralatanMap) {
+            ->map(function (Collection $group, string $teamKey) use ($tanggal, $timPeralatanMap, $mapsLookup) {
                 $batchIds = JadwalMobilisasiService::flattenBatchIds($group->pluck('batch_id')->all());
                 $peralatanAktual = IoPeralatanTimService::resolvePeralatanForBatches($tanggal, $batchIds);
                 if ($peralatanAktual === []) {
                     $peralatanAktual = $timPeralatanMap[$teamKey] ?? [];
                 }
 
-                $listPt = $group->map(function ($trip) use (&$peralatanAktual) {
+                $listPt = $group->map(function ($trip) use (&$peralatanAktual, $mapsLookup) {
                     $mob = JadwalMobilisasiService::findActiveByBatchIds($trip->batch_id) ?: [];
                     if ($peralatanAktual === []) {
                         $peralatanAktual = $this->decodePeralatan($mob['peralatan_aktual'] ?? null);
                     }
-                    return $this->buildTripPayload($trip, $mob);
+                    return $this->buildTripPayload($trip, $mob, $mapsLookup);
                 })->values();
                 $peralatanDisplay = $this->buildAktualDisplayLists($peralatanAktual);
 
@@ -107,9 +111,13 @@ class InformasiOperasionalFdlController extends Controller
             });
     }
 
-    private function buildTripPayload(object $trip, array $mob): array
+    private function buildTripPayload(object $trip, array $mob, array $mapsLookup = []): array
     {
         $quotation = $this->resolveQuotation($trip->no_quotation);
+        $googleMapsUrl = $this->resolveGoogleMapsUrlForTrip(
+            $trip->no_quotation ?? null,
+            $mapsLookup
+        );
         $ketOps = trim(strip_tags(html_entity_decode(
             (string) ($mob['keterangan_operasional'] ?? $mob['keterangan_operasional_sp'] ?? ''),
             ENT_QUOTES,
@@ -133,6 +141,7 @@ class InformasiOperasionalFdlController extends Controller
             'pic_nama' => $quotation->nama_pic_sampling ?? null,
             'pic_telp' => $quotation->no_tlp_pic_sampling ?? null,
             'alamat_sampling' => $quotation->alamat_sampling ?? null,
+            'google_maps_url' => $googleMapsUrl,
             'keterangan_operasional' => $ketOps,
             'status_rilis_io' => $mob['status_rilis_io'] ?? 'draft',
             'waktu_berangkat' => $this->resolveJamBerangkat($trip->jam_mulai, $mob['waktu_berangkat'] ?? null, $estimasiJam, $estimasiMenit),
@@ -251,6 +260,121 @@ class InformasiOperasionalFdlController extends Controller
         return collect($group->first()->team_members)
             ->map(fn ($name, $key) => $drivers->has($key) ? $name . ' (Driver)' : $name)
             ->implode(', ');
+    }
+
+    /**
+     * @return array{no_order_by_qt: array<string, string>, by_order: array<string, string>, by_qt: array<string, string>}
+     */
+    private function buildGoogleMapsLookup(Collection $rows, string $tanggal): array
+    {
+        $quotationNos = $rows->pluck('no_quotation')
+            ->map(fn ($value) => trim((string) $value))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($quotationNos === []) {
+            return ['no_order_by_qt' => [], 'by_order' => [], 'by_qt' => []];
+        }
+
+        $noOrderByQt = $this->resolveNoOrdersByQuotation($quotationNos);
+        $noOrders = array_values(array_unique(array_filter(array_values($noOrderByQt))));
+
+        $sessions = SamplerTrackingSession::query()
+            ->whereDate('tanggal_sampling', $tanggal)
+            ->where('is_active', true)
+            ->whereNotNull('google_maps_url')
+            ->where('google_maps_url', '!=', '')
+            ->where(function ($query) use ($noOrders, $quotationNos) {
+                if ($noOrders !== []) {
+                    $query->whereIn('no_order', $noOrders);
+                }
+                if ($quotationNos !== []) {
+                    $method = $noOrders !== [] ? 'orWhereIn' : 'whereIn';
+                    $query->{$method}('no_quotation', $quotationNos);
+                }
+            })
+            ->orderByDesc('id')
+            ->get(['no_order', 'no_quotation', 'google_maps_url']);
+
+        $byOrder = [];
+        $byQt = [];
+        foreach ($sessions as $session) {
+            $url = trim((string) $session->google_maps_url);
+            if ($url === '') {
+                continue;
+            }
+
+            $orderKey = trim((string) $session->no_order);
+            if ($orderKey !== '' && !isset($byOrder[$orderKey])) {
+                $byOrder[$orderKey] = $url;
+            }
+
+            $qtKey = trim((string) $session->no_quotation);
+            if ($qtKey !== '' && !isset($byQt[$qtKey])) {
+                $byQt[$qtKey] = $url;
+            }
+        }
+
+        return [
+            'no_order_by_qt' => $noOrderByQt,
+            'by_order' => $byOrder,
+            'by_qt' => $byQt,
+        ];
+    }
+
+    /**
+     * @param  list<string>  $quotationNos
+     * @return array<string, string>
+     */
+    private function resolveNoOrdersByQuotation(array $quotationNos): array
+    {
+        $map = [];
+        try {
+            $headers = OrderHeader::query()
+                ->whereIn('no_document', $quotationNos)
+                ->where('is_active', true)
+                ->get(['no_document', 'no_order']);
+            foreach ($headers as $header) {
+                $qt = trim((string) $header->no_document);
+                $order = trim((string) $header->no_order);
+                if ($qt !== '' && $order !== '') {
+                    $map[$qt] = $order;
+                }
+            }
+        } catch (\Throwable $e) {
+            $map = [];
+        }
+
+        foreach ($quotationNos as $qt) {
+            $qt = trim((string) $qt);
+            if ($qt === '' || !empty($map[$qt])) {
+                continue;
+            }
+            $segments = preg_split('/[\/]/', $qt);
+            $fallback = $segments ? trim((string) end($segments)) : $qt;
+            if ($fallback !== '') {
+                $map[$qt] = $fallback;
+            }
+        }
+
+        return $map;
+    }
+
+    private function resolveGoogleMapsUrlForTrip(?string $noQt, array $mapsLookup): ?string
+    {
+        $noQt = trim((string) $noQt);
+        if ($noQt === '') {
+            return null;
+        }
+
+        $noOrder = trim((string) ($mapsLookup['no_order_by_qt'][$noQt] ?? ''));
+        if ($noOrder !== '' && !empty($mapsLookup['by_order'][$noOrder])) {
+            return $mapsLookup['by_order'][$noOrder];
+        }
+
+        return $mapsLookup['by_qt'][$noQt] ?? null;
     }
 
     private function resolveQuotation(?string $noQt)
