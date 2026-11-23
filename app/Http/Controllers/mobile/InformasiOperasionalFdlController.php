@@ -15,7 +15,8 @@ class InformasiOperasionalFdlController extends Controller
     public function index(Request $request)
     {
         $samplerLogin = mb_strtolower(trim((string) $this->karyawan));
-        if ($samplerLogin === '') {
+        $seeAllSchedules = $this->isItProgrammingDivisionMember();
+        if ($samplerLogin === '' && !$seeAllSchedules) {
             return response()->json(['data' => [], 'tanggal' => $request->input('tanggal')]);
         }
 
@@ -44,10 +45,13 @@ class InformasiOperasionalFdlController extends Controller
             ->whereDate('tanggal', $tanggal)
             ->orderByRaw('kendaraan ASC')
             ->orderBy('jam_mulai')
-            ->get()
-            ->filter(function ($item) use ($samplerLogin) {
+            ->get();
+
+        if (!$seeAllSchedules) {
+            $rows = $rows->filter(function ($item) use ($samplerLogin) {
                 return $this->rowBelongsToSampler($item, $samplerLogin);
             });
+        }
 
         if ($rows->isEmpty()) {
             return response()->json([
@@ -79,6 +83,7 @@ class InformasiOperasionalFdlController extends Controller
                 $peralatanDisplay = $this->buildAktualDisplayLists($peralatanAktual);
 
                 $timSampler = $this->buildTimSamplerLabel($group);
+                $jamMulaiTim = $this->earliestJamMulai($group);
 
                 $listPt = $group->map(function ($item) {
                     $quotation = $this->resolveQuotation($item->no_quotation);
@@ -88,6 +93,12 @@ class InformasiOperasionalFdlController extends Controller
                         ENT_QUOTES,
                         'UTF-8'
                     )));
+                    $waktuBerangkat = $this->resolveJamBerangkat(
+                        $item->jam_mulai,
+                        $mob['waktu_berangkat'] ?? null,
+                        (int) ($mob['estimasi_jam'] ?? 0),
+                        (int) ($mob['estimasi_menit'] ?? 0)
+                    );
 
                     return [
                         'jadwal_id' => (int) $item->id,
@@ -104,15 +115,22 @@ class InformasiOperasionalFdlController extends Controller
                         'alamat_sampling' => $quotation->alamat_sampling ?? null,
                         'keterangan_operasional' => $ketOps,
                         'status_rilis_io' => $mob['status_rilis_io'] ?? 'draft',
-                        'waktu_berangkat' => $mob['waktu_berangkat'] ?? null,
+                        'waktu_berangkat' => $waktuBerangkat,
                     ];
                 })->values();
+
+                $waktuBerangkatTim = $this->resolveJamBerangkat(
+                    $jamMulaiTim,
+                    $mobSample['waktu_berangkat'] ?? null,
+                    (int) ($mobSample['estimasi_jam'] ?? 0),
+                    (int) ($mobSample['estimasi_menit'] ?? 0)
+                );
 
                 return [
                     'kendaraan' => $first->kendaraan,
                     'tim_sampler' => $timSampler,
                     'jadwal_mobil' => [
-                        'waktu_berangkat' => $mobSample['waktu_berangkat'] ?? null,
+                        'waktu_berangkat' => $waktuBerangkatTim,
                         'estimasi_jam' => (int) ($mobSample['estimasi_jam'] ?? 0),
                         'estimasi_menit' => (int) ($mobSample['estimasi_menit'] ?? 0),
                         'rute_perjalanan' => $mobSample['rute_perjalanan'] ?? null,
@@ -128,6 +146,104 @@ class InformasiOperasionalFdlController extends Controller
             'data' => $data,
             'tanggal' => $tanggal,
         ]);
+    }
+
+    private function resolveJamBerangkat(?string $jamMulai, $waktuBerangkat, int $estimasiJam = 0, int $estimasiMenit = 0): ?string
+    {
+        $durasiMenit = $this->parseDurasiBerangkatMenit($waktuBerangkat, $estimasiJam, $estimasiMenit);
+        if ($durasiMenit <= 0) {
+            return $this->normalizeJamDisplay($waktuBerangkat);
+        }
+
+        $mulaiMenit = $this->parseJamKeMenit($jamMulai);
+        if ($mulaiMenit === null) {
+            return null;
+        }
+
+        return $this->menitKeJam($mulaiMenit - $durasiMenit);
+    }
+
+    private function parseDurasiBerangkatMenit($waktuBerangkat, int $estimasiJam, int $estimasiMenit): int
+    {
+        $text = trim((string) $waktuBerangkat);
+        if ($text !== '' && !preg_match('/^\d{1,2}[.:]\d{2}/', str_replace('.', ':', $text))) {
+            $total = 0;
+            if (preg_match('/(\d+)\s*Jam/i', $text, $mJam)) {
+                $total += (int) $mJam[1] * 60;
+            }
+            if (preg_match('/(\d+)\s*Menit/i', $text, $mMenit)) {
+                $total += (int) $mMenit[1];
+            }
+            if ($total > 0) {
+                return $total;
+            }
+            if (ctype_digit($text)) {
+                return (int) $text;
+            }
+        }
+
+        return max(0, $estimasiJam) * 60 + max(0, $estimasiMenit);
+    }
+
+    private function parseJamKeMenit(?string $jam): ?int
+    {
+        $jam = trim((string) $jam);
+        if ($jam === '') {
+            return null;
+        }
+
+        $jam = str_replace('.', ':', $jam);
+        if (preg_match('/^(\d{1,2}):(\d{2})(?::\d{2})?$/', $jam, $m)) {
+            return ((int) $m[1]) * 60 + (int) $m[2];
+        }
+
+        $timestamp = strtotime($jam);
+        if ($timestamp !== false) {
+            return (int) date('G', $timestamp) * 60 + (int) date('i', $timestamp);
+        }
+
+        return null;
+    }
+
+    private function menitKeJam(int $totalMenit): string
+    {
+        $totalMenit = (($totalMenit % 1440) + 1440) % 1440;
+
+        return sprintf('%02d:%02d', intdiv($totalMenit, 60), $totalMenit % 60);
+    }
+
+    private function normalizeJamDisplay($value): ?string
+    {
+        $text = trim((string) $value);
+        if ($text === '') {
+            return null;
+        }
+
+        $text = str_replace('.', ':', $text);
+        if (preg_match('/^(\d{1,2}):(\d{2})(?::\d{2})?$/', $text, $m)) {
+            return sprintf('%02d:%02d', (int) $m[1], (int) $m[2]);
+        }
+
+        return null;
+    }
+
+    private function earliestJamMulai($group): ?string
+    {
+        $earliest = null;
+        $earliestMenit = null;
+
+        foreach ($group as $item) {
+            $menit = $this->parseJamKeMenit($item->jam_mulai ?? null);
+            if ($menit === null) {
+                continue;
+            }
+            if ($earliestMenit === null || $menit < $earliestMenit) {
+                $earliestMenit = $menit;
+                $earliest = $item->jam_mulai;
+            }
+        }
+
+        return $earliest;
     }
 
     private function rowBelongsToSampler($item, string $samplerLogin): bool
