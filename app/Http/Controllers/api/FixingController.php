@@ -74,10 +74,13 @@ use App\Services\RenderInvoiceTitik;
 use App\Services\RenderJadwalKontrakCopy;
 use App\Services\RenderKontrakCopy;
 use App\Services\RenderNonKontrakCopy;
+use App\Services\ResolveLhpFile;
 use App\Services\SalesKpiMonthly;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
@@ -540,6 +543,889 @@ class FixingController extends Controller
             ->sort(SORT_NATURAL)
             ->values()
             ->toArray();
+    }
+
+    public function checkLhpByQuotation(Request $request)
+    {
+        $noDocument = trim((string) $request->input('no_quotation', $request->input('no_document', '')));
+
+        if ($noDocument === '') {
+            return response()->json(['message' => 'Nomor quotation wajib diisi.'], 422);
+        }
+
+        try {
+            $resolved = $this->resolveLhpCheckTarget($noDocument);
+            if (!$resolved) {
+                return response()->json(['message' => 'Quotation / order tidak ditemukan.'], 404);
+            }
+
+            $orderHeader = $resolved['order'];
+            $isKontrak = $resolved['is_kontrak'];
+            $periodKeys = $this->collectLhpPeriodKeys($orderHeader, $isKontrak, $resolved['quotation']);
+
+            $linkRows = LinkLhp::where('no_order', $orderHeader->no_order)
+                ->orderBy('id')
+                ->get();
+
+            $orderBerjalan = DB::table('order_berjalan')
+                ->where('no_order', $orderHeader->no_order)
+                ->first();
+            $dataOrderDetail = $orderBerjalan ? $orderBerjalan->dataOrderDetail : null;
+
+            $orderDetails = OrderDetail::where('no_order', $orderHeader->no_order)
+                ->where('is_active', true)
+                ->whereNotNull('cfr')
+                ->get(['id', 'cfr', 'periode', 'no_sampel']);
+
+            $resolver = new ResolveLhpFile();
+            $periods = [];
+            $allIssues = [];
+
+            foreach ($periodKeys as $periode) {
+                $periodResult = $this->inspectLhpPeriod(
+                    $orderHeader,
+                    $periode,
+                    $isKontrak,
+                    $linkRows,
+                    $dataOrderDetail,
+                    $orderDetails,
+                    $resolver
+                );
+                $periods[] = $periodResult;
+                foreach ($periodResult['issues'] as $issue) {
+                    $allIssues[] = $issue;
+                }
+            }
+
+            if (!$orderBerjalan) {
+                $allIssues[] = [
+                    'code' => 'MISSING_ORDER_BERJALAN',
+                    'severity' => 'warning',
+                    'title' => 'order_berjalan kosong',
+                    'message' => 'Status rilis dihitung dari order_detail + file LHP, bukan dataOrderDetail.',
+                    'fixable' => false,
+                    'periode' => null,
+                ];
+            }
+
+            $problemCount = collect($periods)->filter(fn ($row) => !empty($row['issues']))->count();
+            $missingLink = collect($periods)->filter(fn ($row) => empty($row['link_lhp']))->count();
+            $completed = collect($periods)->filter(fn ($row) => (int) ($row['link_lhp']['is_completed'] ?? 0) === 1)->count();
+
+            return response()->json([
+                'message' => 'Data LHP quotation ditemukan.',
+                'data' => [
+                    'quotation' => [
+                        'no_document' => $resolved['no_document'],
+                        'type' => $isKontrak ? 'kontrak' : 'non_kontrak',
+                        'nama_perusahaan' => $orderHeader->nama_perusahaan,
+                        'pelanggan_id' => $orderHeader->id_pelanggan ?? null,
+                    ],
+                    'order' => [
+                        'id' => $orderHeader->id,
+                        'no_order' => $orderHeader->no_order,
+                        'no_document' => $orderHeader->no_document,
+                        'created_at' => $orderHeader->created_at,
+                    ],
+                    'summary' => [
+                        'total_periode' => count($periods),
+                        'ok' => count($periods) - $problemCount,
+                        'problem' => $problemCount,
+                        'missing_link' => $missingLink,
+                        'completed' => $completed,
+                        'has_order_berjalan' => (bool) $orderBerjalan,
+                    ],
+                    'periods' => $periods,
+                    'diagnostics' => [
+                        'has_error' => !empty($allIssues),
+                        'issues' => $allIssues,
+                    ],
+                ],
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile(),
+            ], 500);
+        }
+    }
+
+    public function fixLhpIssue(Request $request)
+    {
+        $noDocument = trim((string) $request->input('no_quotation', $request->input('no_document', '')));
+        $action = trim((string) $request->input('action'));
+        $periode = $request->input('periode');
+        $periode = $periode === null || $periode === '' || $periode === 'all' ? null : (string) $periode;
+
+        $allowed = ['create_missing_link', 'sync_counts', 'rebuild_bundle'];
+        if ($noDocument === '') {
+            return response()->json(['message' => 'Nomor quotation wajib diisi.'], 422);
+        }
+        if (!in_array($action, $allowed, true)) {
+            return response()->json(['message' => 'Action fixing LHP tidak dikenali.'], 422);
+        }
+
+        try {
+            $resolved = $this->resolveLhpCheckTarget($noDocument);
+            if (!$resolved) {
+                return response()->json(['message' => 'Quotation / order tidak ditemukan.'], 404);
+            }
+
+            $orderHeader = $resolved['order'];
+            $isKontrak = $resolved['is_kontrak'];
+            if ($isKontrak && $periode === null && in_array($action, ['create_missing_link', 'sync_counts', 'rebuild_bundle'], true)) {
+                return response()->json(['message' => 'Periode wajib diisi untuk quotation kontrak.'], 422);
+            }
+
+            $payload = [];
+            if ($action === 'create_missing_link') {
+                $payload = $this->createMissingLinkLhp($orderHeader, $periode);
+                try {
+                    $payload['sync'] = $this->syncLinkLhpCounts($orderHeader, $periode);
+                } catch (\Throwable $th) {
+                    $payload['sync_error'] = $th->getMessage();
+                }
+            } elseif ($action === 'sync_counts') {
+                $payload = $this->syncLinkLhpCounts($orderHeader, $periode);
+            } else {
+                $payload = $this->rebuildLhpBundleForPeriod($orderHeader, $periode);
+            }
+
+            return response()->json([
+                'message' => $payload['message'] ?? 'Fixing LHP berhasil.',
+                'data' => $payload,
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => 'Gagal fixing LHP: ' . $th->getMessage(),
+                'line' => $th->getLine(),
+            ], 500);
+        }
+    }
+
+    private function resolveLhpCheckTarget(string $input): ?array
+    {
+        $kontrak = QuotationKontrakH::where('no_document', $input)->first();
+        if ($kontrak) {
+            $order = OrderHeader::where('no_document', $kontrak->no_document)
+                ->where('is_active', true)
+                ->latest('id')
+                ->first();
+            if (!$order) {
+                return null;
+            }
+            return [
+                'quotation' => $kontrak,
+                'order' => $order,
+                'is_kontrak' => true,
+                'no_document' => $kontrak->no_document,
+            ];
+        }
+
+        $nonKontrak = QuotationNonKontrak::where('no_document', $input)->first();
+        if ($nonKontrak) {
+            $order = OrderHeader::where('no_document', $nonKontrak->no_document)
+                ->where('is_active', true)
+                ->latest('id')
+                ->first();
+            if (!$order) {
+                return null;
+            }
+            return [
+                'quotation' => $nonKontrak,
+                'order' => $order,
+                'is_kontrak' => false,
+                'no_document' => $nonKontrak->no_document,
+            ];
+        }
+
+        $order = OrderHeader::where('is_active', true)
+            ->where(function ($q) use ($input) {
+                $q->where('no_document', $input)->orWhere('no_order', $input);
+            })
+            ->latest('id')
+            ->first();
+        if (!$order) {
+            return null;
+        }
+
+        $isKontrak = str_contains((string) $order->no_document, '/QTC/');
+        $quotation = $isKontrak
+            ? QuotationKontrakH::where('no_document', $order->no_document)->first()
+            : QuotationNonKontrak::where('no_document', $order->no_document)->first();
+
+        return [
+            'quotation' => $quotation,
+            'order' => $order,
+            'is_kontrak' => $isKontrak,
+            'no_document' => $order->no_document,
+        ];
+    }
+
+    private function collectLhpPeriodKeys($orderHeader, bool $isKontrak, $quotation): array
+    {
+        $keys = collect();
+
+        if ($isKontrak) {
+            if ($quotation && method_exists($quotation, 'quotationKontrakD')) {
+                $keys = $keys->merge(
+                    $quotation->quotationKontrakD()->pluck('periode_kontrak')
+                );
+            } elseif ($quotation && method_exists($quotation, 'detail')) {
+                $keys = $keys->merge($quotation->detail()->pluck('periode_kontrak'));
+            }
+
+            $keys = $keys->merge(
+                OrderDetail::where('no_order', $orderHeader->no_order)
+                    ->where('is_active', true)
+                    ->whereNotNull('periode')
+                    ->pluck('periode')
+            );
+
+            $keys = $keys->merge(
+                LinkLhp::where('no_order', $orderHeader->no_order)->pluck('periode')
+            );
+
+            $orderBerjalan = DB::table('order_berjalan')->where('no_order', $orderHeader->no_order)->value('dataOrderDetail');
+            $decoded = is_string($orderBerjalan) ? json_decode($orderBerjalan, true) : $orderBerjalan;
+            if (is_array($decoded)) {
+                $keys = $keys->merge(collect($decoded)->pluck('periode'));
+            }
+
+            return $keys
+                ->filter(fn ($value) => $value !== null && $value !== '')
+                ->map(fn ($value) => $this->lhpPeriodKey($value))
+                ->unique()
+                ->sort()
+                ->values()
+                ->toArray();
+        }
+
+        return [null];
+    }
+
+    private function inspectLhpPeriod(
+        $orderHeader,
+        $periode,
+        bool $isKontrak,
+        $linkRows,
+        $dataOrderDetail,
+        $orderDetails,
+        ResolveLhpFile $resolver
+    ): array {
+        $periodKey = $this->lhpPeriodKey($periode);
+        $periodLinks = $linkRows->filter(function ($row) use ($periodKey, $isKontrak) {
+            if (!$isKontrak) {
+                return true;
+            }
+            return $this->lhpPeriodKey($row->periode) === $periodKey;
+        })->values();
+
+        $link = $periodLinks->sortByDesc('id')->first();
+        $detailsForPeriod = $orderDetails->filter(function ($detail) use ($periodKey, $isKontrak) {
+            if (!$isKontrak) {
+                return true;
+            }
+            return $this->lhpPeriodKey($detail->periode) === $periodKey;
+        });
+
+        $expected = $this->calculateExpectedLhpStatus(
+            $orderHeader->no_order,
+            $periode,
+            $isKontrak,
+            $dataOrderDetail,
+            $detailsForPeriod,
+            $resolver
+        );
+
+        $currentList = $link ? $this->normalizeJsonArray($link->list_lhp_rilis) : [];
+        $filename = $link->filename ?? null;
+        $bundlePath = $filename
+            ? public_path('laporan/hasil_pengujian/' . ltrim($filename, '/'))
+            : $this->expectedBundlePath($orderHeader->no_order, $periode);
+        $bundleExists = $filename ? File::exists($bundlePath) : File::exists($this->expectedBundlePath($orderHeader->no_order, $periode));
+        if (!$filename && $bundleExists) {
+            $filename = basename($this->expectedBundlePath($orderHeader->no_order, $periode));
+        }
+
+        $issues = [];
+        $pushIssue = function (array $issue) use (&$issues, $periode) {
+            $issue['periode'] = $this->lhpPeriodKey($periode);
+            $issues[] = $issue;
+        };
+
+        if ($periodLinks->count() > 1) {
+            $pushIssue([
+                'code' => 'DUPLICATE_LINK_LHP',
+                'severity' => 'warning',
+                'title' => 'Link LHP dobel',
+                'message' => 'Ada ' . $periodLinks->count() . ' row link_lhp untuk periode ini. Pengecekan memakai id terbaru.',
+                'fixable' => false,
+                'detail' => ['ids' => $periodLinks->pluck('id')->values()],
+            ]);
+        }
+
+        if (!$link) {
+            $pushIssue([
+                'code' => 'MISSING_LINK_LHP',
+                'severity' => 'danger',
+                'title' => 'Link LHP belum ada',
+                'message' => 'Periode ini tidak punya row di link_lhp (status table: Belum rilis). Approve LHP tidak akan combine.',
+                'fixable' => true,
+                'action' => 'create_missing_link',
+                'button_label' => 'Buat Link',
+            ]);
+        } else {
+            if ((int) ($link->is_active ?? 1) === 0) {
+                $pushIssue([
+                    'code' => 'LINK_INACTIVE',
+                    'severity' => 'warning',
+                    'title' => 'Link LHP nonaktif',
+                    'message' => 'Row link_lhp ada tapi is_active = 0.',
+                    'fixable' => false,
+                ]);
+            }
+
+            if (empty($link->id_token) || empty($link->link)) {
+                $pushIssue([
+                    'code' => 'MISSING_TOKEN',
+                    'severity' => 'warning',
+                    'title' => 'Token/link portal kosong',
+                    'message' => 'id_token atau link portal LHP belum terisi.',
+                    'fixable' => false,
+                ]);
+            }
+
+            if ((int) $link->jumlah_lhp !== (int) $expected['jumlah_lhp']) {
+                $pushIssue([
+                    'code' => 'JUMLAH_LHP_MISMATCH',
+                    'severity' => 'warning',
+                    'title' => 'Jumlah LHP beda',
+                    'message' => 'link_lhp.jumlah_lhp = ' . (int) $link->jumlah_lhp . ', seharusnya ' . (int) $expected['jumlah_lhp'] . ' (unique CFR).',
+                    'fixable' => true,
+                    'action' => 'sync_counts',
+                    'button_label' => 'Sync Jumlah',
+                    'detail' => [
+                        'stored' => (int) $link->jumlah_lhp,
+                        'expected' => (int) $expected['jumlah_lhp'],
+                    ],
+                ]);
+            }
+
+            if ((int) $link->jumlah_lhp_rilis !== (int) $expected['jumlah_lhp_rilis']
+                || count($currentList) !== (int) $link->jumlah_lhp_rilis
+            ) {
+                $pushIssue([
+                    'code' => 'JUMLAH_RILIS_MISMATCH',
+                    'severity' => 'warning',
+                    'title' => 'Jumlah rilis beda',
+                    'message' => 'Stored rilis ' . (int) $link->jumlah_lhp_rilis
+                        . ' / list ' . count($currentList)
+                        . ', aktual rilis ' . (int) $expected['jumlah_lhp_rilis'] . '.',
+                    'fixable' => true,
+                    'action' => 'sync_counts',
+                    'button_label' => 'Sync Jumlah',
+                    'detail' => [
+                        'stored' => (int) $link->jumlah_lhp_rilis,
+                        'list_count' => count($currentList),
+                        'expected' => (int) $expected['jumlah_lhp_rilis'],
+                    ],
+                ]);
+            }
+
+            if ($currentList !== $expected['list_lhp_rilis']) {
+                $pushIssue([
+                    'code' => 'LIST_RILIS_MISMATCH',
+                    'severity' => 'warning',
+                    'title' => 'List LHP rilis tidak sama',
+                    'message' => 'Isi list_lhp_rilis tidak match CFR yang sudah rilis.',
+                    'fixable' => true,
+                    'action' => 'sync_counts',
+                    'button_label' => 'Sync List',
+                    'detail' => [
+                        'stored' => $currentList,
+                        'expected' => $expected['list_lhp_rilis'],
+                    ],
+                ]);
+            }
+
+            $expectedCompleted = (int) $expected['is_completed'];
+            if ((int) $link->is_completed !== $expectedCompleted) {
+                $pushIssue([
+                    'code' => 'IS_COMPLETED_MISMATCH',
+                    'severity' => 'warning',
+                    'title' => 'Flag completed salah',
+                    'message' => 'is_completed = ' . (int) $link->is_completed . ', seharusnya ' . $expectedCompleted . '.',
+                    'fixable' => true,
+                    'action' => 'sync_counts',
+                    'button_label' => 'Sync Flag',
+                ]);
+            }
+        }
+
+        $releasedCount = (int) $expected['jumlah_lhp_rilis'];
+        if ($releasedCount > 0) {
+            if (empty($filename)) {
+                $pushIssue([
+                    'code' => 'BUNDLE_NOT_COMBINED',
+                    'severity' => 'danger',
+                    'title' => 'Rekap belum di-combine',
+                    'message' => 'Sudah ada LHP rilis tapi filename bundle kosong.',
+                    'fixable' => true,
+                    'action' => 'rebuild_bundle',
+                    'button_label' => 'Combine PDF',
+                ]);
+            } elseif (!File::exists($bundlePath)) {
+                $pushIssue([
+                    'code' => 'BUNDLE_FILE_MISSING',
+                    'severity' => 'danger',
+                    'title' => 'File rekap belum ke-render',
+                    'message' => 'Filename ada (' . $filename . ') tapi file tidak ketemu di laporan/hasil_pengujian.',
+                    'fixable' => true,
+                    'action' => 'rebuild_bundle',
+                    'button_label' => 'Render Ulang',
+                    'detail' => ['filename' => $filename, 'path' => 'laporan/hasil_pengujian/' . ltrim($filename, '/')],
+                ]);
+            }
+        }
+
+        $cfrs = array_map(function ($cfrRow) use ($currentList) {
+            $cfrRow['in_list'] = in_array($cfrRow['cfr'], $currentList, true);
+            return $cfrRow;
+        }, $expected['cfrs']);
+
+        foreach ($cfrs as $cfrRow) {
+            if ($cfrRow['released'] && !$cfrRow['in_list'] && $link) {
+                $pushIssue([
+                    'code' => 'CFR_RELEASED_NOT_COMBINED',
+                    'severity' => 'danger',
+                    'title' => 'CFR rilis belum masuk list',
+                    'message' => $cfrRow['cfr'] . ' sudah rilis tapi belum masuk list_lhp_rilis.',
+                    'fixable' => true,
+                    'action' => 'rebuild_bundle',
+                    'button_label' => 'Combine PDF',
+                    'detail' => ['cfr' => $cfrRow['cfr']],
+                ]);
+            }
+            if ($cfrRow['released'] && !$cfrRow['file_exists']) {
+                $pushIssue([
+                    'code' => 'CFR_FILE_MISSING',
+                    'severity' => 'warning',
+                    'title' => 'PDF LHP per CFR belum ada',
+                    'message' => $cfrRow['cfr'] . ' dianggap rilis tapi file individual tidak ketemu.',
+                    'fixable' => false,
+                    'detail' => ['cfr' => $cfrRow['cfr'], 'file_lhp' => $cfrRow['file_lhp']],
+                ]);
+            }
+        }
+
+        $status = 'ok';
+        if (!$link) {
+            $status = 'belum_rilis';
+        } elseif (!empty($issues)) {
+            $status = 'problem';
+        } elseif ((int) ($link->is_completed ?? 0) === 1) {
+            $status = 'selesai';
+        } else {
+            $status = 'belum_selesai';
+        }
+
+        return [
+            'periode' => $periodKey === 'all' ? ($isKontrak ? null : 'non_kontrak') : $periodKey,
+            'status' => $status,
+            'link_lhp' => $link ? [
+                'id' => $link->id,
+                'periode' => $link->periode,
+                'jumlah_lhp' => (int) $link->jumlah_lhp,
+                'jumlah_lhp_rilis' => (int) $link->jumlah_lhp_rilis,
+                'list_lhp_rilis' => $currentList,
+                'is_completed' => (int) $link->is_completed,
+                'filename' => $link->filename,
+                'file_exists' => $filename ? File::exists($bundlePath) : false,
+                'is_active' => (int) ($link->is_active ?? 1),
+                'is_system' => (int) ($link->is_system ?? 0),
+                'created_by' => $link->created_by,
+                'created_at' => $link->created_at,
+            ] : null,
+            'expected' => [
+                'jumlah_lhp' => $expected['jumlah_lhp'],
+                'jumlah_lhp_rilis' => $expected['jumlah_lhp_rilis'],
+                'list_lhp_rilis' => $expected['list_lhp_rilis'],
+                'is_completed' => $expected['is_completed'],
+            ],
+            'cfrs' => $cfrs,
+            'issues' => $issues,
+        ];
+    }
+
+    private function calculateExpectedLhpStatus(
+        string $noOrder,
+        $periode,
+        bool $isKontrak,
+        $dataOrderDetail,
+        $detailsForPeriod,
+        ResolveLhpFile $resolver
+    ): array {
+        $periodKey = $this->lhpPeriodKey($periode);
+        $cfrMap = [];
+
+        foreach ($detailsForPeriod as $detail) {
+            $cfr = $detail->cfr;
+            if (!$cfr) {
+                continue;
+            }
+            if (!isset($cfrMap[$cfr])) {
+                $fileLhp = $resolver->byCfr($noOrder, $cfr, $detail->no_sampel ?? null);
+                $expectedName = 'LHP-' . str_replace('/', '-', $cfr) . '.pdf';
+                $path = $fileLhp
+                    ? public_path('dokumen/LHP_DOWNLOAD/' . $fileLhp)
+                    : public_path('dokumen/LHP_DOWNLOAD/' . $expectedName);
+                $cfrMap[$cfr] = [
+                    'cfr' => $cfr,
+                    'released' => false,
+                    'in_list' => false,
+                    'file_lhp' => $fileLhp ?: $expectedName,
+                    'file_exists' => File::exists($path),
+                    'source' => [],
+                ];
+            }
+        }
+
+        $decoded = is_string($dataOrderDetail) ? json_decode($dataOrderDetail, true) : $dataOrderDetail;
+        $seenInBerjalan = [];
+        if (is_array($decoded)) {
+            foreach ($decoded as $group) {
+                if ($isKontrak && $this->lhpPeriodKey($group['periode'] ?? null) !== $periodKey) {
+                    continue;
+                }
+                foreach (($group['detail'] ?? []) as $detail) {
+                    $cfr = $detail['cfr'] ?? null;
+                    if (!$cfr) {
+                        continue;
+                    }
+                    $seenInBerjalan[$cfr] = true;
+                    if (!isset($cfrMap[$cfr])) {
+                        $fileLhp = $resolver->byCfr($noOrder, $cfr, is_array($detail['no_sampel'] ?? null) ? ($detail['no_sampel'][0] ?? null) : ($detail['no_sampel'] ?? null));
+                        $expectedName = 'LHP-' . str_replace('/', '-', $cfr) . '.pdf';
+                        $path = $fileLhp
+                            ? public_path('dokumen/LHP_DOWNLOAD/' . $fileLhp)
+                            : public_path('dokumen/LHP_DOWNLOAD/' . $expectedName);
+                        $cfrMap[$cfr] = [
+                            'cfr' => $cfr,
+                            'released' => false,
+                            'in_list' => false,
+                            'file_lhp' => $fileLhp ?: $expectedName,
+                            'file_exists' => File::exists($path),
+                            'source' => [],
+                        ];
+                    }
+                    $released = (bool) ($detail['lhp_rilis'] ?? false)
+                        || !empty($detail['steps']['lhp_release']['date']);
+                    if ($released) {
+                        $cfrMap[$cfr]['released'] = true;
+                        $cfrMap[$cfr]['source'][] = 'order_berjalan';
+                    }
+                }
+            }
+        }
+
+        foreach ($cfrMap as $cfr => &$row) {
+            if ($row['file_exists'] && empty($seenInBerjalan[$cfr])) {
+                $row['released'] = true;
+                $row['source'][] = 'file';
+            }
+        }
+        unset($row);
+
+        $listRilis = collect($cfrMap)
+            ->filter(fn ($row) => $row['released'])
+            ->keys()
+            ->sort(SORT_NATURAL)
+            ->values()
+            ->toArray();
+
+        foreach ($cfrMap as $cfr => &$row) {
+            $row['in_list'] = in_array($cfr, $listRilis, true);
+            $row['source'] = array_values(array_unique($row['source']));
+        }
+        unset($row);
+
+        $jumlahLhp = count($cfrMap);
+        $jumlahRilis = count($listRilis);
+
+        return [
+            'jumlah_lhp' => $jumlahLhp,
+            'jumlah_lhp_rilis' => $jumlahRilis,
+            'list_lhp_rilis' => $listRilis,
+            'is_completed' => $jumlahLhp > 0 && $jumlahLhp === $jumlahRilis ? 1 : 0,
+            'cfrs' => array_values($cfrMap),
+        ];
+    }
+
+    private function createMissingLinkLhp($orderHeader, ?string $periode): array
+    {
+        $query = LinkLhp::where('no_order', $orderHeader->no_order);
+        if ($periode) {
+            $query->where(function ($q) use ($periode) {
+                $ym = substr($periode, 0, 7);
+                $q->where('periode', $periode)->orWhere('periode', $ym)->orWhere('periode', 'like', $ym . '%');
+            });
+        } else {
+            $query->where(function ($q) {
+                $q->whereNull('periode')->orWhere('periode', '')->orWhere('periode', 'all');
+            });
+        }
+
+        $existing = $query->latest('id')->first();
+        if ($existing) {
+            return [
+                'message' => 'Link LHP periode ini sudah ada.',
+                'id' => $existing->id,
+                'created' => false,
+            ];
+        }
+
+        $detailQuery = OrderDetail::where('no_order', $orderHeader->no_order)
+            ->where('is_active', true)
+            ->whereNotNull('cfr');
+        if ($periode) {
+            $ym = substr($periode, 0, 7);
+            $detailQuery->where(function ($q) use ($periode, $ym) {
+                $q->where('periode', $periode)->orWhere('periode', $ym)->orWhere('periode', 'like', $ym . '%');
+            });
+        }
+        $jumlahLhp = $detailQuery->get()->unique('cfr')->count();
+
+        $linkLhp = new LinkLhp();
+        $linkLhp->no_quotation = $orderHeader->no_document;
+        $linkLhp->periode = $periode;
+        $linkLhp->no_order = $orderHeader->no_order;
+        $linkLhp->nama_perusahaan = $orderHeader->nama_perusahaan;
+        $linkLhp->jumlah_lhp = $jumlahLhp;
+        $linkLhp->jumlah_lhp_rilis = 0;
+        $linkLhp->list_lhp_rilis = json_encode([]);
+        $linkLhp->is_completed = 0;
+        $linkLhp->is_system = true;
+        $linkLhp->is_active = 1;
+        $linkLhp->created_by = $this->karyawan;
+        $linkLhp->created_at = Carbon::now();
+        $linkLhp->updated_by = $this->karyawan;
+        $linkLhp->updated_at = Carbon::now();
+        $linkLhp->save();
+
+        $key = $orderHeader->no_order;
+        $gen = md5($key);
+        $dateSeed = $periode
+            ? Carbon::createFromFormat('Y-m-d', substr($periode, 0, 7) . '-01')->startOfMonth()
+            : Carbon::now();
+        $token = $this->makeLhpLinkToken($gen . '|' . $dateSeed->format('Y-m-d'));
+
+        $tokenId = GenerateLink::insertGetId([
+            'token' => $token,
+            'key' => $gen,
+            'id_quotation' => $linkLhp->id,
+            'quotation_status' => 'lhp_rilis',
+            'type' => 'lhp_rilis',
+            'expired' => Carbon::now()->addYear()->format('Y-m-d'),
+            'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+            'created_by' => $this->karyawan,
+        ]);
+
+        $linkLhp->update([
+            'id_token' => $tokenId,
+            'link' => env('PORTAL_LHP', 'https://portal.intilab.com/lhp/') . $token,
+        ]);
+
+        return [
+            'message' => 'Link LHP berhasil dibuat.',
+            'id' => $linkLhp->id,
+            'created' => true,
+        ];
+    }
+
+    private function syncLinkLhpCounts($orderHeader, ?string $periode): array
+    {
+        $linkLhp = $this->findLinkLhpForPeriod($orderHeader->no_order, $periode);
+        if (!$linkLhp) {
+            throw new \Exception('Link LHP periode ini belum ada. Buat link dulu.');
+        }
+
+        $orderBerjalan = DB::table('order_berjalan')->where('no_order', $orderHeader->no_order)->value('dataOrderDetail');
+        $details = OrderDetail::where('no_order', $orderHeader->no_order)
+            ->where('is_active', true)
+            ->whereNotNull('cfr')
+            ->get(['id', 'cfr', 'periode', 'no_sampel']);
+        if ($periode) {
+            $ym = substr($periode, 0, 7);
+            $details = $details->filter(fn ($row) => $this->lhpPeriodKey($row->periode) === $ym);
+        }
+
+        $expected = $this->calculateExpectedLhpStatus(
+            $orderHeader->no_order,
+            $periode,
+            (bool) $periode,
+            $orderBerjalan,
+            $details,
+            new ResolveLhpFile()
+        );
+
+        $before = [
+            'jumlah_lhp' => (int) $linkLhp->jumlah_lhp,
+            'jumlah_lhp_rilis' => (int) $linkLhp->jumlah_lhp_rilis,
+            'is_completed' => (int) $linkLhp->is_completed,
+            'list_lhp_rilis' => $this->normalizeJsonArray($linkLhp->list_lhp_rilis),
+        ];
+
+        $linkLhp->update([
+            'jumlah_lhp' => $expected['jumlah_lhp'],
+            'jumlah_lhp_rilis' => $expected['jumlah_lhp_rilis'],
+            'list_lhp_rilis' => json_encode($expected['list_lhp_rilis']),
+            'is_completed' => $expected['is_completed'],
+            'updated_by' => $this->karyawan,
+            'updated_at' => Carbon::now(),
+        ]);
+
+        return [
+            'message' => 'Jumlah / list LHP rilis berhasil disync.',
+            'id' => $linkLhp->id,
+            'before' => $before,
+            'after' => [
+                'jumlah_lhp' => $expected['jumlah_lhp'],
+                'jumlah_lhp_rilis' => $expected['jumlah_lhp_rilis'],
+                'is_completed' => $expected['is_completed'],
+                'list_lhp_rilis' => $expected['list_lhp_rilis'],
+            ],
+        ];
+    }
+
+    private function rebuildLhpBundleForPeriod($orderHeader, ?string $periode): array
+    {
+        $created = false;
+        $linkLhp = $this->findLinkLhpForPeriod($orderHeader->no_order, $periode);
+        if (!$linkLhp) {
+            $createdPayload = $this->createMissingLinkLhp($orderHeader, $periode);
+            $linkLhp = LinkLhp::find($createdPayload['id']);
+            $created = true;
+        }
+
+        $sync = $this->syncLinkLhpCounts($orderHeader, $periode);
+        $linkLhp->refresh();
+
+        $list = $this->normalizeJsonArray($linkLhp->list_lhp_rilis);
+        if (empty($list)) {
+            return [
+                'message' => 'Count sudah disync, tapi belum ada LHP rilis jadi PDF rekap tidak di-combine.',
+                'id' => $linkLhp->id,
+                'created_link' => $created,
+                'merged' => false,
+                'sync' => $sync,
+            ];
+        }
+
+        $resolver = new ResolveLhpFile();
+        $files = [];
+        $missing = [];
+        foreach ($list as $cfr) {
+            $fileLhp = $resolver->byCfr($orderHeader->no_order, $cfr);
+            if (!$fileLhp) {
+                $fileLhp = 'LHP-' . str_replace('/', '-', $cfr) . '.pdf';
+            }
+            $path = public_path('dokumen/LHP_DOWNLOAD/' . $fileLhp);
+            if (File::exists($path)) {
+                $files[] = ['name' => $fileLhp, 'path' => $path];
+            } else {
+                $missing[] = $cfr;
+            }
+        }
+
+        if (empty($files)) {
+            throw new \Exception('Tidak ada file LHP individual yang bisa di-combine.');
+        }
+
+        $finalDirectoryPath = public_path('laporan/hasil_pengujian');
+        $finalFilename = $periode
+            ? $orderHeader->no_order . '_' . substr($periode, 0, 7) . '.pdf'
+            : $orderHeader->no_order . '.pdf';
+        $finalFullPath = $finalDirectoryPath . '/' . $finalFilename;
+        if (!File::isDirectory($finalDirectoryPath)) {
+            File::makeDirectory($finalDirectoryPath, 0777, true);
+        }
+
+        $httpClient = Http::asMultipart();
+        foreach ($files as $file) {
+            $httpClient->attach('pdfs[]', File::get($file['path']), $file['name']);
+        }
+        $httpClient->attach('metadata', json_encode(array_fill(0, count($files), 'skyhwk12')));
+
+        $response = $httpClient->post(env('PDF_COMBINER_SERVICE', 'http://127.0.0.1:2999') . '/merge');
+        if (!$response->successful()) {
+            throw new \Exception('Python PDF Service failed (' . $response->status() . '): ' . $response->body());
+        }
+
+        File::put($finalFullPath, $response->body());
+
+        $linkLhp->filename = $finalFilename;
+        $linkLhp->updated_by = $this->karyawan;
+        $linkLhp->updated_at = Carbon::now();
+        $linkLhp->save();
+
+        GenerateLink::where('id', $linkLhp->id_token)->update([
+            'fileName_pdf' => $finalFilename,
+        ]);
+
+        return [
+            'message' => 'PDF rekap berhasil di-combine.' . ($missing ? ' CFR tanpa file: ' . implode(', ', $missing) : ''),
+            'id' => $linkLhp->id,
+            'created_link' => $created,
+            'merged' => true,
+            'filename' => $finalFilename,
+            'combined_files' => count($files),
+            'missing_cfr_files' => $missing,
+            'sync' => $sync,
+        ];
+    }
+
+    private function findLinkLhpForPeriod(string $noOrder, ?string $periode): ?LinkLhp
+    {
+        $query = LinkLhp::where('no_order', $noOrder);
+        if ($periode) {
+            $ym = substr($periode, 0, 7);
+            $query->where(function ($q) use ($periode, $ym) {
+                $q->where('periode', $periode)->orWhere('periode', $ym)->orWhere('periode', 'like', $ym . '%');
+            });
+        } else {
+            $query->where(function ($q) {
+                $q->whereNull('periode')->orWhere('periode', '')->orWhere('periode', 'all');
+            });
+        }
+
+        return $query->orderByDesc('id')->first();
+    }
+
+    private function expectedBundlePath(string $noOrder, $periode): string
+    {
+        $filename = $periode ? $noOrder . '_' . substr((string) $periode, 0, 7) . '.pdf' : $noOrder . '.pdf';
+        return public_path('laporan/hasil_pengujian/' . $filename);
+    }
+
+    private function lhpPeriodKey($periode): string
+    {
+        if ($periode === null || $periode === '' || $periode === 'all' || $periode === 'non_kontrak') {
+            return 'all';
+        }
+
+        return substr((string) $periode, 0, 7);
+    }
+
+    private function makeLhpLinkToken(string $data): string
+    {
+        $encryptionKey = base64_decode('intilab_jaya');
+        $algorithm = 'AES-256-CBC';
+        $iv = openssl_random_pseudo_bytes(openssl_cipher_iv_length($algorithm));
+        $encrypted = openssl_encrypt($data, $algorithm, $encryptionKey, 0, $iv);
+
+        return base64_encode($encrypted . '::' . $iv);
     }
 
     public function fixDetailStructure(Request $request)
