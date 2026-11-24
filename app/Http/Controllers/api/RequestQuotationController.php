@@ -1230,13 +1230,12 @@ class RequestQuotationController extends Controller
                 foreach ($payload->data_diskon->biaya_preparasi_padatan as $biaya) {
                     $biaya_preparasi += floatval(str_replace(['Rp. ', ',', '.'], '', $biaya->harga));
                 }
+            } else {
+                $data->biaya_preparasi_padatan = json_encode([]);
             }
             $data->total_biaya_preparasi = $biaya_preparasi;
             $grand_total += $biaya_preparasi;
             $harga_total += $biaya_preparasi;
-            // $data->biaya_preparasi_padatan = null;
-            // $data->total_biaya_preparasi = 0;
-            // $biaya_preparasi = 0;
 
             //BIAYA DI LUAR PAJAK
             $biaya_akhir = 0;
@@ -2179,13 +2178,12 @@ class RequestQuotationController extends Controller
                 foreach ($payload->data_diskon->biaya_preparasi_padatan as $biaya) {
                     $biaya_preparasi += floatval(str_replace(['Rp. ', ',', '.'], '', $biaya->harga));
                 }
+            } else {
+                $data->biaya_preparasi_padatan = json_encode([]);
             }
             $data->total_biaya_preparasi = $biaya_preparasi;
             $grand_total += $biaya_preparasi;
             $harga_total += $biaya_preparasi;
-            // $data->biaya_preparasi_padatan = null;
-            // $data->total_biaya_preparasi = 0;
-            // $biaya_preparasi = 0;
 
             //BIAYA DI LUAR PAJAK
             $biaya_akhir = 0;

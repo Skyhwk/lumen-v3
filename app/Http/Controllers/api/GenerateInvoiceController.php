@@ -29,6 +29,61 @@ use Carbon\Carbon;
 
 class GenerateInvoiceController extends Controller
 {
+    private function generateInvoiceStatusLunasSql(): string
+    {
+        return "
+            CASE
+                WHEN (COALESCE(MAX(invoice.nilai_pelunasan), 0)) <= 0 THEN 'Belum Ada Pembayaran'
+                WHEN (SUM(invoice.nilai_tagihan) - (COALESCE(MAX(invoice.nilai_pelunasan), 0))) < 0 THEN 'Kelebihan Pembayaran'
+                WHEN (SUM(invoice.nilai_tagihan) - (COALESCE(MAX(invoice.nilai_pelunasan), 0))) > 0 THEN 'Belum Lunas'
+                ELSE 'Lunas'
+            END
+        ";
+    }
+
+    private function datatablesColumnSearch(Request $request, string $name): string
+    {
+        foreach ((array) $request->input('columns', []) as $column) {
+            if (($column['name'] ?? '') === $name) {
+                return trim((string) ($column['search']['value'] ?? ''));
+            }
+        }
+
+        return '';
+    }
+
+    private function applyGenerateInvoiceDateColumnFilter($query, Request $request, string $columnName, string $sqlColumn): void
+    {
+        $value = $this->datatablesColumnSearch($request, $columnName);
+        if ($value === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return;
+        }
+
+        $query->whereRaw("DATE({$sqlColumn}) = ?", [$value]);
+    }
+
+    private function applyGenerateInvoiceIndexFilters($query, Request $request): void
+    {
+        $status = $this->datatablesColumnSearch($request, 'status_lunas');
+        if ($status !== '') {
+            $query->havingRaw('(' . $this->generateInvoiceStatusLunasSql() . ') = ?', [$status]);
+        }
+
+        $kodePromo = $this->datatablesColumnSearch($request, 'kode_promo_non_kontrak');
+        if ($kodePromo !== '') {
+            $like = '%' . strtolower($kodePromo) . '%';
+            $query->where(function ($inner) use ($like) {
+                $inner->whereRaw('LOWER(rq_non.kode_promo) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(rq_kon.kode_promo) LIKE ?', [$like]);
+            });
+        }
+
+        $this->applyGenerateInvoiceDateColumnFilter($query, $request, 'tgl_invoice', 'invoice.tgl_invoice');
+        $this->applyGenerateInvoiceDateColumnFilter($query, $request, 'emailed_at', 'invoice.emailed_at');
+        $this->applyGenerateInvoiceDateColumnFilter($query, $request, 'tgl_jatuh_tempo', 'invoice.tgl_jatuh_tempo');
+        $this->applyGenerateInvoiceDateColumnFilter($query, $request, 'created_at', 'invoice.created_at');
+    }
+
     private static function generatePDF($noInvoice)
     {
         $render = new RenderInvoice();
@@ -221,25 +276,38 @@ class GenerateInvoiceController extends Controller
                 DB::raw('SUM(invoice.nilai_tagihan) AS nilai_tagihan'),
                 DB::raw('MAX(order_header.is_revisi) AS is_revisi'),
                 DB::raw('GROUP_CONCAT(invoice.no_order) AS no_orders'),
-                DB::raw('GROUP_CONCAT(CONCAT(order_header.no_document, "_", invoice.no_order)) AS document_order')
+                DB::raw('GROUP_CONCAT(CONCAT(order_header.no_document, "_", invoice.no_order)) AS document_order'),
+                DB::raw('MAX(rq_non.kode_promo) AS kode_promo_non_kontrak'),
+                DB::raw('MAX(rq_kon.kode_promo) AS kode_promo_kontrak')
             )
                 ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
                 ->leftJoin('summary_invoice', 'invoice.no_invoice', '=', 'summary_invoice.no_invoice')
+                ->leftJoin('request_quotation as rq_non', 'invoice.no_quotation', '=', 'rq_non.no_document')
+                ->leftJoin('request_quotation_kontrak_H as rq_kon', 'invoice.no_quotation', '=', 'rq_kon.no_document')
                 ->groupBy('invoice.no_invoice');
-
-            // 🔥 FILTER STATUS LUNAS (FIX TOTAL)
-            $status = $request->input('columns')[2]['search']['value'] ?? null;
-
-            if (!empty($status)) {
-                $data->having('status_lunas', '=', trim($status));
-            }
 
             $data->where('invoice.is_emailed', false)
                 ->where('invoice.is_active', true)
                 ->where('order_header.is_active', true)
                 ->orderBy('invoice.no_invoice', 'DESC');
 
+            $this->applyGenerateInvoiceIndexFilters($data, $request);
+
             return Datatables::of($data)
+                ->filterColumn('status_lunas', function () {
+                    // Diterapkan di applyGenerateInvoiceIndexFilters() (kolom agregat / HAVING).
+                })
+                ->filterColumn('kode_promo_non_kontrak', function () {
+                    // Diterapkan di applyGenerateInvoiceIndexFilters().
+                })
+                ->filterColumn('tgl_invoice', function () {})
+                ->filterColumn('emailed_at', function () {})
+                ->filterColumn('tgl_jatuh_tempo', function () {})
+                ->filterColumn('created_at', function () {})
+                ->orderColumn('kode_promo_non_kontrak', function ($query, $direction) {
+                    $direction = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+                    $query->orderByRaw('MAX(COALESCE(rq_non.kode_promo, rq_kon.kode_promo)) ' . $direction);
+                })
                 ->filterColumn('nama_customer', function ($query, $keyword) {
                     $query->whereRaw('LOWER(invoice.nama_perusahaan) LIKE ?', ['%' . strtolower($keyword) . '%']);
                 })
@@ -256,7 +324,9 @@ class GenerateInvoiceController extends Controller
                 })
                 ->make(true);
         } catch (\Throwable $th) {
-            dd($th);
+            return response()->json([
+                'message' => $th->getMessage(),
+            ], 500);
         }
     }
 

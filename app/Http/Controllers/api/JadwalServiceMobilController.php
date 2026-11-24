@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DaftarMobil;
 use App\Models\ServiceMobil;
 use App\Models\ServiceMobilLog;
+use App\Services\ServiceMobilAvailabilityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -14,12 +15,23 @@ use Yajra\Datatables\Datatables;
 
 class JadwalServiceMobilController extends Controller
 {
+    private function mobilWithSelect(): array
+    {
+        return ['mobil:id,merk_mobil,tipe_mobil,plat_mobil'];
+    }
+
+    private function resolveTanggalSelesaiEstimasiInput(Request $request): ?string
+    {
+        return $request->input('tanggal_selesai_estimasi');
+    }
+
     /**
      * Index DataTables — tab Jadwal (status: dijadwalkan).
      */
     public function index(Request $request)
     {
-        $data = ServiceMobil::where('is_active', true)
+        $data = ServiceMobil::with($this->mobilWithSelect())
+            ->where('is_active', true)
             ->where('status', ServiceMobil::STATUS_DIJADWALKAN)
             ->orderByDesc('id');
 
@@ -30,7 +42,8 @@ class JadwalServiceMobilController extends Controller
     {
         $today = date('Y-m-d');
 
-        $data = ServiceMobil::where('is_active', true)
+        $data = ServiceMobil::with($this->mobilWithSelect())
+            ->where('is_active', true)
             ->where('status', ServiceMobil::STATUS_DALAM_PERBAIKAN)
             ->orderByDesc('id');
 
@@ -43,11 +56,7 @@ class JadwalServiceMobilController extends Controller
 
     public function indexHistory(Request $request)
     {
-        $data = ServiceMobil::with([
-            'details' => function ($q) {
-                $q->where('is_active', true)->orderBy('urutan');
-            },
-        ])
+        $data = ServiceMobil::with($this->mobilWithSelect())
             ->where('is_active', true)
             ->whereIn('status', [
                 ServiceMobil::STATUS_SELESAI,
@@ -57,19 +66,7 @@ class JadwalServiceMobilController extends Controller
 
         return Datatables::of($data)
             ->addColumn('service_details', function ($row) {
-                if ($row->status !== ServiceMobil::STATUS_SELESAI) {
-                    return [];
-                }
-
-                return $row->details
-                    ->map(function ($detail) {
-                        return [
-                            'deskripsi_pekerjaan' => $detail->deskripsi_pekerjaan,
-                            'biaya' => $detail->biaya,
-                        ];
-                    })
-                    ->values()
-                    ->all();
+                return $row->completionDetailsForApi();
             })
             ->make(true);
     }
@@ -90,14 +87,11 @@ class JadwalServiceMobilController extends Controller
             ], 422);
         }
 
-        $service = ServiceMobil::with([
-            'details' => function ($q) {
-                $q->where('is_active', true)->orderBy('urutan');
-            },
+        $service = ServiceMobil::with(array_merge($this->mobilWithSelect(), [
             'attachments' => function ($q) {
                 $q->where('is_active', true)->orderBy('id');
             },
-        ])
+        ]))
             ->where('is_active', true)
             ->find($request->id);
 
@@ -105,9 +99,12 @@ class JadwalServiceMobilController extends Controller
             return response()->json(['message' => 'Data Not Found.!'], 404);
         }
 
+        $payload = $service->toArray();
+        $payload['details'] = $service->completionDetailsForApi();
+
         return response()->json([
             'message' => 'Data loaded successfully',
-            'data' => $service,
+            'data' => $payload,
         ], 200);
     }
 
@@ -122,19 +119,8 @@ class JadwalServiceMobilController extends Controller
                 ->value('daftar_mobil_id');
         }
 
-        // Mobil yang masih di jadwal / perbaikan tidak ditawarkan (sampai selesai atau dibatalkan).
-        $busyMobilIds = ServiceMobil::where('is_active', true)
-            ->whereIn('status', [
-                ServiceMobil::STATUS_DIJADWALKAN,
-                ServiceMobil::STATUS_DALAM_PERBAIKAN,
-            ])
-            ->when($editingServiceId, function ($q) use ($editingServiceId) {
-                $q->where('id', '!=', $editingServiceId);
-            })
-            ->pluck('daftar_mobil_id')
-            ->unique()
-            ->values()
-            ->all();
+        $availability = app(ServiceMobilAvailabilityService::class);
+        $busyMobilIds = $availability->busyMobilIdsForActiveService($editingServiceId);
 
         $mobil = DaftarMobil::where('is_active', true)
             ->where(function ($q) use ($busyMobilIds, $editingMobilId) {
@@ -179,7 +165,7 @@ class JadwalServiceMobilController extends Controller
             'id' => ['nullable', 'integer'],
             'daftar_mobil_id' => ['required', 'integer'],
             'tanggal_mulai_rencana' => ['required', 'date'],
-            'tanggal_selesai_rencana_awal' => ['required', 'date', 'after_or_equal:tanggal_mulai_rencana'],
+            'tanggal_selesai_estimasi' => ['required', 'date', 'after_or_equal:tanggal_mulai_rencana'],
             'keluhan' => ['required', 'string'],
             'nama_bengkel' => ['nullable', 'string', 'max:150'],
             'catatan' => ['nullable', 'string'],
@@ -192,6 +178,13 @@ class JadwalServiceMobilController extends Controller
             ], 422);
         }
 
+        $tanggalSelesaiEstimasi = $this->resolveTanggalSelesaiEstimasiInput($request);
+        if (!$tanggalSelesaiEstimasi) {
+            return response()->json([
+                'message' => 'Estimasi selesai wajib diisi.',
+            ], 422);
+        }
+
         $mobil = DaftarMobil::where('id', $request->daftar_mobil_id)
             ->where('is_active', true)
             ->first();
@@ -200,16 +193,33 @@ class JadwalServiceMobilController extends Controller
             return response()->json(['message' => 'Mobil tidak ditemukan atau tidak aktif'], 404);
         }
 
-        $overlap = $this->findServiceOverlap(
+        $availability = app(ServiceMobilAvailabilityService::class);
+        $excludeId = $request->id ? (int) $request->id : null;
+
+        $overlap = $availability->findFirstOverlappingActiveService(
             (int) $request->daftar_mobil_id,
             $request->tanggal_mulai_rencana,
-            $request->tanggal_selesai_rencana_awal,
-            $request->id ? (int) $request->id : null
+            $tanggalSelesaiEstimasi,
+            $excludeId
         );
 
         if ($overlap) {
             return response()->json([
                 'message' => 'Mobil sudah punya jadwal service yang bertumpuk pada periode ini (#' . $overlap->id . ', ' . $overlap->status . ')',
+            ], 422);
+        }
+
+        $penggunaanConflicts = $availability->penggunaanConflictsForServiceRange(
+            (int) $request->daftar_mobil_id,
+            $request->tanggal_mulai_rencana,
+            $tanggalSelesaiEstimasi
+        );
+
+        if ($penggunaanConflicts->isNotEmpty()) {
+            $label = trim($mobil->plat_mobil . ' - ' . ($mobil->merk_mobil ?: '') . ' ' . ($mobil->tipe_mobil ?: ''));
+
+            return response()->json([
+                'message' => $availability->buildPenggunaanConflictMessage($label, $penggunaanConflicts),
             ], 422);
         }
 
@@ -234,10 +244,7 @@ class JadwalServiceMobilController extends Controller
                 $before = $service->only([
                     'daftar_mobil_id',
                     'plat_mobil',
-                    'merk_mobil',
-                    'tipe_mobil',
                     'tanggal_mulai_rencana',
-                    'tanggal_selesai_rencana_awal',
                     'tanggal_selesai_estimasi',
                     'keluhan',
                     'nama_bengkel',
@@ -246,12 +253,8 @@ class JadwalServiceMobilController extends Controller
 
                 $service->daftar_mobil_id = $mobil->id;
                 $service->plat_mobil = $mobil->plat_mobil;
-                $service->merk_mobil = $mobil->merk_mobil;
-                $service->tipe_mobil = $mobil->tipe_mobil;
                 $service->tanggal_mulai_rencana = $request->tanggal_mulai_rencana;
-                $service->tanggal_selesai_rencana_awal = $request->tanggal_selesai_rencana_awal;
-                // Estimasi terbaru ikut di-set ulang ke rencana awal saat masih dijadwalkan
-                $service->tanggal_selesai_estimasi = $request->tanggal_selesai_rencana_awal;
+                $service->tanggal_selesai_estimasi = $tanggalSelesaiEstimasi;
                 $service->keluhan = trim($request->keluhan);
                 $service->nama_bengkel = $request->nama_bengkel ? trim($request->nama_bengkel) : null;
                 $service->catatan = $request->catatan ? trim($request->catatan) : null;
@@ -268,11 +271,8 @@ class JadwalServiceMobilController extends Controller
             $service = ServiceMobil::create([
                 'daftar_mobil_id' => $mobil->id,
                 'plat_mobil' => $mobil->plat_mobil,
-                'merk_mobil' => $mobil->merk_mobil,
-                'tipe_mobil' => $mobil->tipe_mobil,
                 'tanggal_mulai_rencana' => $request->tanggal_mulai_rencana,
-                'tanggal_selesai_rencana_awal' => $request->tanggal_selesai_rencana_awal,
-                'tanggal_selesai_estimasi' => $request->tanggal_selesai_rencana_awal,
+                'tanggal_selesai_estimasi' => $tanggalSelesaiEstimasi,
                 'status' => ServiceMobil::STATUS_DIJADWALKAN,
                 'keluhan' => trim($request->keluhan),
                 'nama_bengkel' => $request->nama_bengkel ? trim($request->nama_bengkel) : null,
@@ -286,7 +286,8 @@ class JadwalServiceMobilController extends Controller
                 'daftar_mobil_id' => $service->daftar_mobil_id,
                 'plat_mobil' => $service->plat_mobil,
                 'tanggal_mulai_rencana' => $service->tanggal_mulai_rencana,
-                'tanggal_selesai_rencana_awal' => $service->tanggal_selesai_rencana_awal,
+                'tanggal_selesai_estimasi' => $service->tanggal_selesai_estimasi,
+                'tanggal_selesai_rencana_awal' => $tanggalSelesaiEstimasi,
                 'keluhan' => $service->keluhan,
             ]);
 
@@ -336,8 +337,6 @@ class JadwalServiceMobilController extends Controller
             $before = ['status' => $service->status];
             $service->status = ServiceMobil::STATUS_DIBATALKAN;
             $service->alasan_pembatalan = trim($request->alasan_pembatalan);
-            $service->canceled_at = date('Y-m-d H:i:s');
-            $service->canceled_by = $this->karyawan;
             $service->updated_at = date('Y-m-d H:i:s');
             $service->updated_by = $this->karyawan;
             $service->save();
@@ -427,8 +426,6 @@ class JadwalServiceMobilController extends Controller
             $service->tanggal_mulai_aktual = $mulaiAktual;
             $service->nama_bengkel = trim($request->nama_bengkel);
             $service->tanggal_selesai_estimasi = $estimasi;
-            $service->started_at = date('Y-m-d H:i:s');
-            $service->started_by = $this->karyawan;
             $service->updated_at = date('Y-m-d H:i:s');
             $service->updated_by = $this->karyawan;
             $service->save();
@@ -538,9 +535,10 @@ class JadwalServiceMobilController extends Controller
             'tanggal_selesai_aktual' => ['required', 'date'],
             'catatan_hasil' => ['nullable', 'string'],
             'kilometer' => ['nullable', 'integer', 'min:0'],
-            'details' => ['required', 'array', 'min:1'],
-            'details.*.deskripsi_pekerjaan' => ['required', 'string'],
-            'details.*.spare_part' => ['nullable', 'string'],
+            'hasil_pekerjaan' => ['required_without:details', 'nullable', 'string'],
+            'biaya' => ['nullable'],
+            'details' => ['required_without:hasil_pekerjaan', 'nullable', 'array', 'min:1'],
+            'details.*.deskripsi_pekerjaan' => ['required_with:details', 'string'],
             'details.*.biaya' => ['nullable', 'string'],
             'attachments' => ['nullable', 'array'],
             'attachments.*' => ['file', 'mimes:pdf,jpg,jpeg,png,webp,gif', 'max:10240'],
@@ -597,26 +595,26 @@ class JadwalServiceMobilController extends Controller
             $service->kilometer = $request->kilometer !== null && $request->kilometer !== ''
                 ? (int) $request->kilometer
                 : null;
-            $service->completed_at = date('Y-m-d H:i:s');
-            $service->completed_by = $this->karyawan;
             $service->updated_at = date('Y-m-d H:i:s');
             $service->updated_by = $this->karyawan;
-            $service->save();
 
-            foreach ($request->details as $index => $detail) {
-                $biayaPayload = $this->normalizeDetailBiaya($detail['biaya'] ?? null);
+            $hasilPekerjaan = $request->filled('hasil_pekerjaan')
+                ? trim((string) $request->hasil_pekerjaan)
+                : trim((string) ($request->input('details.0.deskripsi_pekerjaan') ?? ''));
 
-                \App\Models\ServiceMobilDetail::create([
-                    'service_mobil_id' => $service->id,
-                    'deskripsi_pekerjaan' => trim($detail['deskripsi_pekerjaan']),
-                    'spare_part' => null,
-                    'biaya' => $biayaPayload,
-                    'urutan' => $index + 1,
-                    'created_by' => $this->karyawan,
-                    'created_at' => date('Y-m-d H:i:s'),
-                    'is_active' => true,
-                ]);
+            if ($hasilPekerjaan === '') {
+                DB::rollBack();
+                return response()->json(['message' => 'Rincian pekerjaan wajib diisi.'], 422);
             }
+
+            $biayaRaw = $request->has('biaya')
+                ? $request->biaya
+                : ($request->input('details.0.biaya') ?? null);
+            $biayaPayload = $this->normalizeDetailBiaya($biayaRaw);
+
+            $service->hasil_pekerjaan = $hasilPekerjaan;
+            $service->biaya = $biayaPayload;
+            $service->save();
 
             $savedFiles = 0;
             if ($request->hasFile('attachments')) {
@@ -668,7 +666,8 @@ class JadwalServiceMobilController extends Controller
             $this->writeLog($service->id, 'selesai', $before, [
                 'status' => $service->status,
                 'tanggal_selesai_aktual' => $service->tanggal_selesai_aktual,
-                'jumlah_detail' => count($request->details),
+                'hasil_pekerjaan' => $service->hasil_pekerjaan,
+                'biaya' => $service->biaya,
                 'jumlah_lampiran' => $savedFiles,
             ]);
 
@@ -678,26 +677,6 @@ class JadwalServiceMobilController extends Controller
             DB::rollBack();
             return response()->json(['message' => $th->getMessage()], 500);
         }
-    }
-
-    private function findServiceOverlap(int $mobilId, string $start, string $end, ?int $excludeId = null)
-    {
-        return ServiceMobil::where('is_active', true)
-            ->where('daftar_mobil_id', $mobilId)
-            ->whereIn('status', [
-                ServiceMobil::STATUS_DIJADWALKAN,
-                ServiceMobil::STATUS_DALAM_PERBAIKAN,
-            ])
-            ->when($excludeId, function ($q) use ($excludeId) {
-                $q->where('id', '!=', $excludeId);
-            })
-            ->where(function ($q) use ($start, $end) {
-                // Overlap: start_existing <= end_new AND end_existing >= start_new
-                $q->whereRaw('tanggal_mulai_rencana <= ?', [$end])
-                    ->whereRaw('tanggal_selesai_estimasi >= ?', [$start]);
-            })
-            ->orderByDesc('id')
-            ->first();
     }
 
     /**

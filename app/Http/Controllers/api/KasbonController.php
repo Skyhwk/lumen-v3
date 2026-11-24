@@ -16,14 +16,48 @@ use Yajra\Datatables\Datatables;
 
 class KasbonController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $data = PayrollRecordSyncService::scopeActiveKaryawanById(
             Kasbon::query()->where('kasbon.is_active', true),
             'kasbon.id_karyawan'
         );
 
+        $statusTab = strtolower(trim((string) $request->input('status_tab', 'ongoing')));
+        if ($statusTab === 'end') {
+            $data->where('kasbon.status', 'END');
+        } else {
+            $data->where(function ($query) {
+                $query->where('kasbon.status', 'ONGOING')
+                    ->orWhereNull('kasbon.status');
+            });
+        }
+
         return Datatables::of($data)->make(true);
+    }
+
+    public function tabCounts(Request $request)
+    {
+        $ongoing = PayrollRecordSyncService::scopeActiveKaryawanById(
+            Kasbon::query()->where('kasbon.is_active', true),
+            'kasbon.id_karyawan'
+        )->where(function ($query) {
+            $query->where('kasbon.status', 'ONGOING')
+                ->orWhereNull('kasbon.status');
+        })->count();
+
+        $end = PayrollRecordSyncService::scopeActiveKaryawanById(
+            Kasbon::query()->where('kasbon.is_active', true),
+            'kasbon.id_karyawan'
+        )->where('kasbon.status', 'END')->count();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'ongoing' => $ongoing,
+                'end' => $end,
+            ],
+        ], 200);
     }
 
     public function getKaryawan()

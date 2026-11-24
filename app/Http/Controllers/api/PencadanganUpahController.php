@@ -19,12 +19,22 @@ use Yajra\Datatables\Datatables;
 
 class PencadanganUpahController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $data = PayrollRecordSyncService::scopeActiveKaryawanById(
             PencadanganUpah::query()->where('pencadangan_upah.is_active', true),
             'pencadangan_upah.id_karyawan'
         );
+
+        $statusTab = strtolower(trim((string) $request->input('status_tab', 'ongoing')));
+        if ($statusTab === 'end') {
+            $data->where('pencadangan_upah.status', 'END');
+        } else {
+            $data->where(function ($query) {
+                $query->where('pencadangan_upah.status', 'ONGOING')
+                    ->orWhereNull('pencadangan_upah.status');
+            });
+        }
 
         return Datatables::of($data)
             ->addColumn('nominal_terpotong', function ($row) {
@@ -40,6 +50,30 @@ class PencadanganUpahController extends Controller
                 return 0;
             })
             ->make(true);
+    }
+
+    public function tabCounts(Request $request)
+    {
+        $ongoing = PayrollRecordSyncService::scopeActiveKaryawanById(
+            PencadanganUpah::query()->where('pencadangan_upah.is_active', true),
+            'pencadangan_upah.id_karyawan'
+        )->where(function ($query) {
+            $query->where('pencadangan_upah.status', 'ONGOING')
+                ->orWhereNull('pencadangan_upah.status');
+        })->count();
+
+        $end = PayrollRecordSyncService::scopeActiveKaryawanById(
+            PencadanganUpah::query()->where('pencadangan_upah.is_active', true),
+            'pencadangan_upah.id_karyawan'
+        )->where('pencadangan_upah.status', 'END')->count();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'ongoing' => $ongoing,
+                'end' => $end,
+            ],
+        ], 200);
     }
 
     public function getKaryawan()

@@ -14,6 +14,7 @@ use App\Services\InvestigasiAccessService;
 use App\Services\BakKejadianTimelineService;
 use App\Services\InvestigasiAwalLogService;
 use App\Services\InvestigasiAwalWorkflowService;
+use App\Services\InvestigasiKronologiAiService;
 use App\Services\InvestigasiPengesahanService;
 use App\Services\MenuDataAccessService;
 use App\Support\BeritaAcaraKejadianDokumentasiStorage;
@@ -478,6 +479,66 @@ class InvestigasiController extends Controller
             return response()->json([
                 'success' => true,
                 'data' => $rows,
+            ], 200);
+        } catch (\Throwable $ex) {
+            return response()->json([
+                'success' => false,
+                'message' => $ex->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Summary AI untuk ringkasan kronologi 5W+1H dari BAK terpilih (prompt per nomor BAK, pengaju, perihal, uraian).
+     */
+    public function summaryKronologiAi(Request $request)
+    {
+        $this->validate($request, [
+            'bak_ids' => 'required|array|min:1',
+            'bak_ids.*' => 'integer|min:1',
+        ]);
+
+        $bakIds = array_values(array_unique(array_map(
+            static fn ($id) => (int) $id,
+            is_array($request->input('bak_ids')) ? $request->input('bak_ids') : []
+        )));
+        $bakIds = array_values(array_filter($bakIds, static fn ($id) => $id > 0));
+
+        if ($bakIds === []) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pilih minimal 1 No BAK.',
+            ], 422);
+        }
+
+        try {
+            $generated = app(InvestigasiKronologiAiService::class)->generate($bakIds);
+            $kronologi = is_array($generated['kronologi'] ?? null) ? $generated['kronologi'] : null;
+
+            if ($kronologi === null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Layanan AI tidak mengembalikan ringkasan kronologi. Periksa koneksi AI atau isi manual.',
+                ], 502);
+            }
+
+            $hasContent = false;
+            foreach ($kronologi as $value) {
+                if (trim((string) $value) !== '') {
+                    $hasContent = true;
+                    break;
+                }
+            }
+            if (!$hasContent) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Layanan AI mengembalikan respons kosong. Coba lagi atau isi manual.',
+                ], 502);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $kronologi,
             ], 200);
         } catch (\Throwable $ex) {
             return response()->json([

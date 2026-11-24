@@ -10,10 +10,7 @@ class ServiceMobil extends Sector
     protected $fillable = [
         'daftar_mobil_id',
         'plat_mobil',
-        'merk_mobil',
-        'tipe_mobil',
         'tanggal_mulai_rencana',
-        'tanggal_selesai_rencana_awal',
         'tanggal_selesai_estimasi',
         'tanggal_mulai_aktual',
         'tanggal_selesai_aktual',
@@ -23,23 +20,20 @@ class ServiceMobil extends Sector
         'catatan',
         'kilometer',
         'catatan_hasil',
+        'hasil_pekerjaan',
+        'biaya',
         'alasan_pembatalan',
         'created_by',
         'created_at',
         'updated_by',
         'updated_at',
-        'started_by',
-        'started_at',
-        'completed_by',
-        'completed_at',
-        'canceled_by',
-        'canceled_at',
         'is_active',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'kilometer' => 'integer',
+        'biaya' => 'array',
     ];
 
     public const STATUS_DIJADWALKAN = 'dijadwalkan';
@@ -52,9 +46,45 @@ class ServiceMobil extends Sector
         return $this->belongsTo(DaftarMobil::class, 'daftar_mobil_id');
     }
 
-    public function details()
+    /** Merk dari master (eks snapshot kolom `merk_mobil`). */
+    public function getMerkMobilAttribute(): ?string
     {
-        return $this->hasMany(ServiceMobilDetail::class, 'service_mobil_id');
+        if ($this->relationLoaded('mobil') && $this->mobil) {
+            return $this->mobil->merk_mobil;
+        }
+
+        return $this->attributes['merk_mobil'] ?? null;
+    }
+
+    /** Tipe dari master (eks snapshot kolom `tipe_mobil`). */
+    public function getTipeMobilAttribute(): ?string
+    {
+        if ($this->relationLoaded('mobil') && $this->mobil) {
+            return $this->mobil->tipe_mobil;
+        }
+
+        return $this->attributes['tipe_mobil'] ?? null;
+    }
+
+    /**
+     * Bentuk array details lama (kompatibilitas API / DataTables) dari kolom header.
+     */
+    public function completionDetailsForApi(): array
+    {
+        if ($this->status !== self::STATUS_SELESAI) {
+            return [];
+        }
+
+        if (!$this->hasil_pekerjaan && ($this->biaya === null || $this->biaya === [])) {
+            return [];
+        }
+
+        return [
+            [
+                'deskripsi_pekerjaan' => $this->hasil_pekerjaan,
+                'biaya' => $this->biaya,
+            ],
+        ];
     }
 
     public function logs()

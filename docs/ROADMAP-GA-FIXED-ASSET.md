@@ -416,4 +416,17 @@ Mutasi **same site** tetap Fase 2 (no approval).
 
 ---
 
+## 19. Integrasi HR — penerimaan aset karyawan
+
+Migrasi ATS dan menu **HR aset karyawan** memakai katalog sementara `master_aset_karyawan`, bukan langsung `ga_assets`.
+
+Saat modul GA produksi aktif, mapping & link unit mengikuti dokumen terpisah (tidak mengubah flow import GA):
+
+- **[ROADMAP-HRD-ASSET-FINANCE-BRIDGE.md](./ROADMAP-HRD-ASSET-FINANCE-BRIDGE.md)** — fase, aturan bisnis, menu
+- **[HR-ASSET-FINANCE-LINK-ERD-API.md](./HR-ASSET-FINANCE-LINK-ERD-API.md)** — kontrak API & enum status
+
+Titik sentuh GA: `master_sub_kategori_aset`, `ga_assets.pic_employee_id`.
+
+---
+
 **Kontak dokumen:** tim dev portal Intilab / GA — perbarui changelog saat scope berubah.

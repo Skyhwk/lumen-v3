@@ -61,6 +61,7 @@ use App\Services\GenerateAssessmentDocumentService;
 use App\Services\CandidateDocumentAttachmentService;
 use App\Services\GenerateMessageAtsEmail;
 use App\Services\GenerateToken;
+use App\Services\OllamaAiHttp;
 use App\Services\SallaryOfferService;
 use App\Services\SendEmail;
 // end model LHP
@@ -3708,7 +3709,7 @@ class FixingController extends Controller
             $ch = curl_init($endpoint);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, OllamaAiHttp::jsonRequestHeaders());
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
             curl_setopt($ch, CURLOPT_TIMEOUT, 120);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
@@ -3943,7 +3944,7 @@ class FixingController extends Controller
 
             // Formulate Prompt String for AI Ollama Server
             $promptText = sprintf(
-                "Analisis kecocokan kandidat terhadap posisi yang dilamar.\n\nKandidat:\n- Pendidikan: %s\n- Pengalaman: %s\n- Skill: %s\n- Hasil assessment: %s\n\nPosisi: %s\nKebutuhan pendidikan: %s\nKebutuhan pengalaman: %s\nKebutuhan skill: %s\n\nBerikan skor kecocokan 0-100 (integer) dan alasan singkat dalam Bahasa Indonesia.",
+                "Analisis kecocokan kandidat terhadap posisi yang dilamar, Analisis kecocokan kandidat terhadap posisi yang dilamar, buat penilaian objective, prioritas utama karakter kemudian penunjangnya baru logika, penalaran dan ketelitian, gunakan bahasa Indonesia dan bahasa yang mudah dimengerti orang awam, jika persentase langsung sajikan dalam bentuk persen (%), buat penilaian senatural mungkin dan berbobot.\n\nKandidat:\n- Pendidikan: %s\n- Pengalaman: %s\n- Skill: %s\n- Hasil assessment: %s\n\nPosisi: %s\nKebutuhan pendidikan: %s\nKebutuhan pengalaman: %s\nKebutuhan skill: %s\n\nBerikan skor kecocokan 0-100 (integer) dan alasan singkat dalam Bahasa Indonesia, format return harus json dengan key 'score' dan 'reasoning'.",
                 $candidateEduStr,
                 $candidateExpStr,
                 $candidateSkillsStr,
