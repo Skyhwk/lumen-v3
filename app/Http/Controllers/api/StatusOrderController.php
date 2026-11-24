@@ -589,7 +589,12 @@ class StatusOrderController extends Controller
             });
 
         if (!empty($periode)) {
-            $query->where('periode', $periode);
+            $ym = substr((string) $periode, 0, 7);
+            $query->where(function ($q) use ($periode, $ym) {
+                $q->where('periode', $periode)
+                    ->orWhere('periode', $ym)
+                    ->orWhere('periode', 'like', $ym . '%');
+            });
         }
 
         $linkLhp = $query->orderByDesc('id')->first();
