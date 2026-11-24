@@ -86,6 +86,7 @@ $app->middleware([
 
 $app->routeMiddleware([
     'auth.token' => App\Http\Middleware\CheckToken::class,
+    'internal.ppi' => App\Http\Middleware\InternalPpiToken::class,
     'log.request' => App\Http\Middleware\LogRequest::class,
     'decrypt.slice' => \App\Http\Middleware\DecryptSliceMiddleware::class,
     'rate.limit' => App\Http\Middleware\RateLimitMiddleware::class,
