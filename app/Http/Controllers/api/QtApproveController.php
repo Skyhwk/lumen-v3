@@ -16,6 +16,7 @@ use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use App\Jobs\RenderPdfPenawaran;
+use App\Services\DateColumnFilterService;
 use App\Services\GenerateQrDocument;
 use App\Services\GenerateToken;
 use App\Services\RenderNonKontrak;
@@ -37,21 +38,23 @@ class QtApproveController extends Controller
     public function index(Request $request)
     {
         if ($request->mode == 'non_kontrak') {
-            $data = QuotationNonKontrak::with(['sales', 'addby', 'updateby'])->where('is_active', $request->is_active)
+            $data = QuotationNonKontrak::with(['sales', 'addby', 'updateby'])
+                ->where('is_active', $request->is_active)
                 ->where('id_cabang', $request->id_cabang)
                 ->where('is_approved', $request->is_approve)
                 ->where('is_active', true)
                 ->where('flag_status', $request->flag)
                 ->where('is_emailed', false)
-                ->whereYear('tanggal_penawaran', $request->periode)->get();
+                ->whereYear('tanggal_penawaran', $request->periode);
         } else if ($request->mode == 'kontrak') {
-            $data = QuotationKontrakH::with(['sales', 'addby', 'updateby'])->where('is_active', $request->is_active)
+            $data = QuotationKontrakH::with(['sales', 'addby', 'updateby'])
+                ->where('is_active', $request->is_active)
                 ->where('id_cabang', $request->id_cabang)
                 ->where('is_approved', $request->is_approve)
                 ->where('is_active', true)
                 ->where('flag_status', $request->flag)
                 ->where('is_emailed', false)
-                ->whereYear('tanggal_penawaran', $request->periode)->get();
+                ->whereYear('tanggal_penawaran', $request->periode);
         }
 
         $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
@@ -67,10 +70,23 @@ class QtApproveController extends Controller
                 $data->whereIn('sales_id', $bawahan);
                 break;
         }
-         foreach ($data as $key => $value) {
-            $value->email_cc = json_decode($value->email_cc);
-        };
-        return Datatables::of($data)->make(true);
+
+        return Datatables::of($data)
+            ->filterColumn('created_at', function ($query, $keyword) use ($request) {
+                $column = $request->mode == 'kontrak'
+                    ? 'request_quotation_kontrak_H.created_at'
+                    : 'request_quotation.created_at';
+
+                DateColumnFilterService::apply($query, $column, $keyword);
+            })
+            ->editColumn('email_cc', function ($item) {
+                if (is_string($item->email_cc)) {
+                    return json_decode($item->email_cc);
+                }
+
+                return $item->email_cc;
+            })
+            ->make(true);
     }
  
 
