@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\MasterShiftKaryawan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 
 class MasterShiftKaryawanController extends Controller
@@ -26,7 +27,19 @@ class MasterShiftKaryawanController extends Controller
             $query->where('is_active', 0);
         }
 
-        return Datatables::of($query)->make(true);
+        $usedCodes = DB::table('shift_karyawan')
+            ->whereNotNull('shift')
+            ->where('shift', '!=', '')
+            ->distinct()
+            ->pluck('shift')
+            ->map(fn ($code) => strtoupper(trim((string) $code)))
+            ->filter()
+            ->flip()
+            ->all();
+
+        return Datatables::of($query)
+            ->addColumn('is_used', fn ($row) => isset($usedCodes[strtoupper(trim((string) $row->kode))]))
+            ->make(true);
     }
 
     public function store(Request $request)
@@ -95,6 +108,13 @@ class MasterShiftKaryawanController extends Controller
                 return response()->json(['message' => 'Data shift tidak ditemukan'], 404);
             }
 
+            $currentKode = strtoupper(trim((string) $row->kode));
+            if ($kode !== $currentKode && $this->isShiftCodeUsed($currentKode)) {
+                return response()->json([
+                    'message' => "Kode shift {$currentKode} sudah digunakan pada jadwal karyawan dan tidak dapat diubah",
+                ], 422);
+            }
+
             $duplicate = MasterShiftKaryawan::query()
                 ->where('kode', $kode)
                 ->where('id', '!=', $row->id)
@@ -116,6 +136,7 @@ class MasterShiftKaryawanController extends Controller
             $row->updated_by = $actor;
             $row->updated_at = $now;
             $row->save();
+            MasterShiftKaryawan::clearCache();
 
             return response()->json([
                 'message' => 'Master shift berhasil diperbarui',
@@ -148,6 +169,7 @@ class MasterShiftKaryawanController extends Controller
             'created_at' => $now,
             'updated_at' => $now,
         ]);
+        MasterShiftKaryawan::clearCache();
 
         return response()->json([
             'message' => 'Master shift berhasil ditambahkan',
@@ -172,6 +194,7 @@ class MasterShiftKaryawanController extends Controller
         $row->updated_by = $this->karyawan ?: 'system';
         $row->updated_at = Carbon::now('Asia/Jakarta')->format('Y-m-d H:i:s');
         $row->save();
+        MasterShiftKaryawan::clearCache();
 
         return response()->json([
             'message' => $nextStatus === 1 ? 'Master shift diaktifkan' : 'Master shift dinonaktifkan',
@@ -195,11 +218,19 @@ class MasterShiftKaryawanController extends Controller
         $row->updated_by = $this->karyawan ?: 'system';
         $row->updated_at = Carbon::now('Asia/Jakarta')->format('Y-m-d H:i:s');
         $row->save();
+        MasterShiftKaryawan::clearCache();
 
         return response()->json([
             'message' => 'Master shift berhasil dinonaktifkan',
             'data' => $row,
         ], 200);
+    }
+
+    private function isShiftCodeUsed(string $kode): bool
+    {
+        return DB::table('shift_karyawan')
+            ->whereRaw('UPPER(TRIM(shift)) = ?', [strtoupper(trim($kode))])
+            ->exists();
     }
 
     private function normalizeTime($value): ?string
