@@ -191,7 +191,6 @@ class BankSoalController extends Controller
         $data['is_active'] = isset($data['is_active']) ? (bool) $data['is_active'] : true;
         $data['created_by'] = $this->karyawan ?: 'System';
         $data['name'] = trim((string) $request->name);
-        $data['question_count'] = $request->question_count;
 
         if ($categoryScope === 'manager') {
             $assignedManager = trim((string) $request->input('assigned_manager', ''));
@@ -210,8 +209,17 @@ class BankSoalController extends Controller
             $data['category_scope'] = 'manager';
             $data['owner_karyawan'] = $this->karyawan;
             $data['assigned_manager'] = $assignedManager !== '' ? $assignedManager : null;
+            if (Schema::hasColumn('question_categories', 'question_type')) {
+                $data['question_type'] = $this->normalizedCategoryQuestionType($request->input('question_type'));
+            }
         } else {
             $data['category_scope'] = 'hr';
+            $data['question_count'] = $request->filled('question_count')
+                ? (int) $request->question_count
+                : 30;
+            if (Schema::hasColumn('question_categories', 'question_type')) {
+                $data['question_type'] = $this->normalizedCategoryQuestionType($request->input('question_type'));
+            }
         }
 
         return response()->json(['success' => true, 'message' => 'Kategori berhasil disimpan.', 'data' => QuestionCategory::create($data)], 201);
@@ -241,6 +249,17 @@ class BankSoalController extends Controller
         }
         if ($this->isManagerCategory($category)) {
             $data['question_count'] = 0;
+        }
+        if (Schema::hasColumn('question_categories', 'question_type') && array_key_exists('question_type', $data)) {
+            $nextType = $this->normalizedCategoryQuestionType($data['question_type']);
+            if (
+                $category->question_type
+                && $nextType !== $category->question_type
+                && $category->questions()->where('is_active', 1)->exists()
+            ) {
+                $this->fail('Tipe soal kategori tidak dapat diubah karena sudah ada soal.');
+            }
+            $data['question_type'] = $nextType;
         }
 
         $category->update($data);
@@ -474,6 +493,9 @@ class BankSoalController extends Controller
         }
         if ($scope === 'manager' && !$category) {
             $this->fail('Pilih kategori aktif sebelum mengunggah soal.');
+        }
+        if ($this->categoryLockedQuestionType((int) ($category->id ?? 0)) === 'scale') {
+            $this->fail('Template Excel hanya untuk kategori Pilihan Tunggal. Soal skala ditambahkan satu per satu.');
         }
 
         $questions = [];
@@ -764,24 +786,30 @@ class BankSoalController extends Controller
             ? $request->input('question_type')
             : 'single_choice';
         $data['options'] = $data['options'] ?? [];
+        $categoryQuestionType = $this->categoryLockedQuestionType((int) ($data['question_category_id'] ?? 0));
+        if ($categoryQuestionType) {
+            $data['question_type'] = $categoryQuestionType;
+        }
         if ($this->scope($request) === 'manager') {
             if (empty($data['question_category_id'])) {
                 $this->fail('Pilih kategori soal terlebih dahulu.');
             }
             $this->resolveManagerCategory((int) $data['question_category_id'], 'write');
-            $data['question_type'] = 'single_choice';
-            $data['scoring_type'] = 'correct_answer';
-            $data['scale_type_id'] = null;
+            if ($categoryQuestionType !== 'scale') {
+                $data['question_type'] = 'single_choice';
+                $data['scoring_type'] = 'correct_answer';
+                $data['scale_type_id'] = null;
+            }
         }
 
         if ($data['question_type'] === 'scale') {
             $scaleTypeId = (int) $request->input('scale_type_id');
             if (!$scaleTypeId) {
-                $this->fail('Scale Type wajib dipilih untuk soal bertipe scale.');
+                $this->fail('Tipe scale wajib dipilih untuk soal bertipe skala.');
             }
             ScaleType::where('id', $scaleTypeId)->where('is_active', true)->firstOrFail();
             $data['scale_type_id'] = $scaleTypeId;
-            $data['scoring_type'] = 'scale_average';
+            $data['scoring_type'] = 'weighted_option';
             $data['options'] = [];
             return $data;
         }
@@ -789,11 +817,29 @@ class BankSoalController extends Controller
         $data['scale_type_id'] = null;
         $data['scoring_type'] = 'correct_answer';
 
-        if (in_array($data['question_type'], ['single_choice', 'multiple_choice']) && count($data['options']) === 0) $this->fail('Answer option wajib diisi.');
+        if (in_array($data['question_type'], ['single_choice', 'multiple_choice']) && count($data['options']) === 0) $this->fail('Pilihan jawaban wajib diisi.');
         $correctOptionCount = collect($data['options'])->filter(fn ($option) => filter_var($option['is_correct'] ?? false, FILTER_VALIDATE_BOOLEAN))->count();
-        if ($correctOptionCount === 0) $this->fail('Pilih minimal satu Answer Option sebagai jawaban Correct.');
-        if ($data['question_type'] === 'single_choice' && $correctOptionCount > 1) $this->fail('Single Choice hanya boleh memiliki satu jawaban benar.');
+        if ($correctOptionCount === 0) $this->fail('Pilih minimal satu pilihan jawaban sebagai jawaban benar.');
+        if ($data['question_type'] === 'single_choice' && $correctOptionCount > 1) $this->fail('Pilihan Tunggal hanya boleh memiliki satu jawaban benar.');
         return $data;
+    }
+
+    private function normalizedCategoryQuestionType($type): string
+    {
+        $normalized = strtolower(trim((string) $type));
+
+        return in_array($normalized, ['single_choice', 'scale'], true) ? $normalized : 'single_choice';
+    }
+
+    private function categoryLockedQuestionType(int $categoryId): string
+    {
+        if ($categoryId < 1 || !Schema::hasColumn('question_categories', 'question_type')) {
+            return '';
+        }
+
+        $type = QuestionCategory::where('id', $categoryId)->value('question_type');
+
+        return in_array($type, ['single_choice', 'scale'], true) ? $type : '';
     }
 
     private function scope(Request $request)
