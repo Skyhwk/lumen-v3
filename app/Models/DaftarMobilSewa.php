@@ -16,6 +16,8 @@ class DaftarMobilSewa extends Sector
         'nomor_mesin',
         'warna_mobil',
         'tahun_perakitan',
+        'is_include',
+        'driver',
         'created_at',
         'created_by',
         'updated_at',
@@ -27,6 +29,7 @@ class DaftarMobilSewa extends Sector
 
     protected $casts = [
         'tahun_perakitan' => 'integer',
+        'is_include' => 'boolean',
         'is_active' => 'boolean',
     ];
 

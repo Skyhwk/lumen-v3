@@ -29,6 +29,9 @@ class DaftarMobilSewaController extends Controller
             ->orderByDesc('id');
 
         return DataTables::of($query)
+            ->addColumn('is_include_label', function ($row) {
+                return $row->is_include ? 'Ya (include sopir)' : 'Tidak';
+            })
             ->filterColumn('tanggal_sewa_aktif', function ($query, $keyword) {
                 $date = trim((string) $keyword);
                 if ($date === '') {
@@ -45,6 +48,19 @@ class DaftarMobilSewaController extends Controller
                     $q->whereDate('tanggal_sewa', $date);
                 });
             })
+            ->filterColumn('is_include_label', function ($query, $keyword) {
+                $text = strtolower(trim((string) $keyword));
+                if ($text === '') {
+                    return;
+                }
+                if (in_array($text, ['1', 'ya', 'yes', 'true', 'include'], true)) {
+                    $query->where('is_include', true);
+                    return;
+                }
+                if (in_array($text, ['0', 'tidak', 'no', 'false'], true)) {
+                    $query->where('is_include', false);
+                }
+            })
             ->make(true);
     }
 
@@ -59,6 +75,8 @@ class DaftarMobilSewaController extends Controller
             'nomor_mesin' => ['nullable', 'string', 'max:100'],
             'warna_mobil' => ['required', 'string', 'max:50'],
             'tahun_perakitan' => ['nullable', 'integer', 'min:1900', 'max:2100'],
+            'is_include' => ['required'],
+            'driver' => ['nullable', 'string', 'max:150'],
             'tanggal_sewa' => ['required', 'array', 'min:1'],
             'tanggal_sewa.*' => ['required', 'date'],
         ]);
@@ -96,6 +114,18 @@ class DaftarMobilSewaController extends Controller
             : null;
         $warnaMobil = trim($request->warna_mobil);
         $tahunPerakitan = $request->tahun_perakitan ?: null;
+        $isInclude = filter_var($request->is_include, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        if ($isInclude === null) {
+            $isInclude = in_array((string) $request->is_include, ['1', 'true', 'on', 'ya'], true);
+        }
+        $driverName = $request->filled('driver') ? trim((string) $request->driver) : null;
+        if ($driverName === '') {
+            $driverName = null;
+        }
+        // Tanpa sopir include → nama driver dikosongkan.
+        if (!$isInclude) {
+            $driverName = null;
+        }
         $now = Carbon::now('Asia/Jakarta')->toDateTimeString();
 
         $duplicateQuery = DaftarMobilSewa::where('is_active', true)
@@ -155,6 +185,8 @@ class DaftarMobilSewaController extends Controller
                 $data->nomor_mesin = $nomorMesin;
                 $data->warna_mobil = $warnaMobil;
                 $data->tahun_perakitan = $tahunPerakitan;
+                $data->is_include = $isInclude;
+                $data->driver = $driverName;
                 $data->updated_at = $now;
                 $data->updated_by = $this->karyawan;
                 $data->save();
@@ -175,6 +207,8 @@ class DaftarMobilSewaController extends Controller
                     'nomor_mesin' => $nomorMesin,
                     'warna_mobil' => $warnaMobil,
                     'tahun_perakitan' => $tahunPerakitan,
+                    'is_include' => $isInclude,
+                    'driver' => $driverName,
                     'created_at' => $now,
                     'created_by' => $this->karyawan,
                     'is_active' => true,
