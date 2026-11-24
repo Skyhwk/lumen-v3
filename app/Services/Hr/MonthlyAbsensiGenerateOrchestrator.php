@@ -435,7 +435,7 @@ class MonthlyAbsensiGenerateOrchestrator
                     $keepBySlot['Keluar|' . $dataAbsen->tgl_keluar] = $idKeluar;
                 } else {
                     $tanggal = $dataAbsen->tgl;
-                    if ($dataAbsen->shift == 'SHSECURITY2' || $dataAbsen->shift == '24jam') {
+                    if (\App\Models\MasterShiftKaryawan::isOvernight($dataAbsen->shift ?? null)) {
                         $tanggal = date('Y-m-d', strtotime($dataAbsen->tgl . ' +1 day'));
                     }
                     $insertRows[] = [

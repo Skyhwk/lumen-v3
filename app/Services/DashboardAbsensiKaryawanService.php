@@ -500,14 +500,16 @@ class DashboardAbsensiKaryawanService
         $shiftName = strtoupper(trim((string) $shift));
         $todaySeconds = $this->punchSeconds($today);
         $nextSeconds = $this->punchSeconds($tomorrow);
-        $timeInSeconds = $this->toSeconds($timeIn) ?? $this->toSeconds('08:00:00');
-        $timeOutSeconds = $this->toSeconds($timeOut);
-        $overnight = in_array($shiftName, ['24JAM', 'SHSECURITY2'], true)
-            || ($timeInSeconds !== null && $timeOutSeconds !== null && $timeOutSeconds <= $timeInSeconds);
+        $regularIn = MasterShiftKaryawan::getShiftTimes('SHREGULAR')['in_hms'];
+        $timeInSeconds = $this->toSeconds($timeIn) ?? $this->toSeconds($regularIn);
+        $overnight = MasterShiftKaryawan::isOvernight($shiftName, $timeIn, $timeOut);
+        $isNightShift = MasterShiftKaryawan::isNightShift($shiftName, $timeIn, $timeOut);
 
-        if ($shiftName === 'SHSECURITY2') {
-            $in = $todaySeconds->filter(fn ($value) => $value > $this->toSeconds('14:00:00'))->min();
-            $out = $nextSeconds->first(fn ($value) => $value < $this->toSeconds('14:00:00'));
+        if ($isNightShift) {
+            $bounds = MasterShiftKaryawan::resolveNightShiftBounds($shiftName, $timeIn, $timeOut);
+            $keluarBeforeSec = $this->toSeconds($bounds['keluar_before']) ?? $this->toSeconds('14:00:00');
+            $in = $todaySeconds->filter(fn ($value) => $value > $keluarBeforeSec)->min();
+            $out = $nextSeconds->first(fn ($value) => $value < $keluarBeforeSec);
             return [$in ?: null, $out !== null ? $out + 86400 : null];
         }
 
@@ -517,7 +519,7 @@ class DashboardAbsensiKaryawanService
             return [$in, $out !== null ? $out + 86400 : null];
         }
 
-        $split = ($timeInSeconds ?? $this->toSeconds('08:00:00')) + (4 * 3600);
+        $split = ($timeInSeconds ?? $this->toSeconds($regularIn)) + (4 * 3600);
         $in = $todaySeconds->filter(fn ($value) => $value <= $split)->min();
         $out = $todaySeconds->filter(fn ($value) => $value > $split)->max();
 

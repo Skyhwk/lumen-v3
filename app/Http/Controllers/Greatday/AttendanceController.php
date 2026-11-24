@@ -866,18 +866,39 @@ class AttendanceController extends Controller
 
     private function insertProduksiAbsensiRow(string $tanggal, string $jam): void
     {
-        $shiftCode = ShiftKaryawan::on($this->produksi())
+        $conn = $this->produksi();
+        $shiftRow = ShiftKaryawan::on($conn)
             ->where('karyawan_id', $this->user_id)
             ->where('tanggal', $tanggal)
-            ->value('shift');
+            ->first(['shift', 'time_in', 'time_out']);
 
-        Absensi::on($this->produksi())->create([
+        $prevDate = Carbon::parse($tanggal)->subDay()->toDateString();
+        $prevRow = ShiftKaryawan::on($conn)
+            ->where('karyawan_id', $this->user_id)
+            ->where('tanggal', $prevDate)
+            ->first(['shift', 'time_in', 'time_out']);
+
+        $effectiveRow = $shiftRow;
+        if ($prevRow && MasterShiftKaryawan::isNightShift($prevRow->shift ?? null, $prevRow->time_in ?? null, $prevRow->time_out ?? null, $conn)) {
+            $bounds = MasterShiftKaryawan::resolveNightShiftBounds($prevRow->shift ?? null, $prevRow->time_in ?? null, $prevRow->time_out ?? null, $conn);
+            if ($jam < $bounds['keluar_before']) {
+                $effectiveRow = $prevRow;
+            }
+        }
+
+        Absensi::on($conn)->create([
             'karyawan_id' => $this->user_id,
             'tanggal' => $tanggal,
             'jam' => $jam,
             'hari' => $this->getDayName($tanggal),
             'kode_mesin' => 'GREATDAY',
-            'status' => ShiftAbsensiPunchRules::inferProductionStatus($shiftCode, $jam),
+            'status' => ShiftAbsensiPunchRules::inferProductionStatus(
+                $effectiveRow->shift ?? null,
+                $jam,
+                $effectiveRow->time_in ?? null,
+                $effectiveRow->time_out ?? null,
+                $conn
+            ),
         ]);
     }
 

@@ -99,6 +99,14 @@ class MasterShiftKaryawanController extends Controller
             ? 1
             : (in_array($isActiveInput, [1, '1', true, 'true', 'on'], true) ? 1 : 0);
 
+        $payrollModeRaw = strtolower(trim((string) $request->input('payroll_workday_mode', MasterShiftKaryawan::PAYROLL_MODE_CALENDAR)));
+        if ($payrollModeRaw === '') {
+            $payrollModeRaw = MasterShiftKaryawan::PAYROLL_MODE_CALENDAR;
+        }
+        if (!in_array($payrollModeRaw, MasterShiftKaryawan::PAYROLL_MODES, true)) {
+            return response()->json(['message' => 'Mode hari kerja payroll tidak valid'], 422);
+        }
+
         $actor = $this->karyawan ?: 'system';
         $now = Carbon::now('Asia/Jakarta')->format('Y-m-d H:i:s');
 
@@ -132,6 +140,7 @@ class MasterShiftKaryawanController extends Controller
             if ($sortOrder !== null) {
                 $row->sort_order = $sortOrder;
             }
+            $row->payroll_workday_mode = $payrollModeRaw;
             $row->is_active = $isActive;
             $row->updated_by = $actor;
             $row->updated_at = $now;
@@ -163,6 +172,7 @@ class MasterShiftKaryawanController extends Controller
             'time_in' => $timeIn,
             'time_out' => $timeOut,
             'sort_order' => $sortOrder,
+            'payroll_workday_mode' => $payrollModeRaw,
             'is_active' => $isActive,
             'created_by' => $actor,
             'updated_by' => $actor,

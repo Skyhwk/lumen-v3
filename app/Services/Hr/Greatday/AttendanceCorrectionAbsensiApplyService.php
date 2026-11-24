@@ -2,6 +2,7 @@
 
 namespace App\Services\Hr\Greatday;
 
+use App\Models\MasterShiftKaryawan;
 use App\Models\ShiftKaryawan;
 use App\Services\Hr\MonthlyAbsensiDataBuilder;
 use App\Services\Hr\ShiftAbsensiPunchRules;
@@ -14,8 +15,6 @@ use Illuminate\Support\Facades\DB;
  */
 class AttendanceCorrectionAbsensiApplyService
 {
-    private const OVERNIGHT_SHIFTS = ['shsecurity2', '24jam'];
-
     public function isAlreadyApplied(int $employeeId, string $correctionDate, string $type, string $time): bool
     {
         $context = $this->buildApplyContext($employeeId, $correctionDate, $type, $time);
@@ -85,11 +84,22 @@ class AttendanceCorrectionAbsensiApplyService
         $conn = (string) config('greatday.produksi_connection', config('database.default', 'mysql'));
         $isCheckIn = $this->isCheckInType($type);
 
-        $shiftOnDate = $this->shiftCode($conn, $employeeId, $correctionDate);
+        $shiftRowOnDate = $this->shiftRow($conn, $employeeId, $correctionDate);
+        $shiftOnDate = $shiftRowOnDate ? (string) ($shiftRowOnDate->shift ?? '') : null;
         $prevDate = Carbon::parse($correctionDate)->subDay()->toDateString();
-        $shiftPrevDate = $this->shiftCode($conn, $employeeId, $prevDate);
+        $shiftRowPrevDate = $this->shiftRow($conn, $employeeId, $prevDate);
+        $shiftPrevDate = $shiftRowPrevDate ? (string) ($shiftRowPrevDate->shift ?? '') : null;
 
-        $absensiDate = self::resolveStorageDate($correctionDate, $time, $isCheckIn, $shiftOnDate, $shiftPrevDate);
+        $absensiDate = self::resolveStorageDate(
+            $correctionDate,
+            $time,
+            $isCheckIn,
+            $shiftOnDate,
+            $shiftPrevDate,
+            $shiftRowOnDate,
+            $shiftRowPrevDate,
+            $conn
+        );
         $status = $isCheckIn ? 'Masuk' : 'Keluar';
 
         $existingSlot = $this->findExistingPunchRow(
@@ -99,7 +109,9 @@ class AttendanceCorrectionAbsensiApplyService
             $absensiDate,
             $isCheckIn,
             $shiftOnDate,
-            $shiftPrevDate
+            $shiftPrevDate,
+            $shiftRowOnDate,
+            $shiftRowPrevDate
         );
 
         return [
@@ -141,17 +153,41 @@ class AttendanceCorrectionAbsensiApplyService
         string $time,
         bool $isCheckIn,
         ?string $shiftOnDate,
-        ?string $shiftPreviousDate
+        ?string $shiftPreviousDate,
+        ?object $shiftRowOnDate = null,
+        ?object $shiftRowPreviousDate = null,
+        ?string $connection = null
     ): string {
         if ($isCheckIn) {
             return $correctionDate;
         }
 
-        if ($time < ShiftAbsensiPunchRules::OVERNIGHT_KELUAR_BEFORE) {
-            if (self::isOvernightShift($shiftPreviousDate)) {
+        if (self::isOvernightShift($shiftPreviousDate, $shiftRowPreviousDate, $connection)) {
+            $boundsPrev = MasterShiftKaryawan::resolveNightShiftBounds(
+                $shiftPreviousDate,
+                $shiftRowPreviousDate->time_in ?? null,
+                $shiftRowPreviousDate->time_out ?? null,
+                $connection
+            );
+            $prevCutoff = MasterShiftKaryawan::is24Jam($shiftPreviousDate)
+                ? ShiftAbsensiPunchRules::OVERNIGHT_KELUAR_BEFORE
+                : $boundsPrev['keluar_before'];
+            if ($time < $prevCutoff) {
                 return $correctionDate;
             }
-            if (self::isOvernightShift($shiftOnDate)) {
+        }
+
+        if (self::isOvernightShift($shiftOnDate, $shiftRowOnDate, $connection)) {
+            $boundsOn = MasterShiftKaryawan::resolveNightShiftBounds(
+                $shiftOnDate,
+                $shiftRowOnDate->time_in ?? null,
+                $shiftRowOnDate->time_out ?? null,
+                $connection
+            );
+            $onCutoff = MasterShiftKaryawan::is24Jam($shiftOnDate)
+                ? ShiftAbsensiPunchRules::OVERNIGHT_KELUAR_BEFORE
+                : $boundsOn['keluar_before'];
+            if ($time < $onCutoff) {
                 return Carbon::parse($correctionDate)->addDay()->toDateString();
             }
         }
@@ -189,34 +225,47 @@ class AttendanceCorrectionAbsensiApplyService
         string $absensiDate,
         bool $isCheckIn,
         ?string $shiftOnDate,
-        ?string $shiftPrevDate
+        ?string $shiftPrevDate,
+        ?object $shiftRowOnDate = null,
+        ?object $shiftRowPrevDate = null
     ): ?object {
         if ($isCheckIn) {
-            return $this->findCheckInRow($conn, $employeeId, $correctionDate, $shiftOnDate);
+            return $this->findCheckInRow($conn, $employeeId, $correctionDate, $shiftOnDate, $shiftRowOnDate);
         }
 
-        return $this->findCheckOutRow($conn, $employeeId, $absensiDate, $shiftOnDate, $shiftPrevDate);
+        return $this->findCheckOutRow($conn, $employeeId, $absensiDate, $shiftOnDate, $shiftPrevDate, $shiftRowOnDate, $shiftRowPrevDate);
     }
 
-    private function findCheckInRow(string $conn, int $employeeId, string $correctionDate, ?string $shiftOnDate): ?object
-    {
+    private function findCheckInRow(
+        string $conn,
+        int $employeeId,
+        string $correctionDate,
+        ?string $shiftOnDate,
+        ?object $shiftRowOnDate = null
+    ): ?object {
         $rows = $this->rowsOnDate($conn, $employeeId, $correctionDate);
         if ($rows->isEmpty()) {
             return null;
         }
 
-        $shift = strtolower(trim((string) $shiftOnDate));
-        if ($shift === 'shsecurity2') {
-            return ShiftAbsensiPunchRules::pickSecurity2MasukRow($rows);
+        $timeIn = $shiftRowOnDate->time_in ?? null;
+        $timeOut = $shiftRowOnDate->time_out ?? null;
+
+        if (MasterShiftKaryawan::isNightShift($shiftOnDate, $timeIn, $timeOut, $conn)) {
+            return ShiftAbsensiPunchRules::pickNightShiftMasukRow($rows, $shiftOnDate, $timeIn, $timeOut, $conn);
         }
-        if ($shift === '24jam') {
+        if (MasterShiftKaryawan::is24Jam($shiftOnDate)) {
             $minJam = $rows->min('jam');
 
             return $minJam !== null && (string) $minJam > '00:00:00'
                 ? $rows->first(fn ($row) => (string) $row->jam === (string) $minJam)
                 : null;
         }
-        if ($shift === 'shob2') {
+
+        // Shift siang (jam masuk >= 10:00 seperti SHTEKNISI/SHOB2/SHKORSAMP2): pilih punch paling awal
+        $resolvedInHm = MasterShiftKaryawan::normalizeHm($timeIn)
+            ?? ($shiftOnDate ? MasterShiftKaryawan::getShiftTimes($shiftOnDate, $conn)['in'] : null);
+        if ($resolvedInHm !== null && $resolvedInHm >= '10:00') {
             return $rows->sortBy('jam')->first();
         }
 
@@ -232,15 +281,23 @@ class AttendanceCorrectionAbsensiApplyService
         int $employeeId,
         string $absensiDate,
         ?string $shiftOnDate,
-        ?string $shiftPrevDate
+        ?string $shiftPrevDate,
+        ?object $shiftRowOnDate = null,
+        ?object $shiftRowPrevDate = null
     ): ?object {
         $rows = $this->rowsOnDate($conn, $employeeId, $absensiDate);
         if ($rows->isEmpty()) {
             return null;
         }
 
-        if (self::isOvernightShift($shiftOnDate) || self::isOvernightShift($shiftPrevDate)) {
-            return ShiftAbsensiPunchRules::pickOvernightKeluarRow($rows);
+        if (self::isOvernightShift($shiftOnDate, $shiftRowOnDate, $conn) || self::isOvernightShift($shiftPrevDate, $shiftRowPrevDate, $conn)) {
+            $refCode = self::isOvernightShift($shiftPrevDate, $shiftRowPrevDate, $conn) ? $shiftPrevDate : $shiftOnDate;
+            $refRow = self::isOvernightShift($shiftPrevDate, $shiftRowPrevDate, $conn) ? $shiftRowPrevDate : $shiftRowOnDate;
+            $cutoff = MasterShiftKaryawan::is24Jam($refCode)
+                ? ShiftAbsensiPunchRules::OVERNIGHT_KELUAR_BEFORE
+                : MasterShiftKaryawan::resolveNightShiftBounds($refCode, $refRow->time_in ?? null, $refRow->time_out ?? null, $conn)['keluar_before'];
+
+            return ShiftAbsensiPunchRules::pickOvernightKeluarRow($rows, $cutoff);
         }
 
         $afternoon = $rows->filter(
@@ -266,12 +323,12 @@ class AttendanceCorrectionAbsensiApplyService
             ->get(['id', 'karyawan_id', 'tanggal', 'jam', 'kode_mesin', 'status']);
     }
 
-    private function shiftCode(string $conn, int $employeeId, string $date): ?string
+    private function shiftRow(string $conn, int $employeeId, string $date): ?object
     {
         return ShiftKaryawan::on($conn)
             ->where('karyawan_id', $employeeId)
             ->where('tanggal', $date)
-            ->value('shift');
+            ->first(['shift', 'time_in', 'time_out']);
     }
 
     private function isCheckInType(string $type): bool
@@ -294,8 +351,13 @@ class AttendanceCorrectionAbsensiApplyService
         return $time;
     }
 
-    private static function isOvernightShift(?string $shift): bool
+    private static function isOvernightShift(?string $shift, ?object $shiftRow = null, ?string $connection = null): bool
     {
-        return in_array(strtolower(trim((string) $shift)), self::OVERNIGHT_SHIFTS, true);
+        return MasterShiftKaryawan::isOvernight(
+            $shift,
+            $shiftRow->time_in ?? null,
+            $shiftRow->time_out ?? null,
+            $connection
+        );
     }
 }
