@@ -9,7 +9,7 @@ use App\Models\{
 use App\Jobs\CombineLhpOrderBerjalanJob;
 use App\Models\OrderBerjalan;
 use App\Services\{
-    CombineLHPService,CombineLhpOrderBerjalanService,GetAtasan,SamplingPlanServices,RenderSamplingPlan,JadwalServices,RenderInvoice,RenderInvoiceTitik,GeneratePraSampling,GenerateQrDocumentLhp,GenerateWebinarSertificate,LhpTemplate,RandomSalesAssign,SendEmail,GetBawahan,SnapshotPersiapanService,GenerateToken,GenerateDokumenCocService,GenerateStrukSarService,PortalNotificationService,AppsBasService
+    CombineLHPService,GetAtasan,SamplingPlanServices,RenderSamplingPlan,JadwalServices,RenderInvoice,RenderInvoiceTitik,GeneratePraSampling,GenerateQrDocumentLhp,GenerateWebinarSertificate,LhpTemplate,RandomSalesAssign,SendEmail,GetBawahan,SnapshotPersiapanService,GenerateToken,GenerateDokumenCocService,GenerateStrukSarService,PortalNotificationService,AppsBasService
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -7006,7 +7006,7 @@ class TestingController extends Controller
             $sync = filter_var($request->input('sync', true), FILTER_VALIDATE_BOOLEAN);
 
             if ($sync) {
-                $combineResult = (new CombineLhpOrderBerjalanService())->combine(
+                $combineResult = (new CombineLHPService())->combineFromOrderBerjalan(
                     $noOrder,
                     $periode,
                     $karyawan,

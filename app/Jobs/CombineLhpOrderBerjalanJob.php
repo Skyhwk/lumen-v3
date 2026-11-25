@@ -3,11 +3,11 @@
 namespace App\Jobs;
 
 use App\Models\OrderBerjalan;
-use App\Services\CombineLhpOrderBerjalanService;
+use App\Services\CombineLHPService;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Async wrapper untuk CombineLhpOrderBerjalanService (sumber: order_berjalan).
+ * Async combine LHP dari snapshot order_berjalan.
  */
 class CombineLhpOrderBerjalanJob extends Job
 {
@@ -24,7 +24,7 @@ class CombineLhpOrderBerjalanJob extends Job
 
     /**
      * Dispatch setelah DB commit (jika ada transaksi aktif).
-     * Skip diam-diam jika snapshot order_berjalan belum ada.
+     * Skip + log jika snapshot order_berjalan belum ada.
      */
     public static function dispatchFor(string $noOrder, ?string $periode, string $karyawan): void
     {
@@ -34,7 +34,7 @@ class CombineLhpOrderBerjalanJob extends Job
         }
 
         if (!OrderBerjalan::where('no_order', $noOrder)->exists()) {
-            Log::warning(CombineLhpOrderBerjalanService::LOG_PREFIX . ' dispatch skipped: snapshot missing', [
+            Log::warning(CombineLHPService::LOG_PREFIX . ' dispatch skipped: snapshot missing', [
                 'no_order' => $noOrder,
                 'periode' => $periode,
             ]);
@@ -47,11 +47,16 @@ class CombineLhpOrderBerjalanJob extends Job
 
     public function handle()
     {
-        $service = new CombineLhpOrderBerjalanService();
-        $result = $service->combine($this->noOrder, $this->periode, $this->karyawan, false);
+        $service = new CombineLHPService();
+        $result = $service->combineFromOrderBerjalan(
+            $this->noOrder,
+            $this->periode,
+            $this->karyawan,
+            false
+        );
 
         if (empty($result['ok'])) {
-            Log::warning(CombineLhpOrderBerjalanService::LOG_PREFIX . ' job failed', [
+            Log::warning(CombineLHPService::LOG_PREFIX . ' job failed', [
                 'no_order' => $this->noOrder,
                 'periode' => $this->periode,
                 'spot' => $result['spot'] ?? null,

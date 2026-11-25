@@ -6,8 +6,8 @@ use App\Services\CombineLHPService;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Legacy job signature — sekarang mendelegasikan ke CombineLHPService
- * yang membaca order_berjalan (tanpa wajib link_lhp).
+ * Job signature lama — memanggil CombineLHPService::combine()
+ * (sumber: order_berjalan, tanpa wajib link_lhp).
  */
 class CombineLHPJob extends Job
 {
@@ -52,7 +52,7 @@ class CombineLHPJob extends Job
         );
 
         if (is_array($result) && empty($result['ok'])) {
-            Log::warning('CombineLHPJob failed', [
+            Log::warning(CombineLHPService::LOG_PREFIX . ' CombineLHPJob failed', [
                 'no_order' => $this->noOrder,
                 'periode' => $this->periode,
                 'no_lhp' => $this->noLhp,
