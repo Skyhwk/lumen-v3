@@ -427,7 +427,7 @@ class LhpTemplate
             $kategori = intval(strval($kategori));
             if ($kategori === 1) {
                 $header = LhpsAirHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
-                $detail = LhpsAirDetail::where('id_header', $header->id)->get();
+                $detail = $header ? LhpsAirDetail::where('id_header', $header->id)->get() : collect();
                 foreach ($detail as $val) {
                     if ($val->akr != 'ẍ') {
                         $parameterAkreditasi++;
@@ -437,7 +437,7 @@ class LhpTemplate
                 }
             } else if ($kategori === 6) {
                 $header = LhpsPadatanHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
-                $detail = LhpsPadatanDetail::where('id_header', $header->id)->get();
+                $detail = $header ? LhpsPadatanDetail::where('id_header', $header->id)->get() : collect();
                 foreach ($detail as $val) {
                     if ($val->akr != 'ẍ') {
                         $parameterAkreditasi++;
@@ -467,10 +467,10 @@ class LhpTemplate
             })) {
                 if (collect($dataDecode)->contains(fn($item) => in_array($item, ['324;Sinar UV']))) {
                     $header = LhpsSinarUVHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
-                    $detail = LhpsSinarUVDetail::where('id_header', $header->id)->get();
+                    $detail = $header ? LhpsSinarUVDetail::where('id_header', $header->id)->get() : collect();
                 } else {
                     $header = LhpsLingHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
-                    $detail = LhpsLingDetail::where('id_header', $header->id)->get();
+                    $detail = $header ? LhpsLingDetail::where('id_header', $header->id)->get() : collect();
                 }
 
                 foreach ($detail as $val) {
@@ -488,10 +488,10 @@ class LhpTemplate
                     );
                 })) {
                     $header = LhpsEmisiIsokinetikHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
-                    $detail = LhpsEmisiIsokinetikDetail::where('id_header', $header->id)->get();
+                    $detail = $header ? LhpsEmisiIsokinetikDetail::where('id_header', $header->id)->get() : collect();
                 } else {
                     $header = LhpsEmisiCHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
-                    $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
+                    $detail = $header ? LhpsEmisiCDetail::where('id_header', $header->id)->get() : collect();
                 }
 
                 foreach ($detail as $val) {

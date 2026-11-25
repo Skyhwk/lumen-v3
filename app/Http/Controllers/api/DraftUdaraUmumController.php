@@ -7,12 +7,12 @@ use App\Models\HistoryAppReject;
 
 use App\Models\LhpsLingHeader;
 use App\Models\LhpsLingDetail;
-
-
+use App\Models\LhpsLingCustom;
 use App\Models\LhpsLingHeaderHistory;
 use App\Models\LhpsLingDetailHistory;
-
+use App\Models\KonfirmasiLhp;
 use App\Models\MasterSubKategori;
+use App\Models\MasterRegulasi;
 use App\Models\OrderDetail;
 use App\Models\MetodeSampling;
 use App\Models\MasterBakumutu;
@@ -21,9 +21,10 @@ use App\Models\LingkunganHeader;
 use App\Models\QrDocument;
 use App\Models\Subkontrak;
 use App\Models\Parameter;
+use App\Models\PengesahanLhp;
 use App\Models\GenerateLink;
-
 use App\Services\GenerateQrDocumentLhp;
+use App\Services\LhpTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -255,6 +256,17 @@ class DraftUdaraUmumController extends Controller
                 if ($path = $file_qr->insert('LHP_LINGKUNGAN_HIDUP', $header, $this->karyawan)) {
                     $header->file_qr = $path;
                     $header->save();
+                }
+            } else {
+                // Update QR Document jika ada
+                $qr = QrDocument::where('file', $header->file_qr)->first();
+                if ($qr) {
+                    $dataQr = json_decode($qr->data, true);
+                    $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                    $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                    $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                    $qr->data = json_encode($dataQr);
+                    $qr->save();
                 }
             }
 

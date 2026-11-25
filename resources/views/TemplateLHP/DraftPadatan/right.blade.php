@@ -156,13 +156,16 @@
                         <td class="custom5" width="120">Periode Analisa</td>
                         <td class="custom5" width="12">:</td>
                         @php
-                            $periode_analisa = optional($header)->periode_analisa ?? $header['periode_analisa'];
-
-                            $periode = explode(' - ', $periode_analisa);
-                            $periode1 = $periode[0] ?? '';
-                            $periode2 = $periode[1] ?? '';
+                            $periode_analisa = optional($header)->periode_analisa ?? ($header['periode_analisa'] ?? '');
+                            $periode = explode(' - ', (string) $periode_analisa);
+                            $periode1 = trim($periode[0] ?? '');
+                            $periode2 = trim($periode[1] ?? '');
+                            $periodeText = \App\Helpers\Helper::tanggal_indonesia($periode1);
+                            if ($periode2 !== '') {
+                                $periodeText .= ' - ' . \App\Helpers\Helper::tanggal_indonesia($periode2);
+                            }
                         @endphp
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
+                        <td class="custom5">{{ $periodeText }}</td>
                     </tr>
                 </table>
 

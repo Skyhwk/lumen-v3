@@ -21,7 +21,8 @@
                 {{-- Informasi Pelanggan --}}
                 <table style="padding: 20px 0px 0px 0px;" width="100%">
                     <tr>
-                        <td colspan="3"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Pelanggan</span></td>
+                        <td colspan="3"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi
+                                Pelanggan</span></td>
                     </tr>
                     <tr>
                         <td class="custom5" width="120">Nama Pelanggan</td>
@@ -42,15 +43,22 @@
                 {{-- Informasi Sampling --}}
                 <table style="padding: 10px 0px 0px 0px;" width="100%">
                     <tr>
-                        <td class="custom5" width="120" colspan="3"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
+                        <td class="custom5" width="120" colspan="3"><span
+                                style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
                     </tr>
                     <tr>
-                        <td class="custom5" width="120">@if ($header->status_sampling == 'SD') Tanggal Terima @else Tanggal Sampling @endif</td>
+                        <td class="custom5" width="120">
+                            @if ($header->status_sampling == 'SD')
+                                Tanggal Terima
+                            @else
+                                Tanggal Sampling
+                            @endif
+                        </td>
                         <td class="custom5" width="12">:</td>
                         @php
-                            if($header->status_sampling == 'SD'){ 
-                                $tanggal_ = $header->tanggal_terima ;
-                            } else { 
+                            if ($header->status_sampling == 'SD') {
+                                $tanggal_ = $header->tanggal_terima;
+                            } else {
                                 $tanggal_ = $header->tanggal_sampling;
                             }
                         @endphp
@@ -58,16 +66,17 @@
                     </tr>
                     @php
                         if ($header->methode_sampling != null) {
-                            
-                            $methode_sampling = "";
+                            $methode_sampling = '';
                             $dataArray = json_decode($header->methode_sampling ?? []);
-                            
+
                             $result = array_map(function ($item) {
                                 if (strpos($item, ';') !== false) {
                                     $parts = explode(';', $item);
                                     $accreditation = strpos($parts[0], 'AKREDITASI') !== false;
                                     $sni = $parts[1] ?? '-';
-                                    return $accreditation ? "{$sni} <sup style=\"border-bottom: 1px solid;\">a</sup>" : $sni;
+                                    return $accreditation
+                                        ? "{$sni} <sup style=\"border-bottom: 1px solid;\">a</sup>"
+                                        : $sni;
                                 } else {
                                     // Jika tidak ada ';', langsung tampilkan itemnya saja
                                     return $item;
@@ -76,17 +85,22 @@
 
                             foreach ($result as $index => $item) {
                                 if (trim($item) == '-' || trim($item) == '******') {
-                                    $methode_sampling .= "<span><span>" . $item . "</span></span><br>";
+                                    $methode_sampling .= '<span><span>' . $item . '</span></span><br>';
                                 } else {
-                                    $methode_sampling .= "<span><span>" . ($index + 1) . ". " . $item . "</span></span><br>";
+                                    $methode_sampling .=
+                                        '<span><span>' . ($index + 1) . '. ' . $item . '</span></span><br>';
                                 }
                             }
 
-                            if($header->status_sampling == 'SD') {
-                                $methode_sampling = str_replace('<span><span>******</span></span><br>', '******', $methode_sampling ?? '-');
+                            if ($header->status_sampling == 'SD') {
+                                $methode_sampling = str_replace(
+                                    '<span><span>******</span></span><br>',
+                                    '******',
+                                    $methode_sampling ?? '-',
+                                );
                             }
                         } else {
-                            $methode_sampling = "-";
+                            $methode_sampling = '-';
                         }
                     @endphp
 
@@ -126,18 +140,21 @@
                         <td class="custom5" width="120">Periode Analisa</td>
                         <td class="custom5" width="12">:</td>
                         @php
-                            $periode_analisa = optional($header)->periode_analisa ?? $header['periode_analisa'];
-
-                            $periode = explode(' - ', $periode_analisa);
-                            $periode1 = $periode[0] ?? '';
-                            $periode2 = $periode[1] ?? '';
+                            $periode_analisa = optional($header)->periode_analisa ?? ($header['periode_analisa'] ?? '');
+                            $periode = explode(' - ', (string) $periode_analisa);
+                            $periode1 = trim($periode[0] ?? '');
+                            $periode2 = trim($periode[1] ?? '');
+                            $periodeText = \App\Helpers\Helper::tanggal_indonesia($periode1);
+                            if ($periode2 !== '') {
+                                $periodeText .= ' - ' . \App\Helpers\Helper::tanggal_indonesia($periode2);
+                            }
                         @endphp
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
+                        <td class="custom5">{{ $periodeText }}</td>
                     </tr>
                 </table>
 
                 {{-- Regulasi --}}
-                @if ($header->regulasi_custom!=null)
+                @if ($header->regulasi_custom != null)
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
                         @foreach (json_decode($header->regulasi_custom) as $key => $y)
                             @if ($y->page == $page)
@@ -151,7 +168,7 @@
 
                 {{-- Keterangan --}}
                 @php
-                $temptArrayPush = [];
+                    $temptArrayPush = [];
                     if (!empty($detail)) {
                         foreach ($detail as $v) {
                             if (!empty($v['akr']) && !in_array($v['akr'], $temptArrayPush)) {
@@ -178,7 +195,8 @@
                         @endforeach
                         @if ($header->status_sampling == 'SD' && $methode_sampling == '******')
                             <tr>
-                                <td class="custom5" colspan="3">(******) Adalah sampling tidak dilakukan Laboratorium</td>
+                                <td class="custom5" colspan="3">(******) Adalah sampling tidak dilakukan Laboratorium
+                                </td>
                             </tr>
                         @endif
                     </table>
@@ -188,7 +206,7 @@
                 @endphp
                 @if ($header->status_sampling == 'SD')
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
-                        @if(!in_array('pH', $parameterUji ?? []) && $header->suhu_air != null || !in_array('Suhu', $parameterUji ?? []) && $header->ph != null)
+                        @if ((!in_array('pH', $parameterUji ?? []) && $header->suhu_air != null) || (!in_array('Suhu', $parameterUji ?? []) && $header->ph != null))
                         <tr>
                             <td class="custom5" colspan="3">Informasi Hasil Parameter In-Situ Pengukuran di Lapangan</td>
                         </tr>

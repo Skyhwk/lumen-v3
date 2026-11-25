@@ -20,12 +20,32 @@ class Helper
             'November',
             'Desember'
         );
-        if ($tanggal != '') {
-            $var = explode('-', $tanggal);
-            return $var[2] . ' ' . $bulan[(int) $var[1]] . ' ' . $var[0];
-        } else {
+        if ($tanggal === null || $tanggal === '') {
             return '-';
         }
+
+        $tanggal = trim((string) $tanggal);
+        // Format penuh Y-m-d
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $tanggal)) {
+            $var = explode('-', substr($tanggal, 0, 10));
+            $bulanIdx = (int) ($var[1] ?? 0);
+            if (!isset($var[0], $var[1], $var[2]) || !isset($bulan[$bulanIdx])) {
+                return $tanggal;
+            }
+            return $var[2] . ' ' . $bulan[$bulanIdx] . ' ' . $var[0];
+        }
+
+        // Format Y-m (tanpa hari)
+        if (preg_match('/^\d{4}-\d{2}$/', $tanggal)) {
+            $var = explode('-', $tanggal);
+            $bulanIdx = (int) ($var[1] ?? 0);
+            if (!isset($bulan[$bulanIdx])) {
+                return $tanggal;
+            }
+            return $bulan[$bulanIdx] . ' ' . $var[0];
+        }
+
+        return $tanggal;
     }
     // public static function waktuPemaparan($waktu)
     // {

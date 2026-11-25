@@ -133,7 +133,7 @@ class DraftUdaraKebauanController extends Controller
     {
         $categoryKebisingan = [23, 24, 25];
         $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
-        $categoryLingkunganKerja = [11, 27, 53];
+        $categoryLingkunganKerja = [11, 22, 27, 53];
         $categoryPencahayaan = [28];
         $category = explode('-', $request->kategori_3)[0];
         $sub_category = explode('-', $request->kategori_3)[1];
@@ -238,11 +238,25 @@ class DraftUdaraKebauanController extends Controller
                 $details = LhpsKebisinganDetail::where('id_header', $header->id)->get();
                 if ($header != null) {
 
-                    $file_qr = new GenerateQrDocumentLhp();
-                    $file_qr = $file_qr->insert('LHP_KEBISINGAN', $header, $this->karyawan);
-                    if ($file_qr) {
-                        $header->file_qr = $file_qr;
-                        $header->save();
+                    // === Generate QR & File ===
+                    if (!$header->file_qr) {
+                        $file_qr = new GenerateQrDocumentLhp();
+                        $file_qr = $file_qr->insert('LHP_KEBISINGAN', $header, $this->karyawan);
+                        if ($file_qr) {
+                            $header->file_qr = $file_qr;
+                            $header->save();
+                        }
+                    } else {
+                        // Update QR Document jika ada
+                        $qr = QrDocument::where('file', $header->file_qr)->first();
+                        if ($qr) {
+                            $dataQr = json_decode($qr->data, true);
+                            $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                            $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                            $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                            $qr->data = json_encode($dataQr);
+                            $qr->save();
+                        }
                     }
 
                     $groupedByPage = [];
@@ -430,11 +444,25 @@ class DraftUdaraKebauanController extends Controller
                 $details = LhpsGetaranDetail::where('id_header', $header->id)->get();
                 // dd($details);
                 if ($header != null) {
-                    $file_qr = new GenerateQrDocumentLhp();
-                    $file_qr = $file_qr->insert('LHP_GETARAN', $header, $this->karyawan);
-                    if ($file_qr) {
-                        $header->file_qr = $file_qr;
-                        $header->save();
+                    // === Generate QR & File ===
+                    if (!$header->file_qr) {
+                        $file_qr = new GenerateQrDocumentLhp();
+                        $file_qr = $file_qr->insert('LHP_GETARAN', $header, $this->karyawan);
+                        if ($file_qr) {
+                            $header->file_qr = $file_qr;
+                            $header->save();
+                        }
+                    } else {
+                        // Update QR Document jika ada
+                        $qr = QrDocument::where('file', $header->file_qr)->first();
+                        if ($qr) {
+                            $dataQr = json_decode($qr->data, true);
+                            $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                            $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                            $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                            $qr->data = json_encode($dataQr);
+                            $qr->save();
+                        }
                     }
 
                     $groupedByPage = [];
@@ -553,11 +581,25 @@ class DraftUdaraKebauanController extends Controller
 
                 $details = LhpsPencahayaanDetail::where('id_header', $header->id)->get();
                 if ($header != null) {
-                    $file_qr = new GenerateQrDocumentLhp();
-                    $file_qr = $file_qr->insert('LHP_PENCAHAYAAN', $header, $this->karyawan);
-                    if ($file_qr) {
-                        $header->file_qr = $file_qr;
-                        $header->save();
+                    // === Generate QR & File ===
+                    if (!$header->file_qr) {
+                        $file_qr = new GenerateQrDocumentLhp();
+                        $file_qr = $file_qr->insert('LHP_PENCAHAYAAN', $header, $this->karyawan);
+                        if ($file_qr) {
+                            $header->file_qr = $file_qr;
+                            $header->save();
+                        }
+                    } else {
+                        // Update QR Document jika ada
+                        $qr = QrDocument::where('file', $header->file_qr)->first();
+                        if ($qr) {
+                            $dataQr = json_decode($qr->data, true);
+                            $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                            $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                            $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                            $qr->data = json_encode($dataQr);
+                            $qr->save();
+                        }
                     }
 
                     $groupedByPage = [];
@@ -598,13 +640,37 @@ class DraftUdaraKebauanController extends Controller
         } else if (in_array($category, $categoryLingkunganKerja)) {
             try {
                 // Lingkungan Kerja
+                $noLhp = $request->no_lhp ?: $request->cfr;
+                $noSampel = $request->no_sampel ?: $request->noSampel;
 
-                $orderDetail = OrderDetail::where('id', $request->id)->where('is_active', true)->where('kategori_3', 'LIKE', "%{$category}%")->where('cfr', $request->no_lhp)->first();
-                $orderDetailParameter = json_decode($orderDetail->parameter);
-                $parameterNames = array_map(function ($param) {
-                    $parts = explode(';', $param);
-                    return $parts[1] ?? null;
-                }, $orderDetailParameter);
+                $orderDetail = null;
+                if ($request->id) {
+                    $orderDetail = OrderDetail::where('id', $request->id)
+                        ->where('is_active', true)
+                        ->first();
+                }
+                if (!$orderDetail) {
+                    $orderDetail = OrderDetail::where('is_active', true)
+                        ->where('kategori_3', 'LIKE', "%{$category}%")
+                        ->when($noLhp, function ($q) use ($noLhp) {
+                            $q->where('cfr', $noLhp);
+                        })
+                        ->when($noSampel, function ($q) use ($noSampel) {
+                            $q->where('no_sampel', $noSampel);
+                        })
+                        ->first();
+                }
+
+                $parameterNames = [];
+                if ($orderDetail && $orderDetail->parameter) {
+                    $orderDetailParameter = json_decode($orderDetail->parameter);
+                    if (is_array($orderDetailParameter)) {
+                        $parameterNames = array_map(function ($param) {
+                            $parts = explode(';', $param);
+                            return $parts[1] ?? null;
+                        }, $orderDetailParameter);
+                    }
+                }
                 if (
                     in_array("Medan Listrik", $parameterNames) ||
                     in_array("Medan Magnit Statis", $parameterNames) ||
@@ -729,11 +795,25 @@ class DraftUdaraKebauanController extends Controller
                     }
                     $details = LhpsMedanLMDetail::where('id_header', $header->id)->get();
                     if ($header != null) {
-                        $file_qr = new GenerateQrDocumentLhp();
-                        $file_qr = $file_qr->insert('LHP_MEDAN_LM', $header, $this->karyawan);
-                        if ($file_qr) {
-                            $header->file_qr = $file_qr;
-                            $header->save();
+                        // === Generate QR & File ===
+                        if (!$header->file_qr) {
+                            $file_qr = new GenerateQrDocumentLhp();
+                            $file_qr = $file_qr->insert('LHP_MEDAN_LM', $header, $this->karyawan);
+                            if ($file_qr) {
+                                $header->file_qr = $file_qr;
+                                $header->save();
+                            }
+                        } else {
+                            // Update QR Document jika ada
+                            $qr = QrDocument::where('file', $header->file_qr)->first();
+                            if ($qr) {
+                                $dataQr = json_decode($qr->data, true);
+                                $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                                $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                                $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                                $qr->data = json_encode($dataQr);
+                                $qr->save();
+                            }
                         }
 
                         $groupedByPage = [];
@@ -837,7 +917,7 @@ class DraftUdaraKebauanController extends Controller
                     }
                 } else {
 
-                    $header = LhpsLingHeader::where('no_sampel', $request->no_sampel)->where('no_order', $request->no_order)->where('id_kategori_3', $category)->where('is_active', true)->first();
+                    $header = LhpsLingHeader::where('no_sampel', $noSampel)->where('no_order', $request->no_order)->where('id_kategori_3', $category)->where('is_active', true)->first();
                     if ($header == null) {
                         $header = new LhpsLingHeader;
                         $header->created_by = $this->karyawan;
@@ -853,15 +933,22 @@ class DraftUdaraKebauanController extends Controller
                         $header->updated_by = $this->karyawan;
                         $header->updated_at = Carbon::now()->format('Y-m-d H:i:s');
                     }
-                    $parameter = \explode(', ', $request->parameter);
+                    $parameter = is_array($request->parameter)
+                        ? $request->parameter
+                        : \explode(', ', (string) $request->parameter);
                     $keterangan = [];
-                    foreach ($request->keterangan as $key => $value) {
-                        if ($value != '')
-                            array_push($keterangan, $value);
+                    if (is_array($request->keterangan)) {
+                        foreach ($request->keterangan as $key => $value) {
+                            if ($value != '') {
+                                array_push($keterangan, $value);
+                            }
+                        }
+                    } elseif (is_string($request->keterangan) && $request->keterangan !== '') {
+                        $keterangan[] = $request->keterangan;
                     }
                     $header->no_order = ($request->no_order != '') ? $request->no_order : NULL;
-                    $header->no_lhp = ($request->no_lhp != '') ? $request->no_lhp : NULL;
-                    $header->no_sampel = ($request->no_sampel != '') ? $request->no_sampel : NULL;
+                    $header->no_lhp = ($noLhp != '') ? $noLhp : NULL;
+                    $header->no_sampel = ($noSampel != '') ? $noSampel : NULL;
                     $header->id_kategori_2 = ($request->kategori_2 != '') ? explode('-', $request->kategori_2)[0] : NULL;
                     $header->id_kategori_3 = ($category != '') ? $category : NULL;
                     $header->no_qt = ($request->no_penawaran != '') ? $request->no_penawaran : NULL;
@@ -900,38 +987,56 @@ class DraftUdaraKebauanController extends Controller
                     }
                     $detail = LhpsLingDetail::where('id_header', $header->id)->delete();
 
-                    foreach (explode(',', $request->parameter) as $key => $val) {
+                    $parameterList = is_array($request->parameter)
+                        ? $request->parameter
+                        : explode(',', (string) $request->parameter);
+                    $cleaned_hasil_uji = is_array($request->hasil_uji) ? array_combine(
+                        array_map(fn($k) => trim($k, " '\""), array_keys($request->hasil_uji)),
+                        array_values($request->hasil_uji)
+                    ) : [];
+                    $cleaned_C = is_array($request->C) ? array_combine(
+                        array_map(fn($k) => trim($k, " '\""), array_keys($request->C)),
+                        array_values($request->C)
+                    ) : [];
+                    $cleaned_C1 = is_array($request->C1) ? array_combine(
+                        array_map(fn($k) => trim($k, " '\""), array_keys($request->C1)),
+                        array_values($request->C1)
+                    ) : [];
+                    $cleaned_C2 = is_array($request->C2) ? array_combine(
+                        array_map(fn($k) => trim($k, " '\""), array_keys($request->C2)),
+                        array_values($request->C2)
+                    ) : [];
+                    $cleaned_akr = is_array($request->akr) ? array_combine(
+                        array_map(fn($k) => trim($k, " '\""), array_keys($request->akr)),
+                        array_values($request->akr)
+                    ) : [];
+                    $cleaned_satuan = is_array($request->satuan) ? array_combine(
+                        array_map(fn($k) => trim($k, " '\""), array_keys($request->satuan)),
+                        array_values($request->satuan)
+                    ) : [];
+                    $cleaned_attr = is_array($request->attr) ? array_combine(
+                        array_map(fn($k) => trim($k, " '\""), array_keys($request->attr)),
+                        array_values($request->attr)
+                    ) : [];
+                    $cleaned_methode = is_array($request->methode) ? array_combine(
+                        array_map(fn($k) => trim($k, " '\""), array_keys($request->methode)),
+                        array_values($request->methode)
+                    ) : [];
+                    $cleaned_bakumutu = is_array($request->baku_mutu) ? array_combine(
+                        array_map(fn($k) => trim($k, " '\""), array_keys($request->baku_mutu)),
+                        array_values($request->baku_mutu)
+                    ) : [];
+                    $cleaned_durasi = is_array($request->durasi) ? array_combine(
+                        array_map(fn($k) => trim($k, " '\""), array_keys($request->durasi)),
+                        array_values($request->durasi)
+                    ) : [];
+
+                    foreach ($parameterList as $key => $val) {
                         $hasil = '';
-                        $akr = '';
-                        $satuan = '';
-                        $attr = '';
-                        $methode = '';
-                        $bakumutu = '';
                         $val = trim($val, " '\"");
-                        if ($request->hasil_uji) {
-                            $cleaned_key_hasil_uji = array_map(fn($k) => trim($k, " '\""), array_keys($request->hasil_uji));
-                            $cleaned_hasil_uji = array_combine($cleaned_key_hasil_uji, array_values($request->hasil_uji));
+                        if ($val === '') {
+                            continue;
                         }
-                        if ($request->C) {
-                            $cleaned_key_C = array_map(fn($k) => trim($k, " '\""), array_keys($request->C));
-                            $cleaned_C = array_combine($cleaned_key_C, array_values($request->C));
-                            $cleaned_key_C1 = array_map(fn($k) => trim($k, " '\""), array_keys($request->C1));
-                            $cleaned_C1 = array_combine($cleaned_key_C1, array_values($request->C1));
-                            $cleaned_key_C2 = array_map(fn($k) => trim($k, " '\""), array_keys($request->C2));
-                            $cleaned_C2 = array_combine($cleaned_key_C2, array_values($request->C2));
-                        }
-                        $cleaned_key_akr = array_map(fn($k) => trim($k, " '\""), array_keys($request->akr));
-                        $cleaned_akr = array_combine($cleaned_key_akr, array_values($request->akr));
-                        $cleaned_key_satuan = array_map(fn($k) => trim($k, " '\""), array_keys($request->satuan));
-                        $cleaned_satuan = array_combine($cleaned_key_satuan, array_values($request->satuan));
-                        $cleaned_key_attr = array_map(fn($k) => trim($k, " '\""), array_keys($request->attr));
-                        $cleaned_attr = array_combine($cleaned_key_attr, array_values($request->attr));
-                        $cleaned_key_methode = array_map(fn($k) => trim($k, " '\""), array_keys($request->methode));
-                        $cleaned_methode = array_combine($cleaned_key_methode, array_values($request->methode));
-                        $cleaned_key_bakumutu = array_map(fn($k) => trim($k, " '\""), array_keys($request->baku_mutu));
-                        $cleaned_bakumutu = array_combine($cleaned_key_bakumutu, array_values($request->baku_mutu));
-                        $cleaned_key_durasi = array_map(fn($k) => trim($k, " '\""), array_keys($request->durasi));
-                        $cleaned_durasi = array_combine($cleaned_key_durasi, array_values($request->durasi));
                         if (!empty($cleaned_hasil_uji[$val])) {
                             $hasil = $cleaned_hasil_uji[$val];
                         } else {
@@ -949,7 +1054,7 @@ class DraftUdaraKebauanController extends Controller
                             $detail = new LhpsLingDetail;
                             $detail->id_header = $header->id;
                             $detail->parameter_lab = $val;
-                            $detail->parameter = $parame->nama_regulasi;
+                            $detail->parameter = $parame ? $parame->nama_regulasi : $val;
                             $detail->durasi = (isset($cleaned_durasi[$val]) ? $cleaned_durasi[$val] : '');
                             $detail->akr = $cleaned_akr[$val];
                             $detail->hasil_uji = $hasil;
@@ -963,11 +1068,25 @@ class DraftUdaraKebauanController extends Controller
 
                     $details = LhpsLingDetail::where('id_header', $header->id)->get();
                     if ($header != null) {
-                        $file_qr = new GenerateQrDocumentLhp();
-                        $file_qr = $file_qr->insert('LHP_LINGKUNGAN', $header, $this->karyawan);
-                        if ($file_qr) {
-                            $header->file_qr = $file_qr;
-                            $header->save();
+                        // === Generate QR & File ===
+                        if (!$header->file_qr) {
+                            $file_qr = new GenerateQrDocumentLhp();
+                            $file_qr = $file_qr->insert('LHP_LINGKUNGAN', $header, $this->karyawan);
+                            if ($file_qr) {
+                                $header->file_qr = $file_qr;
+                                $header->save();
+                            }
+                        } else {
+                            // Update QR Document jika ada
+                            $qr = QrDocument::where('file', $header->file_qr)->first();
+                            if ($qr) {
+                                $dataQr = json_decode($qr->data, true);
+                                $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                                $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                                $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                                $qr->data = json_encode($dataQr);
+                                $qr->save();
+                            }
                         }
 
                         $groupedByPage = [];
@@ -1016,7 +1135,7 @@ class DraftUdaraKebauanController extends Controller
         try {
             $categoryKebisingan = [23, 24, 25];
             $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
-            $categoryLingkunganKerja = [11, 27, 53];
+            $categoryLingkunganKerja = [11, 22, 27, 53];
             $categoryPencahayaan = [28];
             $data_lapangan = array();
             $id_category = explode('-', $request->kategori_3)[0];
@@ -1387,7 +1506,7 @@ class DraftUdaraKebauanController extends Controller
     {
         $categoryKebisingan = [23, 24, 25];
         $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
-        $categoryLingkunganKerja = [11, 27, 53];
+        $categoryLingkunganKerja = [11, 22, 27, 53];
         $categoryPencahayaan = [28];
         $category = explode('-', $request->kategori_3)[0];
         $sub_category = explode('-', $request->kategori_3)[1];
@@ -1570,7 +1689,7 @@ class DraftUdaraKebauanController extends Controller
     {
         $categoryKebisingan = [23, 24, 25];
         $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
-        $categoryLingkunganKerja = [11, 27, 53];
+        $categoryLingkunganKerja = [11, 22, 27, 53];
         $categoryPencahayaan = [28];
         $category = explode('-', $request->kategori_3)[0];
         $sub_category = explode('-', $request->kategori_3)[1];
@@ -1878,7 +1997,7 @@ class DraftUdaraKebauanController extends Controller
 
             $categoryKebisingan = [23, 24, 25];
             $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
-            $categoryLingkunganKerja = [11, 27, 53];
+            $categoryLingkunganKerja = [11, 22, 27, 53];
             $categoryPencahayaan = [28];
 
             // Kebisingan
@@ -2137,7 +2256,7 @@ class DraftUdaraKebauanController extends Controller
     {
         $categoryKebisingan = [23, 24, 25];
         $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
-        $categoryLingkunganKerja = [11, 27, 53];
+        $categoryLingkunganKerja = [11, 22, 27, 53];
         $categoryPencahayaan = [28];
         $category = explode('-', $request->kategori_3)[0];
         $sub_category = explode('-', $request->kategori_3)[1];
@@ -2247,7 +2366,7 @@ class DraftUdaraKebauanController extends Controller
         try {
             $categoryKebisingan = [23, 24, 25];
             $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
-            $categoryLingkunganKerja = [11, 27, 53];
+            $categoryLingkunganKerja = [11, 22, 27, 53];
             $categoryPencahayaan = [28];
             $category = explode('-', $request->kategori)[0];
             $sub_category = explode('-', $request->kategori)[1];
@@ -2350,7 +2469,7 @@ class DraftUdaraKebauanController extends Controller
     // {
     //     $categoryKebisingan = [23, 24, 25];
     //     $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
-    //     $categoryLingkunganKerja = [11, 27, 53];
+    //     $categoryLingkunganKerja = [11, 22, 27, 53];
     //     $categoryPencahayaan = [28];
 
     //     try {

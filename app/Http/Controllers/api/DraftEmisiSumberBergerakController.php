@@ -6,10 +6,10 @@ namespace App\Http\Controllers\api;
 
 use App\Helpers\EmailLhpRilisHelpers;
 use App\Helpers\DraftLhpRejectHelper;
-use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCustom,LinkLhp};
+use App\Models\{HistoryAppReject, KonfirmasiLhp, MasterKaryawan, LhpsEmisiHeader, LhpsEmisiDetail, LhpsEmisiHeaderHistory, LhpsEmisiDetailHistory, LhpsEmisiCHeader, LhpsEmisiCDetail, LhpsEmisiCHeaderHistory, LhpsEmisiCDetailHistory, OrderDetail, MetodeSampling, MasterBakumutu, PengesahanLhp, Subkontrak, DataLapanganEmisiCerobong, DataLapanganEmisiKendaraan, EmisiCerobongHeader, MasterRegulasi, Parameter, GenerateLink, QrDocument, LhpsEmisiCustom, LinkLhp};
 
 // service
-use App\Services\{PrintLhp,TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,SendEmail,CombineLHPService};
+use App\Services\{PrintLhp, TemplateLhps, GenerateQrDocumentLhp, LhpTemplate, SendEmail, CombineLHPService};
 
 // job
 use App\Jobs\RenderLhp;
@@ -40,7 +40,7 @@ class DraftEmisiSumberBergerakController extends Controller
             ->where('is_approve', 0)
             ->where('is_active', true)
             ->where('kategori_2', '5-Emisi')
-            ->whereNotIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak','119-Emisi Isokinetik'])
+            ->whereNotIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak', '119-Emisi Isokinetik'])
             ->groupBy('cfr')
             ->where('status', 2)
             ->get();
@@ -96,9 +96,9 @@ class DraftEmisiSumberBergerakController extends Controller
                 }
 
                 $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_lhp)
-                ->orderByDesc('berlaku_mulai')
-                ->first();
-                
+                    ->orderByDesc('berlaku_mulai')
+                    ->first();
+
                 try {
                     $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
                         return ['page' => (int) $page, 'regulasi' => $item];
@@ -237,12 +237,25 @@ class DraftEmisiSumberBergerakController extends Controller
                     }
 
                     if ($header != null) {
-                        $file_qr = new GenerateQrDocumentLhp();
-
-                        $file_qr = $file_qr->insert('LHP_EMISI', $header, $this->karyawan);
-                        if ($file_qr) {
-                            $header->file_qr = $file_qr;
-                            $header->save();
+                        // === Generate QR & File ===
+                        if (!$header->file_qr) {
+                            $file_qr = new GenerateQrDocumentLhp();
+                            $file_qr = $file_qr->insert('LHP_EMISI', $header, $this->karyawan);
+                            if ($file_qr) {
+                                $header->file_qr = $file_qr;
+                                $header->save();
+                            }
+                        } else {
+                            // Update QR Document jika ada
+                            $qr = QrDocument::where('file', $header->file_qr)->first();
+                            if ($qr) {
+                                $dataQr = json_decode($qr->data, true);
+                                $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                                $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                                $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                                $qr->data = json_encode($dataQr);
+                                $qr->save();
+                            }
                         }
 
                         $detail = LhpsEmisiDetail::whereIn('id', $idDetail)->get();
@@ -278,7 +291,6 @@ class DraftEmisiSumberBergerakController extends Controller
                             $header->count_revisi++;
                             if ($header->count_revisi > 2) {
                                 $this->handleApprove($request, false);
-
                             }
                         }
 
@@ -420,7 +432,6 @@ class DraftEmisiSumberBergerakController extends Controller
             foreach ($custom as $item) {
                 $page = $item->page;
                 $groupedByPage[$page][] = $item->toArray();
-
             }
 
 
@@ -808,7 +819,6 @@ class DraftEmisiSumberBergerakController extends Controller
                     'ẍ Parameter belum terakreditasi.'
                 ]
             ], 200);
-
         } catch (\Throwable $e) {
             return response()->json([
                 'status'  => false,
@@ -939,7 +949,7 @@ class DraftEmisiSumberBergerakController extends Controller
         $extand = explode("|", $data);
         return $extand;
     }
-    
+
     public function getUser(Request $request)
     {
         $users = MasterKaryawan::with(['department', 'jabatan'])->where('id', $request->id ?: $this->user_id)->first();
@@ -1083,8 +1093,8 @@ class DraftEmisiSumberBergerakController extends Controller
                 ]);
 
                 $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $data->tanggal_lhp)
-                ->orderByDesc('berlaku_mulai')
-                ->first();
+                    ->orderByDesc('berlaku_mulai')
+                    ->first();
 
                 if ($qr != null) {
                     $dataQr = json_decode($qr->data);

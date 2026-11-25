@@ -241,11 +241,25 @@ class DraftUdaraKelembapanController extends Controller
                 $details = LhpsKebisinganDetail::where('id_header', $header->id)->get();
                 if ($header != null) {
 
-                    $file_qr = new GenerateQrDocumentLhp();
-                    $file_qr = $file_qr->insert('LHP_KEBISINGAN', $header, $this->karyawan);
-                    if ($file_qr) {
-                        $header->file_qr = $file_qr;
-                        $header->save();
+                    // === Generate QR & File ===
+                    if (!$header->file_qr) {
+                        $file_qr = new GenerateQrDocumentLhp();
+                        $file_qr = $file_qr->insert('LHP_KEBISINGAN', $header, $this->karyawan);
+                        if ($file_qr) {
+                            $header->file_qr = $file_qr;
+                            $header->save();
+                        }
+                    } else {
+                        // Update QR Document jika ada
+                        $qr = QrDocument::where('file', $header->file_qr)->first();
+                        if ($qr) {
+                            $dataQr = json_decode($qr->data, true);
+                            $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                            $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                            $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                            $qr->data = json_encode($dataQr);
+                            $qr->save();
+                        }
                     }
 
                     $groupedByPage = [];
@@ -432,11 +446,25 @@ class DraftUdaraKelembapanController extends Controller
                 $details = LhpsGetaranDetail::where('id_header', $header->id)->get();
                 // dd($details);
                 if ($header != null) {
-                    $file_qr = new GenerateQrDocumentLhp();
-                    $file_qr = $file_qr->insert('LHP_GETARAN', $header, $this->karyawan);
-                    if ($file_qr) {
-                        $header->file_qr = $file_qr;
-                        $header->save();
+                    // === Generate QR & File ===
+                    if (!$header->file_qr) {
+                        $file_qr = new GenerateQrDocumentLhp();
+                        $file_qr = $file_qr->insert('LHP_GETARAN', $header, $this->karyawan);
+                        if ($file_qr) {
+                            $header->file_qr = $file_qr;
+                            $header->save();
+                        }
+                    } else {
+                        // Update QR Document jika ada
+                        $qr = QrDocument::where('file', $header->file_qr)->first();
+                        if ($qr) {
+                            $dataQr = json_decode($qr->data, true);
+                            $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                            $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                            $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                            $qr->data = json_encode($dataQr);
+                            $qr->save();
+                        }
                     }
 
                     $groupedByPage = [];
@@ -554,11 +582,25 @@ class DraftUdaraKelembapanController extends Controller
 
                 $details = LhpsPencahayaanDetail::where('id_header', $header->id)->get();
                 if ($header != null) {
-                    $file_qr = new GenerateQrDocumentLhp();
-                    $file_qr = $file_qr->insert('LHP_PENCAHAYAAN', $header, $this->karyawan);
-                    if ($file_qr) {
-                        $header->file_qr = $file_qr;
-                        $header->save();
+                    // === Generate QR & File ===
+                    if (!$header->file_qr) {
+                        $file_qr = new GenerateQrDocumentLhp();
+                        $file_qr = $file_qr->insert('LHP_PENCAHAYAAN', $header, $this->karyawan);
+                        if ($file_qr) {
+                            $header->file_qr = $file_qr;
+                            $header->save();
+                        }
+                    } else {
+                        // Update QR Document jika ada
+                        $qr = QrDocument::where('file', $header->file_qr)->first();
+                        if ($qr) {
+                            $dataQr = json_decode($qr->data, true);
+                            $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                            $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                            $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                            $qr->data = json_encode($dataQr);
+                            $qr->save();
+                        }
                     }
 
                     $groupedByPage = [];
@@ -728,11 +770,25 @@ class DraftUdaraKelembapanController extends Controller
                     }
                     $details = LhpsMedanLMDetail::where('id_header', $header->id)->get();
                     if ($header != null) {
-                        $file_qr = new GenerateQrDocumentLhp();
-                        $file_qr = $file_qr->insert('LHP_MEDAN_LM', $header, $this->karyawan);
-                        if ($file_qr) {
-                            $header->file_qr = $file_qr;
-                            $header->save();
+                        // === Generate QR & File ===
+                        if (!$header->file_qr) {
+                            $file_qr = new GenerateQrDocumentLhp();
+                            $file_qr = $file_qr->insert('LHP_MEDAN_LM', $header, $this->karyawan);
+                            if ($file_qr) {
+                                $header->file_qr = $file_qr;
+                                $header->save();
+                            }
+                        } else {
+                            // Update QR Document jika ada
+                            $qr = QrDocument::where('file', $header->file_qr)->first();
+                            if ($qr) {
+                                $dataQr = json_decode($qr->data, true);
+                                $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                                $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                                $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                                $qr->data = json_encode($dataQr);
+                                $qr->save();
+                            }
                         }
 
                         $groupedByPage = [];
@@ -961,11 +1017,25 @@ class DraftUdaraKelembapanController extends Controller
 
                     $details = LhpsLingDetail::where('id_header', $header->id)->get();
                     if ($header != null) {
-                        $file_qr = new GenerateQrDocumentLhp();
-                        $file_qr = $file_qr->insert('LHP_LINGKUNGAN', $header, $this->karyawan);
-                        if ($file_qr) {
-                            $header->file_qr = $file_qr;
-                            $header->save();
+                        // === Generate QR & File ===
+                        if (!$header->file_qr) {
+                            $file_qr = new GenerateQrDocumentLhp();
+                            $file_qr = $file_qr->insert('LHP_LINGKUNGAN', $header, $this->karyawan);
+                            if ($file_qr) {
+                                $header->file_qr = $file_qr;
+                                $header->save();
+                            }
+                        } else {
+                            // Update QR Document jika ada
+                            $qr = QrDocument::where('file', $header->file_qr)->first();
+                            if ($qr) {
+                                $dataQr = json_decode($qr->data, true);
+                                $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                                $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                                $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                                $qr->data = json_encode($dataQr);
+                                $qr->save();
+                            }
                         }
 
                         $groupedByPage = [];

@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\api;
+
 use App\Helpers\DraftLhpRejectHelper;
 
 use App\Helpers\HelperSatuan;
@@ -258,7 +259,7 @@ class DraftUlkController extends Controller
 
         $parameterAllowed = array_merge($parameterAllowed);
 
-        
+
         // Bersihkan duplikasi dan karakter aneh
         $parameterAllowed = array_unique(array_filter($parameterAllowed));
 
@@ -287,9 +288,9 @@ class DraftUlkController extends Controller
             ->where('is_active', true)
             ->where('kategori_3', '27-Udara Lingkungan Kerja')
             ->where('status', 2)
-            ->where(function($query) use ($parameterAllowed) {
+            ->where(function ($query) use ($parameterAllowed) {
                 foreach ($parameterAllowed as $param) {
-                    
+
                     $query->orWhere('parameter', 'LIKE', '%' . $param . '%');
                 }
             })
@@ -313,7 +314,7 @@ class DraftUlkController extends Controller
         // 3. Map data di memori
         $data->map(function ($item) use ($allLing, $allDirect, $allDebu, $allSenyawa, $allPartikulat) {
             $noSampelList = array_filter(explode(',', $item->no_sampel));
-            
+
             $lapangan = collect();
             foreach ($noSampelList as $no) {
                 if (isset($allLing[$no])) $lapangan = $lapangan->merge($allLing[$no]);
@@ -399,10 +400,10 @@ class DraftUlkController extends Controller
                 return explode(';', $item)[1] ?? null;
             }, $parameter);
 
-            if(count($hasil) > 1){
+            if (count($hasil) > 1) {
                 $data = MetodeSampling::where('kategori', '4-UDARA')
-                ->where('sub_kategori', strtoupper($subKategori[1]))
-                ->get();
+                    ->where('sub_kategori', strtoupper($subKategori[1]))
+                    ->get();
             } else {
                 $data = MasterBakumutu::whereIn('id_regulasi', $hasil_regulasi)->where('is_active', true)->select('method as metode_sampling')->distinct()->get();
             }
@@ -624,6 +625,17 @@ class DraftUlkController extends Controller
                     $header->file_qr = $path;
                     $header->save();
                 }
+            } else {
+                // Update QR Document jika ada
+                $qr = QrDocument::where('file', $header->file_qr)->first();
+                if ($qr) {
+                    $dataQr = json_decode($qr->data, true);
+                    $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                    $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                    $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                    $qr->data = json_encode($dataQr);
+                    $qr->save();
+                }
             }
 
             $groupedByPage = collect(LhpsLingCustom::where('id_header', $header->id)->get())
@@ -637,7 +649,7 @@ class DraftUlkController extends Controller
                 ->whereView('DraftUdaraLingkunganKerja')
                 ->render('downloadLHPFinal');
 
-                // dd($fileName);
+            // dd($fileName);
             $header->file_lhp = $fileName;
             $header->save();
 
@@ -848,7 +860,7 @@ class DraftUlkController extends Controller
                                 ->where('id_kategori', '4')
                                 ->where('is_active', true)
                                 ->first();
-                                // dump($item->no_sampel);
+                            // dump($item->no_sampel);
                             return [
                                 'id'            => $item->id,
                                 'parameter'     => $newQuery->nama_lhp ?? $newQuery->nama_regulasi,
@@ -1011,7 +1023,7 @@ class DraftUlkController extends Controller
             $methodsUsed[]         = $bakumutu->method;
         }
 
-        if($entry['hasil_uji'] == '##'){
+        if ($entry['hasil_uji'] == '##') {
             $entry['nilai_persyaratan'] = '-';
             $entry['jenis_persyaratan'] = '-';
             $entry['satuan'] = '-';

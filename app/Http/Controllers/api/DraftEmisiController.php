@@ -188,12 +188,25 @@ class DraftEmisiController extends Controller
                     }
 
                     if ($header != null) {
-                        $file_qr = new GenerateQrDocumentLhp();
-
-                        $file_qr = $file_qr->insert('LHP_EMISI', $header, $this->karyawan);
-                        if ($file_qr) {
-                            $header->file_qr = $file_qr;
-                            $header->save();
+                        // === Generate QR & File ===
+                        if (!$header->file_qr) {
+                            $file_qr = new GenerateQrDocumentLhp();
+                            $file_qr = $file_qr->insert('LHP_EMISI', $header, $this->karyawan);
+                            if ($file_qr) {
+                                $header->file_qr = $file_qr;
+                                $header->save();
+                            }
+                        } else {
+                            // Update QR Document jika ada
+                            $qr = QrDocument::where('file', $header->file_qr)->first();
+                            if ($qr) {
+                                $dataQr = json_decode($qr->data, true);
+                                $dataQr['Tanggal_Pengesahan'] = Carbon::parse($header->tgl_lhp ?: $request->tanggal_terima)->locale('id')->isoFormat('DD MMMM YYYY');
+                                $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                                $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                                $qr->data = json_encode($dataQr);
+                                $qr->save();
+                            }
                         }
 
                         $detail = LhpsEmisiDetail::whereIn('id', $idDetail)->get();
@@ -362,12 +375,29 @@ class DraftEmisiController extends Controller
 
 
                     if ($header != null) {
-
-                        $file_qr = new GenerateQrDocumentLhp();
-                        $file_qr = $file_qr->insert('LHP_EMISI_C', $header, $this->karyawan);
-                        if ($file_qr) {
-                            $header->file_qr = $file_qr;
-                            $header->save();
+                        // === Generate QR & File ===
+                        if (!$header->file_qr) {
+                            $file_qr = new GenerateQrDocumentLhp();
+                            $file_qr = $file_qr->insert('LHP_EMISI_C', $header, $this->karyawan);
+                            if ($file_qr) {
+                                $header->file_qr = $file_qr;
+                                $header->save();
+                            }
+                        } else {
+                            // Update QR Document jika ada
+                            $qr = QrDocument::where('file', $header->file_qr)->first();
+                            if ($qr) {
+                                $dataQr = json_decode($qr->data, true);
+                                $tanggalPengesahan = $header->tanggal_lhp
+                                    ?? $header->tgl_lhp
+                                    ?? $header->tanggal_terima
+                                    ?? $request->tanggal_terima;
+                                $dataQr['Tanggal_Pengesahan'] = Carbon::parse($tanggalPengesahan)->locale('id')->isoFormat('DD MMMM YYYY');
+                                $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                                $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                                $qr->data = json_encode($dataQr);
+                                $qr->save();
+                            }
                         }
 
                         $groupedByPage = [];

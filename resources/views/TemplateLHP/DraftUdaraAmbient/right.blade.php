@@ -231,8 +231,14 @@
                         <table style="padding-top: 10px;" width="100%">
                             <tr>
                                 @php
+                                    $regulasiText = is_string($y) ? $y : (string) $y;
+                                    $regulasiParts = explode('-', $regulasiText, 2);
+                                    $regulasiLabel =
+                                        isset($regulasiParts[1]) && $regulasiParts[1] !== ''
+                                            ? $regulasiParts[1]
+                                            : $regulasiText;
                                 @endphp
-                                <td class="custom5" colspan="3"><strong>{{ explode('-', $y)[1] }}</strong></td>
+                                <td class="custom5" colspan="3"><strong>{{ $regulasiLabel }}</strong></td>
                             </tr>
                         </table>
                     @endforeach
@@ -277,7 +283,7 @@
                     }
                 @endphp
 
-                @if($isPager)
+                @if ($isPager)
                     <table style="padding: 5px 0px 0px 10px;" width="100%">
                         <tr>
                             <td class="custom5" colspan="3">(##) Hasil analisa dalam proses di Laboratorium</td>

@@ -608,11 +608,25 @@ class DraftUdaraMikrobiologiController extends Controller
             //     ->toArray();
             // dd('done');
             if ($header != null) {
-                $file_qr = new GenerateQrDocumentLhp;
-                $file_qr = $file_qr->insert('LHP_MIKROBIO', $header, $this->karyawan);
-                if ($file_qr) {
-                    $header->file_qr = $file_qr;
-                    $header->save();
+                // === Generate QR & File ===
+                if (!$header->file_qr) {
+                    $file_qr = new GenerateQrDocumentLhp;
+                    $file_qr = $file_qr->insert('LHP_MIKROBIO', $header, $this->karyawan);
+                    if ($file_qr) {
+                        $header->file_qr = $file_qr;
+                        $header->save();
+                    }
+                } else {
+                    // Update QR Document jika ada
+                    $qr = QrDocument::where('file', $header->file_qr)->first();
+                    if ($qr) {
+                        $dataQr = json_decode($qr->data, true);
+                        $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                        $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                        $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                        $qr->data = json_encode($dataQr);
+                        $qr->save();
+                    }
                 }
 
                 $detailCollection       = LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', 1)->get();

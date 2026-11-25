@@ -237,11 +237,28 @@ class DraftLhpUdaraPsikologiController extends Controller
 			$detail = LhpUdaraPsikologiDetail::where('id_header', $header->id)->get();
 
 			if ($header != null) {
-				$qr = new GenerateQrDocumentLhpp();
-				$file_qr = $qr->insert('LHP_PSIKOLOGI', $header, $this->karyawan, '');
-				if ($file_qr) {
-					$header->file_qr = $file_qr . '.svg';
-					$header->save();
+				// === Generate QR & File ===
+				if (!$header->file_qr) {
+					$qrGen = new GenerateQrDocumentLhpp();
+					$file_qr = $qrGen->insert('LHP_PSIKOLOGI', $header, $this->karyawan, '');
+					if ($file_qr) {
+						$header->file_qr = $file_qr . '.svg';
+						$header->save();
+					}
+				} else {
+					// Update QR Document jika ada (file di qr_documents tanpa .svg)
+					$fileKey = preg_replace('/\.svg$/i', '', (string) $header->file_qr);
+					$qr = QrDocument::where(function ($q) use ($fileKey, $header) {
+						$q->where('file', $fileKey)->orWhere('file', $header->file_qr);
+					})->first();
+					if ($qr) {
+						$dataQr = json_decode($qr->data, true);
+						$dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_rilis_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+						$dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+						$dataQr['Jabatan'] = $header->jabatan_karyawan;
+						$qr->data = json_encode($dataQr);
+						$qr->save();
+					}
 				}
 				// dd('This endpoint is deprecated. Please use the new endpoint for generating LHP PDF.');
 				$render = app(TemplateLhpp::class);

@@ -1,5 +1,7 @@
 <?php
+
 namespace App\Http\Controllers\api;
+
 use App\Helpers\DraftLhpRejectHelper;
 
 use App\Helpers\HelperSatuan;
@@ -45,64 +47,64 @@ class DraftUdaraAmbientController extends Controller
     public function index(Request $request)
     {
         $data = OrderDetail::with([
-        'lhps_ling',
-        'allDetailLingkunganHidup',
-        'dataLapanganPartikulatMeter', // Relasi ini sudah dipanggil
-        'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
+            'lhps_ling',
+            'allDetailLingkunganHidup',
+            'dataLapanganPartikulatMeter', // Relasi ini sudah dipanggil
+            'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
         ])
-        ->where([
-            ['is_active', true],
-            ['status', 2],
-            ['kategori_2', '4-Udara'],
-            ['kategori_3', '11-Udara Ambient'],
-        ])
-        ->get()
-        ->map(function ($item) {
-            $lhps = $item->lhps_ling;
-            $lapangan = collect($item->allDetailLingkunganHidup);
-            $partikulat = DataLapanganPartikulatMeter::where('no_sampel', $item->no_sampel)
-                ->get();
-            // Ambil data partikulat sebagai collection
+            ->where([
+                ['is_active', true],
+                ['status', 2],
+                ['kategori_2', '4-Udara'],
+                ['kategori_3', '11-Udara Ambient'],
+            ])
+            ->get()
+            ->map(function ($item) {
+                $lhps = $item->lhps_ling;
+                $lapangan = collect($item->allDetailLingkunganHidup);
+                $partikulat = DataLapanganPartikulatMeter::where('no_sampel', $item->no_sampel)
+                    ->get();
+                // Ambil data partikulat sebagai collection
 
-            if (!empty($lhps->methode_sampling)) {
-                $lhps->methode_sampling = json_decode($lhps->methode_sampling);
-            }
+                if (!empty($lhps->methode_sampling)) {
+                    $lhps->methode_sampling = json_decode($lhps->methode_sampling);
+                }
 
-            // Tentukan data lapangan lingkungan hidup
-            $shiftL2 = $lapangan->where('shift_pengambilan', 'L2')->take(1)->values();
-            $item->data_lapangan_lingkungan_hidup = $shiftL2->isNotEmpty() 
-                ? $shiftL2 
-                : $lapangan->take(1)->values();
+                // Tentukan data lapangan lingkungan hidup
+                $shiftL2 = $lapangan->where('shift_pengambilan', 'L2')->take(1)->values();
+                $item->data_lapangan_lingkungan_hidup = $shiftL2->isNotEmpty()
+                    ? $shiftL2
+                    : $lapangan->take(1)->values();
 
-            if ($lapangan->isNotEmpty()) {
-                $minDate = $lapangan->min('created_at');
-                $maxDate = $lapangan->max('created_at');
-            } else {
-                $minDate = $partikulat->pluck('created_at')->min();
-                $maxDate = $partikulat->pluck('created_at')->max();
-            }
+                if ($lapangan->isNotEmpty()) {
+                    $minDate = $lapangan->min('created_at');
+                    $maxDate = $lapangan->max('created_at');
+                } else {
+                    $minDate = $partikulat->pluck('created_at')->min();
+                    $maxDate = $partikulat->pluck('created_at')->max();
+                }
 
-            $hasLhpsDates = $lhps && (
-                $lhps->tanggal_sampling_awal || 
-                $lhps->tanggal_sampling_akhir || 
-                $lhps->tanggal_analisa_awal || 
-                $lhps->tanggal_analisa_akhir
-            );
+                $hasLhpsDates = $lhps && (
+                    $lhps->tanggal_sampling_awal ||
+                    $lhps->tanggal_sampling_akhir ||
+                    $lhps->tanggal_analisa_awal ||
+                    $lhps->tanggal_analisa_akhir
+                );
 
-            if (!$hasLhpsDates) {
-                $item->tanggal_sampling_awal  = $minDate ? Carbon::parse($minDate)->format('Y-m-d') : null;
-                $item->tanggal_sampling_akhir = $maxDate ? Carbon::parse($maxDate)->format('Y-m-d') : null;
-                $item->tanggal_analisa_awal   = $item->tanggal_terima;
-                $item->tanggal_analisa_akhir  = Carbon::now()->format('Y-m-d');
-            } else {
-                $item->tanggal_sampling_awal  = $lhps->tanggal_sampling_awal;
-                $item->tanggal_sampling_akhir = $lhps->tanggal_sampling_akhir;
-                $item->tanggal_analisa_awal   = $lhps->tanggal_analisa_awal;
-                $item->tanggal_analisa_akhir  = $lhps->tanggal_analisa_akhir;
-            }
+                if (!$hasLhpsDates) {
+                    $item->tanggal_sampling_awal  = $minDate ? Carbon::parse($minDate)->format('Y-m-d') : null;
+                    $item->tanggal_sampling_akhir = $maxDate ? Carbon::parse($maxDate)->format('Y-m-d') : null;
+                    $item->tanggal_analisa_awal   = $item->tanggal_terima;
+                    $item->tanggal_analisa_akhir  = Carbon::now()->format('Y-m-d');
+                } else {
+                    $item->tanggal_sampling_awal  = $lhps->tanggal_sampling_awal;
+                    $item->tanggal_sampling_akhir = $lhps->tanggal_sampling_akhir;
+                    $item->tanggal_analisa_awal   = $lhps->tanggal_analisa_awal;
+                    $item->tanggal_analisa_akhir  = $lhps->tanggal_analisa_akhir;
+                }
 
-            return $item;
-        });
+                return $item;
+            });
 
         return Datatables::of($data)->make(true);
     }
@@ -269,7 +271,7 @@ class DraftUdaraAmbientController extends Controller
                 'tanggal_sampling_akhir' => $request->tanggal_sampling_akhir ?: null,
                 'tanggal_analisa_awal'   => $request->tanggal_analisa_awal ?: null,
                 'tanggal_analisa_akhir'  => $request->tanggal_analisa_akhir ?: null,
-                
+
             ]);
             $header->save();
 
@@ -324,11 +326,22 @@ class DraftUdaraAmbientController extends Controller
             }
 
             // === 7. Generate QR & File ===
-            if (! $header->file_qr) {
+            if (!$header->file_qr) {
                 $file_qr = new GenerateQrDocumentLhp();
                 if ($path = $file_qr->insert('LHP_LINGKUNGAN_HIDUP', $header, $this->karyawan)) {
                     $header->file_qr = $path;
                     $header->save();
+                }
+            } else {
+                // Update QR Document jika ada
+                $qr = QrDocument::where('file', $header->file_qr)->first();
+                if ($qr) {
+                    $dataQr = json_decode($qr->data, true);
+                    $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+                    $dataQr['Disahkan_Oleh'] = $header->nama_karyawan;
+                    $dataQr['Jabatan'] = $header->jabatan_karyawan;
+                    $qr->data = json_encode($dataQr);
+                    $qr->save();
                 }
             }
 
@@ -339,7 +352,7 @@ class DraftUdaraAmbientController extends Controller
             $fileName = LhpTemplate::setDataDetail(LhpsLingDetail::where('id_header', $header->id)->get())
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
-            // ->useLampiran(true)
+                // ->useLampiran(true)
                 ->whereView('DraftUdaraAmbient')
                 ->render('downloadLHPFinal');
 
@@ -546,7 +559,7 @@ class DraftUdaraAmbientController extends Controller
                 $methodsFromLhp = collect($cek_lhp->lhpsLingDetail)
                     ->pluck('methode')
                     ->merge(collect($cek_lhp->lhpsLingCustom)->pluck('methode'))
-                    ->filter(fn ($methode) => ! empty($methode) && $methode !== '-')
+                    ->filter(fn($methode) => ! empty($methode) && $methode !== '-')
                     ->unique()
                     ->values()
                     ->toArray();
@@ -747,7 +760,7 @@ class DraftUdaraAmbientController extends Controller
                 $methodsFromLhp = collect($cek_lhp->lhpsLingDetail)
                     ->pluck('methode')
                     ->merge(collect($cek_lhp->lhpsLingCustom)->pluck('methode'))
-                    ->filter(fn ($methode) => ! empty($methode) && $methode !== '-')
+                    ->filter(fn($methode) => ! empty($methode) && $methode !== '-')
                     ->unique()
                     ->values()
                     ->toArray();
@@ -808,7 +821,7 @@ class DraftUdaraAmbientController extends Controller
                         'ws_lingkungan' => collect($item->ws_value_linkungan)->toArray(),
                     ];
                 });
-                
+
                 // dd($test);
 
                 // dd($validasi->udaraLingkungan, $validasi->udaraMicrobio, $validasi->udaraSubKontrak, $validasi->udaraDirect, $validasi->udaraPartikulat);
@@ -857,7 +870,7 @@ class DraftUdaraAmbientController extends Controller
 
                 $parameters = Parameter::where(['id_kategori' => 4, 'is_active' => true])->whereIn('nama_lab', $validasi->pluck('nama_lab'))->get()->map(fn($item) => ['id' => $item->id, 'parameter' => $item->nama_lab]);
                 $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
-                
+
                 $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
                     if ($hasilUji && $hasilUji !== "-" && $hasilUji !== "##" && !str_contains($hasilUji, '<')) {
                         $colToSearch = "hasil" . ($index ?: 1);
@@ -928,11 +941,11 @@ class DraftUdaraAmbientController extends Controller
             'no_sampel'     => $val->no_sampel,
             'akr'           => (
                 ! empty($bakumutu)
-                    ? (str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ')
-                    : 'ẍ'
+                ? (str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ')
+                : 'ẍ'
             ),
             'parameter'     => $parameter,
-           'satuan'            => (! empty($bakumutu->satuan))
+            'satuan'            => (! empty($bakumutu->satuan))
                 ? $bakumutu->satuan
                 : 'µg/Nm³',
             'durasi'        => ! empty($bakumutu->durasi_pengukuran) ? $bakumutu->durasi_pengukuran : (! empty($val->durasi) ? $val->durasi : '-'),
@@ -958,7 +971,7 @@ class DraftUdaraAmbientController extends Controller
             $hasilKey    = "C{$i}";
             $ws = $ws_value_lingkungan;
         }
-        
+
         $entry['hasil_uji'] = $ws->$fKoreksiKey ?? $ws->$hasilKey ?? null;
         if ($bakumutu && in_array($bakumutu->satuan, ["mg/m³", "mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
             $fKoreksi2          = $ws->f_koreksi_2 ?? null;
@@ -977,7 +990,7 @@ class DraftUdaraAmbientController extends Controller
             $entry['hasil_uji'] = $fKoreksi1 ?? $hasil1 ?? $entry['hasil_uji'];
         }
 
-        if($bakumutu && $bakumutu->baku_mutu) {
+        if ($bakumutu && $bakumutu->baku_mutu) {
             $entry['baku_mutu'][0] = $bakumutu->baku_mutu;
         }
 
@@ -988,13 +1001,13 @@ class DraftUdaraAmbientController extends Controller
             $methodsUsed[]         = $bakumutu->method;
         }
 
-        if($entry['hasil_uji'] == '##'){
+        if ($entry['hasil_uji'] == '##') {
             $entry['satuan'] = '-';
             $entry['durasi'] = '-';
             $entry['methode'] = '-';
             $entry['baku_mutu'] = ['-'];
         }
-        
+
         $entry['hasil_uji'] = $getHasilUji($index, Parameter::where(['id_kategori' => 4, 'nama_lab' => $val->nama_lab, 'is_active' => true])->first()->id, $entry['hasil_uji']);
 
         return $entry;
@@ -1086,7 +1099,7 @@ class DraftUdaraAmbientController extends Controller
                 }
 
                 $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
-                ->first();
+                    ->first();
 
                 EmailLhpRilisHelpers::run([
                     'cfr'              => $request->no_lhp,
@@ -1199,7 +1212,7 @@ class DraftUdaraAmbientController extends Controller
         try {
             $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)
                 ->where('is_active', true)
-            // ->where('id', $request->id)
+                // ->where('id', $request->id)
                 ->first();
 
             if ($header != null) {
