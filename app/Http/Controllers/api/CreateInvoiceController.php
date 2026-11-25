@@ -12,6 +12,7 @@ use App\Models\OrderDetail;
 use App\Models\Invoice;
 use App\Services\GenerateQrDocument;
 use App\Http\Controllers\Controller;
+use App\Services\DateColumnFilterService;
 use App\Services\RenderInvoice;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -115,7 +116,9 @@ class CreateInvoiceController extends Controller
                     $query->whereRaw("LOWER(order_header.no_order) LIKE ?", ["%{$keyword}%"]);
                 })
                 ->filterColumn('tanggal_order', function ($query, $keyword) {
-                    $query->whereRaw("LOWER(order_header.tanggal_order) LIKE ?", ["%{$keyword}%"]);
+                    DateColumnFilterService::apply($query, 'order_header.tanggal_order', $keyword, [
+                        'likeFallback' => false,
+                    ]);
                 })
                 ->make(true);
         } catch (\Throwable $th) {
