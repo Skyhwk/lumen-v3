@@ -78,7 +78,7 @@ class MasterShiftKaryawan extends Sector
     }
 
     /**
-     * @return array<int, array{value: string, text: string, kode: string}>
+     * @return array<int, array{value: string, text: string, kode: string, time_in: string, time_out: string, is_overnight: bool}>
      */
     public static function dropdownOptions(): array
     {
@@ -88,11 +88,17 @@ class MasterShiftKaryawan extends Sector
             ->map(function ($row) {
                 $timeIn = self::normalizeHm($row->time_in) ?? '';
                 $timeOut = self::normalizeHm($row->time_out) ?? '';
+                $isOvernight = ($timeIn !== '' && $timeOut !== '')
+                    ? self::hmToMinutes($timeOut) <= self::hmToMinutes($timeIn)
+                    : false;
 
                 return [
                     'value' => trim("S {$row->kode} {$timeIn} {$timeOut}"),
                     'text' => $row->label ?: $row->kode,
                     'kode' => $row->kode,
+                    'time_in' => $timeIn,
+                    'time_out' => $timeOut,
+                    'is_overnight' => $isOvernight,
                 ];
             })
             ->values()
