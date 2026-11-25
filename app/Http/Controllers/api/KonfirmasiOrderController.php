@@ -16,6 +16,7 @@ use App\Models\Jadwal;
 use App\Models\SamplingPlan;
 
 use App\Models\MasterKaryawan;
+use App\Services\DateColumnFilterService;
 use App\Services\SamplingPlanServices;
 use App\Services\QuotationService;
 
@@ -88,16 +89,11 @@ class KonfirmasiOrderController extends Controller
 
 		return DataTables::of($data)
 			->filterColumn('created_at', function ($query, $keyword) use ($request) {
-				$keyword = trim((string) $keyword);
-				$date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
-				if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-					return;
-				}
-
 				$column = $request->status == 'kontrak'
 					? 'request_quotation_kontrak_H.created_at'
 					: 'request_quotation.created_at';
-				$query->whereDate($column, $date);
+
+				DateColumnFilterService::apply($query, $column, $keyword);
 			})
 			->filterColumn('data_lama', function ($query, $keyword) {
 				if (Str::contains($keyword, 'QS U')) {

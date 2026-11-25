@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\Facades\DataTables;
+use App\Services\DateColumnFilterService;
 use App\Services\Notification;
 use App\Services\GetAtasan;
 use App\Services\GetBawahan;
@@ -101,20 +102,10 @@ class RequestQrController extends Controller
                     return $exist !== null ? $exist->sales_id : null;
                     // return $item['pelanggan_info'] !== null ? $item['pelanggan_info']->sales_id : null;
                 })
-                ->filterColumn('created_at', function ($query, $keyword) {
-                    $keyword = trim((string) $keyword);
-                    if ($keyword === '') {
-                        return;
-                    }
-
-                    $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
-                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-                        $query->whereDate('request_qr.created_at', $date);
-                        return;
-                    }
-
-                    $query->where('request_qr.created_at', 'like', '%' . $keyword . '%');
-                })
+                ->filterColumn(
+                    'created_at',
+                    DateColumnFilterService::datatablesFilter('request_qr.created_at')
+                )
                 ->make(true);
         }catch(\Exception $e){
             return response()->json(['message' => $e->getMessage(), 'line' => $e->getLine(), 'file' => $e->getFile()], 500);
