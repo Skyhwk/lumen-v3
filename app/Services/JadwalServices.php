@@ -1670,7 +1670,9 @@ class JadwalServices
         $changed = [];
 
         if (!$basKosong) {
-            if ($samplesSame && $samplersSame && !$tanggalSame) {
+            // BAS sudah terisi: perubahan tanggal / sampel / sampler → nonaktifkan header lama
+            // (PS baru akan dibuat lewat alur PersiapanSampleController).
+            if (!$tanggalSame || !$samplesSame || !$samplersSame) {
                 $psh->is_active = false;
                 $changed[] = 'is_active';
                 PersiapanSampelDetail::where('id_persiapan_sampel_header', $psh->id)

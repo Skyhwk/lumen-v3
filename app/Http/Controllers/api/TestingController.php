@@ -6,9 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\{
     QuotationKontrakH,QuotationKontrakD,SamplingPlan,QuotationNonKontrak,Jadwal,AnalystFormula,Colorimetri,OrderHeader,OrderDetail,Invoice,PersiapanSampelHeader,PersiapanSampelDetail,LhpsAirDetail,LhpsAirCustom,MasterBakumutu,HargaParameter,KelengkapanKonfirmasiQs,Parameter,DataLapanganAir,LhpUdaraPsikologiHeader,SampelTidakSelesai,MasterKaryawan,QrDocument,DataLapanganPartikulatMeter,DetailSenyawaVolatile,DetailLingkunganHidup,DataLapanganDirectLain,DetailLingkunganKerja,DetailMicrobiologi,DataLapanganKebisinganPersonal,DataLapanganKebisingan,DataLapanganCahaya,DataLapanganGetaran,DataLapanganGetaranPersonal,DataLapanganIklimPanas,DataLapanganIklimDingin,DataLapanganSwab,DataLapanganErgonomi,DataLapanganDebuPersonal,DataLapanganMedanLM,DataLapanganSinarUV,DataLapanganPsikologi,DataLapanganEmisiKendaraan,DataLapanganEmisiCerobong,DataLapanganIsokinetikHasil,Gravimetri,MasterPelanggan,Titrimetri,WsValueAir, DataLapanganIsokinetikBeratMolekul,DataLapanganIsokinetikKadarAir,DataLapanganIsokinetikPenentuanKecepatanLinier,DataLapanganIsokinetikSurveiLapangan,DataLapanganKebisinganBySoundMeter,DataLapanganKecerahan,DataLapanganLapisanMinyak,DataLapanganMicrobiologi,DataLapanganSampah,DataLapanganSenyawaVolatile,DataLapanganUnion,DataLimbah,DataPsikologi,DetailFlowMeter,DetailSoundMeter,DailyQsd,SertifikatWebinarHeader,SertifikatWebinarDetail,LayoutCertificate,JenisFont,TemplateBackground,MasterTargetSales,SarHeader,TemplatePaketAnalisa,DataLapanganEmisiOrder,LhpsAdverseOdorHeader,LhpsAirHeader,LhpsEmisiCHeader,LhpsEmisiHeader,LhpsEmisiIsokinetikHeader,LhpsErgonomiHeader,LhpsGetaranHeader,LhpsHygieneSanitasiHeader,LhpsIklimHeader,LhpsKebisinganHeader,LhpsKebisinganPersonalHeader,LhpsLingHeader,LhpsMedanLMHeader,LhpsMicrobiologiHeader,LhpsPadatanHeader,LhpsPencahayaanHeader,LhpsSinarUVHeader,LhpsSwabTesHeader,RekapLiburKalender,LinkLhp
 };
-use App\Jobs\CombineLHPJob;
+use App\Jobs\CombineLhpOrderBerjalanJob;
+use App\Models\OrderBerjalan;
 use App\Services\{
-    CombineLHPService,GetAtasan,SamplingPlanServices,RenderSamplingPlan,JadwalServices,RenderInvoice,RenderInvoiceTitik,GeneratePraSampling,GenerateQrDocumentLhp,GenerateWebinarSertificate,LhpTemplate,RandomSalesAssign,SendEmail,GetBawahan,SnapshotPersiapanService,GenerateToken,GenerateDokumenCocService,GenerateStrukSarService,PortalNotificationService,AppsBasService
+    CombineLHPService,CombineLhpOrderBerjalanService,GetAtasan,SamplingPlanServices,RenderSamplingPlan,JadwalServices,RenderInvoice,RenderInvoiceTitik,GeneratePraSampling,GenerateQrDocumentLhp,GenerateWebinarSertificate,LhpTemplate,RandomSalesAssign,SendEmail,GetBawahan,SnapshotPersiapanService,GenerateToken,GenerateDokumenCocService,GenerateStrukSarService,PortalNotificationService,AppsBasService
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -6929,12 +6930,11 @@ class TestingController extends Controller
     }
 
     /**
-     * Recombine LHP — menjalankan ulang CombineLHPJob / CombineLHPService
-     * (sama seperti saat approve di DraftUdaraAmbientController / DraftAirController).
+     * Recombine LHP — sumber order_berjalan (tanpa wajib link_lhp / file_lhp).
      *
      * Body:
-     * - no_lhp (required)
-     * - file_lhp, no_order, periode (optional, auto-resolve dari header/order detail)
+     * - no_order (atau no_lhp untuk resolve order)
+     * - periode (wajib untuk KONTRAK/QTC)
      * - sync: true = jalankan langsung (default), false = dispatch queue
      * - karyawan (optional)
      */
@@ -6942,90 +6942,110 @@ class TestingController extends Controller
     {
         try {
             $noLhp = trim((string) ($request->no_lhp ?? ''));
-            if ($noLhp === '') {
-                return response()->json([
-                    'message' => 'no_lhp wajib diisi',
-                    'status' => false,
-                ], 422);
-            }
-
-            $cekDetail = OrderDetail::where('cfr', $noLhp)
-                ->where('is_active', true)
-                ->first();
-
-            $header = $this->resolveLhpHeaderForRecombine($noLhp);
+            $cekDetail = $noLhp !== ''
+                ? OrderDetail::where('cfr', $noLhp)->where('is_active', true)->first()
+                : null;
+            $header = $noLhp !== '' ? $this->resolveLhpHeaderForRecombine($noLhp) : null;
 
             $noOrder = trim((string) ($request->no_order ?? ''));
             if ($noOrder === '') {
                 $noOrder = trim((string) ($header->no_order ?? ($cekDetail->no_order ?? '')));
             }
 
-            $fileLhp = trim((string) ($request->file_lhp ?? ''));
-            if ($fileLhp === '') {
-                $fileLhp = trim((string) ($header->file_lhp ?? ''));
+            if ($noOrder === '') {
+                return response()->json([
+                    'message' => 'no_order wajib diisi (atau kirim no_lhp yang bisa di-resolve).',
+                    'status' => false,
+                ], 422);
             }
 
             $periode = $request->has('periode')
-                ? $request->periode
+                ? ($request->periode === '' || $request->periode === null ? null : (string) $request->periode)
                 : ($cekDetail->periode ?? null);
 
             $karyawan = trim((string) ($request->karyawan ?? $this->karyawan ?? 'TestingController'));
 
-            if ($noOrder === '' || $fileLhp === '') {
+            $orderHeader = OrderHeader::where('no_order', $noOrder)->where('is_active', true)->latest()->first();
+            if (!$orderHeader) {
                 return response()->json([
-                    'message' => 'no_order atau file_lhp tidak ditemukan. Lengkapi manual via request body.',
+                    'message' => "Order aktif tidak ditemukan (noOrder: {$noOrder}).",
                     'status' => false,
-                    'data' => [
-                        'no_lhp' => $noLhp,
-                        'no_order' => $noOrder ?: null,
-                        'file_lhp' => $fileLhp ?: null,
-                        'header_found' => $header !== null,
-                        'order_detail_found' => $cekDetail !== null,
-                    ],
-                ], 422);
+                ], 404);
             }
 
-            $cekLink = LinkLhp::where('no_order', $noOrder);
-            if ($periode) {
-                $cekLink = $cekLink->where('periode', $periode);
-            }
-            $cekLink = $cekLink->first();
+            $orderBerjalan = OrderBerjalan::where('id', $orderHeader->id)->first()
+                ?: OrderBerjalan::where('no_order', $noOrder)->orderByDesc('updated_at')->first();
 
-            if (!$cekLink) {
+            if (!$orderBerjalan) {
                 return response()->json([
-                    'message' => 'Link LHP tidak ditemukan untuk order/periode ini',
+                    'message' => "Snapshot order_berjalan tidak ditemukan (noOrder: {$noOrder}). Jalankan checkorder atau backfill terlebih dahulu.",
                     'status' => false,
                     'data' => [
                         'no_order' => $noOrder,
+                        'order_header_id' => $orderHeader->id,
                         'periode' => $periode,
                     ],
                 ], 404);
             }
 
+            $isKontrak = strtoupper((string) ($orderBerjalan->jenis_order ?? '')) === 'KONTRAK'
+                || str_contains((string) $orderHeader->no_document, 'QTC');
+
+            if ($isKontrak && ($periode === null || $periode === '')) {
+                return response()->json([
+                    'message' => "Order KONTRAK/QTC wajib periode (noOrder: {$noOrder}).",
+                    'status' => false,
+                    'data' => [
+                        'no_order' => $noOrder,
+                        'periode' => $periode,
+                        'jenis_order' => $orderBerjalan->jenis_order,
+                    ],
+                ], 422);
+            }
+
             $sync = filter_var($request->input('sync', true), FILTER_VALIDATE_BOOLEAN);
 
             if ($sync) {
-                (new CombineLHPService())->combine($noLhp, $fileLhp, $noOrder, $karyawan, $periode);
-                $mode = 'sync';
-            } else {
-                $job = new CombineLHPJob($noLhp, $fileLhp, $noOrder, $karyawan, $periode);
-                $this->dispatch($job);
-                $mode = 'queue';
+                $combineResult = (new CombineLhpOrderBerjalanService())->combine(
+                    $noOrder,
+                    $periode,
+                    $karyawan,
+                    false
+                );
+                $ok = !empty($combineResult['ok']);
+
+                return response()->json([
+                    'message' => $ok
+                        ? ('Recombine sync OK: ' . ($combineResult['message'] ?? 'merge selesai'))
+                        : ('Recombine sync gagal: ' . ($combineResult['message'] ?? ($combineResult['spot'] ?? 'unknown'))),
+                    'status' => $ok,
+                    'data' => [
+                        'no_lhp' => $noLhp ?: null,
+                        'no_order' => $noOrder,
+                        'periode' => $periode,
+                        'karyawan' => $karyawan,
+                        'mode' => 'sync',
+                        'order_berjalan_id' => $orderBerjalan->id,
+                        'combine' => $combineResult,
+                    ],
+                ], $ok ? 200 : 422);
             }
 
+            CombineLhpOrderBerjalanJob::dispatchFor($noOrder, $periode, $karyawan);
+
             return response()->json([
-                'message' => 'Recombine LHP berhasil dijalankan (' . $mode . ')',
+                'message' => 'Recombine queue diterima.',
                 'status' => true,
                 'data' => [
-                    'no_lhp' => $noLhp,
-                    'file_lhp' => $fileLhp,
+                    'no_lhp' => $noLhp ?: null,
                     'no_order' => $noOrder,
                     'periode' => $periode,
                     'karyawan' => $karyawan,
-                    'mode' => $mode,
-                    'link_lhp_id' => $cekLink->id,
+                    'mode' => 'queue',
+                    'job_accepted' => true,
+                    'order_berjalan_id' => $orderBerjalan->id,
                 ],
-            ], 200);
+            ], 202);
         } catch (\Throwable $e) {
             return response()->json([
                 'message' => 'Error: ' . $e->getMessage(),

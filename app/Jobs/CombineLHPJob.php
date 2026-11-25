@@ -3,7 +3,12 @@
 namespace App\Jobs;
 
 use App\Services\CombineLHPService;
+use Illuminate\Support\Facades\Log;
 
+/**
+ * Legacy job signature — sekarang mendelegasikan ke CombineLHPService
+ * yang membaca order_berjalan (tanpa wajib link_lhp).
+ */
 class CombineLHPJob extends Job
 {
     protected $noLhp;
@@ -21,9 +26,39 @@ class CombineLHPJob extends Job
         $this->karyawan = $karyawan;
     }
 
+    /**
+     * Dispatch setelah commit — kompatibel signature lama.
+     */
+    public static function dispatchFor($noLhp, $fileLhp, $noOrder, $karyawan, $periode = null): void
+    {
+        $noOrder = trim((string) $noOrder);
+        if ($noOrder === '') {
+            return;
+        }
+
+        $job = (new static($noLhp, $fileLhp, $noOrder, $karyawan, $periode))->afterCommit();
+        dispatch($job);
+    }
+
     public function handle()
     {
         $service = new CombineLHPService();
-        $service->combine($this->noLhp, $this->fileLhp, $this->noOrder, $this->karyawan, $this->periode);
+        $result = $service->combine(
+            $this->noLhp,
+            $this->fileLhp,
+            $this->noOrder,
+            $this->karyawan,
+            $this->periode
+        );
+
+        if (is_array($result) && empty($result['ok'])) {
+            Log::warning('CombineLHPJob failed', [
+                'no_order' => $this->noOrder,
+                'periode' => $this->periode,
+                'no_lhp' => $this->noLhp,
+                'spot' => $result['spot'] ?? null,
+                'message' => $result['message'] ?? null,
+            ]);
+        }
     }
 }

@@ -96,6 +96,7 @@ class Kernel extends ConsoleKernel
         Commands\GaAssetImportFinancialCommand::class,
         Commands\GaAssetReconcileExcelCommand::class,
         Commands\GaAssetSmokeMenusCommand::class,
+        Commands\CombineLhpFromOrderBerjalanCommand::class,
         Commands\QuotationDiscoverCommand::class,
         Commands\QuotationCreateCommand::class,
         Commands\QuotationDispatchCommand::class,

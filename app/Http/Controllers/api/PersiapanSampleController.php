@@ -1215,10 +1215,66 @@ class PersiapanSampleController extends Controller
             }
 
             $psh->save();
+
+            // Exact no_sampel match bisa miss header lama saat ada ganti/tambah sampel.
+            // Matikan sibling aktif (order+periode+tanggal+sampler) supaya hanya 1 yang hidup.
+            $this->deactivateSiblingPersiapanHeaders($request, (int) $psh->id);
+
             return $this->collapseDuplicatePersiapanHeaders($request, $psh);
         } catch (\Throwable $th) {
             new Exception($th);
         }
+    }
+
+    /**
+     * Nonaktifkan PS header aktif lain dengan identitas sama
+     * (quotation/order + periode + tanggal_sampling + sampler), tanpa syarat no_sampel exact.
+     */
+    private function deactivateSiblingPersiapanHeaders(Request $request, int $keepId): void
+    {
+        $periode = trim((string) $request->periode);
+        $wantedSampler = $this->normalizeSamplerList($request->sampler_jadwal);
+
+        $query = PersiapanSampelHeader::where('is_active', 1)
+            ->where('id', '!=', $keepId)
+            ->where('tanggal_sampling', $request->tanggal_sampling)
+            ->where(function ($quotation) use ($request) {
+                $quotation->where('no_quotation', $request->no_quotation);
+                if (!empty($request->no_order)) {
+                    $quotation->orWhere('no_order', $request->no_order);
+                }
+            });
+
+        if ($periode === '') {
+            $query->where(function ($inner) {
+                $inner->whereNull('periode')->orWhere('periode', '')->orWhereRaw("TRIM(periode) = ''");
+            });
+        } else {
+            $query->whereRaw('TRIM(periode) = ?', [$periode]);
+        }
+
+        $siblingIds = $query->get()
+            ->filter(function ($header) use ($wantedSampler) {
+                return $this->normalizeSamplerList($header->sampler_jadwal) === $wantedSampler;
+            })
+            ->pluck('id')
+            ->values()
+            ->all();
+
+        if (!$siblingIds) {
+            return;
+        }
+
+        PersiapanSampelHeader::whereIn('id', $siblingIds)->update([
+            'is_active' => 0,
+            'updated_by' => $this->karyawan,
+            'updated_at' => Carbon::now(),
+        ]);
+        PersiapanSampelDetail::whereIn('id_persiapan_sampel_header', $siblingIds)->update([
+            'is_active' => 0,
+            'updated_by' => $this->karyawan,
+            'updated_at' => Carbon::now(),
+        ]);
     }
 
 
@@ -1288,7 +1344,7 @@ class PersiapanSampleController extends Controller
             
             return true;
         } catch (\Throwable $th) {
-            throw $th;
+            throw $th;  
         }
     }
 
@@ -1299,7 +1355,7 @@ class PersiapanSampleController extends Controller
         DB::beginTransaction();
 
         try {
-            $psh = $this->saveHeader($request);
+            $psh = $this->s aveHeader($request);
             
             $this->saveDetail($request, $psh);
             $this->saveQrDocument($psh);

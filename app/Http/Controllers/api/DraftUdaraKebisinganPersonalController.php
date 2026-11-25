@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 use App\Helpers\DraftLhpRejectHelper;
 
 use App\Models\HistoryAppReject;
+use App\Models\OrderBerjalan;
 use App\Models\KonfirmasiLhp;
 
 use App\Models\LhpsKebisinganPersonalHeader;
@@ -34,8 +35,7 @@ use App\Services\LhpTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
-use App\Jobs\CombineLHPJob;
-use App\Models\LinkLhp;
+use App\Jobs\CombineLhpOrderBerjalanJob;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -577,12 +577,11 @@ class DraftUdaraKebisinganPersonalController extends Controller
                 }
 
                 $cekDetail = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first();
-                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $cekDetail->periode)->first();
-
-                if($cekLink) {
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
-                    $this->dispatch($job);
-                }
+                CombineLhpOrderBerjalanJob::dispatchFor(
+                    $data->no_order,
+                    $cekDetail->periode ?? null,
+                    $this->karyawan
+                );
 
                 $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
                 ->first();

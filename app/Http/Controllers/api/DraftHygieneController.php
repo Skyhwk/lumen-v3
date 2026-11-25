@@ -4,16 +4,16 @@ namespace App\Http\Controllers\api;
 
 use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
-use App\Jobs\CombineLHPJob;
+use App\Jobs\CombineLhpOrderBerjalanJob;
 // Models
 use App\Models\GenerateLink;
+use App\Models\OrderBerjalan;
 use App\Models\HistoryAppReject;
 use App\Models\KonfirmasiLhp;
 use App\Models\LhpsLingCustom;
 use App\Models\LhpsLingDetail;
 use App\Models\LhpsLingDetailHistory;
 use App\Models\LhpsHygieneSanitasiHeaderHistory;
-use App\Models\LinkLhp;
 use App\Models\MasterBakumutu;
 use App\Models\MasterKaryawan;
 use App\Models\MasterRegulasi;
@@ -846,14 +846,11 @@ class DraftHygieneController extends Controller
                     ->where('is_active', true)
                     ->first();
 
-                $cekLink = LinkLhp::where('no_order', $data->no_order);
-                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
-                $cekLink = $cekLink->first();
-                // dd($cekLink);
-                if ($cekLink) {
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
-                    $this->dispatch($job);
-                }
+                CombineLhpOrderBerjalanJob::dispatchFor(
+                    $data->no_order,
+                    $cekDetail->periode ?? null,
+                    $this->karyawan
+                );
 
                 $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
                     ->first();

@@ -8,7 +8,7 @@ use App\Helpers\EmailLhpRilisHelpers;
 use App\Helpers\DraftLhpRejectHelper;
 use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
-use App\Jobs\CombineLHPJob;
+use App\Jobs\CombineLhpOrderBerjalanJob;
 use App\Models\EmisiCerobongHeader;
 use App\Models\GenerateLink;
 use App\Models\HistoryAppReject;
@@ -22,7 +22,7 @@ use App\Models\LhpsEmisiDetail;
 use App\Models\LhpsEmisiDetailHistory;
 use App\Models\LhpsEmisiHeader;
 use App\Models\LhpsEmisiHeaderHistory;
-use App\Models\LinkLhp;
+use App\Models\OrderBerjalan;
 use App\Models\MasterBakumutu;
 use App\Models\MasterKaryawan;
 use App\Models\MasterRegulasi;
@@ -996,14 +996,11 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     ->where('is_active', true)
                     ->first();
 
-                $cekLink = LinkLhp::where('no_order', $data->no_order);
-                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
-                $cekLink = $cekLink->first();
-
-                if ($cekLink) {
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
-                    $this->dispatch($job);
-                }
+                CombineLhpOrderBerjalanJob::dispatchFor(
+                    $data->no_order,
+                    $cekDetail->periode ?? null,
+                    $this->karyawan
+                );
 
                 EmailLhpRilisHelpers::run([
                     'cfr'              => $request->cfr,
