@@ -87,6 +87,7 @@ class GenerateDocumentJadwal
                 $quote->jadwalfile     = $filename;
                 // $quote->is_generated   = true;
                 $quote->is_ready_order = 1;
+                $quote->flag_status = 'sp';
                 $quote->save();
             }
 
@@ -146,6 +147,7 @@ class GenerateDocumentJadwal
                 $quote->jadwalfile     = $filename;
                 // $quote->is_generated   = true;
                 $quote->is_ready_order = 1;
+                $quote->flag_status = 'sp';
                 $quote->save();
             }
 
