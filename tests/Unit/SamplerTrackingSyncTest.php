@@ -1656,6 +1656,52 @@ class SamplerTrackingSyncTest extends TestCase
     }
 
 
+    public function testBlockedTabKeepsActiveTroubleWhenSamplerReturnedWithoutCheckin(): void
+    {
+        $controller = (new \ReflectionClass(\App\Http\Controllers\api\SamplerTrackingController::class))
+            ->newInstanceWithoutConstructor();
+        $method = new \ReflectionMethod($controller, 'consolidateBlockedTeamRows');
+        $method->setAccessible(true);
+        $rows = collect([[
+            'row_id' => 'trouble-280',
+            'tracking_session_id' => 8068,
+            'trouble_id' => 280,
+            'tanggal_sampling' => '2026-11-20',
+            'sampler' => "Bayu Nasta'iin",
+            'members' => [['id' => 19018, 'sampler_id' => 1276, 'sampler_name' => "Bayu Nasta'iin"]],
+            'events' => [
+                ['sampler_tracking_member_id' => 19018, 'event_type' => 'checkout', 'event_at' => '2026-11-20 14:29:26'],
+                ['sampler_tracking_member_id' => 19018, 'event_type' => 'return', 'event_at' => '2026-11-20 17:05:03'],
+            ],
+            'trouble' => ['sampler_id' => 1276, 'sampler_name' => "Bayu Nasta'iin"],
+        ]]);
+
+        $blocked = $method->invoke($controller, $rows);
+
+        $this->assertCount(1, $blocked);
+        $this->assertSame('trouble-280', $blocked->first()['row_id']);
+        $this->assertSame("Bayu Nasta'iin", $blocked->first()['sampler']);
+    }
+
+    public function testTroubleMessageDoesNotClaimMissingReturnWhenCheckinIsMissing(): void
+    {
+        $member = new SamplerTrackingMember();
+        $member->sampler_id = 1276;
+        $member->setRelation('events', collect([
+            new \App\Models\SamplerTrackingEvent(['event_type' => 'checkout']),
+            new \App\Models\SamplerTrackingEvent(['event_type' => 'return']),
+        ]));
+        $session = new SamplerTrackingSession();
+        $session->setRelation('activeMembers', collect([$member]));
+        $trouble = (object) ['sampler_id' => 1276];
+        $method = new \ReflectionMethod(\App\Services\SamplerTrackingTroubleService::class, 'unfinishedProblemLabel');
+        $method->setAccessible(true);
+
+        $label = $method->invoke(new \App\Services\SamplerTrackingTroubleService(), $trouble, ['complete' => false], $session);
+
+        $this->assertSame('belum check-in di lokasi', $label);
+    }
+
     public function testBlockedRowsAndUnblockAreScopedToSession(): void
     {
         \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-22 10:00:00', 'Asia/Jakarta'));

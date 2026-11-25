@@ -43,7 +43,7 @@ class DraftUdaraKebisinganController extends Controller
     // id regulasi untuk template lh
     private $lh_ids = [
         "46", "54", "151", "167", "168",
-        "382", "1321", "1672", "1740", "1786"
+        "382", "1321", "1672", "1740", "1786", "1981", "1950"
     ];
 
     // done if status = 2
@@ -410,7 +410,7 @@ class DraftUdaraKebisinganController extends Controller
             if (in_array($id_regulasii, $this->lh_ids)) {
 
                 $master_regulasi = MasterRegulasi::find($id_regulasii);
-                if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {
+                if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH' || $master_regulasi->deskripsi == 'Kebisingan') {
                     $fileName = LhpTemplate::setDataDetail($detail)
                         ->setDataHeader($dataHeader)
                         ->setDataCustom($custom)

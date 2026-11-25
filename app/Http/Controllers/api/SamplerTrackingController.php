@@ -579,9 +579,9 @@ class SamplerTrackingController extends Controller
             return $row['trouble']['sampler_id'] ?? null;
         })->filter()->unique()->values();
 
-        $pendingIds = $troubleSamplerIds->filter(function ($samplerId) use ($baseRow) {
-            return !$this->blockedSamplerHasReturn($baseRow, $samplerId);
-        })->values();
+        // An active trouble can be caused by a missing check-in/checkout even
+        // when this sampler already has a return event.
+        $pendingIds = $troubleSamplerIds;
 
         if ($pendingIds->isEmpty()) {
             return null;
@@ -608,7 +608,10 @@ class SamplerTrackingController extends Controller
 
         $wholeTeamStillOut = !$hasReturnedTeammate
             && $pendingIds->count() === $troubleSamplerIds->count()
-            && $troubleSamplerIds->count() > 1;
+            && $troubleSamplerIds->count() > 1
+            && $pendingIds->every(function ($samplerId) use ($baseRow) {
+                return !$this->blockedSamplerHasReturn($baseRow, $samplerId);
+            });
 
         if ($wholeTeamStillOut) {
             $merged['row_id'] = 'trouble-session-' . $sessionId;
