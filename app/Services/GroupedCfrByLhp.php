@@ -58,7 +58,12 @@ class GroupedCfrByLhp
                     'is_active' => true,
                 ])
                 ->when(!empty($periode), function ($query) use ($periode) {
-                    $query->where('periode', $periode);
+                    $ym = substr((string) $periode, 0, 7);
+                    $query->where(function ($q) use ($periode, $ym) {
+                        $q->where('periode', $periode)
+                            ->orWhere('periode', $ym)
+                            ->orWhere('periode', 'like', $ym . '%');
+                    });
                 })->get();
 
             $groupedData = $orderDetails->groupBy(['cfr', 'periode'])->map(fn($periodGroups) =>

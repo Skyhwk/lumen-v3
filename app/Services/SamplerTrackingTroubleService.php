@@ -643,7 +643,7 @@ class SamplerTrackingTroubleService
             $missing[] = 'check-in / check-out belum lengkap';
         }
 
-        if (empty($progress['complete'])) {
+        if (empty($progress['complete']) && !SamplerTrackingActivity::hasEvent($member, 'return')) {
             $checkedOut = $member && SamplerTrackingActivity::hasEvent($member, 'checkout');
             if (!empty($progress['stops_complete']) || $checkedOut || !$missing) {
                 $missing[] = 'belum pulang (return)';
