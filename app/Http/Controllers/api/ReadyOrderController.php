@@ -108,6 +108,15 @@ class ReadyOrderController extends Controller
                         : 'request_quotation.created_at';
                     $query->whereDate($column, $date);
                 })
+                ->filterColumn('sales.nama_lengkap', function ($query, $keyword) {
+                    $keyword = trim((string) $keyword);
+                    if ($keyword === '') {
+                        return;
+                    }
+                    $query->whereHas('sales', function ($sales) use ($keyword) {
+                        $sales->where('nama_lengkap', 'like', '%' . $keyword . '%');
+                    });
+                })
                 ->addColumn('count_jadwal', function ($row) {
                     return $row->sampling ? $row->sampling->sum(function ($sampling) {
                         return $sampling->jadwal->count();

@@ -105,7 +105,17 @@ class KonfirmasiOrderController extends Controller
 						->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data_lama, '$.no_order')) IS NOT NULL")
 						->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data_lama, '$.no_order')) != 'null'");
 				}
-			})->make(true);
+			})
+			->filterColumn('sales.nama_lengkap', function ($query, $keyword) {
+				$keyword = trim((string) $keyword);
+				if ($keyword === '') {
+					return;
+				}
+				$query->whereHas('sales', function ($sales) use ($keyword) {
+					$sales->where('nama_lengkap', 'like', '%' . $keyword . '%');
+				});
+			})
+			->make(true);
 	}
 
 	public function getOrderDetail(Request $request)
@@ -117,9 +127,8 @@ class KonfirmasiOrderController extends Controller
 			->flatMap(function ($item) {
 				return
 					collect($item->orderDetail)
-						->pluck('keterangan_1')
-						->filter(fn($text) => !empty(trim($text)));
-
+					->pluck('keterangan_1')
+					->filter(fn($text) => !empty(trim($text)));
 			})
 			->unique()
 			->values();
@@ -238,12 +247,12 @@ class KonfirmasiOrderController extends Controller
 				}
 
 				// Cek no Quotation apakah sudah ada di invoice dengan pembayaran > 0, jika iya maka tidak bisa di void
-                $check = $quotationService->validateVoidQuotation($data->no_document);
+				$check = $quotationService->validateVoidQuotation($data->no_document);
 
-                if (!$check['status']) {
-                    return response()->json($check, 401);
-                }
-				
+				if (!$check['status']) {
+					return response()->json($check, 401);
+				}
+
 				$sampling_plan = SamplingPlan::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
 				$jadwal = Jadwal::where('no_quotation', $data->no_document)->where('is_active', true)->update(['is_active' => false]);
 
@@ -254,33 +263,33 @@ class KonfirmasiOrderController extends Controller
 				$data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
 				$data->save();
 
-                $keterangan = [];
-                if ($request->tanggal_next_fu) {
-                    $keterangan[] = ['tanggal_next_fu' => $request->tanggal_next_fu];
-                }
-                if ($request->nama_lab_lain) {
-                    $keterangan[] = ['nama_lab_lain' => $request->nama_lab_lain];
-                }
-                if ($request->budget_customer) {
-                    $keterangan[] = ['budget_customer' => $request->budget_customer];
-                }
-                if ($request->penawaran_yg_akan_dikirim) {
-                    $keterangan[] = ['penawaran_yg_akan_dikirim' => $request->penawaran_yg_akan_dikirim];
-                }
-                if ($request->blacklist) {
-                    $keterangan[] = ['blacklist' => $request->blacklist];
-                }
-                if ($request->keterangan) {
-                    $keterangan[] = ['keterangan' => $request->keterangan];
-                }
+				$keterangan = [];
+				if ($request->tanggal_next_fu) {
+					$keterangan[] = ['tanggal_next_fu' => $request->tanggal_next_fu];
+				}
+				if ($request->nama_lab_lain) {
+					$keterangan[] = ['nama_lab_lain' => $request->nama_lab_lain];
+				}
+				if ($request->budget_customer) {
+					$keterangan[] = ['budget_customer' => $request->budget_customer];
+				}
+				if ($request->penawaran_yg_akan_dikirim) {
+					$keterangan[] = ['penawaran_yg_akan_dikirim' => $request->penawaran_yg_akan_dikirim];
+				}
+				if ($request->blacklist) {
+					$keterangan[] = ['blacklist' => $request->blacklist];
+				}
+				if ($request->keterangan) {
+					$keterangan[] = ['keterangan' => $request->keterangan];
+				}
 
-                $alasanVoidQt = new AlasanVoidQt();
-                $alasanVoidQt->no_quotation = $data->no_document;
-                $alasanVoidQt->alasan = $request->alasan;
-                $alasanVoidQt->keterangan = json_encode($keterangan);
-                $alasanVoidQt->voided_by = $this->karyawan;
-                $alasanVoidQt->voided_at = Carbon::now()->format('Y-m-d H:i:s');
-                $alasanVoidQt->save();
+				$alasanVoidQt = new AlasanVoidQt();
+				$alasanVoidQt->no_quotation = $data->no_document;
+				$alasanVoidQt->alasan = $request->alasan;
+				$alasanVoidQt->keterangan = json_encode($keterangan);
+				$alasanVoidQt->voided_by = $this->karyawan;
+				$alasanVoidQt->voided_at = Carbon::now()->format('Y-m-d H:i:s');
+				$alasanVoidQt->save();
 
 				DB::commit();
 				return response()->json([
@@ -553,8 +562,8 @@ class KonfirmasiOrderController extends Controller
 			}
 
 			$this->fillKonfirmasiData($konfirmasi, $request, $data, $fileNames, $lampiranTitikNames);
-				// dd($konfirmasi);
-		
+			// dd($konfirmasi);
+
 
 			DB::commit();
 			return response()->json([
@@ -562,7 +571,6 @@ class KonfirmasiOrderController extends Controller
 				'message' => 'Data berhasil disimpan',
 				'data' => $konfirmasi,
 			], 200);
-
 		} catch (\Throwable $th) {
 			DB::rollBack();
 			return response()->json([
@@ -655,7 +663,6 @@ class KonfirmasiOrderController extends Controller
 				'filename' => $fileName,
 				'bytes_written' => $bytesWritten
 			];
-
 		} catch (\Exception $e) {
 			return [
 				'success' => false,
@@ -777,7 +784,6 @@ class KonfirmasiOrderController extends Controller
 				'success' => true,
 				'message' => 'Data berhasil disimpan',
 			], 200);
-
 		} catch (\Throwable $th) {
 			DB::rollBack();
 			return response()->json([
