@@ -80,20 +80,8 @@ class TicketSkK3KategoriService
     public static function isAllowedKategoriName(string $name, array $allowedNormalized): bool
     {
         $normalized = self::normalizeName($name);
-        if ($normalized === '') {
-            return false;
-        }
 
-        foreach ($allowedNormalized as $allowed) {
-            if ($normalized === $allowed) {
-                return true;
-            }
-            if (str_contains($normalized, $allowed) || str_contains($allowed, $normalized)) {
-                return true;
-            }
-        }
-
-        return false;
+        return $normalized !== '' && in_array($normalized, $allowedNormalized, true);
     }
 
     public static function collectLabelsFromSamplingPlan(?int $samplingPlanId): array
