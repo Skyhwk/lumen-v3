@@ -115,6 +115,7 @@ class Kernel extends ConsoleKernel
         Commands\VoidFollowUpInactiveSalesCommand::class,
         Commands\VoidNeverOrderedQuotationsCommand::class,
         Commands\SyncPrinterStatusCommand::class,
+        Commands\InspectSkK3RefsCommand::class,
         // Commands\LhpBackfillCommand::class,
         // Commands\LhpRefreshKpgiDetailCommand::class,
         // Commands\LhpRefreshLingHeaderCommand::class,

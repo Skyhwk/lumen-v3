@@ -1170,7 +1170,9 @@ class LimsFppsController extends Controller
 
             $latestPengesahan = null;
             if ($tanggal) {
-                $latestPengesahan = PengesahanDokumenSampling::orderByDesc('berlaku_mulai')->first();
+                $latestPengesahan = PengesahanDokumenSampling::latestForType(
+                    PengesahanDokumenSampling::TYPE_SAMPLING
+                );
             }
 
             if($latestPengesahan !== null && !file_exists($path)){
