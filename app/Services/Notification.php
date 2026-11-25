@@ -58,39 +58,36 @@ class Notification extends Controller
 
     public function send()
     {
-        try {
-            $users = $this->query->get(['id']);
-            if ($users->isEmpty()) {
-                return true;
-            }
+        $users = $this->query->get(['id']);
 
-            $notifications = [];
-            foreach ($users as $user) {
-                $notifications[] = [
-                    'user_id' => $user->id,
-                    'title' => $this->title,
-                    'message' => $this->message,
-                    'url' => $this->url,
-                    'is_read' => false,
-                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'is_active' => true,
-                ];
-            }
-
-            NotificationModel::insert($notifications);
-
-            $job = new SendNotificationJob([
-                'data' => [
-                    'title' => $this->title,
-                    'message' => $this->message,
-                    'url' => $this->url,
-                ],
-                'users' => $users,
-            ]);
-            $this->dispatch($job);
-        } catch (\Throwable $e) {
-            Log::warning('Notification send gagal: ' . $e->getMessage());
+        $notifications = [];
+        foreach ($users as $user) {
+            $notifications[] = [
+                'user_id' => $user->id,
+                'title' => $this->title,
+                'message' => $this->message,
+                'url' => $this->url,
+                'is_read' => false,
+                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'is_active' => true,
+            ];
         }
+
+        NotificationModel::insert($notifications);
+
+        $data = [
+            'title' => $this->title,
+            'message' => $this->message,
+            'url' => $this->url,
+        ];
+
+        $array = [
+            'data' => $data,
+            'users' => $users,
+        ];
+
+        $job = new SendNotificationJob($array);
+        $this->dispatch($job);
 
         return true;
     }
