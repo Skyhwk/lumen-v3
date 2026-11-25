@@ -27,13 +27,13 @@ class StatusOrderController extends Controller
         if (!$orderHeader) {
             return response()->json(['message' => 'Order tidak ditemukan'], 404);
         }
-        
+
         $groupedData = (new CfrDetails($orderHeader, $request->periode))->get();
         $lhpBundle = $this->resolveLhpBundleForOrder(
             $orderHeader->no_order,
             $request->periode ?? null
         );
-        
+
         return response()->json([
             'groupedCFRs' => $groupedData,
             'lhp_bundle' => $lhpBundle,
@@ -113,7 +113,7 @@ class StatusOrderController extends Controller
                             $q->orderBy('periode_kontrak', 'asc');
                         },
                         'orderHeader.getInvoice.recordWithdraw',
-                        'link_lhp' // Eager load untuk cek status
+                        'link_lhp'
                     ])
                     ->where('id_cabang', $request->cabang)
                     ->where('is_approved', true)
@@ -136,11 +136,9 @@ class StatusOrderController extends Controller
                 }
 
                 $rawData = $data->get();
-
             } else if ($mode == 'kontrak') {
                 // Query kontrak - sederhana
                 $data = QuotationKontrakD::query()
-                    ->select('request_quotation_kontrak_D.*')
                     ->with([
                         'header.sales',
                         'header.sampling' => function ($q) {
@@ -160,7 +158,7 @@ class StatusOrderController extends Controller
                     });
 
                 // Filter jabatan
-                
+
                 if ($jabatan == 24 || $jabatan == 86) {
                     $data->whereHas('header', function ($q) {
                         $q->where('sales_id', $this->user_id);
@@ -174,15 +172,18 @@ class StatusOrderController extends Controller
                     });
                 }
 
-                $data->orderBy('id', 'desc');
+                $data->orderBy('request_quotation_kontrak_D.id', 'desc');
                 $rawData = $data->get();
             }
 
+            // Ambil ringkasan order_berjalan sekali per no_document (tanpa detail CFR)
+            $orderBerjalanMap = $this->loadOrderBerjalanSummaryMap($rawData, $mode);
+
             // ===== STEP 2: MAPPING COLLECTION + LOGIC BUSINESS =====
-            $mappedData = $rawData->map(function ($item) use ($mode, $filterStatusType) {
+            $mappedData = $rawData->map(function ($item) use ($mode, $filterStatusType, $orderBerjalanMap) {
                 // Calculate status untuk setiap item
                 $status = $this->calculateItemStatus($item, $mode);
-                
+
                 // Filter berdasarkan status (di PHP, bukan SQL)
                 if ($filterStatusType === 'completed' && $status !== 'completed') {
                     return null;
@@ -192,13 +193,19 @@ class StatusOrderController extends Controller
                 }
 
                 // Build data untuk DataTable
-                return $this->mapItemForDataTable($item, $mode, $status);
+                return $this->mapItemForDataTable($item, $mode, $status, $orderBerjalanMap);
             })->filter()->values(); // Remove null values & reindex
+
+            // Bebaskan memory sebelum DataTables serialize
+            unset($rawData, $orderBerjalanMap);
 
             // ===== STEP 3: KIRIM KE DATATABLE =====
             // Gunakan DataTables::collection() untuk array/collection
             return DataTables::collection($mappedData)
                 // Semua column sudah ada di array, langsung akses
+                ->addColumn('order_berjalan', function ($row) {
+                    return $row['order_berjalan'] ?? null;
+                })
                 ->addColumn('count_jadwal', function ($row) {
                     return $row['count_jadwal'];
                 })
@@ -223,7 +230,7 @@ class StatusOrderController extends Controller
                         $row = (array) $row;
                         // ===== LOGIKA GLOBAL SEARCH =====
                         if ($globalSearch) {
-                            $searchableColumns = ['no_document', 'pelanggan_ID', 'nama_perusahaan', 'konsultan','status_sampling','sales','invoice_searchable'];
+                            $searchableColumns = ['no_document', 'pelanggan_ID', 'nama_perusahaan', 'konsultan', 'status_sampling', 'sales', 'invoice_searchable'];
                             foreach ($searchableColumns as $key) {
                                 if (stripos($row[$key] ?? '', $globalSearch) !== false) {
                                     return true;
@@ -236,13 +243,13 @@ class StatusOrderController extends Controller
                         foreach ($columns as $column) {
                             $columnSearch = $column['search']['value'] ?? null;
                             $dataKey = $column['data'] ?? null;
-                            
+
                             // Perbaikan handling null/array untuk stripos
-            
+
                             if ($columnSearch && $dataKey) {
-        
+
                                 // --- MODIFIKASI DIMULAI DARI SINI ---
-                                
+
                                 // Jika kolom yang dicari adalah 'invoice' (Array), alihkan ke 'invoice_searchable' (String)
                                 if ($dataKey === 'invoice') {
                                     $searchValue = $row['invoice_searchable'] ?? '';
@@ -255,7 +262,7 @@ class StatusOrderController extends Controller
 
                                 // Pengecekan standar (sama seperti kodemu)
                                 if (is_array($searchValue)) {
-                                    return false; 
+                                    return false;
                                 }
 
                                 if ($searchValue === null || stripos((string)$searchValue, $columnSearch) === false) {
@@ -263,13 +270,12 @@ class StatusOrderController extends Controller
                                 }
                             }
                         }
-                        
+
                         return true;
                     });
                 })
 
                 ->make(true);
-
         } catch (Exception $e) {
             return response()->json([
                 'error' => $e->getMessage(),
@@ -287,15 +293,15 @@ class StatusOrderController extends Controller
         if ($mode == 'non_kontrak') {
             // 1. Cek LHP
             $lhpCompleted = $item->link_lhp && $item->link_lhp->is_completed;
-            
+
             // 2. Cek Invoice - HARUS ADA dan SEMUA LUNAS
             $hasInvoice = false;
             $allInvoicesPaid = false;
-            
+
             if ($item->orderHeader && $item->orderHeader->getInvoice && $item->orderHeader->getInvoice->isNotEmpty()) {
                 $hasInvoice = true;
                 $allInvoicesPaid = true;
-                
+
                 // foreach ($item->orderHeader->getInvoice as $invoice) {
                 //     // Jika pelunasan NULL atau kurang dari tagihan = belum lunas
                 //     if (!$invoice->nilai_pelunasan || $invoice->nilai_pelunasan < $invoice->nilai_tagihan) {
@@ -306,8 +312,8 @@ class StatusOrderController extends Controller
                 foreach ($item->orderHeader->getInvoice as $invoice) {
                     // Hitung total withdraw dari relasi recordWithdraw
                     // Pastikan nama kolom jumlah uangnya sesuai (misal: 'nominal', 'amount', dll)
-                    $totalWithdraw = $invoice->recordWithdraw->sum('nilai_pembayaran'); 
-                    
+                    $totalWithdraw = $invoice->recordWithdraw->sum('nilai_pembayaran');
+
                     // Hitung total yang sudah dibayar (Pelunasan + Withdraw)
                     $totalPaid = ($invoice->nilai_pelunasan ?? 0) + $totalWithdraw;
 
@@ -321,7 +327,6 @@ class StatusOrderController extends Controller
 
             // COMPLETED = LHP Complete + Ada Invoice + Semua Invoice Lunas
             return ($lhpCompleted && $hasInvoice && $allInvoicesPaid) ? 'completed' : 'incompleted';
-
         } else if ($mode == 'kontrak') {
             // 1. Check LHP untuk periode ini
             $lhpCompleted = false;
@@ -333,11 +338,11 @@ class StatusOrderController extends Controller
             // 2. Check invoice untuk periode ini - HARUS ADA dan SEMUA LUNAS
             $hasInvoice = false;
             $allInvoicesPaid = false;
-            
+
             if ($item->header && $item->header->orderHeader && $item->header->orderHeader->getInvoice) {
                 $invoices = $item->header->orderHeader->getInvoice
                     ->where('periode', $item->periode_kontrak);
-                
+
                 if ($invoices->isEmpty()) {
                     $invoices = $item->header->orderHeader->getInvoice->where('periode', 'all');
                 }
@@ -345,7 +350,7 @@ class StatusOrderController extends Controller
                 if ($invoices->isNotEmpty()) {
                     $hasInvoice = true;
                     $allInvoicesPaid = true;
-                    
+
                     // foreach ($invoices as $invoice) {
                     //     if (!$invoice->nilai_pelunasan || $invoice->nilai_pelunasan < $invoice->nilai_tagihan) {
                     //         $allInvoicesPaid = false;
@@ -387,16 +392,16 @@ class StatusOrderController extends Controller
             }
             return null; // Return null jika sales tidak ada atau format salah
         }
-        
+
         // Jika key sederhana (tanpa dot)
         if (!str_contains($key, '.')) {
             return $array[$key] ?? null;
         }
-        
+
         // Jika key nested (contoh: 'sales.nama_lengkap')
         $keys = explode('', $key);
         $value = $array;
-        
+
         foreach ($keys as $k) {
             if (is_array($value) && isset($value[$k])) {
                 $value = $value[$k];
@@ -404,7 +409,7 @@ class StatusOrderController extends Controller
                 return null;
             }
         }
-        
+
         return $value;
     }
 
@@ -443,12 +448,97 @@ class StatusOrderController extends Controller
     // }
 
     /**
+     * Batch load ringkasan order_berjalan (tanpa detail CFR) keyed by no_penawaran.
+     */
+    private function loadOrderBerjalanSummaryMap($rawData, string $mode): array
+    {
+        if ($rawData->isEmpty()) {
+            return [];
+        }
+
+        $documents = $mode === 'kontrak'
+            ? $rawData->map(function ($item) {
+                return optional($item->header)->no_document;
+            })->filter()->unique()->values()->all()
+            : $rawData->pluck('no_document')->filter()->unique()->values()->all();
+
+        if (empty($documents)) {
+            return [];
+        }
+
+        $rows = collect();
+        foreach (array_chunk($documents, 500) as $chunk) {
+            $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+            $chunkRows = DB::select(
+                "SELECT no_penawaran, (
+                    SELECT JSON_ARRAYAGG(JSON_OBJECT(
+                        'periode', j.periode,
+                        'proses', j.proses,
+                        'jumlah_lhp', j.jumlah_lhp,
+                        'status_selesai', j.status_selesai,
+                        'jumlah_lhp_selesai', j.jumlah_lhp_selesai,
+                        'persentase_lhp_selesai', j.persentase_lhp_selesai
+                    ))
+                    FROM JSON_TABLE(
+                        dataOrderDetail,
+                        '\$[*]' COLUMNS (
+                            periode VARCHAR(32) PATH '\$.periode',
+                            proses VARCHAR(64) PATH '\$.proses',
+                            jumlah_lhp INT PATH '\$.jumlah_lhp',
+                            status_selesai TINYINT PATH '\$.status_selesai',
+                            jumlah_lhp_selesai INT PATH '\$.jumlah_lhp_selesai',
+                            persentase_lhp_selesai DOUBLE PATH '\$.persentase_lhp_selesai'
+                        )
+                    ) j
+                ) AS order_berjalan
+                FROM order_berjalan
+                WHERE no_penawaran IN ({$placeholders})",
+                $chunk
+            );
+            $rows = $rows->concat($chunkRows);
+        }
+
+        $map = [];
+        foreach ($rows as $row) {
+            $decoded = json_decode($row->order_berjalan ?? 'null', true);
+            $map[$row->no_penawaran] = is_array($decoded) ? $decoded : [];
+        }
+
+        return $map;
+    }
+
+    private function resolveOrderBerjalanSummary(array $map, ?string $noDocument, ?string $periode = null): ?array
+    {
+        if (!$noDocument || !isset($map[$noDocument])) {
+            return null;
+        }
+
+        $summary = $map[$noDocument];
+        if ($periode === null || $periode === '') {
+            return $summary;
+        }
+
+        $periodeYm = substr((string) $periode, 0, 7);
+        $filtered = array_values(array_filter($summary, function ($row) use ($periode, $periodeYm) {
+            $rowPeriode = (string) ($row['periode'] ?? '');
+            return $rowPeriode === (string) $periode
+                || substr($rowPeriode, 0, 7) === $periodeYm;
+        }));
+
+        return !empty($filtered) ? $filtered : null;
+    }
+
+    /**
      * HELPER: Map item ke format DataTable
      */
-    private function mapItemForDataTable($item, $mode, $status)
+    private function mapItemForDataTable($item, $mode, $status, array $orderBerjalanMap = [])
     {
         if ($mode == 'non_kontrak') {
             $invoicesData = $this->getInvoicesForItem($item, $mode);
+            $orderBerjalan = $this->resolveOrderBerjalanSummary(
+                $orderBerjalanMap,
+                $item->no_document
+            );
             return [
                 'id' => $item->id,
                 'no_document' => $item->no_document,
@@ -464,41 +554,47 @@ class StatusOrderController extends Controller
                     return $sampling->jadwal->count();
                 }) : 0,
                 'total_invoice' => $item->orderHeader ? $item->orderHeader->getInvoice->count() : 0,
-                'nilai_pelunasan' => $item->orderHeader && $item->orderHeader->getInvoice 
-                    ? $item->orderHeader->getInvoice->sum('nilai_pelunasan') 
+                'nilai_pelunasan' => $item->orderHeader && $item->orderHeader->getInvoice
+                    ? $item->orderHeader->getInvoice->sum('nilai_pelunasan')
                     : 0,
                 'invoice' => $this->getInvoicesForItem($item, $mode),
-                'invoice_searchable' => !empty($invoicesData) 
-                ? implode(', ', array_column($invoicesData, 'no_invoice')) 
-                : null,
+                'invoice_searchable' => !empty($invoicesData)
+                    ? implode(', ', array_column($invoicesData, 'no_invoice'))
+                    : null,
                 'link_lhp' => json_decode($item->link_lhp, true),
                 'lhp_bundle' => $this->buildLhpBundle($item->link_lhp),
-                'order_header'=>[
+                'order_header' => [
                     'id' =>  $item->orderHeader ? $item->orderHeader->id : null,
                     'tanggal_order' =>  $item->orderHeader ? $item->orderHeader->tanggal_order : null,
                     'no_order' =>  $item->orderHeader ? $item->orderHeader->no_order : null,
                 ],
-                // Original object untuk akses lain
-                '_original' => $item
+                'order_berjalan' => $orderBerjalan,
+                '_original' => [
+                    'id' => $item->id,
+                    'piutang' => $item->piutang ?? 0,
+                    'status_sampling' => $item->status_sampling ?? null,
+                    'konsultan' => $item->konsultan ?? null,
+                    'pelanggan_ID' => $item->pelanggan_ID ?? null,
+                    'nama_perusahaan' => $item->nama_perusahaan ?? null,
+                ]
             ];
-
         } else if ($mode == 'kontrak') {
             $invoicesData = [];
-            
+
             // Optimasi: Cek dulu apakah ada invoices sebelum filter
             if ($item->header && $item->header->orderHeader && $item->header->orderHeader->getInvoice && $item->header->orderHeader->getInvoice->isNotEmpty()) {
                 $filtered = $item->header->orderHeader->getInvoice
                     ->where('periode', $item->periode_kontrak)
                     ->where('no_quotation', $item->header->no_document);
-                
+
                 if ($filtered->isEmpty()) {
                     $filtered = $item->header->orderHeader->getInvoice
                         ->where('periode', 'all')
                         ->where('no_quotation', $item->header->no_document);
                 }
-                
+
                 // PENTING: Ambil hanya field yang dibutuhkan
-                $invoicesData = $filtered->map(function($inv) {
+                $invoicesData = $filtered->map(function ($inv) {
                     return [
                         'id' => $inv->id,
                         'no_invoice' => $inv->no_invoice,
@@ -506,7 +602,7 @@ class StatusOrderController extends Controller
                         'nilai_tagihan' => $inv->nilai_tagihan,
                         'nilai_pelunasan' => $inv->nilai_pelunasan,
                         'tgl_pelunasan' => $inv->tgl_pelunasan,
-                        'record_withdraw' => $inv->recordWithdraw ? $inv->recordWithdraw->map(function($rw) {
+                        'record_withdraw' => $inv->recordWithdraw ? $inv->recordWithdraw->map(function ($rw) {
                             return [
                                 'id' => $rw->id,
                                 'nilai_pembayaran' => $rw->nilai_pembayaran
@@ -534,6 +630,12 @@ class StatusOrderController extends Controller
                 }
             }
 
+            $orderBerjalan = $this->resolveOrderBerjalanSummary(
+                $orderBerjalanMap,
+                optional($item->header)->no_document,
+                $item->periode_kontrak
+            );
+
             return [
                 'id' => $item->header->id,
                 'no_document' => $item->header->no_document ?? null,
@@ -544,7 +646,7 @@ class StatusOrderController extends Controller
                 'nama_perusahaan' => $item->header->nama_perusahaan ?? null,
                 'konsultan' => $item->header->konsultan ?? null,
                 'status_sampling' => $item->header->status_sampling ?? null,
-                'sales' => $item->header->sales ? $item->header->sales->nama_lengkap :null,
+                'sales' => $item->header->sales ? $item->header->sales->nama_lengkap : null,
                 'status' => $status,
                 'count_jadwal' => $item->header && $item->header->sampling && $item->header->sampling->isNotEmpty()
                     ? $item->header->sampling->sum(function ($sampling) {
@@ -552,22 +654,22 @@ class StatusOrderController extends Controller
                     }) : 0,
                 'total_invoice' => count($invoicesData),
                 'nilai_pelunasan' => collect($invoicesData)->sum('nilai_pelunasan'),
-                'invoice_searchable' => !empty($invoicesData) 
-                ? implode(', ', array_column($invoicesData, 'no_invoice')) 
-                : null,
+                'invoice_searchable' => !empty($invoicesData)
+                    ? implode(', ', array_column($invoicesData, 'no_invoice'))
+                    : null,
                 'invoice' => $invoicesData,
                 'link_lhp' => $lhpData,
                 'lhp_bundle' => $this->buildLhpBundle($lhp),
-                'order_header'=>[
-                    'id' =>  $item->header->orderHeader->id,
-                    'tanggal_order' =>  $item->header->orderHeader->tanggal_order,
-                    'no_order' =>  $item->header->orderHeader->no_order,
+                'order_header' => [
+                    'id' =>  $item->header->orderHeader->id ?? null,
+                    'tanggal_order' =>  $item->header->orderHeader->tanggal_order ?? null,
+                    'no_order' =>  $item->header->orderHeader->no_order ?? null,
                 ],
-                // PENTING: Jangan simpan full object, hanya data minimal untuk fallback
+                'order_berjalan' => $orderBerjalan,
                 '_original' => [
                     'id' => $item->id,
-                        'periode_kontrak' => $item->periode_kontrak,
-                        'piutang' => $item->header->piutang ?? 0,
+                    'periode_kontrak' => $item->periode_kontrak,
+                    'piutang' => $item->header->piutang ?? 0,
                     'status_sampling' => $item->header->status_sampling ?? null,
                     'konsultan' => $item->header->konsultan ?? null,
                     'pelanggan_ID' => $item->header->pelanggan_ID ?? null,
@@ -669,29 +771,29 @@ class StatusOrderController extends Controller
             if (!$item->orderHeader || !$item->orderHeader->getInvoice || $item->orderHeader->getInvoice->isEmpty()) {
                 return [];
             }
-            
+
             // Untuk non-kontrak, ambil semua invoice dari order
             return $item->orderHeader->getInvoice->toArray();
         }
-        
+
         if ($mode == 'kontrak') {
             if (!$item->header || !$item->header->orderHeader || !$item->header->orderHeader->getInvoice || $item->header->orderHeader->getInvoice->isEmpty()) {
                 return [];
             }
-            
+
             $invoices = $item->header->orderHeader->getInvoice
                 ->where('periode', $item->periode_kontrak)
                 ->where('no_quotation', $item->header->no_document);
-            
+
             if ($invoices->isEmpty()) {
                 $invoices = $item->header->orderHeader->getInvoice
                     ->where('periode', 'all')
                     ->where('no_quotation', $item->header->no_document);
             }
-            
+
             return $invoices->values()->toArray();
         }
-        
+
         return [];
     }
 
@@ -709,16 +811,16 @@ class StatusOrderController extends Controller
     private function calculateTotalPelunasan($item, $mode)
     {
         $invoices = $this->getInvoicesForItemRaw($item, $mode);
-        
+
         if (empty($invoices)) {
             return 0;
         }
-        
+
         $total = 0;
         foreach ($invoices as $invoice) {
             $total += $invoice['nilai_pelunasan'] ?? $invoice->nilai_pelunasan ?? 0;
         }
-        
+
         return $total;
     }
 
@@ -730,11 +832,11 @@ class StatusOrderController extends Controller
         if (!$item->header || !$item->header->link_lhp) {
             return null;
         }
-        
+
         $filtered = $item->header->link_lhp
             ->where('periode', $item->periode_kontrak)
             ->first();
-        
+
         return json_decode($filtered, true);
     }
 }
