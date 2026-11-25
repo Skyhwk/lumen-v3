@@ -7,6 +7,7 @@ use App\Models\Invoice;
 use App\Models\RecordPembayaranInvoice;
 use App\Http\Controllers\Controller;
 use App\Models\SummaryInvoice;
+use App\Services\DateColumnFilterService;
 use App\Services\RenderInvoice;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -84,21 +85,37 @@ class InvoiceController extends Controller
                 );
             })
             ->filterColumn('no_invoice', $like('summary_invoice.no_invoice'))
-            ->filterColumn('tgl_invoice', $like('summary_invoice.tgl_invoice'))
+            ->filterColumn(
+                'tgl_invoice',
+                DateColumnFilterService::datatablesFilter('summary_invoice.tgl_invoice')
+            )
             ->filterColumn('document', $like('summary_invoice.document'))
             ->filterColumn('sales_penanggung_jawab', $like('summary_invoice.sales_penanggung_jawab'))
             ->filterColumn('nama_customer', $like('summary_invoice.nama_customer'))
             ->filterColumn('consultant', $like('summary_invoice.consultant'))
             ->filterColumn('no_po', $like('summary_invoice.no_po'))
             ->filterColumn('no_spk', $like('summary_invoice.no_spk'))
-            ->filterColumn('tgl_jatuh_tempo', $like('summary_invoice.tgl_jatuh_tempo'))
-            ->filterColumn('tgl_pelunasan', $like('summary_invoice.tgl_pelunasan'))
+            ->filterColumn(
+                'tgl_jatuh_tempo',
+                DateColumnFilterService::datatablesFilter('summary_invoice.tgl_jatuh_tempo')
+            )
+            ->filterColumn(
+                'tgl_pelunasan',
+                DateColumnFilterService::datatablesFilter('summary_invoice.tgl_pelunasan')
+            )
             ->filterColumn('nilai_tagihan', $like('summary_invoice.nilai_tagihan'))
             ->filterColumn('nilai_pelunasan', $like('summary_invoice.nilai_pelunasan'))
             ->filterColumn('emailed_by', $like('summary_invoice.emailed_by'))
-            ->filterColumn('emailed_at', $like('summary_invoice.emailed_at'))
+            ->filterColumn(
+                'emailed_at',
+                DateColumnFilterService::datatablesFilter('summary_invoice.emailed_at')
+            )
+            ->filterColumn(
+                'created_at',
+                DateColumnFilterService::datatablesFilter('summary_invoice.created_at')
+            )
             ->filterColumn('created_by', $like('summary_invoice.created_by'))
-            ->filterColumn('created_at', $like('summary_invoice.created_at'));
+        ;
     }
 
     public function pelunasan(Request $request)
