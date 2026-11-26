@@ -269,7 +269,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 		// dd('masuk');
 		DB::beginTransaction();
 		try {
-			$faktor_koreksi = (float) $request->faktor_koreksi;
+			$faktor_koreksi = (float) $request->faktor_koreksi / 100;
 			$dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $request->no_sampel)->first();
 			$order_detail = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
 			if ($order_detail != null) {
@@ -285,7 +285,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 						->first();
 					if($request->faktor_koreksi > 0) {
 						$C1_value = $ws_value->f_koreksi_c1 !== null ? floatval($ws_value->f_koreksi_c1) : floatval($ws_value->C1);
-						$hasil = ((21 - $faktor_koreksi) / (21 - floatval($dataLapangan->O2))) * $C1_value;
+						$hasil = ((20.9 - $faktor_koreksi) / (20.9 - floatval($dataLapangan->O2))) * $C1_value;
 						if ($ws_value != null) {
 							$ws_value->input_koreksi = $request->faktor_koreksi;
 							$ws_value->nil_koreksi = number_format((float) $hasil, 4, '.', '');

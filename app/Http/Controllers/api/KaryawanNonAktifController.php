@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use Illuminate\Http\Request;
 use App\Models\MasterKaryawan;
 use App\Models\MasterCabang;
+use App\Models\PenanggungJawabDokumenKaryawan;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
@@ -139,7 +140,6 @@ class KaryawanNonAktifController extends Controller
                 ], 404);
             }
 
-            $hrd = MasterKaryawan::with('jabatan', 'department')->where('id', $this->user_id)->first();
             $cabang = MasterCabang::where('id', $this->idcabang)->first();
 
             $mpdfConfig = array(
@@ -157,10 +157,17 @@ class KaryawanNonAktifController extends Controller
             );
             $pdf = new PDF($mpdfConfig);
 
-            $namaDivisi = e(optional($data->department)->nama_divisi ?: '-');
-            $namaJabatan = e(optional($data->jabatan)->nama_jabatan ?: '-');
-            $namaHrd = e(optional($hrd)->nama_lengkap ?: '-');
-            $jabatanHrd = e(optional(optional($hrd)->jabatan)->nama_jabatan ?: '-');
+            $namaDivisi = $data->department;
+            $namaJabatan = $data->jabatan;
+
+            PenanggungJawabDokumenKaryawan::syncActive();
+            $penanggungJawab = PenanggungJawabDokumenKaryawan::query()
+                ->where('is_active', 1)
+                ->orderByDesc('id')
+                ->first();
+            $namaHrd = e(optional($penanggungJawab)->nama_karyawan ?: '-');
+            $jabatanHrd = e(optional($penanggungJawab)->jabatan ?: '-');
+
             $tanggalTerakhir = !empty($data->effective_date)
                 ? e(self::tanggal_indonesia($data->effective_date))
                 : '-';
@@ -228,7 +235,7 @@ class KaryawanNonAktifController extends Controller
             $pdf->WriteHTML('
                 <p>Dihimbau kepada seluruh karyawan agar dapat diperhatikan, dimengerti dan dipahami serta dapat bekerja dengan sebaik-baiknya dan sebenar-benarnya.</p>
                 <p style="margin-top: 18px;">Tangerang, ' . self::tanggal_indonesia(date('Y-m-d')) . '</p>
-                <p style="margin-top: 48px;"><b><u>' . $namaHrd . '</u></b><br>' . $jabatanHrd . '</p>
+                <p style="margin-top: 90px;"><b><u>' . $namaHrd . '</u></b><br>' . $jabatanHrd . '</p>
             ');
 
             $pdf->SetHTMLFooter('
