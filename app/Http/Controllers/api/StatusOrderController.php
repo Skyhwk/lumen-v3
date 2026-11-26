@@ -218,7 +218,6 @@ class StatusOrderController extends Controller
                 ->filter(function ($instance) use ($request, $mode) {
                     $globalSearch = $request->input('search.value');
                     $columns = $request->input('columns');
-                    \Log::info('Columns received:', $columns);
                     $instance->collection = $instance->collection->filter(function ($row) use ($globalSearch, $columns, $mode) {
                         $row = (array) $row;
                         // ===== LOGIKA GLOBAL SEARCH =====
@@ -379,7 +378,6 @@ class StatusOrderController extends Controller
     private function getNestedValue($array, $key, $mode = null)
     {
         // Handle kasus khusus untuk sales
-        \Log::info('Columns received:', ['key' => $key]);
         if ($key === 'sales') {
             // Pastikan $array['sales'] ada DAN berupa array sebelum akses key di dalamnya
             if (isset($array['sales']) && is_array($array['sales'])) {
