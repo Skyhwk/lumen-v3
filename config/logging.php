@@ -312,6 +312,13 @@ return [
             'days' => 30,
         ],
 
+        'laporan_harian_summary_ai' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/laporan_harian_summary_ai/log.log'),
+            'level' => 'info',
+            'days' => 30,
+        ],
+
         'telegram' => [
             'driver' => 'daily',
             'path' => storage_path('logs/telegram/log.log'),

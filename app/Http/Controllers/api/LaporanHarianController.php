@@ -7,6 +7,7 @@ use App\Models\LaporanHarian;
 use App\Models\LaporanSummary;
 use App\Models\LaporanSummarySumber;
 use App\Models\MasterKaryawan;
+use App\Services\LaporanHarianSummaryAiService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -159,13 +160,14 @@ class LaporanHarianController extends Controller
         $jenis = $this->summaryJenis($request->input('jenis'));
         $anchor = $this->anchorDate($request->input('tanggal'));
         $start = $this->periodStartFrom($jenis, $anchor);
+        $summaryRow = $this->summaryFor($jenis, $start);
 
         return response()->json([
             'jenis' => $jenis,
             'tanggal' => $start,
             'periode_label' => $this->periodLabel($jenis, $start),
-            'rows' => $this->publicSourceRows($this->sourceRows($jenis, $anchor)),
-            'summary' => $this->presentSummary($this->summaryFor($jenis, $start)),
+            'rows' => $this->publicSourceRows($this->sourceRows($jenis, $anchor), $summaryRow, $jenis),
+            'summary' => $this->presentSummary($summaryRow),
         ]);
     }
 
@@ -181,6 +183,7 @@ class LaporanHarianController extends Controller
         $jenis = $this->summaryJenis($request->input('jenis'));
         $anchor = $this->anchorDate($request->input('tanggal'));
         $start = $this->periodStartFrom($jenis, $anchor);
+        $periodeLabel = $this->periodLabel($jenis, $start);
         $blocks = array_values(array_filter($this->sourceRows($jenis, $anchor), function ($row) {
             return $row['sumber_id'] && $this->hasText($row['isi']);
         }));
@@ -191,8 +194,25 @@ class LaporanHarianController extends Controller
             ], 422);
         }
 
+        $generated = app(LaporanHarianSummaryAiService::class)->generate(
+            $jenis,
+            $periodeLabel,
+            $blocks,
+            [
+                'karyawan_id' => (int) $this->user_id,
+                'tanggal' => $start,
+            ]
+        );
+        $summaryHtml = trim((string) ($generated['html'] ?? ''));
+
+        if ($summaryHtml === '') {
+            return response()->json([
+                'message' => 'Layanan AI tidak mengembalikan ringkasan laporan. Silakan coba lagi.',
+            ], 502);
+        }
+
         $now = Carbon::now();
-        $summary = DB::transaction(function () use ($jenis, $start, $blocks, $now) {
+        $summary = DB::transaction(function () use ($jenis, $start, $blocks, $summaryHtml, $now) {
             $row = $this->summaryFor($jenis, $start);
             if (!$row) {
                 $row = new LaporanSummary();
@@ -203,7 +223,7 @@ class LaporanHarianController extends Controller
                 $row->created_at = $now;
             }
 
-            $row->isi = $this->composeSummary($blocks);
+            $row->isi = $summaryHtml;
             $row->updated_at = $now;
             $row->save();
 
@@ -224,7 +244,7 @@ class LaporanHarianController extends Controller
         return response()->json([
             'message' => 'Summary tersimpan',
             'summary' => $this->presentSummary($summary),
-            'rows' => $this->publicSourceRows($this->sourceRows($jenis, $anchor)),
+            'rows' => $this->publicSourceRows($this->sourceRows($jenis, $anchor), $summary, $jenis),
         ]);
     }
 
@@ -432,7 +452,7 @@ class LaporanHarianController extends Controller
             ->where('id', '!=', (int) $this->user_id)
             ->whereJsonContains('atasan_langsung', (string) $this->user_id)
             ->orderBy('nama_lengkap')
-            ->get(['id', 'nama_lengkap']);
+            ->get(['id', 'nama_lengkap', 'image', 'jabatan', 'department']);
     }
 
     private function sourceRows(string $jenis, Carbon $anchor): array
@@ -493,6 +513,9 @@ class LaporanHarianController extends Controller
                 'sumber_id' => $report ? (int) $report->id : null,
                 'karyawan_id' => (int) $person->id,
                 'nama' => $person->nama_lengkap,
+                'image' => $person->image ?? null,
+                'jabatan' => $person->jabatan ?? null,
+                'department' => $person->department ?? null,
                 'tanggal' => $tanggal,
                 'no_dokumen' => $report->no_dokumen ?? null,
                 'status' => $filled ? 'Sudah' : 'Belum',
@@ -530,20 +553,6 @@ class LaporanHarianController extends Controller
         ];
     }
 
-    private function composeSummary(array $blocks): string
-    {
-        $html = '';
-        foreach ($blocks as $block) {
-            $title = htmlspecialchars((string) $block['nama'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            $doc = $block['no_dokumen']
-                ? ' <small>(' . htmlspecialchars((string) $block['no_dokumen'], ENT_QUOTES | ENT_HTML5, 'UTF-8') . ')</small>'
-                : '';
-            $html .= '<h3>' . $title . $doc . '</h3>' . $this->cleanHtml((string) $block['isi']);
-        }
-
-        return $html;
-    }
-
     private function snippet(?string $html): string
     {
         $text = html_entity_decode(strip_tags((string) $html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -570,8 +579,20 @@ class LaporanHarianController extends Controller
         return $number;
     }
 
-    private function publicSourceRows(array $rows): array
+    private function publicSourceRows(array $rows, ?LaporanSummary $summaryRow = null, string $jenis = 'harian'): array
     {
-        return array_values($rows);
+        $extracted = LaporanHarianSummaryAiService::extractSourceSummaries($summaryRow ? (string) $summaryRow->isi : null);
+        $useKaryawanId = $jenis === 'harian';
+
+        return array_values(array_map(static function (array $row) use ($extracted, $useKaryawanId): array {
+            $row['ringkasan_ai'] = LaporanHarianSummaryAiService::resolveSourceSummary(
+                $extracted,
+                isset($row['karyawan_id']) ? (int) $row['karyawan_id'] : null,
+                (string) ($row['nama'] ?? ''),
+                $useKaryawanId
+            );
+
+            return $row;
+        }, $rows));
     }
 }
