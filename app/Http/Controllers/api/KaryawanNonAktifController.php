@@ -168,20 +168,19 @@ class KaryawanNonAktifController extends Controller
             $teleponCabang = e(optional($cabang)->tlp_cabang ?: '');
 
             $pdf->SetHTMLHeader('
-                <table style="width: 198mm; margin-left: -13mm; border-collapse: collapse;">
+                <table style="width: 100%; margin-left: 0mm; border-collapse: collapse;">
                     <tr>
-                        <td style="width: 36%; vertical-align: middle; padding: 0 0 3mm 14mm;">
+                        <td style="width: 50%; vertical-align: middle; padding: 0 0 0mm 0mm;">
                             <img src="' . public_path() . '/logo/isl_logo.png" alt="ISL" style="height: 52px; width: auto;">
                         </td>
-                        <td style="width: 44%; text-align: center; vertical-align: middle; padding: 0 0 0mm 20mm;">
+                        <td style="width: 50%; text-align: center; vertical-align: middle; padding: 0 0 0mm 0;">
+                        <div style="display: flex; flex-direction: column; align-items: center;">      
                             <div style="font-size: 14pt; font-weight: bold; letter-spacing: 0.4px;">SURAT PEMBERITAHUAN</div>
                             <div style="font-size: 9pt; margin-top: 4px;">Ref : ISL/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/' . DATE('y') . '-' . self::romawi(DATE('m')) . '/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</div>
-                        </td>
-                        <td style="width: 28%; padding: 0 12mm 7mm 0;"></td>
+                        </div></td>
                     </tr>
                 </table>
             ');
-
             $pdf->WriteHTML('
                 <style>
                     body { font-family: sans-serif; font-size: 11pt; color: #111; line-height: 1.45; }
