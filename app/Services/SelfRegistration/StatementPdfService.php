@@ -99,51 +99,51 @@ class StatementPdfService
         $pointsHtml = '';
         foreach ($points as $idx => $text) {
             $pointsHtml .= '<tr>'
-                . '<td style="width:7mm;vertical-align:top;padding:0 2mm 7px 0;text-align:left;">' . ($idx + 1) . '.</td>'
-                . '<td style="vertical-align:top;padding:0 0 7px 0;text-align:justify;">' . $text . '</td>'
+                . '<td style="width:7mm;vertical-align:top;padding:0 2mm 0 0;text-align:left;line-height:1.56;">' . ($idx + 1) . '.</td>'
+                . '<td style="vertical-align:top;padding:0;text-align:justify;line-height:1.56;">' . $text . '</td>'
                 . '</tr>';
         }
 
         return '<!DOCTYPE html><html><head><meta charset="utf-8"></head>
-<body style="font-family: calibri, sans-serif; font-size: 11pt; color:#000000; line-height:1.55;">
+<body style="font-family: calibri, sans-serif; font-size: 11pt; color:#000000; line-height:1.42;">
 
 <div style="margin:0;">Perihal : <b><u><i>Person In Charge</i> (PIC) Intilab Portal</u></b></div>
-<div style="height:8mm;line-height:8mm;font-size:1px;">&nbsp;</div>
+<div style="height:4mm;line-height:4mm;font-size:1px;">&nbsp;</div>
 
-<div style="margin:0 0 4px;">Yang bertanda tangan di bawah ini :</div>
+<div style="margin:0 0 2px;">Yang bertanda tangan di bawah ini :</div>
 ' . $this->fieldTable([
             ['Nama Lengkap', $this->e($namaPic !== '' ? $namaPic : '-')],
             ['Jabatan', $this->e($jabatanPic !== '' ? $jabatanPic : '-')],
             ['No. HP', $this->e($noKontak !== '' ? $noKontak : '-')],
             ['<i>Email</i>', $emailEsc],
         ], '0') . '
-<div style="height:8mm;line-height:8mm;font-size:1px;">&nbsp;</div>
+<div style="height:4.5mm;line-height:4.5mm;font-size:1px;">&nbsp;</div>
 
-<div style="margin:0 0 6px;">Selaku pihak yang melakukan pendaftaran pada Intilab Portal untuk dan atas nama :</div>
+<div style="margin:0 0 4px;">Selaku pihak yang melakukan pendaftaran pada Intilab Portal untuk dan atas nama :</div>
 <table width="100%" style="border-collapse:collapse;margin:0;background:transparent;">
 <thead>
 <tr>
-<th style="border:1px solid #000;padding:6px 8px;background:#f2f2f2;color:#000;text-align:center;font-weight:bold;width:8%;">No.</th>
-<th style="border:1px solid #000;padding:6px 8px;background:#f2f2f2;color:#000;text-align:center;font-weight:bold;width:35%;">ID Pelanggan</th>
-<th style="border:1px solid #000;padding:6px 8px;background:#f2f2f2;color:#000;text-align:center;font-weight:bold;width:57%;">Nama Perusahaan</th>
+<th style="border:1px solid #000;padding:5px 8px;background:#f2f2f2;color:#000;text-align:center;font-weight:bold;width:8%;">No.</th>
+<th style="border:1px solid #000;padding:5px 8px;background:#f2f2f2;color:#000;text-align:center;font-weight:bold;width:35%;">ID Pelanggan</th>
+<th style="border:1px solid #000;padding:5px 8px;background:#f2f2f2;color:#000;text-align:center;font-weight:bold;width:57%;">Nama Perusahaan</th>
 </tr>
 </thead>
 <tbody>
 ' . $rows . '
 </tbody>
 </table>
-<div style="height:8mm;line-height:8mm;font-size:1px;">&nbsp;</div>
+<div style="height:5.5mm;line-height:5.5mm;font-size:1px;">&nbsp;</div>
 
-<div style="margin:0 0 6px;">Dengan ini menyatakan dan menjamin dengan sebenar-benarnya bahwa :</div>
-<table width="100%" style="border-collapse:collapse;margin:0;background:transparent;">
+<div style="margin:0 0 4px;">Dengan ini menyatakan dan menjamin dengan sebenar-benarnya bahwa :</div>
+<table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0;background:transparent;">
 <tbody>
 ' . $pointsHtml . '
 </tbody>
 </table>
 <div style="height:5mm;line-height:5mm;font-size:1px;">&nbsp;</div>
 
-<div style="margin:0;text-align:justify;">Demikian surat pernyataan ini dibuat dengan sebenar-benarnya, dalam keadaan sadar dan tanpa paksaan dari pihak mana pun, dapat dipertanggungjawabkan secara hukum, serta dapat dipergunakan sebagaimana mestinya.</div>
-<div style="height:8mm;line-height:8mm;font-size:1px;">&nbsp;</div>
+<div style="margin:0;text-align:justify;line-height:1.6;">Demikian surat pernyataan ini dibuat dengan sebenar-benarnya, dalam keadaan sadar dan tanpa paksaan dari pihak mana pun, dapat dipertanggungjawabkan secara hukum, serta dapat dipergunakan sebagaimana mestinya.</div>
+<div style="height:7mm;line-height:7mm;font-size:1px;">&nbsp;</div>
 
 <div style="page-break-inside:avoid;">
 <div>' . $this->e($payload['tanggal_lengkap'] ?? '') . '</div>
@@ -167,9 +167,9 @@ class StatementPdfService
             'mode' => 'utf-8',
             'format' => 'A4',
             'orientation' => 'P',
-            'margin_top' => 34,
+            'margin_top' => 33,
             'margin_header' => 6,
-            'margin_bottom' => 25,
+            'margin_bottom' => 24,
             'margin_footer' => 5,
             'margin_left' => 17,
             'margin_right' => 17,
@@ -281,12 +281,12 @@ P : 021-5089-8988/89 - <u>www.intilab.com</u> - contact@intilab.com
 
     private function fieldTable(array $rows, $marginBottom)
     {
-        $html = '<table style="width:100%;border-collapse:collapse;margin:0 0 ' . $marginBottom . ';line-height:1.5;"><tbody>';
+        $html = '<table style="width:100%;border-collapse:collapse;margin:0 0 ' . $marginBottom . ';line-height:1.38;"><tbody>';
         foreach ($rows as $row) {
             $html .= '<tr>'
-                . '<td style="border:none;padding:2px 4mm 2px 0;width:30mm;white-space:nowrap;vertical-align:top;">' . $row[0] . '</td>'
-                . '<td style="border:none;padding:2px 2mm 2px 0;width:3mm;white-space:nowrap;vertical-align:top;">:</td>'
-                . '<td style="border:none;padding:2px 0;vertical-align:top;">' . $row[1] . '</td>'
+                . '<td style="border:none;padding:1px 4mm 1px 0;width:30mm;white-space:nowrap;vertical-align:top;">' . $row[0] . '</td>'
+                . '<td style="border:none;padding:1px 2mm 1px 0;width:3mm;white-space:nowrap;vertical-align:top;">:</td>'
+                . '<td style="border:none;padding:1px 0;vertical-align:top;">' . $row[1] . '</td>'
                 . '</tr>';
         }
 
