@@ -482,12 +482,22 @@ class DraftUdaraKebisinganController extends Controller
 
             // Mapping data ke array associative
             $mappedData = $kebisinganData->map(function ($val) {
+                $lokasiKeterangan = function ($value) {
+                    if ($value === null) {
+                        return null;
+                    }
+                    $value = trim((string) $value);
+                    if ($value === '' || $value === '-') {
+                        return null;
+                    }
+                    return $value;
+                };
+
                 $tanggal_sampling = OrderDetail::where('no_sampel', $val->no_sampel)->where('is_active', 1)->first()->tanggal_sampling;
                 return [
-                    'lokasi_keterangan' => $val->data_lapangan->informasi_tambahan
-                        ?? $val->data_lapangan->keterangan
-                        ?? $val->data_lapangan_personal->keterangan
-                        ?? null,
+                    'lokasi_keterangan' => $lokasiKeterangan($val->data_lapangan->informasi_tambahan)
+                        ?? $lokasiKeterangan($val->data_lapangan->keterangan)
+                        ?? $lokasiKeterangan($val->data_lapangan_personal->keterangan),
                     'paparan'          => $val->data_lapangan->jam_pemaparan
                         ?? $val->data_lapangan_personal->waktu_pengukuran
                         ?? null,
