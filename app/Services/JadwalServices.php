@@ -726,10 +726,13 @@ class JadwalServices
                 }
             }
             */
-            // Sinkronkan tanggal_sampling OD dari SEMUA jadwal aktif (bukan hanya payload).
+            // Hanya sampel di payload request → tanggal jadwal ini.
+            // Jangan sweep semua jadwal aktif QT (risiko geser OD tim/hari lain).
             if ($dataUpdate->kategori != null) {
-                self::reconcileTanggalSamplingFromActiveJadwal(
+                self::syncTanggalSamplingOrderDetail(
                     $dataUpdate->no_quotation,
+                    $dataUpdate->kategori,
+                    $dataUpdate->tanggal,
                     $dataUpdate->periode ?? null
                 );
             }
@@ -950,11 +953,13 @@ class JadwalServices
                 $noqt = $dataUpdate->no_quotation;
             }
 
-            // Sinkronkan tanggal_sampling OD dari SEMUA jadwal aktif (bukan hanya payload).
+            // Hanya sampel di payload request → tanggal jadwal ini.
             if ($dataUpdate->kategori != null) {
                 try {
-                    self::reconcileTanggalSamplingFromActiveJadwal(
+                    self::syncTanggalSamplingOrderDetail(
                         $dataUpdate->no_quotation,
+                        $dataUpdate->kategori,
+                        $dataUpdate->tanggal,
                         $dataUpdate->periode ?? null
                     );
                 } catch (Exception $ex) {
@@ -1373,8 +1378,10 @@ class JadwalServices
                 $update = Jadwal::insert($body);
             }
             if ($dataParsial->kategori != null) {
-                self::reconcileTanggalSamplingFromActiveJadwal(
+                self::syncTanggalSamplingOrderDetail(
                     $dataParsial->no_quotation,
+                    $dataParsial->kategori,
+                    $dataParsial->tanggal,
                     $dataParsial->periode ?? null
                 );
             }
@@ -1539,8 +1546,10 @@ class JadwalServices
             }
 
             if ($dataParsial->kategori != null) {
-                self::reconcileTanggalSamplingFromActiveJadwal(
+                self::syncTanggalSamplingOrderDetail(
                     $dataParsial->no_quotation,
+                    $dataParsial->kategori,
+                    $dataParsial->tanggal,
                     $dataParsial->periode ?? null
                 );
             }
@@ -1950,98 +1959,8 @@ class JadwalServices
     }
 
     /**
-     * Set ulang order_detail.tanggal_sampling mengikuti SEMUA jadwal aktif QT.
-     * Dipakai setelah update/parsial supaya sampel pindahan (mis. 002,003 ke tgl 26)
-     * ikut tanggal jadwal tujuan, tanpa bergantung exact match payload saja.
-     */
-    public static function reconcileTanggalSamplingFromActiveJadwal($no_quotation, $periode = null)
-    {
-        \Log::channel('sampling')->info("[START] Reconcile OD dari jadwal aktif: {$no_quotation}");
-
-        $orderh = OrderHeader::where('no_document', $no_quotation)->where('is_active', true)->first();
-        if (!$orderh) {
-            \Log::channel('sampling')->info("[SKIP] Tidak ada OrderHeader aktif — QT belum di-order.");
-            return;
-        }
-
-        $jadwalQuery = Jadwal::where('no_quotation', $no_quotation)->where('is_active', true);
-        $periodeNorm = $periode !== null ? trim((string) $periode) : '';
-        if ($periodeNorm !== '') {
-            $jadwalQuery->where('periode', $periodeNorm);
-        }
-        // id ASC → insert lebih baru menimpa map (sampel pindahan ke tanggal baru).
-        $jadwals = $jadwalQuery->orderBy('id')->get();
-
-        $sampleToDate = [];
-        foreach ($jadwals as $jadwal) {
-            $kats = json_decode($jadwal->kategori, true);
-            if (!is_array($kats)) {
-                continue;
-            }
-            $tgl = date('Y-m-d', strtotime($jadwal->tanggal));
-            foreach ($kats as $kat) {
-                $parts = explode(' - ', (string) $kat);
-                if (!isset($parts[1])) {
-                    \Log::channel('sampling')->warning("[FORMAT] Skip kategori jadwal id={$jadwal->id}: {$kat}");
-                    continue;
-                }
-                $code = trim($parts[1]);
-                // Jadwal terakhir yang memuat sampel menang (hindari stuck di tanggal lama).
-                $sampleToDate[$code] = $tgl;
-            }
-        }
-
-        $success = 0;
-        foreach ($sampleToDate as $code => $tgl) {
-            $noSampelFull = $orderh->no_order . '/' . $code;
-            // Hanya OD yang belum diterima (tanggal_terima kosong) yang boleh ikut jadwal.
-            $query = OrderDetail::where('id_order_header', $orderh->id)
-                ->where('is_active', true)
-                ->where('no_sampel', $noSampelFull)
-                ->where(function ($q) {
-                    $q->whereNull('tanggal_terima')->orWhere('tanggal_terima', '');
-                });
-
-            if ($periodeNorm !== '') {
-                $query->whereRaw('TRIM(periode) = ?', [$periodeNorm]);
-            }
-
-            $rows = $query->get();
-            if ($rows->isEmpty()) {
-                $alt = OrderDetail::where('id_order_header', $orderh->id)
-                    ->where('is_active', true)
-                    ->where(DB::raw('RIGHT(no_sampel, 3)'), '=', $code)
-                    ->where(function ($q) {
-                        $q->whereNull('tanggal_terima')->orWhere('tanggal_terima', '');
-                    });
-                if ($periodeNorm !== '') {
-                    $alt->whereRaw('TRIM(periode) = ?', [$periodeNorm]);
-                }
-                $rows = $alt->get();
-            }
-
-            foreach ($rows as $detail) {
-                if (self::orderDetailSudahDiterima($detail)) {
-                    \Log::channel('sampling')->info("[SKIP] OD#{$detail->id} {$detail->no_sampel} sudah tanggal_terima={$detail->tanggal_terima} — tanggal_sampling dikunci.");
-                    continue;
-                }
-                $old = $detail->tanggal_sampling;
-                if ((string) $old === (string) $tgl) {
-                    continue;
-                }
-                $detail->tanggal_sampling = $tgl;
-                $detail->save();
-                $success++;
-                \Log::channel('sampling')->info("[RECONCILE] OD#{$detail->id} {$detail->no_sampel}: {$old} -> {$tgl}");
-            }
-        }
-
-        \Log::channel('sampling')->info("[SUMMARY] Reconcile OD selesai. Updated={$success}, mapped_samples=" . count($sampleToDate));
-    }
-
-    /**
-     * Sync OD untuk daftar kategori request → tanggal tertentu.
-     * Tetap dipakai path revisi SP. Update jadwal utama memakai reconcile*.
+     * Sync OD hanya untuk kategori di payload → tanggal jadwal request.
+     * Skip jika tanggal_terima sudah terisi (dikunci).
      */
     public static function syncTanggalSamplingOrderDetail($no_quotation, $kategori_array, $tanggal_baru, $periode = null)
     {
