@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Yajra\Datatables\Datatables;
 
@@ -98,25 +99,19 @@ class DashboardHRDController extends Controller
 
     public function getEnd(Request $request)
     {
-        [$tahun, $bulan] = explode('-', $request->tgl_akhir);
+        $rawMonth = trim((string) $request->input('tgl_akhir', ''));
+        if (preg_match('/^\d{4}-\d{2}$/', $rawMonth)) {
+            [$tahun, $bulan] = array_map('intval', explode('-', $rawMonth));
+            $baseMonth = Carbon::create($tahun, $bulan, 1, 0, 0, 0, 'Asia/Jakarta');
+        } else {
+            $baseMonth = Carbon::now('Asia/Jakarta')->startOfMonth();
+        }
 
-        $dt = strtotime("{$tahun}-{$bulan}-01");
+        $startDate = $baseMonth->copy()->subMonthsNoOverflow(2)->startOfMonth()->toDateString();
+        $endDate = $baseMonth->copy()->addMonthsNoOverflow(1)->endOfMonth()->toDateString();
 
-        $currentMonth = date('m', $dt);
-        $currentYear = date('Y', $dt);
-
-        $nextMonth = date('m', strtotime('+1 month', $dt));
-        $nextYear = date('Y', strtotime('+1 month', $dt));
-
-        $data = MasterKaryawan::where(function ($q) use ($currentMonth, $currentYear, $nextMonth, $nextYear) {
-            $q->where(function ($q2) use ($currentMonth, $currentYear) {
-                $q2->whereMonth('tgl_berakhir_kontrak', $currentMonth)
-                    ->whereYear('tgl_berakhir_kontrak', $currentYear);
-            })->orWhere(function ($q3) use ($nextMonth, $nextYear) {
-                $q3->whereMonth('tgl_berakhir_kontrak', $nextMonth)
-                    ->whereYear('tgl_berakhir_kontrak', $nextYear);
-            });
-        })
+        $data = MasterKaryawan::whereNotNull('tgl_berakhir_kontrak')
+            ->whereBetween('tgl_berakhir_kontrak', [$startDate, $endDate])
             ->whereIn('status_karyawan', ['Training', 'Contract'])
             ->where('is_active', true)
             ->get();
