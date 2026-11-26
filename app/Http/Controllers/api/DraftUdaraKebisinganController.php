@@ -484,7 +484,7 @@ class DraftUdaraKebisinganController extends Controller
             $mappedData = $kebisinganData->map(function ($val) {
                 $tanggal_sampling = OrderDetail::where('no_sampel', $val->no_sampel)->where('is_active', 1)->first()->tanggal_sampling;
                 return [
-                    'lokasi_keterangan' => $val->data_lapangan->lokasi_titik_sampling
+                    'lokasi_keterangan' => $val->data_lapangan->informasi_tambahan
                         ?? $val->data_lapangan->keterangan
                         ?? $val->data_lapangan_personal->keterangan
                         ?? null,
