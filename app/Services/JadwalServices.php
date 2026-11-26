@@ -478,17 +478,10 @@ class JadwalServices
 
         $oldDate = $dataUpdate->tanggal_lama;
         // ===============================SEARCH DATA======================
-
-        $data = Jadwal::where('no_quotation', $dataUpdate->no_quotation)
-            ->where('tanggal', $dataUpdate->tanggal)
-            ->where('durasi', $dataUpdate->durasi_lama)
-            ->where('is_active', true);
-        if (!empty($dataUpdate->tipe_parsial)) {
-            $data = $data->where('parsial', $dataUpdate->tipe_parsial);
-        } else {
-            $data = $data->whereNull('parsial');
-        }
-        $data = $data->get();
+        // Harus ambil baris jadwal yang SEDANG DIEDIT (batch_id / tanggal_lama),
+        // bukan tanggal baru — kalau pakai tanggal baru, pindah 27→26 akan
+        // mengenai jadwal tujuan (004-006) dan OD sampel pindahan tidak ikut.
+        $data = $this->resolveJadwalRowsForUpdate($dataUpdate);
         // =================================================================
 
         $dir = $dataUpdate->sampler;
@@ -733,10 +726,12 @@ class JadwalServices
                 }
             }
             */
-            //update order
-            
+            // Sinkronkan tanggal_sampling OD dari SEMUA jadwal aktif (bukan hanya payload).
             if ($dataUpdate->kategori != null) {
-                self::syncTanggalSamplingOrderDetail($dataUpdate->no_quotation, $dataUpdate->kategori, $dataUpdate->tanggal);
+                self::reconcileTanggalSamplingFromActiveJadwal(
+                    $dataUpdate->no_quotation,
+                    $dataUpdate->periode ?? null
+                );
             }
 
             try {
@@ -790,16 +785,9 @@ class JadwalServices
 
 
         // ===============================SEARCH DATA======================
-        $data = Jadwal::where('no_quotation', $dataUpdate->no_quotation)
-            ->where('tanggal', $dataUpdate->tanggal)
-            ->where('durasi', $dataUpdate->durasi_lama)
-            ->where('is_active', true);
-        if (!empty($dataUpdate->tipe_parsial)) {
-            $data = $data->where('parsial', $dataUpdate->tipe_parsial);
-        } else {
-            $data = $data->whereNull('parsial');
-        }
-        $data = $data->get();
+        // Sama seperti updateJadwalSP: edit harus kena baris sumber (batch_id /
+        // tanggal_lama), bukan jadwal di tanggal tujuan.
+        $data = $this->resolveJadwalRowsForUpdate($dataUpdate);
         // =================================================================
 
         $dir = $dataUpdate->sampler;
@@ -962,10 +950,13 @@ class JadwalServices
                 $noqt = $dataUpdate->no_quotation;
             }
 
-            // update
+            // Sinkronkan tanggal_sampling OD dari SEMUA jadwal aktif (bukan hanya payload).
             if ($dataUpdate->kategori != null) {
                 try {
-                    self::syncTanggalSamplingOrderDetail($dataUpdate->no_quotation, $dataUpdate->kategori, $dataUpdate->tanggal);
+                    self::reconcileTanggalSamplingFromActiveJadwal(
+                        $dataUpdate->no_quotation,
+                        $dataUpdate->periode ?? null
+                    );
                 } catch (Exception $ex) {
                     throw new Exception($ex->getMessage(), 401);
                 }
@@ -1382,7 +1373,10 @@ class JadwalServices
                 $update = Jadwal::insert($body);
             }
             if ($dataParsial->kategori != null) {
-                self::syncTanggalSamplingOrderDetail($dataParsial->no_quotation, $dataParsial->kategori, $dataParsial->tanggal);
+                self::reconcileTanggalSamplingFromActiveJadwal(
+                    $dataParsial->no_quotation,
+                    $dataParsial->periode ?? null
+                );
             }
 
             $sales = JadwalServices::on('no_quotation', $dataParsial->no_quotation)->getQuotation()->sales_id;
@@ -1545,7 +1539,10 @@ class JadwalServices
             }
 
             if ($dataParsial->kategori != null) {
-                self::syncTanggalSamplingOrderDetail($dataParsial->no_quotation, $dataParsial->kategori, $dataParsial->tanggal);
+                self::reconcileTanggalSamplingFromActiveJadwal(
+                    $dataParsial->no_quotation,
+                    $dataParsial->periode ?? null
+                );
             }
 
             $sales = JadwalServices::on('no_quotation', $dataParsial->no_quotation)->getQuotation()->sales_id;
@@ -1919,77 +1916,191 @@ class JadwalServices
             . '</body></html>';
     }
 
-    public static function syncTanggalSamplingOrderDetail($no_quotation, $kategori_array, $tanggal_baru)
+    /**
+     * Ambil baris jadwal yang sedang diedit.
+     * Prioritas: batch_id (ID pasti dari UI) → fallback tanggal_lama + durasi + parsial.
+     * Jangan pakai tanggal baru: pindah 27→26 akan mengenai jadwal tujuan.
+     */
+    private function resolveJadwalRowsForUpdate($dataUpdate)
     {
-        \Log::channel('sampling')->info("[START] Sync OrderDetail untuk No QT: {$no_quotation}");
-        $type = explode('/', $no_quotation)[1];
+        $batchIds = is_array($dataUpdate->batch_id ?? null)
+            ? $dataUpdate->batch_id
+            : explode(',', (string) ($dataUpdate->batch_id ?? ''));
+        $batchIds = array_values(array_filter(array_map('intval', $batchIds)));
 
-        // 1. Check Quotation Status
-        if ($type == 'QTC') {
-            $quotation = QuotationKontrakH::where('no_document', $no_quotation)->where('is_active', true)->first();
+        if (!empty($batchIds)) {
+            $rows = Jadwal::whereIn('id', $batchIds)->where('is_active', true)->get();
+            if ($rows->isNotEmpty()) {
+                return $rows;
+            }
+        }
+
+        $query = Jadwal::where('no_quotation', $dataUpdate->no_quotation)
+            ->where('tanggal', $dataUpdate->tanggal_lama)
+            ->where('durasi', $dataUpdate->durasi_lama)
+            ->where('is_active', true);
+
+        if (!empty($dataUpdate->tipe_parsial)) {
+            $query->where('parsial', $dataUpdate->tipe_parsial);
         } else {
-            $quotation = QuotationNonKontrak::where('no_document', $no_quotation)->where('is_active', true)->first();
+            $query->whereNull('parsial');
         }
 
-        if (!$quotation) {
-            \Log::channel('sampling')->warning("[SKIP] Quotation tidak ditemukan atau tidak aktif.");
-            return;
-        }
+        return $query->get();
+    }
 
-        if ($quotation->flag_status !== 'ordered') {
-            \Log::channel('sampling')->info("[SKIP] Status Quotation bukan 'ordered' (Status: {$quotation->flag_status}).");
-            return;
-        }
+    /**
+     * Set ulang order_detail.tanggal_sampling mengikuti SEMUA jadwal aktif QT.
+     * Dipakai setelah update/parsial supaya sampel pindahan (mis. 002,003 ke tgl 26)
+     * ikut tanggal jadwal tujuan, tanpa bergantung exact match payload saja.
+     */
+    public static function reconcileTanggalSamplingFromActiveJadwal($no_quotation, $periode = null)
+    {
+        \Log::channel('sampling')->info("[START] Reconcile OD dari jadwal aktif: {$no_quotation}");
 
-        // 2. Find OrderHeader
         $orderh = OrderHeader::where('no_document', $no_quotation)->where('is_active', true)->first();
         if (!$orderh) {
-            \Log::channel('sampling')->warning("[SKIP] OrderHeader tidak ditemukan untuk QT 'ordered'.");
+            \Log::channel('sampling')->info("[SKIP] Tidak ada OrderHeader aktif — QT belum di-order.");
+            return;
+        }
+
+        $jadwalQuery = Jadwal::where('no_quotation', $no_quotation)->where('is_active', true);
+        $periodeNorm = $periode !== null ? trim((string) $periode) : '';
+        if ($periodeNorm !== '') {
+            $jadwalQuery->where('periode', $periodeNorm);
+        }
+        // id ASC → insert lebih baru menimpa map (sampel pindahan ke tanggal baru).
+        $jadwals = $jadwalQuery->orderBy('id')->get();
+
+        $sampleToDate = [];
+        foreach ($jadwals as $jadwal) {
+            $kats = json_decode($jadwal->kategori, true);
+            if (!is_array($kats)) {
+                continue;
+            }
+            $tgl = date('Y-m-d', strtotime($jadwal->tanggal));
+            foreach ($kats as $kat) {
+                $parts = explode(' - ', (string) $kat);
+                if (!isset($parts[1])) {
+                    \Log::channel('sampling')->warning("[FORMAT] Skip kategori jadwal id={$jadwal->id}: {$kat}");
+                    continue;
+                }
+                $code = trim($parts[1]);
+                // Jadwal terakhir yang memuat sampel menang (hindari stuck di tanggal lama).
+                $sampleToDate[$code] = $tgl;
+            }
+        }
+
+        $success = 0;
+        foreach ($sampleToDate as $code => $tgl) {
+            $noSampelFull = $orderh->no_order . '/' . $code;
+            // Hanya OD yang belum diterima (tanggal_terima kosong) yang boleh ikut jadwal.
+            $query = OrderDetail::where('id_order_header', $orderh->id)
+                ->where('is_active', true)
+                ->where('no_sampel', $noSampelFull)
+                ->where(function ($q) {
+                    $q->whereNull('tanggal_terima')->orWhere('tanggal_terima', '');
+                });
+
+            if ($periodeNorm !== '') {
+                $query->whereRaw('TRIM(periode) = ?', [$periodeNorm]);
+            }
+
+            $rows = $query->get();
+            if ($rows->isEmpty()) {
+                $alt = OrderDetail::where('id_order_header', $orderh->id)
+                    ->where('is_active', true)
+                    ->where(DB::raw('RIGHT(no_sampel, 3)'), '=', $code)
+                    ->where(function ($q) {
+                        $q->whereNull('tanggal_terima')->orWhere('tanggal_terima', '');
+                    });
+                if ($periodeNorm !== '') {
+                    $alt->whereRaw('TRIM(periode) = ?', [$periodeNorm]);
+                }
+                $rows = $alt->get();
+            }
+
+            foreach ($rows as $detail) {
+                if (self::orderDetailSudahDiterima($detail)) {
+                    \Log::channel('sampling')->info("[SKIP] OD#{$detail->id} {$detail->no_sampel} sudah tanggal_terima={$detail->tanggal_terima} — tanggal_sampling dikunci.");
+                    continue;
+                }
+                $old = $detail->tanggal_sampling;
+                if ((string) $old === (string) $tgl) {
+                    continue;
+                }
+                $detail->tanggal_sampling = $tgl;
+                $detail->save();
+                $success++;
+                \Log::channel('sampling')->info("[RECONCILE] OD#{$detail->id} {$detail->no_sampel}: {$old} -> {$tgl}");
+            }
+        }
+
+        \Log::channel('sampling')->info("[SUMMARY] Reconcile OD selesai. Updated={$success}, mapped_samples=" . count($sampleToDate));
+    }
+
+    /**
+     * Sync OD untuk daftar kategori request → tanggal tertentu.
+     * Tetap dipakai path revisi SP. Update jadwal utama memakai reconcile*.
+     */
+    public static function syncTanggalSamplingOrderDetail($no_quotation, $kategori_array, $tanggal_baru, $periode = null)
+    {
+        \Log::channel('sampling')->info("[START] Sync OrderDetail untuk No QT: {$no_quotation}");
+
+        $orderh = OrderHeader::where('no_document', $no_quotation)->where('is_active', true)->first();
+        if (!$orderh) {
+            \Log::channel('sampling')->warning("[SKIP] OrderHeader tidak ditemukan — tidak ada yang di-sync.");
             return;
         }
 
         \Log::channel('sampling')->info("[CHECK] OrderHeader DITEMUKAN (ID: {$orderh->id}).");
 
         $tanggal_format = date('Y-m-d', strtotime($tanggal_baru));
+        $periodeNorm = $periode !== null ? trim((string) $periode) : '';
         $success_count = 0;
         $missing_samples = [];
 
-        // 3. Process each category
         foreach ($kategori_array as $kategori_raw) {
             \Log::channel('sampling')->info("[LOOP] Memproses Kategori: {$kategori_raw}");
-            
-            // Format 1: "Nama Kategori - 001" -> extract "001"
+
             $parts = explode(" - ", $kategori_raw);
             if (!isset($parts[1])) {
                 \Log::channel('sampling')->error("[FORMAT ERROR] Gagal parse kategori: {$kategori_raw}");
                 $missing_samples[] = $kategori_raw;
                 continue;
             }
-            
+
             $pra_no_sample = trim($parts[1]);
             $no_sampel_full = $orderh->no_order . '/' . $pra_no_sample;
 
-            \Log::channel('sampling')->info("[LOOP] Mencari OrderDetail dengan no_sampel: {$no_sampel_full}");
-
-            $order_detail = OrderDetail::where('id_order_header', $orderh->id)
+            $query = OrderDetail::where('id_order_header', $orderh->id)
                 ->where('is_active', true)
-                ->where('no_sampel', $no_sampel_full)
-                ->first();
+                ->where('no_sampel', $no_sampel_full);
+            if ($periodeNorm !== '') {
+                $query->whereRaw('TRIM(periode) = ?', [$periodeNorm]);
+            }
+            $order_detail = $query->first();
 
-            // Alternatif pencarian menggunakan logika insertParsial jika no_sampel_full gagal
             if (!$order_detail) {
                 $kateg = MasterSubKategori::where('nama_sub_kategori', trim($parts[0]))->where('is_active', true)->first();
                 if ($kateg) {
                     $kateg1 = $kateg->id . '-' . $kateg->nama_sub_kategori;
-                    $order_detail = OrderDetail::where('id_order_header', $orderh->id)
+                    $alt = OrderDetail::where('id_order_header', $orderh->id)
                         ->where('is_active', true)
                         ->where('kategori_3', $kateg1)
-                        ->where(DB::raw('RIGHT(no_sampel, 3)'), '=', $pra_no_sample)
-                        ->first();
+                        ->where(DB::raw('RIGHT(no_sampel, 3)'), '=', $pra_no_sample);
+                    if ($periodeNorm !== '') {
+                        $alt->whereRaw('TRIM(periode) = ?', [$periodeNorm]);
+                    }
+                    $order_detail = $alt->first();
                 }
             }
 
             if ($order_detail) {
+                if (self::orderDetailSudahDiterima($order_detail)) {
+                    \Log::channel('sampling')->info("[SKIP] OD#{$order_detail->id} {$no_sampel_full} sudah tanggal_terima={$order_detail->tanggal_terima} — tanggal_sampling dikunci.");
+                    continue;
+                }
                 $old_date = $order_detail->tanggal_sampling;
                 $order_detail->tanggal_sampling = $tanggal_format;
                 $order_detail->save();
@@ -2008,5 +2119,12 @@ class JadwalServices
             \Log::channel('sampling')->error("[ROLLBACK] " . $msg);
             throw new \Exception($msg);
         }
+    }
+
+    /** OD sudah diterima lab → tanggal_sampling dikunci dari perubahan jadwal. */
+    private static function orderDetailSudahDiterima($orderDetail): bool
+    {
+        $val = $orderDetail->tanggal_terima ?? null;
+        return $val !== null && trim((string) $val) !== '';
     }
 }
