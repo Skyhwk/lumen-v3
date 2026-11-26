@@ -82,15 +82,15 @@ class StatementPdfService
         }
 
         $points = [
-            'Saya secara sah dan berwenang bertindak untuk dan atas nama perusahaan / instansi tersebut, serta telah memperoleh persetujuan atau kuasa dari pihak yang berwenang untuk melakukan pendaftaran dan bertindak sebagai Penanggung Jawab / <i>Person In Charge</i> (PIC) Pengelolaan Intilab Portal.',
-            'Dengan diselesaikannya pendaftaran ini, saya secara otomatis ditetapkan sebagai PIC dan berwenang untuk mengakses, menggunakan, dan mengelola Intilab Portal; menerima, mengakses, dan mengelola seluruh data serta dokumen layanan; melakukan persetujuan dan/atau tindakan hukum melalui sistem elektronik; serta bertindak untuk dan atas nama perusahaan / instansi dalam seluruh aktivitas pada Intilab Portal.',
+            'Saya secara sah dan berwenang bertindak untuk dan atas nama perusahaan / instansi tersebut, serta telah memperoleh persetujuan atau kuasa dari pihak yang berwenang untuk melakukan pendaftaran dan bertindak sebagai Penanggung Jawab / <i>Person In Charge</i> (PIC) Pengelolaan Portal Pelanggan Intilab.',
+            'Dengan diselesaikannya pendaftaran ini, saya secara otomatis ditetapkan sebagai PIC dan berwenang untuk mengakses, menggunakan, dan mengelola Portal Pelanggan Intilab; menerima, mengakses, dan mengelola seluruh data serta dokumen layanan; melakukan persetujuan dan/atau tindakan hukum melalui sistem elektronik; serta bertindak untuk dan atas nama perusahaan / instansi dalam seluruh aktivitas pada Portal Pelanggan Intilab.',
             'Seluruh data dan informasi yang saya sampaikan pada saat pendaftaran adalah benar, lengkap, dan sah secara hukum.',
-            '<i>Email</i> yang saya gunakan saat pendaftaran ' . $emailEsc . ' ditetapkan sebagai <i>email</i> utama (<i>main email</i>), yaitu identitas resmi perusahaan / instansi dalam Intilab Portal, sarana penerimaan notifikasi sistem termasuk <i>password</i>, dan sarana persetujuan transaksi serta dokumen elektronik. Saya memahami dan menyetujui bahwa <i>email</i> tersebut merupakan bentuk autentikasi utama dalam sistem, sehingga setiap aktivitas yang dilakukan melaluinya dianggap sah dan mewakili perusahaan / instansi tanpa memerlukan verifikasi tambahan.',
+            '<i>Email</i> yang saya gunakan saat pendaftaran ' . $emailEsc . ' ditetapkan sebagai <i>email</i> utama (<i>main email</i>), yaitu identitas resmi perusahaan / instansi dalam Portal Pelanggan Intilab, sarana penerimaan notifikasi sistem termasuk <i>password</i>, dan sarana persetujuan transaksi serta dokumen elektronik. Saya memahami dan menyetujui bahwa <i>email</i> tersebut merupakan bentuk autentikasi utama dalam sistem, sehingga setiap aktivitas yang dilakukan melaluinya dianggap sah dan mewakili perusahaan / instansi tanpa memerlukan verifikasi tambahan.',
             'Saya akan menjalankan kewenangan sesuai dengan penunjukan sebagai PIC dan tidak melampaui batas kewenangan yang diberikan.',
             'Saya akan menjaga kerahasiaan seluruh data, informasi, dan kredensial akses, termasuk <i>email</i>, <i>username</i>, dan <i>password</i>, serta tidak akan membagikannya kepada pihak yang tidak berwenang.',
             'Saya tidak akan menyalahgunakan akses dalam bentuk apa pun.',
             'Saya bertanggung jawab atas penggunaan akun yang berada dalam penguasaan saya, termasuk atas tindakan pihak lain yang memperoleh akses melalui saya.',
-            'Setiap persetujuan, transaksi, atau tindakan yang saya lakukan melalui Intilab Portal diakui sah, mengikat, dan memiliki kekuatan hukum penuh bagi perusahaan / instansi.',
+            'Setiap persetujuan, transaksi, atau tindakan yang saya lakukan melalui Portal Pelanggan Intilab diakui sah, mengikat, dan memiliki kekuatan hukum penuh bagi perusahaan / instansi.',
             'Dalam hal terjadi perubahan PIC dan/atau <i>email</i> utama, saya atau perusahaan / instansi wajib melakukan pemberitahuan dan pembaruan melalui sistem atau formulir yang ditetapkan oleh PT Inti Surya Laboratorium.',
             'Saya bersedia mematuhi seluruh ketentuan, kebijakan, dan prosedur yang ditetapkan oleh PT Inti Surya Laboratorium.',
             'Saya bertanggung jawab secara hukum atas segala akibat yang timbul dari penggunaan maupun penyalahgunaan akses yang berada dalam penguasaan saya.',
@@ -107,7 +107,7 @@ class StatementPdfService
         return '<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="font-family: calibri, sans-serif; font-size: 11pt; color:#000000; line-height:1.42;">
 
-<div style="margin:0;">Perihal : <b><u><i>Person In Charge</i> (PIC) Intilab Portal</u></b></div>
+<div style="margin:0;">Perihal : <b><u><i>Person In Charge</i> (PIC) Portal Pelanggan Intilab</u></b></div>
 <div style="height:4mm;line-height:4mm;font-size:1px;">&nbsp;</div>
 
 <div style="margin:0 0 2px;">Yang bertanda tangan di bawah ini :</div>
@@ -119,7 +119,7 @@ class StatementPdfService
         ], '0') . '
 <div style="height:4.5mm;line-height:4.5mm;font-size:1px;">&nbsp;</div>
 
-<div style="margin:0 0 4px;">Selaku pihak yang melakukan pendaftaran pada Intilab Portal untuk dan atas nama :</div>
+<div style="margin:0 0 4px;">Selaku pihak yang melakukan pendaftaran pada Portal Pelanggan Intilab untuk dan atas nama :</div>
 <table width="100%" style="border-collapse:collapse;margin:0;background:transparent;">
 <thead>
 <tr>
@@ -193,7 +193,7 @@ class StatementPdfService
         }
 
         $mpdf = new Mpdf($mpdfConfig);
-        $mpdf->SetTitle('Surat Pernyataan - Person In Charge (PIC) Intilab Portal');
+        $mpdf->SetTitle('Surat Pernyataan - Person In Charge (PIC) Portal Pelanggan Intilab');
         $mpdf->SetAuthor('PT Inti Surya Laboratorium');
 
         $header = $this->headerHtml($payload);
