@@ -44,7 +44,6 @@ class AttendanceCorrectionAbsensiApplyService
         $time = $context['time'];
         $status = $context['status'];
         $existing = $context['existingSlot'];
-        $duplicateIds = $context['duplicateIds'];
 
         if ($existing !== null) {
             DB::connection($conn)->table('absensi')->where('id', $existing->id)->update([
@@ -95,12 +94,15 @@ class AttendanceCorrectionAbsensiApplyService
             $time,
             $isCheckIn,
             $shiftOnDate,
-            $shiftPrevDate
+            $shiftPrevDate,
+            $shiftRowOnDate,
+            $shiftRowPrevDate,
+            $conn
         );
         $status = $isCheckIn ? 'Masuk' : 'Keluar';
 
         $rows = $this->rowsOnDate($conn, $employeeId, $absensiDate);
-        $existingSlot = self::resolveTargetRow(
+        $slot = self::resolveSlotSelection(
             $rows,
             $correctionDate,
             $absensiDate,
@@ -108,7 +110,9 @@ class AttendanceCorrectionAbsensiApplyService
             $isCheckIn,
             $shiftOnDate,
             $shiftPrevDate,
-            $shiftRowOnDate
+            $shiftRowOnDate,
+            $shiftRowPrevDate,
+            $conn
         );
 
         return [
@@ -118,7 +122,6 @@ class AttendanceCorrectionAbsensiApplyService
             'time' => $time,
             'status' => $status,
             'existingSlot' => $slot['primary'],
-            'duplicateIds' => $slot['duplicateIds'],
         ];
     }
 
@@ -131,14 +134,9 @@ class AttendanceCorrectionAbsensiApplyService
         $time = $context['time'];
         $status = $context['status'];
         $existing = $context['existingSlot'];
-        $duplicateIds = $context['duplicateIds'];
 
-        if ($existing !== null) {
-            return $duplicateIds === []
-                && $this->rowAlreadyMatches($existing, $absensiDate, $time, $status);
-        }
-
-        return $this->hasExactPunch($conn, $employeeId, $absensiDate, $time, $status);
+        return $this->hasExactPunch($conn, $employeeId, $absensiDate, $time, $status)
+            || ($existing !== null && $this->rowAlreadyMatches($existing, $absensiDate, $time, $status));
     }
 
     /**
@@ -214,12 +212,7 @@ class AttendanceCorrectionAbsensiApplyService
             && strcasecmp((string) ($row->status ?? ''), $status) === 0;
     }
 
-    /**
-     * Pilih satu baris target yang harus di-UPDATE tanpa pernah menyentuh baris milik pasangan slot lawannya (Masuk vs Keluar).
-     * Mengembalikan null jika slot belum ada sehingga caller melakukan INSERT.
-     *
-     * @param  Collection<int, object>  $rows
-     */
+    /** @param Collection<int, object> $rows */
     public static function resolveTargetRow(
         Collection $rows,
         string $correctionDate,
@@ -230,25 +223,58 @@ class AttendanceCorrectionAbsensiApplyService
         ?string $shiftPrevDate,
         ?object $shiftRowOnDate = null
     ): ?object {
+        return self::resolveSlotSelection(
+            $rows,
+            $correctionDate,
+            $absensiDate,
+            $time,
+            $isCheckIn,
+            $shiftOnDate,
+            $shiftPrevDate,
+            $shiftRowOnDate
+        )['primary'];
+    }
+
+    /**
+     * Pilih baris target yang harus di-UPDATE (dan ID duplikat di slot yang sama yang perlu dibersihkan)
+     * tanpa pernah menyentuh baris milik pasangan slot lawannya (Masuk vs Keluar).
+     *
+     * @param  Collection<int, object>  $rows
+     * @return array{primary: ?object, duplicateIds: list<int>}
+     */
+    public static function resolveSlotSelection(
+        Collection $rows,
+        string $correctionDate,
+        string $absensiDate,
+        string $time,
+        bool $isCheckIn,
+        ?string $shiftOnDate,
+        ?string $shiftPrevDate,
+        ?object $shiftRowOnDate = null,
+        ?object $shiftRowPrevDate = null,
+        ?string $conn = null
+    ): array {
         if ($rows->isEmpty()) {
-            return null;
+            return ['primary' => null, 'duplicateIds' => []];
         }
 
         $targetStatus = $isCheckIn ? 'Masuk' : 'Keluar';
 
         if ($isCheckIn) {
-            return self::resolveCheckInRow(
+            return self::resolveCheckInSlot(
                 $rows,
                 $absensiDate,
                 $time,
                 $targetStatus,
                 $shiftOnDate,
                 $shiftPrevDate,
-                $shiftRowOnDate
+                $shiftRowOnDate,
+                $shiftRowPrevDate,
+                $conn
             );
         }
 
-        return self::resolveCheckOutRow(
+        return self::resolveCheckOutSlot(
             $rows,
             $correctionDate,
             $absensiDate,
@@ -256,52 +282,59 @@ class AttendanceCorrectionAbsensiApplyService
             $targetStatus,
             $shiftOnDate,
             $shiftPrevDate,
-            $shiftRowOnDate
+            $shiftRowOnDate,
+            $shiftRowPrevDate,
+            $conn
         );
     }
 
     /**
      * @param  Collection<int, object>  $rows
+     * @return array{primary: ?object, duplicateIds: list<int>}
      */
-    private static function resolveCheckInRow(
+    private static function resolveCheckInSlot(
         Collection $rows,
         string $absensiDate,
         string $time,
         string $targetStatus,
         ?string $shiftOnDate,
         ?string $shiftPrevDate,
-        ?object $shiftRowOnDate
-    ): ?object {
-        $shiftNorm = strtolower(trim((string) $shiftOnDate));
+        ?object $shiftRowOnDate,
+        ?object $shiftRowPrevDate,
+        ?string $conn
+    ): array {
+        $timeIn = $shiftRowOnDate->time_in ?? null;
+        $timeOut = $shiftRowOnDate->time_out ?? null;
 
-        if ($shiftNorm === 'shsecurity2') {
-            $bucket = $rows->filter(function ($row) {
+        if (MasterShiftKaryawan::isNightShift($shiftOnDate, $timeIn, $timeOut, $conn)) {
+            $bounds = MasterShiftKaryawan::resolveNightShiftBounds($shiftOnDate, $timeIn, $timeOut, $conn);
+            $bucket = $rows->filter(function ($row) use ($bounds) {
                 $jam = self::normalizeJamForCompare((string) ($row->jam ?? ''));
 
-                return $jam !== '' && $jam > ShiftAbsensiPunchRules::OVERNIGHT_KELUAR_BEFORE;
+                return $jam !== '' && $jam > $bounds['keluar_before'];
             })->values();
 
             if ($bucket->isEmpty()) {
-                return null;
+                return ['primary' => null, 'duplicateIds' => []];
             }
 
-            $preferred = ShiftAbsensiPunchRules::pickSecurity2MasukRow($bucket);
+            $preferred = ShiftAbsensiPunchRules::pickNightShiftMasukRow($bucket, $shiftOnDate, $timeIn, $timeOut, $conn);
 
-            return self::pickExactOrPreferred($bucket, $preferred, $absensiDate, $time, $targetStatus);
+            return self::finalizeSlotSelection($bucket, $preferred, $absensiDate, $time, $targetStatus);
         }
 
-        $prevIsOvernight = self::isOvernightShift($shiftPrevDate);
+        $prevOvernightCutoff = self::resolveOvernightCutoff($shiftPrevDate, $shiftRowPrevDate, $conn);
 
-        if ($shiftNorm === '24jam') {
-            $bucket = $rows->filter(function ($row) use ($prevIsOvernight) {
+        if (MasterShiftKaryawan::is24Jam($shiftOnDate)) {
+            $bucket = $rows->filter(function ($row) use ($prevOvernightCutoff) {
                 $jam = self::normalizeJamForCompare((string) ($row->jam ?? ''));
                 if ($jam === '' || $jam <= '00:00:00') {
                     return false;
                 }
                 if (
-                    $prevIsOvernight
+                    $prevOvernightCutoff !== null
                     && strcasecmp((string) ($row->status ?? ''), 'Keluar') === 0
-                    && $jam < ShiftAbsensiPunchRules::OVERNIGHT_KELUAR_BEFORE
+                    && $jam < $prevOvernightCutoff
                 ) {
                     return false;
                 }
@@ -310,24 +343,24 @@ class AttendanceCorrectionAbsensiApplyService
             })->values();
 
             if ($bucket->isEmpty()) {
-                return null;
+                return ['primary' => null, 'duplicateIds' => []];
             }
 
             $preferred = $bucket->sortBy(fn ($row) => self::normalizeJamForCompare((string) ($row->jam ?? '')))->first();
 
-            return self::pickExactOrPreferred($bucket, $preferred, $absensiDate, $time, $targetStatus);
+            return self::finalizeSlotSelection($bucket, $preferred, $absensiDate, $time, $targetStatus);
         }
 
-        $threshold = self::resolveDaySplitThreshold($shiftRowOnDate);
-        $bucket = $rows->filter(function ($row) use ($threshold, $prevIsOvernight) {
+        $threshold = self::resolveDaySplitThreshold($shiftRowOnDate, $shiftOnDate, $conn);
+        $bucket = $rows->filter(function ($row) use ($threshold, $prevOvernightCutoff) {
             $jam = self::normalizeJamForCompare((string) ($row->jam ?? ''));
             if ($jam === '' || $jam > $threshold) {
                 return false;
             }
             if (
-                $prevIsOvernight
+                $prevOvernightCutoff !== null
                 && strcasecmp((string) ($row->status ?? ''), 'Keluar') === 0
-                && $jam < ShiftAbsensiPunchRules::OVERNIGHT_KELUAR_BEFORE
+                && $jam < $prevOvernightCutoff
             ) {
                 return false;
             }
@@ -336,18 +369,19 @@ class AttendanceCorrectionAbsensiApplyService
         })->values();
 
         if ($bucket->isEmpty()) {
-            return null;
+            return ['primary' => null, 'duplicateIds' => []];
         }
 
         $preferred = $bucket->sortBy(fn ($row) => self::normalizeJamForCompare((string) ($row->jam ?? '')))->first();
 
-        return self::pickExactOrPreferred($bucket, $preferred, $absensiDate, $time, $targetStatus);
+        return self::finalizeSlotSelection($bucket, $preferred, $absensiDate, $time, $targetStatus);
     }
 
     /**
      * @param  Collection<int, object>  $rows
+     * @return array{primary: ?object, duplicateIds: list<int>}
      */
-    private static function resolveCheckOutRow(
+    private static function resolveCheckOutSlot(
         Collection $rows,
         string $correctionDate,
         string $absensiDate,
@@ -355,25 +389,38 @@ class AttendanceCorrectionAbsensiApplyService
         string $targetStatus,
         ?string $shiftOnDate,
         ?string $shiftPrevDate,
-        ?object $shiftRowOnDate
-    ): ?object {
-        if (self::isOvernightCheckOutTarget($correctionDate, $absensiDate, $time, $shiftOnDate, $shiftPrevDate)) {
-            $bucket = $rows->filter(function ($row) {
+        ?object $shiftRowOnDate,
+        ?object $shiftRowPrevDate,
+        ?string $conn
+    ): array {
+        $overnightCutoff = self::resolveOvernightCheckOutCutoff(
+            $correctionDate,
+            $absensiDate,
+            $time,
+            $shiftOnDate,
+            $shiftPrevDate,
+            $shiftRowOnDate,
+            $shiftRowPrevDate,
+            $conn
+        );
+
+        if ($overnightCutoff !== null) {
+            $bucket = $rows->filter(function ($row) use ($overnightCutoff) {
                 $jam = self::normalizeJamForCompare((string) ($row->jam ?? ''));
 
-                return $jam !== '' && $jam < ShiftAbsensiPunchRules::OVERNIGHT_KELUAR_BEFORE;
+                return $jam !== '' && $jam < $overnightCutoff;
             })->values();
 
             if ($bucket->isEmpty()) {
-                return null;
+                return ['primary' => null, 'duplicateIds' => []];
             }
 
-            $preferred = ShiftAbsensiPunchRules::pickOvernightKeluarRow($bucket);
+            $preferred = ShiftAbsensiPunchRules::pickOvernightKeluarRow($bucket, $overnightCutoff);
 
-            return self::pickExactOrPreferred($bucket, $preferred, $absensiDate, $time, $targetStatus);
+            return self::finalizeSlotSelection($bucket, $preferred, $absensiDate, $time, $targetStatus);
         }
 
-        $threshold = self::resolveDaySplitThreshold($shiftRowOnDate);
+        $threshold = self::resolveDaySplitThreshold($shiftRowOnDate, $shiftOnDate, $conn);
         $bucket = $rows->filter(function ($row) use ($threshold) {
             $jam = self::normalizeJamForCompare((string) ($row->jam ?? ''));
 
@@ -381,27 +428,37 @@ class AttendanceCorrectionAbsensiApplyService
         })->values();
 
         if ($bucket->isEmpty()) {
-            return null;
+            return ['primary' => null, 'duplicateIds' => []];
         }
 
         $preferred = $bucket->sortByDesc(fn ($row) => self::normalizeJamForCompare((string) ($row->jam ?? '')))->first();
 
-        return self::pickExactOrPreferred($bucket, $preferred, $absensiDate, $time, $targetStatus);
+        return self::finalizeSlotSelection($bucket, $preferred, $absensiDate, $time, $targetStatus);
     }
 
     /**
      * @param  Collection<int, object>  $bucket
+     * @return array{primary: ?object, duplicateIds: list<int>}
      */
-    private static function pickExactOrPreferred(
+    private static function finalizeSlotSelection(
         Collection $bucket,
         ?object $preferred,
         string $absensiDate,
         string $time,
         string $targetStatus
-    ): ?object {
+    ): array {
         if ($bucket->isEmpty()) {
-            return null;
+            return ['primary' => null, 'duplicateIds' => []];
         }
+
+        $oppositeStatus = $targetStatus === 'Masuk' ? 'Keluar' : 'Masuk';
+        $bucket = $bucket->reject(
+            fn ($row) => strcasecmp(trim((string) ($row->status ?? '')), $oppositeStatus) === 0
+        )->values();
+        if ($bucket->isEmpty()) {
+            return ['primary' => null, 'duplicateIds' => []];
+        }
+
 
         $exact = $bucket->first(function ($row) use ($absensiDate, $time, $targetStatus) {
             $rowDate = !empty($row->tanggal)
@@ -413,42 +470,92 @@ class AttendanceCorrectionAbsensiApplyService
                 && strcasecmp((string) ($row->status ?? ''), $targetStatus) === 0;
         });
 
-        return $exact ?? $preferred ?? $bucket->first();
+        $primary = $exact ?? $bucket->first(fn ($row) => $row === $preferred) ?? $bucket->first();
+        $primaryId = (int) ($primary->id ?? 0);
+
+        $duplicateIds = $bucket
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn ($id) => $id > 0 && $id !== $primaryId)
+            ->values()
+            ->all();
+
+        return [
+            'primary' => $primary,
+            'duplicateIds' => $duplicateIds,
+        ];
     }
 
     /**
      * Batas pemisah Masuk vs Keluar untuk shift harian — selaras dengan MonthlyAbsensiDataBuilder (time_in + 4 jam).
      */
-    public static function resolveDaySplitThreshold(?object $shiftRowOnDate = null): string
-    {
-        $checkinHms = '08:00:00';
-        if ($shiftRowOnDate && !empty($shiftRowOnDate->time_in)) {
-            $normalized = self::normalizeJamForCompare((string) $shiftRowOnDate->time_in);
-            if ($normalized !== '') {
-                $checkinHms = $normalized;
-            }
+    public static function resolveDaySplitThreshold(
+        ?object $shiftRowOnDate = null,
+        ?string $shiftOnDate = null,
+        ?string $conn = null
+    ): string {
+        $timeInHm = $shiftRowOnDate && !empty($shiftRowOnDate->time_in)
+            ? MasterShiftKaryawan::normalizeHm($shiftRowOnDate->time_in)
+            : null;
+
+        if ($timeInHm !== null) {
+            $checkinHms = $timeInHm . ':00';
+        } else {
+            $shiftCode = ($shiftOnDate !== null && trim($shiftOnDate) !== '')
+                ? $shiftOnDate
+                : 'SHREGULAR';
+            $checkinHms = MasterShiftKaryawan::getShiftTimes($shiftCode, $conn)['in_hms'];
         }
 
         return date('H:i:s', strtotime($checkinHms . ' +4 hours'));
     }
 
-    private static function isOvernightCheckOutTarget(
+    private static function resolveOvernightCutoff(
+        ?string $shift,
+        ?object $shiftRow,
+        ?string $conn
+    ): ?string {
+        if (!self::isOvernightShift($shift, $shiftRow, $conn)) {
+            return null;
+        }
+
+        if (MasterShiftKaryawan::is24Jam($shift)) {
+            return ShiftAbsensiPunchRules::OVERNIGHT_KELUAR_BEFORE;
+        }
+
+        return MasterShiftKaryawan::resolveNightShiftBounds(
+            $shift,
+            $shiftRow->time_in ?? null,
+            $shiftRow->time_out ?? null,
+            $conn
+        )['keluar_before'];
+    }
+
+    private static function resolveOvernightCheckOutCutoff(
         string $correctionDate,
         string $absensiDate,
         string $time,
         ?string $shiftOnDate,
-        ?string $shiftPrevDate
-    ): bool {
-        $onIsOvernight = self::isOvernightShift($shiftOnDate);
-        if ($absensiDate > $correctionDate && $onIsOvernight) {
-            return true;
+        ?string $shiftPrevDate,
+        ?object $shiftRowOnDate,
+        ?object $shiftRowPrevDate,
+        ?string $conn
+    ): ?string {
+        $onCutoff = self::resolveOvernightCutoff($shiftOnDate, $shiftRowOnDate, $conn);
+        if ($absensiDate > $correctionDate && $onCutoff !== null) {
+            return $onCutoff;
         }
 
-        if ($time < ShiftAbsensiPunchRules::OVERNIGHT_KELUAR_BEFORE) {
-            return self::isOvernightShift($shiftPrevDate) || $onIsOvernight;
+        $prevCutoff = self::resolveOvernightCutoff($shiftPrevDate, $shiftRowPrevDate, $conn);
+        if ($prevCutoff !== null && $time < $prevCutoff) {
+            return $prevCutoff;
         }
 
-        return false;
+        if ($onCutoff !== null && $time < $onCutoff) {
+            return $onCutoff;
+        }
+
+        return null;
     }
 
     private static function normalizeJamForCompare(string $jam): string
