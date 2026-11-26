@@ -12,6 +12,8 @@ use App\Models\Colorimetri;
 use App\Models\Titrimetri;
 use App\Models\Gravimetri;
 use App\Models\WsValueAir;
+use App\Models\WsValueUdara;
+use App\Models\MicrobioHeader;
 use App\Models\Subkontrak;
 use Carbon\Carbon;
 use DataTables;
@@ -83,6 +85,8 @@ class PerubahanParameterController extends Controller
 
         DB::beginTransaction();
         try {
+            $missingMicrobio = [];
+
             // Ambil data OrderDetail berdasarkan id dan parameter_existing
             foreach($request->parameterPairs as $key => $pair){
                 $parameter_existing = $pair['parameter_existing'];
@@ -121,6 +125,24 @@ class PerubahanParameterController extends Controller
                 } else {
                     $parameter_pengganti_value = trim($parameter_pengganti);
                 }
+
+                if (!$data) {
+                    continue;
+                }
+
+                $oldParameterId = count($existing_parts) > 1 ? trim($existing_parts[0]) : null;
+                $newParameterId = count($pengganti_parts) > 1 ? trim($pengganti_parts[0]) : null;
+                
+                $this->syncMicrobioHeader(
+                    $data,
+                    $oldParameterId,
+                    $newParameterId,
+                    $parameter_existing_value,
+                    $parameter_pengganti_value,
+                    $missingMicrobio
+                );
+
+
     
                 // Cari parameter secara dinamis di titrimetri, gravimetri, colorimetri, atau subkontrak
                 $relations = ['titrimetri', 'gravimetri', 'colorimetri', 'subkontrak'];
@@ -152,6 +174,15 @@ class PerubahanParameterController extends Controller
             }
 
             DB::commit();
+
+            if (!empty($missingMicrobio)) {
+                return response()->json([
+                    'status' => 'warning',
+                    'message' => 'Perubahan parameter di Order Detail berhasil, tetapi header Microbio tidak ditemukan.',
+                    'warning' => 'Header Microbio tidak ditemukan untuk: ' . implode('; ', $missingMicrobio) . '. Data Order Detail sudah diubah. Silakan hubungi tim IT terkait kendala ini.',
+                ], 200);
+            }
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Perubahan parameter berhasil diupdate'
@@ -163,6 +194,84 @@ class PerubahanParameterController extends Controller
                 'message' => 'Perubahan parameter gagal diupdate',
                 'error' => $th->getMessage()
             ], 500);
+        }
+    }
+
+    private function syncMicrobioHeader($orderDetail, $oldParameterId, $newParameterId, $oldParameterName, $newParameterName, array &$missingMicrobio)
+    {
+        $isUdara = stripos((string) $orderDetail->kategori_2, 'Udara') !== false;
+        if (!$isUdara) {
+            return;
+        }
+
+        $headers = collect();
+
+        if ($oldParameterId !== null && $oldParameterId !== '') {
+            $headers = MicrobioHeader::where('no_sampel', $orderDetail->no_sampel)
+                ->where('id_parameter', $oldParameterId)
+                ->get();
+        }
+
+        if ($headers->isEmpty() && $oldParameterName) {
+            $headers = MicrobioHeader::where('no_sampel', $orderDetail->no_sampel)
+                ->where('parameter', $oldParameterName)
+                ->get();
+        }
+
+        if ($headers->isEmpty() || $newParameterId === null || $newParameterId === '' || $newParameterName === null || $newParameterName === '') {
+            $missingMicrobio[] = $orderDetail->no_sampel . ' / ' . ($oldParameterName ?: '-') . ' (ID ' . ($oldParameterId ?: '-') . ')';
+            return;
+        }
+
+        $headerIds = $headers->pluck('id')->all();
+        $newToken = $newParameterId . ';' . $newParameterName;
+        $oldToken = ($oldParameterId !== null && $oldParameterId !== '' && $oldParameterName)
+            ? $oldParameterId . ';' . $oldParameterName
+            : null;
+
+        MicrobioHeader::whereIn('id', $headerIds)->update([
+            'id_parameter' => $newParameterId,
+            'parameter' => $newParameterName,
+            'is_active' => 1,
+        ]);
+
+        WsValueUdara::whereIn('id_microbiologi_header', $headerIds)->update([
+            'is_active' => 1,
+        ]);
+
+        $details = OrderDetail::where('no_sampel', $orderDetail->no_sampel)
+            ->where(function ($query) use ($orderDetail, $oldToken, $newToken) {
+                $query->where('id', $orderDetail->id);
+                if ($oldToken) {
+                    $query->orWhereJsonContains('parameter', $oldToken);
+                }
+                $query->orWhereJsonContains('parameter', $newToken);
+            })
+            ->get();
+
+        foreach ($details as $detail) {
+            $params = json_decode($detail->parameter, true);
+            if (!is_array($params)) {
+                $params = [];
+            }
+
+            foreach ($params as $index => $item) {
+                $itemId = explode(';', (string) $item)[0];
+                if ($item === $oldToken || $item === $newToken || ($oldParameterId !== null && $oldParameterId !== '' && (string) $itemId === (string) $oldParameterId)) {
+                    $params[$index] = $newToken;
+                }
+            }
+
+            $params = array_values(array_unique($params));
+            if (!in_array($newToken, $params, true)) {
+                $params[] = $newToken;
+            }
+
+            $detail->parameter = json_encode($params);
+            $detail->is_active = 1;
+            $detail->updated_by = $this->karyawan;
+            $detail->updated_at = Carbon::now();
+            $detail->save();
         }
     }
 

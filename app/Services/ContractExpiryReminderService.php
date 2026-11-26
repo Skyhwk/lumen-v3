@@ -10,6 +10,7 @@ use Illuminate\Support\Collection;
 class ContractExpiryReminderService
 {
     public const WINDOW_DAYS = 40;
+    public const LOOKBACK_MONTHS = 2;
     public const ALLOWED_GRADES = ['MANAGER', 'SENIOR MANAGER'];
     public const ALLOWED_EMPLOYEE_STATUSES = ['CONTRACT', 'TRAINING'];
     public const CLOSED_ADJUSTMENT_STATUSES = [
@@ -41,6 +42,7 @@ class ContractExpiryReminderService
         }
 
         $today = Carbon::now('Asia/Jakarta')->startOfDay();
+        $lookbackStart = $today->copy()->subMonthsNoOverflow(self::LOOKBACK_MONTHS);
         $limit = $today->copy()->addDays(self::WINDOW_DAYS);
         $employees = $this->loadActiveEmployees();
         $descendantIds = $this->resolveDescendantIds($employees, $managerId);
@@ -53,7 +55,7 @@ class ContractExpiryReminderService
         $blockedIds = $this->openAdjustmentEmployeeIds($descendantIds);
 
         return $employees
-            ->filter(function ($employee) use ($idSet, $limit, $blockedIds) {
+            ->filter(function ($employee) use ($idSet, $lookbackStart, $limit, $blockedIds) {
                 $employeeId = (int) $employee->id;
                 if (!isset($idSet[$employeeId]) || isset($blockedIds[$employeeId])) {
                     return false;
@@ -65,7 +67,7 @@ class ContractExpiryReminderService
 
                 $end = $this->parseContractDate($employee->tgl_berakhir_kontrak);
 
-                return $end !== null && $end->lte($limit);
+                return $end !== null && $end->gte($lookbackStart) && $end->lte($limit);
             })
             ->map(function ($employee) use ($today) {
                 return $this->transform($employee, $today);

@@ -12,6 +12,7 @@ use App\Models\MasterPelanggan;
 use App\Models\PicPelanggan;
 use App\Models\GenerateLink;
 use App\Models\Invoice;
+use App\Services\DateColumnFilterService;
 use App\Services\GenerateToken;
 use App\Http\Controllers\Controller;
 use App\Services\RenderInvoice;
@@ -55,11 +56,9 @@ class GenerateInvoiceController extends Controller
     private function applyGenerateInvoiceDateColumnFilter($query, Request $request, string $columnName, string $sqlColumn): void
     {
         $value = $this->datatablesColumnSearch($request, $columnName);
-        if ($value === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
-            return;
-        }
-
-        $query->whereRaw("DATE({$sqlColumn}) = ?", [$value]);
+        DateColumnFilterService::apply($query, $sqlColumn, $value, [
+            'likeFallback' => false,
+        ]);
     }
 
     private function applyGenerateInvoiceIndexFilters($query, Request $request): void
