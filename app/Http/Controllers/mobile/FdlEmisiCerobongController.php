@@ -848,8 +848,6 @@ class FdlEmisiCerobongController extends Controller
                 'merk' => null,
                 'bahan_bakar' => null,
                 'cuaca' => null,
-                'kecepatan_angin' => null,
-                'arah_pengamat' => null,
                 'diameter_cerobong' => null,
                 'durasi_operasi' => null,
                 'proses_filtrasi' => null,
