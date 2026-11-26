@@ -44,8 +44,15 @@ class AttendanceCorrectionAbsensiApplyService
         $time = $context['time'];
         $status = $context['status'];
         $existing = $context['existingSlot'];
+        $duplicateIds = $context['duplicateIds'];
 
         if ($existing !== null) {
+            if ($duplicateIds !== []) {
+                DB::connection($conn)->table('absensi')
+                    ->whereIn('id', $duplicateIds)
+                    ->delete();
+            }
+
             DB::connection($conn)->table('absensi')->where('id', $existing->id)->update([
                 'tanggal' => $absensiDate,
                 'hari' => MonthlyAbsensiDataBuilder::hariIndonesia($absensiDate),
@@ -122,6 +129,7 @@ class AttendanceCorrectionAbsensiApplyService
             'time' => $time,
             'status' => $status,
             'existingSlot' => $slot['primary'],
+            'duplicateIds' => $slot['duplicateIds'],
         ];
     }
 
@@ -134,9 +142,14 @@ class AttendanceCorrectionAbsensiApplyService
         $time = $context['time'];
         $status = $context['status'];
         $existing = $context['existingSlot'];
+        $duplicateIds = $context['duplicateIds'];
 
-        return $this->hasExactPunch($conn, $employeeId, $absensiDate, $time, $status)
-            || ($existing !== null && $this->rowAlreadyMatches($existing, $absensiDate, $time, $status));
+        if ($existing !== null) {
+            return $duplicateIds === []
+                && $this->rowAlreadyMatches($existing, $absensiDate, $time, $status);
+        }
+
+        return $this->hasExactPunch($conn, $employeeId, $absensiDate, $time, $status);
     }
 
     /**
@@ -210,29 +223,6 @@ class AttendanceCorrectionAbsensiApplyService
         return $rowDate === $absensiDate
             && $this->normalizeTime((string) $row->jam) === $time
             && strcasecmp((string) ($row->status ?? ''), $status) === 0;
-    }
-
-    /** @param Collection<int, object> $rows */
-    public static function resolveTargetRow(
-        Collection $rows,
-        string $correctionDate,
-        string $absensiDate,
-        string $time,
-        bool $isCheckIn,
-        ?string $shiftOnDate,
-        ?string $shiftPrevDate,
-        ?object $shiftRowOnDate = null
-    ): ?object {
-        return self::resolveSlotSelection(
-            $rows,
-            $correctionDate,
-            $absensiDate,
-            $time,
-            $isCheckIn,
-            $shiftOnDate,
-            $shiftPrevDate,
-            $shiftRowOnDate
-        )['primary'];
     }
 
     /**
@@ -351,7 +341,7 @@ class AttendanceCorrectionAbsensiApplyService
             return self::finalizeSlotSelection($bucket, $preferred, $absensiDate, $time, $targetStatus);
         }
 
-        $threshold = self::resolveDaySplitThreshold($shiftRowOnDate, $shiftOnDate, $conn);
+        $threshold = self::resolveDaySplitThreshold($shiftOnDate, $shiftRowOnDate, $conn);
         $bucket = $rows->filter(function ($row) use ($threshold, $prevOvernightCutoff) {
             $jam = self::normalizeJamForCompare((string) ($row->jam ?? ''));
             if ($jam === '' || $jam > $threshold) {
@@ -420,7 +410,7 @@ class AttendanceCorrectionAbsensiApplyService
             return self::finalizeSlotSelection($bucket, $preferred, $absensiDate, $time, $targetStatus);
         }
 
-        $threshold = self::resolveDaySplitThreshold($shiftRowOnDate, $shiftOnDate, $conn);
+        $threshold = self::resolveDaySplitThreshold($shiftOnDate, $shiftRowOnDate, $conn);
         $bucket = $rows->filter(function ($row) use ($threshold) {
             $jam = self::normalizeJamForCompare((string) ($row->jam ?? ''));
 
@@ -451,15 +441,6 @@ class AttendanceCorrectionAbsensiApplyService
             return ['primary' => null, 'duplicateIds' => []];
         }
 
-        $oppositeStatus = $targetStatus === 'Masuk' ? 'Keluar' : 'Masuk';
-        $bucket = $bucket->reject(
-            fn ($row) => strcasecmp(trim((string) ($row->status ?? '')), $oppositeStatus) === 0
-        )->values();
-        if ($bucket->isEmpty()) {
-            return ['primary' => null, 'duplicateIds' => []];
-        }
-
-
         $exact = $bucket->first(function ($row) use ($absensiDate, $time, $targetStatus) {
             $rowDate = !empty($row->tanggal)
                 ? Carbon::parse((string) $row->tanggal)->toDateString()
@@ -470,7 +451,7 @@ class AttendanceCorrectionAbsensiApplyService
                 && strcasecmp((string) ($row->status ?? ''), $targetStatus) === 0;
         });
 
-        $primary = $exact ?? $bucket->first(fn ($row) => $row === $preferred) ?? $bucket->first();
+        $primary = $exact ?? $preferred ?? $bucket->first();
         $primaryId = (int) ($primary->id ?? 0);
 
         $duplicateIds = $bucket
@@ -490,8 +471,8 @@ class AttendanceCorrectionAbsensiApplyService
      * Batas pemisah Masuk vs Keluar untuk shift harian — selaras dengan MonthlyAbsensiDataBuilder (time_in + 4 jam).
      */
     public static function resolveDaySplitThreshold(
+        ?string $shiftOnDate,
         ?object $shiftRowOnDate = null,
-        ?string $shiftOnDate = null,
         ?string $conn = null
     ): string {
         $timeInHm = $shiftRowOnDate && !empty($shiftRowOnDate->time_in)
