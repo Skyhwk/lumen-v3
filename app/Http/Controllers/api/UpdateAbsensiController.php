@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
-use \App\Models\{Absensi, RekapMasukKerja, RekapLiburKalender, ShiftKaryawan, MasterKaryawan};
+use \App\Models\{Absensi, RekapMasukKerja, RekapLiburKalender, ShiftKaryawan, MasterKaryawan, MasterShiftKaryawan};
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -62,7 +62,7 @@ class UpdateAbsensiController extends Controller
                     ]);
                 } else {
                     $tanggal = $request->tgl;
-                    if ($request->shift == 'SHSECURITY2' || $request->shift == '24jam') {
+                    if (MasterShiftKaryawan::isOvernight($request->shift)) {
                         $tanggal = DATE('Y-m-d', strtotime($request->tgl . '+1day'));
                     }
                     Absensi::insert([
@@ -107,7 +107,7 @@ class UpdateAbsensiController extends Controller
                 ->delete();
 
             $keluarDate = (string) ($request->tgl_keluar ?: $tanggal);
-            if ($request->tgl_keluar === '' && in_array($request->shift, ['SHSECURITY2', '24jam'], true)) {
+            if ($request->tgl_keluar === '' && MasterShiftKaryawan::isOvernight($request->shift)) {
                 $keluarDate = date('Y-m-d', strtotime($tanggal . ' +1 day'));
             }
             Absensi::where('karyawan_id', $karyawanId)

@@ -2,6 +2,7 @@
 
 namespace App\Services\Payroll;
 
+use App\Models\MasterShiftKaryawan;
 use App\Models\RekapLiburKalender;
 use App\Models\ShiftKaryawan;
 use App\Services\Hr\AbsensiPeriodeService;
@@ -163,6 +164,22 @@ class PayrollWorkingDaysService
         return $count;
     }
 
+    /** @return list<string> */
+    public static function perShiftCodes(): array
+    {
+        $codes = MasterShiftKaryawan::perShiftCodes();
+
+        return $codes !== [] ? $codes : self::PER_SHIFT_CODES;
+    }
+
+    /** @return list<string> */
+    public static function masukPerShiftCodes(): array
+    {
+        $codes = MasterShiftKaryawan::masukPerShiftCodes();
+
+        return $codes !== [] ? $codes : self::MASUK_PER_SHIFT_CODES;
+    }
+
     public static function scheduledShiftCount(int $karyawanId, string $periodeYm, ?string $grade = null): int
     {
         $bounds = self::periodBounds($periodeYm, $grade);
@@ -175,7 +192,7 @@ class PayrollWorkingDaysService
             ->whereNotNull('shift')
             ->where('shift', '<>', '')
             ->where('shift', '<>', 'off')
-            ->whereIn('shift', self::PER_SHIFT_CODES)
+            ->whereIn('shift', self::perShiftCodes())
             ->count();
     }
 
@@ -316,9 +333,14 @@ class PayrollWorkingDaysService
 
     public static function isMasukPerShift(string $shift): bool
     {
-        $shift = trim($shift);
+        $shift = strtoupper(trim($shift));
+        if ($shift === '') {
+            return false;
+        }
 
-        return $shift !== '' && in_array($shift, self::MASUK_PER_SHIFT_CODES, true);
+        $codes = array_map('strtoupper', self::masukPerShiftCodes());
+
+        return in_array($shift, $codes, true);
     }
 
     /**

@@ -7,6 +7,7 @@ use App\Models\Greatday\AbsensiAndroid;
 use App\Support\Greatday\GreatdayAssetPaths;
 use App\Models\Greatday\LiburPerusahaan;
 use App\Models\MasterCabang;
+use App\Models\MasterShiftKaryawan;
 use App\Models\RfidCard;
 use App\Models\ShiftKaryawan;
 use App\Services\Hr\ShiftAbsensiPunchRules;
@@ -72,6 +73,7 @@ class AttendanceController extends Controller
                 return response()->json(['status' => 'success', 'message' => 'Absen berhasil', 'data' => $result], 200);
             }
 
+            $regularTimes = MasterShiftKaryawan::getShiftTimes('SHREGULAR', $this->produksi());
             $jumlahHari = cal_days_in_month(CAL_GREGORIAN, (int) $bulan, (int) $tahun);
             $result = [];
             for ($hari = 1; $hari <= $jumlahHari; $hari++) {
@@ -82,8 +84,8 @@ class AttendanceController extends Controller
                         'userid' => $userid,
                         'tanggal' => $tanggal,
                         'shift' => 'SHREGULAR',
-                        'time_in' => '08:00',
-                        'time_out' => '17:00',
+                        'time_in' => $regularTimes['in'],
+                        'time_out' => $regularTimes['out'],
                         'hari' => $namaHari,
                     ];
                 }
@@ -242,11 +244,12 @@ class AttendanceController extends Controller
 
             if (!$inTimeStr || !$outTimeStr) {
                 $shiftDetails = collect($daftarShift)->firstWhere('text', $shiftName);
+                $fallbackTimes = MasterShiftKaryawan::getShiftTimes('SHREGULAR', $this->produksi());
                 if (!$shiftDetails) {
-                    $shiftDetails = ['value' => ['IN' => '08:00', 'OUT' => '17:00'], 'text' => $shiftName];
+                    $shiftDetails = ['value' => ['IN' => $fallbackTimes['in'], 'OUT' => $fallbackTimes['out']], 'text' => $shiftName];
                 }
-                $inTimeStr = $inTimeStr ?: ($shiftDetails['value']['IN'] ?? '08:00');
-                $outTimeStr = $outTimeStr ?: ($shiftDetails['value']['OUT'] ?? '17:00');
+                $inTimeStr = $inTimeStr ?: ($shiftDetails['value']['IN'] ?? $fallbackTimes['in']);
+                $outTimeStr = $outTimeStr ?: ($shiftDetails['value']['OUT'] ?? $fallbackTimes['out']);
             }
 
             $isCrossDay = false;
@@ -557,11 +560,12 @@ class AttendanceController extends Controller
 
         if (!$inTimeStr || !$outTimeStr) {
             $shiftDetails = collect($ctx['daftarShift'])->firstWhere('text', $shiftName);
+            $fallbackTimes = MasterShiftKaryawan::getShiftTimes('SHREGULAR', $this->produksi());
             if (!$shiftDetails) {
-                $shiftDetails = ['value' => ['IN' => '08:00', 'OUT' => '17:00'], 'text' => $shiftName];
+                $shiftDetails = ['value' => ['IN' => $fallbackTimes['in'], 'OUT' => $fallbackTimes['out']], 'text' => $shiftName];
             }
-            $inTimeStr = $inTimeStr ?: ($shiftDetails['value']['IN'] ?? '08:00');
-            $outTimeStr = $outTimeStr ?: ($shiftDetails['value']['OUT'] ?? '17:00');
+            $inTimeStr = $inTimeStr ?: ($shiftDetails['value']['IN'] ?? $fallbackTimes['in']);
+            $outTimeStr = $outTimeStr ?: ($shiftDetails['value']['OUT'] ?? $fallbackTimes['out']);
         }
 
         $isCrossDay = false;
@@ -862,18 +866,39 @@ class AttendanceController extends Controller
 
     private function insertProduksiAbsensiRow(string $tanggal, string $jam): void
     {
-        $shiftCode = ShiftKaryawan::on($this->produksi())
+        $conn = $this->produksi();
+        $shiftRow = ShiftKaryawan::on($conn)
             ->where('karyawan_id', $this->user_id)
             ->where('tanggal', $tanggal)
-            ->value('shift');
+            ->first(['shift', 'time_in', 'time_out']);
 
-        Absensi::on($this->produksi())->create([
+        $prevDate = Carbon::parse($tanggal)->subDay()->toDateString();
+        $prevRow = ShiftKaryawan::on($conn)
+            ->where('karyawan_id', $this->user_id)
+            ->where('tanggal', $prevDate)
+            ->first(['shift', 'time_in', 'time_out']);
+
+        $effectiveRow = $shiftRow;
+        if ($prevRow && MasterShiftKaryawan::isNightShift($prevRow->shift ?? null, $prevRow->time_in ?? null, $prevRow->time_out ?? null, $conn)) {
+            $bounds = MasterShiftKaryawan::resolveNightShiftBounds($prevRow->shift ?? null, $prevRow->time_in ?? null, $prevRow->time_out ?? null, $conn);
+            if ($jam < $bounds['keluar_before']) {
+                $effectiveRow = $prevRow;
+            }
+        }
+
+        Absensi::on($conn)->create([
             'karyawan_id' => $this->user_id,
             'tanggal' => $tanggal,
             'jam' => $jam,
             'hari' => $this->getDayName($tanggal),
             'kode_mesin' => 'GREATDAY',
-            'status' => ShiftAbsensiPunchRules::inferProductionStatus($shiftCode, $jam),
+            'status' => ShiftAbsensiPunchRules::inferProductionStatus(
+                $effectiveRow->shift ?? null,
+                $jam,
+                $effectiveRow->time_in ?? null,
+                $effectiveRow->time_out ?? null,
+                $conn
+            ),
         ]);
     }
 
@@ -1020,24 +1045,6 @@ class AttendanceController extends Controller
 
     private function daftarShift(): array
     {
-        return [
-            ['value' => ['IN' => '08:00', 'OUT' => '17:00'], 'text' => 'SHREGULAR'],
-            ['value' => ['IN' => '10:00', 'OUT' => '19:00'], 'text' => 'SHTEKNISI'],
-            ['value' => ['IN' => '07:00', 'OUT' => '16:00'], 'text' => 'SHANALYST'],
-            ['value' => ['IN' => '07:00', 'OUT' => '16:00'], 'text' => 'SHADMSAMPLING'],
-            ['value' => ['IN' => '06:00', 'OUT' => '15:00'], 'text' => 'SHOB'],
-            ['value' => ['IN' => '11:00', 'OUT' => '20:00'], 'text' => 'SHOB2'],
-            ['value' => ['IN' => '09:00', 'OUT' => '18:00'], 'text' => 'SHSPVOPFIN'],
-            ['value' => ['IN' => '09:00', 'OUT' => '13:00'], 'text' => 'SHANALISMIKRO'],
-            ['value' => ['IN' => '08:00', 'OUT' => '17:00'], 'text' => 'SHKORSAMP1'],
-            ['value' => ['IN' => '11:00', 'OUT' => '20:00'], 'text' => 'SHKORSAMP2'],
-            ['value' => ['IN' => '07:00', 'OUT' => '12:00'], 'text' => 'SWOB'],
-            ['value' => ['IN' => '09:00', 'OUT' => '18:00'], 'text' => 'SWOB2'],
-            ['value' => ['IN' => '08:00', 'OUT' => '20:00'], 'text' => 'SHSECURITY'],
-            ['value' => ['IN' => '20:00', 'OUT' => '08:00'], 'text' => 'SHSECURITY2'],
-            ['value' => ['IN' => '07:00', 'OUT' => '19:00'], 'text' => 'SHSECURITYGO1'],
-            ['value' => ['IN' => '07:00', 'OUT' => '15:00'], 'text' => 'SHSECURITYGO2'],
-            ['value' => ['IN' => null, 'OUT' => null], 'text' => 'OFF'],
-        ];
+        return MasterShiftKaryawan::daftarShift($this->produksi());
     }
 }

@@ -2,10 +2,11 @@
 
 namespace App\Services\Hr;
 
+use App\Models\MasterShiftKaryawan;
 use Illuminate\Support\Collection;
 
 /**
- * Aturan punch shift malam (SHSECURITY2) — selaras MesinAbsenHandler & AbsensiController monthly.
+ * Aturan punch shift malam lintas hari — dinamis mengikuti master_shift_karyawan (selaras MesinAbsenHandler & AbsensiController).
  */
 final class ShiftAbsensiPunchRules
 {
@@ -15,41 +16,54 @@ final class ShiftAbsensiPunchRules
 
     public const OVERNIGHT_KELUAR_BEFORE = '14:00:00';
 
-    public static function inferProductionStatus(?string $shiftCode, string $jam): string
-    {
+    public static function inferProductionStatus(
+        ?string $shiftCode,
+        string $jam,
+        ?string $timeIn = null,
+        ?string $timeOut = null,
+        ?string $connection = null
+    ): string {
         $jamNorm = self::normalizeJamString($jam);
         if ($jamNorm === null) {
             return 'Masuk';
         }
 
-        $shift = strtolower(trim((string) $shiftCode));
-        if ($shift === 'shsecurity2') {
-            return $jamNorm >= self::SECURITY2_MASUK_FROM ? 'Masuk' : 'Keluar';
+        if (MasterShiftKaryawan::isNightShift($shiftCode, $timeIn, $timeOut, $connection)) {
+            $bounds = MasterShiftKaryawan::resolveNightShiftBounds($shiftCode, $timeIn, $timeOut, $connection);
+
+            return $jamNorm >= $bounds['masuk_from'] ? 'Masuk' : 'Keluar';
         }
 
         return $jamNorm > self::OVERNIGHT_KELUAR_BEFORE ? 'Keluar' : 'Masuk';
     }
 
     /**
-     * Masuk shift SHSECURITY2: punch malam (>= 18:00), utamakan GREATDAY lalu jam terawal.
+     * Masuk shift malam lintas hari: punch malam (>= masuk_from), utamakan GREATDAY lalu jam terawal.
      *
      * @param  Collection<int, object>  $rowsToday
      */
-    public static function pickSecurity2MasukRow(Collection $rowsToday): ?object
-    {
+    public static function pickNightShiftMasukRow(
+        Collection $rowsToday,
+        ?string $shiftCode = null,
+        ?string $timeIn = null,
+        ?string $timeOut = null,
+        ?string $connection = null
+    ): ?object {
         if ($rowsToday->isEmpty()) {
             return null;
         }
 
+        $bounds = MasterShiftKaryawan::resolveNightShiftBounds($shiftCode, $timeIn, $timeOut, $connection);
+
         $evening = $rowsToday->filter(
-            fn ($row) => self::normalizeJamString((string) $row->jam) >= self::SECURITY2_MASUK_FROM
+            fn ($row) => self::normalizeJamString((string) $row->jam) >= $bounds['masuk_from']
         );
         if ($evening->isNotEmpty()) {
             return self::preferGreatdayThenEarliestJam($evening);
         }
 
         $maxJam = $rowsToday->max('jam');
-        if ($maxJam === null || (string) $maxJam <= self::OVERNIGHT_KELUAR_BEFORE) {
+        if ($maxJam === null || (string) $maxJam <= $bounds['keluar_before']) {
             return null;
         }
 
@@ -57,18 +71,30 @@ final class ShiftAbsensiPunchRules
     }
 
     /**
-     * Pulang shift malam: punch keesokan pagi (< 14:00), utamakan GREATDAY lalu jam terawal.
+     * Alias kompatibilitas untuk shift malam SHSECURITY2 (20:00–08:00).
+     *
+     * @param  Collection<int, object>  $rowsToday
+     */
+    public static function pickSecurity2MasukRow(Collection $rowsToday): ?object
+    {
+        return self::pickNightShiftMasukRow($rowsToday, 'SHSECURITY2');
+    }
+
+    /**
+     * Pulang shift malam: punch keesokan pagi (< keluar_before), utamakan GREATDAY lalu jam terawal.
      *
      * @param  Collection<int, object>  $rowsNext
      */
-    public static function pickOvernightKeluarRow(Collection $rowsNext): ?object
-    {
+    public static function pickOvernightKeluarRow(
+        Collection $rowsNext,
+        string $keluarBefore = self::OVERNIGHT_KELUAR_BEFORE
+    ): ?object {
         if ($rowsNext->isEmpty()) {
             return null;
         }
 
         $morning = $rowsNext->filter(
-            fn ($row) => self::normalizeJamString((string) $row->jam) < self::OVERNIGHT_KELUAR_BEFORE
+            fn ($row) => self::normalizeJamString((string) $row->jam) < $keluarBefore
         );
         if ($morning->isEmpty()) {
             return null;

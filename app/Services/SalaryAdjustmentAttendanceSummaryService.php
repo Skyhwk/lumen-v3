@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Http\Controllers\api\AbsensiController;
 use App\Models\Hr\HrRequest;
+use App\Models\MasterShiftKaryawan;
 use App\Models\ShiftKaryawan;
 use App\Services\Hr\HrAttendanceDayExcuseLabels;
 use App\Services\Hr\WorkflowStatus;
@@ -17,26 +18,20 @@ class SalaryAdjustmentAttendanceSummaryService
     /** Pengajuan izin / cuti / lembur via portal HR dihitung dari tanggal ini. */
     public const SYSTEM_REQUESTS_EFFECTIVE_FROM = '2026-10-01';
 
-    /** @var array<string, string> */
-    private $defaultShiftOut = [
-        'SHREGULAR' => '17:00:00',
-        'SHANALYST' => '16:00:00',
-        'SHADMSAMPLING' => '16:00:00',
-        'SHTEKNISI' => '19:00:00',
-        'SHOB' => '15:00:00',
-        'SHOB2' => '20:00:00',
-        'SHSPVOPFIN' => '18:00:00',
-        'SHANALISMIKRO' => '13:00:00',
-        'SHKORSAMP1' => '17:00:00',
-        'SHKORSAMP2' => '20:00:00',
-        'SWOB' => '12:00:00',
-        'SWOB2' => '18:00:00',
-        'SHSECURITY' => '20:00:00',
-        'SHSECURITY2' => '08:00:00',
-        'SHSECURITYGO1' => '19:00:00',
-        'SHSECURITYGO2' => '15:00:00',
-        '24JAM' => '08:00:00',
-    ];
+    /** @var ?array<string, string> */
+    private ?array $defaultShiftOut = null;
+
+    /**
+     * @return array<string, string>
+     */
+    private function defaultShiftOutMap(): array
+    {
+        if ($this->defaultShiftOut === null) {
+            $this->defaultShiftOut = MasterShiftKaryawan::defaultShiftOutMap();
+        }
+
+        return $this->defaultShiftOut;
+    }
 
     public function build(int $employeeId, int $months = 3): array
     {
@@ -568,9 +563,8 @@ class SalaryAdjustmentAttendanceSummaryService
             return false;
         }
 
-        if ($shiftNorm === '' || $shiftNorm === 'SHREGULAR') {
-            return $keluarSeconds > $this->toSeconds('18:00:00');
-        }
+        $defaultOutMap = $this->defaultShiftOutMap();
+        $regularOut = $defaultOutMap['SHREGULAR'] ?? '17:00:00';
 
         $scheduledOut = null;
         if ($shiftMeta && !empty($shiftMeta['time_out'])) {
@@ -578,7 +572,8 @@ class SalaryAdjustmentAttendanceSummaryService
         }
 
         if ($scheduledOut === null) {
-            $defaultOut = $this->defaultShiftOut[$shiftNorm] ?? '17:00:00';
+            $key = ($shiftNorm === '' || $shiftNorm === 'SHREGULAR') ? 'SHREGULAR' : $shiftNorm;
+            $defaultOut = $defaultOutMap[$key] ?? $regularOut;
             $scheduledOut = $this->toSeconds($defaultOut);
         }
 
