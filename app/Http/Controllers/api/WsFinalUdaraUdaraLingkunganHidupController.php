@@ -1208,6 +1208,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 					if ($wsUdara->$field) {
 						$valid = $model::where('id', $wsUdara->$field)
 							->where('parameter', $request->parameter)
+							->where('is_active', 1)
 							->exists();
 
 						if ($valid) {
