@@ -64,6 +64,7 @@ use Exception;
 use Illuminate\Support\Facades\Validator;
 use App\Models\TemplateStp;
 use App\Services\AppsBasService;
+use App\Services\SamplingCompletionService;
 
 
 class BasOnlineController extends Controller
@@ -2132,110 +2133,13 @@ class BasOnlineController extends Controller
         }
     }*/
     
+    /**
+     * Status sampling — sama dengan jalur sampler (AppsBas).
+     * Termasuk aturan ULK Hygiene K3 (570;K3-KB …) = selesai.
+     */
     private function getStatusSampling($sample)
     {
-        try {
-            $parametersRaw = json_decode($sample->parameter);
-            
-            // 1. Panggil data Template ICP di luar loop (sekali saja agar query ringan)
-            // Pastikan Anda sudah meng-import: use App\Models\TemplateStp; di atas class
-            $templateIcp = TemplateStp::where('name', 'icp')
-                ->where('category_id', 4)
-                ->first();
-                
-            $icpParameters = [];
-            if ($templateIcp && $templateIcp->param) {
-                // Decode array JSON seperti $a yang Anda berikan tadi
-                $icpParameters = json_decode($templateIcp->param, true) ?? [];
-            }
-            
-            // Panggil sekali di luar loop, bukan di dalam array_reduce
-            $requiredParameters = collect($this->getRequiredParameters())
-                ->where('category', $sample->kategori_2);
-
-            $parameters = array_reduce($parametersRaw, function ($carry, $item) use ($sample, $requiredParameters) {
-                $parameterName = explode(";", $item)[1] ?? null;
-
-                if (!$parameterName) {
-                    return $carry;
-                }
-
-                $matchedParameter = $requiredParameters
-                    ->where('parameter', $parameterName)
-                    ->first();
-
-                if ($matchedParameter == null) {
-                    throw new Exception("Kemungkinan Parameter.{$parameterName}. Belum Terdaftar di RequiredParameters Hub IT");
-                }
-                $carry[] = $matchedParameter;
-                return $carry;
-            }, []);
-
-            $parameters = array_filter($parameters, function ($param) {
-                if ($param == null) {
-                    return false;
-                }
-                if ($param['category'] == '6-Padatan') {
-                    return is_array($param);
-                }
-                return is_array($param) && isset($param['model']);
-            });
-
-            $status = 'selesai';
-            if (!empty($parameters)) {
-                $parameterBypass = ['Gelombang Elektro', 'N-Propil Asetat (SC)', 'Xylene secara personil sampling (SC)'];
-                
-                foreach ($parameters as $parameter) {
-                    $paramName = $parameter['parameter']; // Ambil nama parameter untuk mempermudah pengecekan
-
-                    if ($parameter['category'] == '6-Padatan') {
-                        continue;
-                    }
-                    
-                    if (in_array($paramName, $parameterBypass)) {
-                        continue;
-                    }
-
-                    if ($sample->no_sample == 'ITEM012501/015' && in_array($paramName, ['NO2 (24 Jam)', 'PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
-                        continue;
-                    }
-
-                    if (in_array($sample->no_sample, ['BUIL022603/12', 'BUIL022603/14', 'BUIL022603/15', 'BUIL022603/16', 'BUIL022603/008'])) {
-                        continue;
-                    }
-
-                    // --- LOGIKA BYPASS ICP TEMPLATE ---
-                    // Cek apakah parameter saat ini ada di dalam list JSON Template ICP
-                    if (in_array($paramName, $icpParameters)) {
-                        
-                        // Validasi Regex: Cari kata "jam" atau angka bergandengan huruf "j" (seperti 8j, 24j)
-                        // /i = case-insensitive (Jam, jam, 8J, 8j akan terdeteksi)
-                        if (!preg_match('/(jam|\d+j)/i', $paramName)) {
-                            
-                            // Jika TIDAK MENGANDUNG "jam" atau "8j", maka BYPASS (dianggap selesai).
-                            continue; 
-                        }
-                        
-                        // Jika MENGANDUNG "jam" atau "8j" (misal: "Pb 8J (IKM-ICP-LK)"), 
-                        // kode akan mengabaikan blok if ini dan tetap lanjut diperiksa di bawah oleh verifyStatus.
-                    }
-                    // ----------------------------------
-
-                    $verified = $this->verifyStatus($sample->no_sample, $parameter);
-
-                    if (!$verified) {
-                        $status = 'belum selesai';
-                        break;
-                    }
-                }
-            } else {
-                $status = 'belum selesai';
-            }
-
-            return $status;
-        } catch (\Exception $th) {
-            throw new Exception($th->getMessage());
-        }
+        return app(SamplingCompletionService::class)->getStatusSampling($sample);
     }
 
     private function verifyStatus($sample_number, $parameter)
