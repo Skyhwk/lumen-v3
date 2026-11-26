@@ -145,8 +145,8 @@ class KaryawanNonAktifController extends Controller
             $mpdfConfig = array(
                 'mode' => 'utf-8',
                 'format' => 'A4',
-                'margin_left' => 18,
-                'margin_right' => 18,
+                'margin_left' => 12,
+                'margin_right' => 12,
                 'margin_top' => 34,
                 'margin_bottom' => 30,
                 'margin_header' => 12,
@@ -189,10 +189,10 @@ class KaryawanNonAktifController extends Controller
                     table.identitas td { padding: 3px 0; vertical-align: top; font-size: 10.5pt; }
                     table.identitas td.label { width: 145px; }
                 </style>
-                <div style="position: fixed; left: -12mm; top: -29mm; width: 198mm; height: 275mm; border: 1.2pt solid #1a1a1a;">&nbsp;</div>
-                <div style="position: fixed; left: -12mm; top: -2mm; width: 198mm; border-top: 0.5pt solid grey; font-size: 1pt; line-height: 0;">&nbsp;</div>
-                <div style="position: fixed; left: -12mm; top: 233mm; width: 198mm; border-top: 0.5pt solid grey; font-size: 1pt; line-height: 0;">&nbsp;</div>
-                <div style="position: fixed; left: -12mm; top: 249mm; width: 198mm; text-align: right; font-family: serif; font-style: italic; font-size: 8pt; color: #000; line-height: 1.35;">
+                <div style="position: fixed; left: -6mm; top: -29mm; width: 198.5mm; height: 275mm; border: 1.2pt solid #1a1a1a;">&nbsp;</div>
+                <div style="position: fixed; left: -6mm; top: -2mm; width: 198.5mm; border-top: 0.5pt solid grey; font-size: 1pt; line-height: 0;">&nbsp;</div>
+                <div style="position: fixed; left: -6mm; top: 233mm; width: 198.5mm; border-top: 0.5pt solid grey; font-size: 1pt; line-height: 0;">&nbsp;</div>
+                <div style="position: fixed; left: -6mm; top: 249mm; width: 198.5mm; text-align: right; font-family: serif; font-style: italic; font-size: 8pt; color: #000; line-height: 1.35;">
                     Note : Dokumen ini diterbitkan otomatis oleh sistem<br>' . date('YmdHi') . '
                 </div>
                 <p style="margin-top: 10mm;">Perihal : <b>Karyawan Keluar</b></p>
