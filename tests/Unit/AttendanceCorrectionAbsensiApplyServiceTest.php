@@ -307,6 +307,29 @@ class AttendanceCorrectionAbsensiApplyServiceTest extends TestCase
         $this->assertNull($slotDayIn['primary']);
     }
 
+    public function testNightShiftCheckOutIgnoresNextDayCheckInWithOrWithoutExistingCheckOut(): void
+    {
+        $checkIn = (object) ['id' => 801, 'tanggal' => '2026-11-26', 'jam' => '08:30:00', 'status' => 'Masuk', 'kode_mesin' => 'GREATDAY'];
+        $checkOut = (object) ['id' => 802, 'tanggal' => '2026-11-26', 'jam' => '08:10:00', 'status' => 'Keluar', 'kode_mesin' => 'ISL05'];
+        $shift = (object) ['shift' => 'SHSECURITY2', 'time_in' => '20:00', 'time_out' => '08:00'];
+
+        foreach ([collect([$checkIn]), collect([$checkIn, $checkOut])] as $index => $rows) {
+            $slot = AttendanceCorrectionAbsensiApplyService::resolveSlotSelection(
+                $rows,
+                '2026-11-25',
+                '2026-11-26',
+                '08:15:00',
+                false,
+                'SHSECURITY2',
+                null,
+                $shift
+            );
+
+            $this->assertSame($index === 0 ? null : $checkOut, $slot['primary']);
+            $this->assertSame([], $slot['duplicateIds']);
+        }
+    }
+
     public function testNightShiftCheckInCorrectionDoesNotTouchPreviousMorningCheckOutAndCleansEveningDuplicates(): void
     {
         $rows = collect([
