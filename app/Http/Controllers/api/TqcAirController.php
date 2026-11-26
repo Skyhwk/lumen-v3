@@ -165,7 +165,7 @@ class TqcAirController extends Controller
                     }
 
                     if ($data_order->dataLapanganAir != null) {
-                        if ($parameter == 'Suhu') {
+                        if ($parameter == 'Suhu' || $parameter == 'Suhu (NA)') {
                             $hasil1 = $data_order->dataLapanganAir->suhu_air;
                         } else if ($parameter == 'pH') {
                             $hasil1 = $data_order->dataLapanganAir->ph;
