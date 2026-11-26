@@ -2,11 +2,13 @@
 
 namespace App\Services\SelfRegistration;
 
+use Mpdf\Config\ConfigVariables;
+use Mpdf\Config\FontVariables;
 use Mpdf\Mpdf;
 
 class StatementPdfService
 {
-    const NAVY = '#1a4f8b';
+    const RULE_COLOR = '#bfbfbf';
 
     public function storeFromPayload($registrationId, $signatureBinary, array $payload)
     {
@@ -26,12 +28,9 @@ class StatementPdfService
         }
 
         $payload['signature_src'] = str_replace('\\', '/', $sigAbs);
-        $payload['dokumen_hash'] = $payload['dokumen_hash'] ?? 'pending';
 
         $this->generatePdf($payload, $pdfAbs);
         $dokHash = strtoupper(substr(hash('sha256', (string) file_get_contents($pdfAbs)), 0, 12));
-        $payload['dokumen_hash'] = $dokHash;
-        $this->generatePdf($payload, $pdfAbs);
 
         return [
             'signature_path' => $sigRel,
@@ -58,72 +57,102 @@ class StatementPdfService
     {
         $rows = '';
         $no = 1;
-        foreach ($payload['companies'] as $company) {
+        $companies = isset($payload['companies']) && is_array($payload['companies']) ? $payload['companies'] : [];
+        foreach ($companies as $company) {
             $rows .= '<tr>'
-                . '<td style="border:1px solid #c5d0dc;padding:5px 8px;text-align:center;background:transparent;">' . $no . '</td>'
-                . '<td style="border:1px solid #c5d0dc;padding:5px 8px;background:transparent;">' . $this->e($company['id_pelanggan']) . '</td>'
-                . '<td style="border:1px solid #c5d0dc;padding:5px 8px;background:transparent;">' . $this->e($company['nama_pelanggan']) . '</td>'
+                . '<td style="border:1px solid #000;padding:5px 8px;text-align:center;background:transparent;">' . $no . '</td>'
+                . '<td style="border:1px solid #000;padding:5px 8px;background:transparent;">' . $this->e($company['id_pelanggan'] ?? '') . '</td>'
+                . '<td style="border:1px solid #000;padding:5px 8px;background:transparent;">' . $this->e($company['nama_pelanggan'] ?? '') . '</td>'
                 . '</tr>';
             $no++;
         }
 
-        $signature = '';
+        $emailEsc = $this->e($payload['email'] ?? '');
+        $namaPic = trim((string) ($payload['nama_pic'] ?? ''));
+        $jabatanPic = trim((string) ($payload['jabatan_pic'] ?? ''));
+        $noKontak = trim((string) ($payload['no_kontak'] ?? ''));
+        $jabatanSign = $jabatanPic !== ''
+            ? $jabatanPic
+            : ('PIC ' . trim((string) ($payload['nama_pelanggan_utama'] ?? '')));
+
         if (!empty($payload['signature_src'])) {
-            $signature = '<img src="' . $payload['signature_src'] . '" alt="TTD" style="height:20mm;max-width:42mm;display:block;margin:4px auto 2px;">';
+            $signature = '<img src="' . $payload['signature_src'] . '" alt="TTD" style="height:20mm;max-width:55mm;display:block;margin:6px 0 6px;">';
         } else {
-            $signature = '<div style="height:20mm;"></div>';
+            $signature = '<div style="height:22mm;"></div>';
+        }
+
+        $points = [
+            'Saya secara sah dan berwenang bertindak untuk dan atas nama perusahaan / instansi tersebut, serta telah memperoleh persetujuan atau kuasa dari pihak yang berwenang untuk melakukan pendaftaran dan bertindak sebagai Penanggung Jawab / <i>Person In Charge</i> (PIC) Pengelolaan Intilab Portal.',
+            'Dengan diselesaikannya pendaftaran ini, saya secara otomatis ditetapkan sebagai PIC dan berwenang untuk mengakses, menggunakan, dan mengelola Intilab Portal; menerima, mengakses, dan mengelola seluruh data serta dokumen layanan; melakukan persetujuan dan/atau tindakan hukum melalui sistem elektronik; serta bertindak untuk dan atas nama perusahaan / instansi dalam seluruh aktivitas pada Intilab Portal.',
+            'Seluruh data dan informasi yang saya sampaikan pada saat pendaftaran adalah benar, lengkap, dan sah secara hukum.',
+            '<i>Email</i> yang saya gunakan saat pendaftaran ' . $emailEsc . ' ditetapkan sebagai <i>email</i> utama (<i>main email</i>), yaitu identitas resmi perusahaan / instansi dalam Intilab Portal, sarana penerimaan notifikasi sistem termasuk <i>password</i>, dan sarana persetujuan transaksi serta dokumen elektronik. Saya memahami dan menyetujui bahwa <i>email</i> tersebut merupakan bentuk autentikasi utama dalam sistem, sehingga setiap aktivitas yang dilakukan melaluinya dianggap sah dan mewakili perusahaan / instansi tanpa memerlukan verifikasi tambahan.',
+            'Saya akan menjalankan kewenangan sesuai dengan penunjukan sebagai PIC dan tidak melampaui batas kewenangan yang diberikan.',
+            'Saya akan menjaga kerahasiaan seluruh data, informasi, dan kredensial akses, termasuk <i>email</i>, <i>username</i>, dan <i>password</i>, serta tidak akan membagikannya kepada pihak yang tidak berwenang.',
+            'Saya tidak akan menyalahgunakan akses dalam bentuk apa pun.',
+            'Saya bertanggung jawab atas penggunaan akun yang berada dalam penguasaan saya, termasuk atas tindakan pihak lain yang memperoleh akses melalui saya.',
+            'Setiap persetujuan, transaksi, atau tindakan yang saya lakukan melalui Intilab Portal diakui sah, mengikat, dan memiliki kekuatan hukum penuh bagi perusahaan / instansi.',
+            'Dalam hal terjadi perubahan PIC dan/atau <i>email</i> utama, saya atau perusahaan / instansi wajib melakukan pemberitahuan dan pembaruan melalui sistem atau formulir yang ditetapkan oleh PT Inti Surya Laboratorium.',
+            'Saya bersedia mematuhi seluruh ketentuan, kebijakan, dan prosedur yang ditetapkan oleh PT Inti Surya Laboratorium.',
+            'Saya bertanggung jawab secara hukum atas segala akibat yang timbul dari penggunaan maupun penyalahgunaan akses yang berada dalam penguasaan saya.',
+        ];
+
+        $pointsHtml = '';
+        foreach ($points as $idx => $text) {
+            $pointsHtml .= '<tr>'
+                . '<td style="width:7mm;vertical-align:top;padding:0 2mm 7px 0;text-align:left;">' . ($idx + 1) . '.</td>'
+                . '<td style="vertical-align:top;padding:0 0 7px 0;text-align:justify;">' . $text . '</td>'
+                . '</tr>';
         }
 
         return '<!DOCTYPE html><html><head><meta charset="utf-8"></head>
-<body style="font-family: serif; font-size: 10.5pt; color:#1a1a1a; line-height:1.5;">
-' . $this->fieldTable([
-            ['Nomor', '<b>' . $this->e($payload['nomor_dokumen'] ?? '') . '</b>'],
-            ['Perihal', '<b>Pendaftaran Akun Portal Pelanggan Intilab</b>'],
-        ], '14px') . '
-<p style="margin:0 0 8px;">Yang bertanda tangan di bawah ini:</p>
-' . $this->fieldTable([
-            ['Nama Lengkap', $this->e($payload['nama_pic'])],
-            ['Nomor Kontak', $this->e($payload['no_kontak'] ?: '-')],
-            ['Alamat <i>Email</i>', $this->e($payload['email'])],
-        ], '12px') . '
+<body style="font-family: calibri, sans-serif; font-size: 11pt; color:#000000; line-height:1.55;">
 
-<p style="margin:0 0 8px;">dalam kapasitas sebagai <i>Person in Charge</i> (<i>PIC</i>) yang mewakili perusahaan berikut:</p>
-<table width="100%" style="border-collapse:collapse;margin:0 0 12px;background:transparent;">
+<div style="margin:0;">Perihal : <b><u><i>Person In Charge</i> (PIC) Intilab Portal</u></b></div>
+<div style="height:8mm;line-height:8mm;font-size:1px;">&nbsp;</div>
+
+<div style="margin:0 0 4px;">Yang bertanda tangan di bawah ini :</div>
+' . $this->fieldTable([
+            ['Nama Lengkap', $this->e($namaPic !== '' ? $namaPic : '-')],
+            ['Jabatan', $this->e($jabatanPic !== '' ? $jabatanPic : '-')],
+            ['No. HP', $this->e($noKontak !== '' ? $noKontak : '-')],
+            ['<i>Email</i>', $emailEsc],
+        ], '0') . '
+<div style="height:8mm;line-height:8mm;font-size:1px;">&nbsp;</div>
+
+<div style="margin:0 0 6px;">Selaku pihak yang melakukan pendaftaran pada Intilab Portal untuk dan atas nama :</div>
+<table width="100%" style="border-collapse:collapse;margin:0;background:transparent;">
+<thead>
 <tr>
-<th style="border:1px solid #c5d0dc;padding:6px 8px;background:transparent;color:#111;width:12%;">No</th>
-<th style="border:1px solid #c5d0dc;padding:6px 8px;background:transparent;color:#111;width:28%;"><i>ID</i> Pelanggan</th>
-<th style="border:1px solid #c5d0dc;padding:6px 8px;background:transparent;color:#111;">Nama Perusahaan</th>
+<th style="border:1px solid #000;padding:6px 8px;background:#f2f2f2;color:#000;text-align:center;font-weight:bold;width:8%;">No.</th>
+<th style="border:1px solid #000;padding:6px 8px;background:#f2f2f2;color:#000;text-align:center;font-weight:bold;width:35%;">ID Pelanggan</th>
+<th style="border:1px solid #000;padding:6px 8px;background:#f2f2f2;color:#000;text-align:center;font-weight:bold;width:57%;">Nama Perusahaan</th>
 </tr>
+</thead>
+<tbody>
 ' . $rows . '
+</tbody>
 </table>
+<div style="height:8mm;line-height:8mm;font-size:1px;">&nbsp;</div>
 
-<p style="margin:0 0 6px;">dengan ini menyatakan dengan sebenar-benarnya bahwa:</p>
-<ol style="padding-left:18px;margin:0 0 12px;">
-<li>Saya adalah <i>PIC</i> yang sah dan berwenang mewakili perusahaan di atas dalam hubungan kerja sama dengan Intilab, dan alamat <i>email</i> yang saya gunakan adalah <i>email</i> resmi yang telah saya berikan kepada Intilab.</li>
-<li>Seluruh data dan informasi yang tercantum dalam pernyataan ini adalah benar, lengkap, dan dapat dipertanggungjawabkan.</li>
-<li>Saya bertanggung jawab penuh atas kerahasiaan kredensial akun (<i>email</i> dan kata sandi) serta seluruh aktivitas yang dilakukan melalui akun Portal Pelanggan atas nama saya.</li>
-<li>Saya akan menggunakan Portal Pelanggan hanya untuk kepentingan perusahaan yang saya wakili dan sesuai dengan ketentuan yang berlaku di Intilab.</li>
-<li>Saya tidak akan memberikan, meminjamkan, atau mengalihkan akses akun kepada pihak lain yang tidak berwenang.</li>
-<li>Saya akan segera memberitahukan Intilab apabila terjadi perubahan <i>PIC</i>, perubahan data, atau dugaan penyalahgunaan akun.</li>
-<li>Saya menyetujui pemrosesan data pribadi saya oleh Intilab untuk keperluan pengelolaan akun dan layanan, sesuai dengan Undang-Undang Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi.</li>
-<li>Saya memahami bahwa Intilab berhak menangguhkan atau menonaktifkan akun apabila ditemukan ketidaksesuaian data atau pelanggaran atas pernyataan ini.</li>
-</ol>
+<div style="margin:0 0 6px;">Dengan ini menyatakan dan menjamin dengan sebenar-benarnya bahwa :</div>
+<table width="100%" style="border-collapse:collapse;margin:0;background:transparent;">
+<tbody>
+' . $pointsHtml . '
+</tbody>
+</table>
+<div style="height:5mm;line-height:5mm;font-size:1px;">&nbsp;</div>
 
-<p>Demikian surat pernyataan ini saya buat dengan sadar dan tanpa paksaan dari pihak mana pun, untuk dipergunakan sebagaimana mestinya.</p>
+<div style="margin:0;text-align:justify;">Demikian surat pernyataan ini dibuat dengan sebenar-benarnya, dalam keadaan sadar dan tanpa paksaan dari pihak mana pun, dapat dipertanggungjawabkan secara hukum, serta dapat dipergunakan sebagaimana mestinya.</div>
+<div style="height:8mm;line-height:8mm;font-size:1px;">&nbsp;</div>
 
-<table width="100%" style="margin-top:10px;">
-<tr>
-<td style="width:58%;"></td>
-<td style="width:42%;text-align:center;">
-' . $this->e($payload['tanggal_lengkap']) . '<br>
-Yang membuat pernyataan,<br>
+<div style="page-break-inside:avoid;">
+<div>' . $this->e($payload['tanggal_lengkap'] ?? '') . '</div>
+<div>Yang menyatakan (PIC),</div>
 ' . $signature . '
-<div style="border-top:0.6px solid ' . self::NAVY . ';width:78%;margin:0 auto 4px;"></div>
-<b>' . $this->e($payload['nama_pic']) . '</b><br>
-<span style="font-size:9pt;"><i>PIC</i> ' . $this->e($payload['nama_pelanggan_utama']) . '</span>
-</td>
-</tr>
-</table>
+<div><b><u>' . $this->e($namaPic) . '</u></b></div>
+<div style="font-size:10pt;"><i>' . $this->e(trim($jabatanSign)) . '</i></div>
+</div>
+
 </body></html>';
     }
 
@@ -134,26 +163,49 @@ Yang membuat pernyataan,<br>
             mkdir($dir, 0775, true);
         }
 
-        $mpdf = new Mpdf([
+        $mpdfConfig = [
             'mode' => 'utf-8',
             'format' => 'A4',
             'orientation' => 'P',
-            'margin_top' => 32,
-            'margin_header' => 8,
-            'margin_bottom' => 30,
-            'margin_footer' => 4,
-            'margin_left' => 16,
-            'margin_right' => 16,
-            'default_font' => 'times',
-        ]);
-        $mpdf->SetTitle('Surat Pernyataan Portal Pelanggan');
+            'margin_top' => 34,
+            'margin_header' => 6,
+            'margin_bottom' => 25,
+            'margin_footer' => 5,
+            'margin_left' => 17,
+            'margin_right' => 17,
+            'default_font' => 'dejavusans',
+        ];
+
+        $calibriDir = resource_path('fonts/Calibri');
+        if (is_dir($calibriDir) && is_file($calibriDir . DIRECTORY_SEPARATOR . 'calibri.ttf')) {
+            $fontDirs = (new ConfigVariables())->getDefaults()['fontDir'];
+            $fontData = (new FontVariables())->getDefaults()['fontdata'];
+            $mpdfConfig['fontDir'] = array_merge($fontDirs, [$calibriDir]);
+            $mpdfConfig['fontdata'] = $fontData + [
+                'calibri' => [
+                    'R' => 'calibri.ttf',
+                    'B' => 'calibrib.ttf',
+                    'I' => 'calibrii.ttf',
+                    'BI' => 'calibriz.ttf',
+                ],
+            ];
+            $mpdfConfig['default_font'] = 'calibri';
+        }
+
+        $mpdf = new Mpdf($mpdfConfig);
+        $mpdf->SetTitle('Surat Pernyataan - Person In Charge (PIC) Intilab Portal');
         $mpdf->SetAuthor('PT Inti Surya Laboratorium');
-        $mpdf->SetHTMLHeader($this->headerHtml($payload));
-        $mpdf->SetHTMLFooter($this->footerHtml($payload));
+
+        $header = $this->headerHtml($payload);
+        $footer = $this->footerHtml($payload);
+        $mpdf->SetHTMLHeader($header);
+        $mpdf->SetHTMLHeader($header, 'E');
+        $mpdf->SetHTMLFooter($footer);
+        $mpdf->SetHTMLFooter($footer, 'E');
 
         $watermark = $this->watermarkPath();
         if ($watermark) {
-            $mpdf->SetWatermarkImage($watermark, -1, '', [65, 60]);
+            $mpdf->SetWatermarkImage($watermark, 0.14, '', [55, 85]);
             $mpdf->showWatermarkImage = true;
         }
 
@@ -166,44 +218,33 @@ Yang membuat pernyataan,<br>
     private function headerHtml(array $payload)
     {
         $logo = $this->logoTag();
+        $nomor = $this->e($payload['nomor_dokumen'] ?? '-');
 
-        return '<table width="100%" style="border-collapse:collapse;">
+        return '<table width="100%" style="font-family:calibri,sans-serif;border-collapse:collapse;table-layout:fixed;">
 <tr>
-<td style="width:48%;vertical-align:middle;">' . $logo . '</td>
-<td style="width:52%;text-align:right;vertical-align:middle;font-size:7.5pt;line-height:1.35;color:#222;">
-<b>PT INTI SURYA LABORATORIUM</b><br>
-Ruko Icon Business Park blok O no 5 - 6, BSD City<br>
-Jl. Raya Cisauk, Sampora, Cisauk, Kab. Tangerang<br>
-T : 021-50898988/89 - sales@intilab.com<br>
-www.intilab.com
+<td colspan="2" style="text-align:right;font-size:8pt;color:#555555;padding:0 0 1mm;">Page {PAGENO} of {nbpg}</td>
+</tr>
+<tr>
+<td style="width:46%;vertical-align:middle;padding:0 0 2mm;">' . $logo . '</td>
+<td style="width:54%;vertical-align:middle;text-align:center;padding:0 0 2mm;">
+<div style="font-size:19pt;font-weight:bold;color:#333333;line-height:1.15;letter-spacing:0.3px;">SURAT PERNYATAAN</div>
+<div style="font-size:10pt;font-weight:bold;color:#333333;margin-top:1mm;">No. : ' . $nomor . '</div>
 </td>
 </tr>
-</table>
-<div style="border-top:2.2px solid ' . self::NAVY . ';border-bottom:0.6px solid ' . self::NAVY . ';margin-top:5px;height:3px;"></div>';
+<tr>
+<td colspan="2" style="border-bottom:0.8px solid ' . self::RULE_COLOR . ';padding:0;line-height:0;font-size:1px;">&nbsp;</td>
+</tr>
+</table>';
     }
 
     private function footerHtml(array $payload)
     {
-        $footerNote = 'Dokumen ini ditandatangani secara elektronik melalui Portal Pelanggan Intilab '
-            . 'dan memiliki kekuatan hukum sesuai UU No. 11 Tahun 2008 tentang Informasi dan Transaksi Elektronik beserta perubahannya. '
-            . 'No. Dokumen: ' . $this->e($payload['nomor_dokumen'] ?? '')
-            . ' | Ditandatangani: ' . $this->e($payload['timestamp_wib'] ?? '-')
-            . ' | Kode Verifikasi: ' . $this->e($payload['dokumen_hash'] ?? '-');
-
-        $generatedAt = $payload['generated_at'] ?? $payload['timestamp_wib'] ?? '-';
-
-        return '<div style="border-top:1.6px solid ' . self::NAVY . ';padding-top:3px;">
-<table width="100%" style="border-collapse:collapse;">
-<tr>
-<td style="width:70%;text-align:left;vertical-align:bottom;font-size:7pt;color:#555;">
-' . $this->e($generatedAt) . '
-</td>
-<td style="width:30%;text-align:right;vertical-align:bottom;font-size:7pt;font-style:italic;color:#606060;white-space:nowrap;">
-Halaman {PAGENO} dari {nbpg}
-</td>
-</tr>
-</table>
-<div style="font-size:5.5pt;color:#777;margin-top:2px;line-height:1.3;text-align:left;">' . $this->e($footerNote) . '</div>
+        return '<div style="font-family:calibri,sans-serif;border-top:0.8px solid ' . self::RULE_COLOR . ';padding-top:5px;text-align:center;color:#555555;">
+<div style="font-size:9.5pt;line-height:1.35;">
+Ruko Icon Business Park blok O no. 5 &ndash; 6<br>
+Jl. Raya Cisauk, Sampora, Cisauk, Kab. Tangerang &ndash; 15345<br>
+P : 021-5089-8988/89 - <u>www.intilab.com</u> - contact@intilab.com
+</div>
 </div>';
     }
 
@@ -232,20 +273,20 @@ Halaman {PAGENO} dari {nbpg}
     {
         $path = $this->logoPath();
         if ($path) {
-            return '<img src="' . $path . '" alt="Intilab" style="height:15mm;">';
+            return '<img src="' . $path . '" alt="Intilab" style="height:15mm;max-width:52mm;">';
         }
 
-        return '<div style="font-size:14pt;font-weight:bold;color:' . self::NAVY . ';">INTILAB</div>';
+        return '<div style="font-size:14pt;font-weight:bold;color:#1a4f8b;">INTILAB</div>';
     }
 
     private function fieldTable(array $rows, $marginBottom)
     {
-        $html = '<table style="width:1px;border-collapse:collapse;margin:0 0 ' . $marginBottom . ';line-height:1.25;"><tbody>';
+        $html = '<table style="width:100%;border-collapse:collapse;margin:0 0 ' . $marginBottom . ';line-height:1.5;"><tbody>';
         foreach ($rows as $row) {
             $html .= '<tr>'
-                . '<td style="border:none;padding:0 4mm 0 0;white-space:nowrap;vertical-align:top;">' . $row[0] . '</td>'
-                . '<td style="border:none;padding:0;width:4mm;white-space:nowrap;vertical-align:top;">:&nbsp;</td>'
-                . '<td style="border:none;padding:0;white-space:nowrap;vertical-align:top;">' . $row[1] . '</td>'
+                . '<td style="border:none;padding:2px 4mm 2px 0;width:30mm;white-space:nowrap;vertical-align:top;">' . $row[0] . '</td>'
+                . '<td style="border:none;padding:2px 2mm 2px 0;width:3mm;white-space:nowrap;vertical-align:top;">:</td>'
+                . '<td style="border:none;padding:2px 0;vertical-align:top;">' . $row[1] . '</td>'
                 . '</tr>';
         }
 
