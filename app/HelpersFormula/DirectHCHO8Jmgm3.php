@@ -21,11 +21,9 @@ class DirectHCHO8Jmgm3 {
             }
         }
 
-        if(count($measurements) > 1){
-            $average = !empty($measurements) ? number_format(array_sum($measurements) / count($measurements), 3) : 0;
-        } else {
-            $average = !empty($measurements) ? $measurements[0] : 0;
-        }
+        $average = !empty($measurements)
+            ? array_sum($measurements) / count($measurements)
+            : 0;
         $tekanan_udara = !empty($pa) ? round(array_sum($pa) / count($pa), 1) : 0;
         $suhu = !empty($ta) ? round(array_sum($ta) / count($ta), 1) : 0;
 
@@ -66,7 +64,6 @@ class DirectHCHO8Jmgm3 {
         $c15 = MdlUdaraService::applyColumn($c3Rounded, $mdlRow, 'hasil15');
 
         $satuan = 'mg/Nm3';
-
 
         return [
             'c1'     => $c1,
