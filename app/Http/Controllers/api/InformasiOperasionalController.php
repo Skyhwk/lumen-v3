@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\GaAsset;
+use App\Models\IoPeralatanTim;
 use App\Models\Jadwal;
 use App\Models\JadwalMobilisasi;
 use App\Models\JadwalMobilisasiAset;
@@ -14,8 +15,10 @@ use App\Models\OrderHeader;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
+use App\Models\MasterDriver;
 use App\Services\IoPeralatanTimService;
 use App\Services\JadwalMobilisasiService;
+use App\Services\KendaraanSamplingAvailabilityService;
 use App\Services\MonitoringPeralatanService;
 use App\Services\RenderInformasiOperasionalService;
 use Carbon\Carbon;
@@ -153,6 +156,14 @@ class InformasiOperasionalController extends Controller
 
                 $ketOps = trim(html_entity_decode(strip_tags((string) ($mob['keterangan_operasional'] ?? $mob['keterangan_operasional_sp'] ?? '')), ENT_QUOTES, 'UTF-8'));
 
+                $transport = $this->resolveTransportDisplay(
+                    $tanggal,
+                    $row->batch_id,
+                    $row->sampler ?? '',
+                    $row->kendaraan ?? null,
+                    $row->driver ?? null
+                );
+
                 return [
                     'id' => $mob['id'] ?? null,
                     'tujuan_sampling' => $mob['tujuan_sampling'] ?? null,
@@ -174,6 +185,13 @@ class InformasiOperasionalController extends Controller
                     'jumlah_alat_aktual' => $aktualDisplay['jumlah'],
                     'kode_aset_aktual' => $aktualDisplay['kode'],
                     'has_peralatan_aktual' => count($aktualDisplay['nama']) > 0,
+                    'kendaraan_jadwal' => $transport['kendaraan_jadwal'],
+                    'driver_jadwal' => $transport['driver_jadwal'],
+                    'kendaraan_aktual' => $transport['kendaraan_aktual'],
+                    'driver_aktual' => $transport['driver_aktual'],
+                    'kendaraan_display' => $transport['kendaraan_display'],
+                    'driver_display' => $transport['driver_display'],
+                    'transport_source' => $transport['source'],
                 ];
             })
             ->addColumn('keterangan_qs', function ($row) {
@@ -414,6 +432,47 @@ class InformasiOperasionalController extends Controller
     }
 
     /**
+     * List kendaraan untuk modal peralatan tim.
+     * Gabungan daftar_mobil (Internal) + daftar_mobil_sewa aktif di tanggal IO,
+     * exclude plat yang sudah terpakai di penggunaan mobil.
+     */
+    public function getKendaraanAvailableTim(Request $request)
+    {
+        $tanggal = $request->input('tanggal');
+        if (!$tanggal) {
+            return response()->json([
+                'status' => true,
+                'data' => [],
+                'conflicts' => new \stdClass(),
+                'message' => 'Tanggal sampling belum tersedia.',
+            ]);
+        }
+
+        $service = new KendaraanSamplingAvailabilityService();
+        $payload = $service->availableByTanggal(
+            $tanggal,
+            $request->input('id_sampling')
+        );
+
+        return response()->json($payload);
+    }
+
+    /**
+     * Master driver aktif — sumber sama Sampling Plan (MasterDriver).
+     */
+    public function showDriver()
+    {
+        $data = MasterDriver::where('is_active', true)
+            ->orderBy('nama_driver')
+            ->get(['id', 'nama_driver', 'user_id']);
+
+        return response()->json([
+            'status' => true,
+            'data' => $data,
+        ]);
+    }
+
+    /**
      * Ringkasan peralatan 1 tim (N perusahaan) untuk modal Update Peralatan.
      * Request per PT (read-only referensi) + bawaan aktual = milik TIM/HARI.
      */
@@ -433,6 +492,11 @@ class InformasiOperasionalController extends Controller
         $warnaSet = [];
         $cabangSet = [];
         $flatBatchIdsForDurasi = [];
+        $driverFromJadwal = null;
+        $kendaraanFromJadwal = null;
+        $jamMulai = null;
+        $jamSelesai = null;
+        $idSampling = null;
 
         foreach ($batchGroups as $batchIds) {
             $ctxRequest = Request::create('/', 'POST', ['batch_id' => $batchIds]);
@@ -455,6 +519,21 @@ class InformasiOperasionalController extends Controller
             }
             if (!empty($row['warna'])) {
                 $warnaSet[strtolower(trim((string) $row['warna']))] = true;
+            }
+            if ($driverFromJadwal === null && trim((string) ($row['driver'] ?? '')) !== '') {
+                $driverFromJadwal = trim((string) $row['driver']);
+            }
+            if ($kendaraanFromJadwal === null && trim((string) ($row['kendaraan'] ?? '')) !== '') {
+                $kendaraanFromJadwal = trim((string) $row['kendaraan']);
+            }
+            if ($jamMulai === null && !empty($row['jam_mulai'])) {
+                $jamMulai = $row['jam_mulai'];
+            }
+            if ($jamSelesai === null && !empty($row['jam_selesai'])) {
+                $jamSelesai = $row['jam_selesai'];
+            }
+            if ($idSampling === null && !empty($row['id_sampling'])) {
+                $idSampling = (int) $row['id_sampling'];
             }
             foreach (JadwalMobilisasiService::flattenBatchIds($batchIds) as $bid) {
                 $flatBatchIdsForDurasi[] = $bid;
@@ -596,6 +675,37 @@ class InformasiOperasionalController extends Controller
             'storage' => 'io_peralatan_tim',
             'ownership_reconciled' => (bool) ($reconcile['changed'] ?? false),
             'ownership_reconcile_message' => $reconcile['message'] ?? null,
+            // Jadwal (Sampling Plan) vs aktual (IO). Preselect modal: aktual dulu, fallback jadwal.
+            'driver_jadwal' => $driverFromJadwal,
+            'kendaraan_jadwal' => $kendaraanFromJadwal,
+            'driver_aktual' => $savedTim && Schema::hasColumn('io_peralatan_tim', 'driver')
+                ? (trim((string) ($savedTim->driver ?? '')) ?: null)
+                : null,
+            'kendaraan_aktual' => $savedTim && Schema::hasColumn('io_peralatan_tim', 'kendaraan')
+                ? (trim((string) ($savedTim->kendaraan ?? '')) ?: null)
+                : null,
+            'driver' => (
+                $savedTim && Schema::hasColumn('io_peralatan_tim', 'driver')
+                    ? (trim((string) ($savedTim->driver ?? '')) ?: null)
+                    : null
+            ) ?: $driverFromJadwal,
+            'kendaraan' => (
+                $savedTim && Schema::hasColumn('io_peralatan_tim', 'kendaraan')
+                    ? (trim((string) ($savedTim->kendaraan ?? '')) ?: null)
+                    : null
+            ) ?: $kendaraanFromJadwal,
+            'transport_source' => (
+                $savedTim
+                && Schema::hasColumn('io_peralatan_tim', 'kendaraan')
+                && trim((string) ($savedTim->kendaraan ?? '')) !== ''
+            ) || (
+                $savedTim
+                && Schema::hasColumn('io_peralatan_tim', 'driver')
+                && trim((string) ($savedTim->driver ?? '')) !== ''
+            ) ? 'aktual' : 'jadwal',
+            'jam_mulai' => $jamMulai,
+            'jam_selesai' => $jamSelesai,
+            'id_sampling' => $idSampling,
         ]);
     }
 
@@ -612,6 +722,8 @@ class InformasiOperasionalController extends Controller
             'peralatan_aktual.*.jumlah_alat' => 'nullable|integer|min:1',
             'peralatan_aktual.*.kode_aset_list' => 'nullable|array',
             'peralatan_aktual.*.kode_aset_list.*' => 'string',
+            'driver' => 'nullable|string',
+            'kendaraan' => 'nullable|string',
         ]);
         if ($validator->fails()) {
             return response()->json(['message' => $validator->errors()->first()], 422);
@@ -753,6 +865,18 @@ class InformasiOperasionalController extends Controller
             }
         }
 
+        $hasDriverInput = $request->exists('driver');
+        $hasKendaraanInput = $request->exists('kendaraan');
+        $driver = trim((string) $request->input('driver', ''));
+        $kendaraan = trim((string) $request->input('kendaraan', ''));
+        // Plat bersih (tanpa suffix tebeng di label UI).
+        $kendaraanService = new KendaraanSamplingAvailabilityService();
+        $kendaraan = $kendaraanService->stripTebeng($kendaraan);
+
+        if ($hasKendaraanInput && $kendaraan !== '' && $tanggal) {
+            $kendaraanService->assertSelectionAvailable($kendaraan, $tanggal);
+        }
+
         $record = null;
         DB::transaction(function () use (
             $tanggal,
@@ -763,15 +887,23 @@ class InformasiOperasionalController extends Controller
             $idCabang,
             $batchGroups,
             $beforePeralatan,
+            $hasDriverInput,
+            $hasKendaraanInput,
+            $driver,
+            $kendaraan,
             &$record
         ) {
+            $syncTransport = $hasDriverInput || $hasKendaraanInput;
             $record = IoPeralatanTimService::upsert(
                 $tanggal,
                 $petugas,
                 $flatBatchIds,
                 $peralatan,
                 $idCabang,
-                $this->karyawan
+                $this->karyawan,
+                $hasDriverInput ? $driver : null,
+                $hasKendaraanInput ? $kendaraan : null,
+                $syncTransport
             );
 
             // Mirror opsional ke jadwal_mobilisasi (fallback baca lama) jika kolom masih ada.
@@ -781,6 +913,24 @@ class InformasiOperasionalController extends Controller
                     $peralatan,
                     $this->karyawan
                 );
+            }
+
+            // Mirror ke jadwal agar FDL/ops tetap baca nilai terkini;
+            // sumber "aktual" di index tetap dari io_peralatan_tim.
+            if ($flatBatchIds !== [] && $syncTransport) {
+                $jadwalPatch = [
+                    'updated_by' => $this->karyawan,
+                    'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                ];
+                if ($hasDriverInput) {
+                    $jadwalPatch['driver'] = $driver !== '' ? $driver : null;
+                }
+                if ($hasKendaraanInput) {
+                    $jadwalPatch['kendaraan'] = $kendaraan !== '' ? $kendaraan : null;
+                }
+                Jadwal::whereIn('id', $flatBatchIds)
+                    ->where('is_active', true)
+                    ->update($jadwalPatch);
             }
 
             // Monitoring: hanya status_alat (tanpa start_date / end_date).
@@ -796,6 +946,8 @@ class InformasiOperasionalController extends Controller
             'id' => $record->id ?? null,
             'tanggal' => $tanggal,
             'petugas_sampling' => $petugas,
+            'driver' => $driver !== '' ? $driver : null,
+            'kendaraan' => $kendaraan !== '' ? $kendaraan : null,
             'snapshots_count' => is_array($record->snapshots ?? null) ? count($record->snapshots) : 0,
             'storage' => 'io_peralatan_tim',
         ]);
@@ -1545,6 +1697,85 @@ class InformasiOperasionalController extends Controller
         }
 
         return [];
+    }
+
+    /**
+     * Tentukan plat/driver tampilan: aktual IO jika sudah disimpan, else dari jadwal SP.
+     *
+     * @return array{
+     *   kendaraan_jadwal:?string,
+     *   driver_jadwal:?string,
+     *   kendaraan_aktual:?string,
+     *   driver_aktual:?string,
+     *   kendaraan_display:?string,
+     *   driver_display:?string,
+     *   source:string
+     * }
+     */
+    private function resolveTransportDisplay(
+        string $tanggal,
+        $batchId,
+        string $sampler,
+        $kendaraanJadwal,
+        $driverJadwal
+    ): array {
+        $kendaraanJadwal = trim((string) ($kendaraanJadwal ?? ''));
+        $driverJadwal = trim((string) ($driverJadwal ?? ''));
+        $kendaraanAktual = null;
+        $driverAktual = null;
+
+        $saved = null;
+        if (Schema::hasTable('io_peralatan_tim')) {
+            $petugasKey = IoPeralatanTimService::normalizePetugasKey($sampler);
+            if ($petugasKey !== '') {
+                $saved = IoPeralatanTimService::findActive($tanggal, $petugasKey);
+            }
+            if (!$saved) {
+                // Fallback: cari row yang memuat salah satu batch (tim multi-PT).
+                foreach (JadwalMobilisasiService::flattenBatchIds($batchId) as $bid) {
+                    $hit = IoPeralatanTim::query()
+                        ->where('is_active', true)
+                        ->whereDate('tanggal', $tanggal)
+                        ->where(function ($q) use ($bid) {
+                            $q->whereJsonContains('batch_ids', (int) $bid)
+                                ->orWhereJsonContains('batch_ids', (string) $bid);
+                        })
+                        ->orderByDesc('id')
+                        ->first();
+                    if ($hit) {
+                        $saved = $hit;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($saved) {
+            if (Schema::hasColumn('io_peralatan_tim', 'kendaraan')) {
+                $val = trim((string) ($saved->kendaraan ?? ''));
+                $kendaraanAktual = $val !== '' ? $val : null;
+            }
+            if (Schema::hasColumn('io_peralatan_tim', 'driver')) {
+                $val = trim((string) ($saved->driver ?? ''));
+                $driverAktual = $val !== '' ? $val : null;
+            }
+        }
+
+        $hasAktual = $kendaraanAktual !== null || $driverAktual !== null;
+
+        return [
+            'kendaraan_jadwal' => $kendaraanJadwal !== '' ? $kendaraanJadwal : null,
+            'driver_jadwal' => $driverJadwal !== '' ? $driverJadwal : null,
+            'kendaraan_aktual' => $kendaraanAktual,
+            'driver_aktual' => $driverAktual,
+            'kendaraan_display' => $hasAktual
+                ? ($kendaraanAktual ?? ($kendaraanJadwal !== '' ? $kendaraanJadwal : null))
+                : ($kendaraanJadwal !== '' ? $kendaraanJadwal : null),
+            'driver_display' => $hasAktual
+                ? ($driverAktual ?? ($driverJadwal !== '' ? $driverJadwal : null))
+                : ($driverJadwal !== '' ? $driverJadwal : null),
+            'source' => $hasAktual ? 'aktual' : 'jadwal',
+        ];
     }
 
     /**

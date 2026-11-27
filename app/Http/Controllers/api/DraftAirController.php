@@ -700,7 +700,12 @@ class DraftAirController extends Controller
         $suhuValue = $resolveLapanganField($lhpsHeader ? $lhpsHeader->suhu_air : null, $lapanganAir->suhu_air);
 
         $cekOrderDetailPH = OrderDetail::where('no_sampel', $noSampel)->whereJsonContains('parameter', "128;pH")->first();
-        $cekOrderDetaiSUHU = OrderDetail::where('no_sampel', $noSampel)->whereJsonContains('parameter', "160;Suhu")->first();
+        $cekOrderDetaiSUHU = OrderDetail::where('no_sampel', $noSampel)
+            ->where(function ($query) {
+                $query->whereJsonContains('parameter', '160;Suhu')
+                    ->orWhereJsonContains('parameter', '2329;Suhu (NA)');
+            })
+            ->first();
         $cekOrderDetaiDebit = OrderDetail::where('no_sampel', $noSampel)->where('parameter', 'LIKE', "%Debit Air%")->first();
 
         if ($phValue !== null && $cekOrderDetailPH) {
@@ -779,12 +784,12 @@ class DraftAirController extends Controller
                 'no_sampel' => $lapanganAir->no_sampel,
                 'akr' => '',
                 'satuan' => $bakumutu->satuan ?? '°C',
-                'methode' => $bakumutu->method ?? $masterParameterSuhu->method,
+                'methode' => $bakumutu->method ?? ($masterParameterSuhu->method ?? '-'),
                 'baku_mutu' => [$bakumutu->baku_mutu ?? '-'],
                 'hasil' => $suhuValue,
                 'status' => 'AKREDITASI',
                 'hasil_koreksi' => '',
-                'keterangan' => "Suhu"
+                'keterangan' => 'Suhu'
             ];
 
             $methodsUsed[] = $bakumutu->method ?? '-';
@@ -829,7 +834,12 @@ class DraftAirController extends Controller
         $suhuValue = $resolveSdField($lhpsHeader ? $lhpsHeader->suhu_air : null, $sampelDiantar['suhu'] ?? null);
 
         $cekPH    = OrderDetail::where('no_sampel', $noSampel)->whereJsonContains('parameter', "128;pH")->first();
-        $cekSuhu  = OrderDetail::where('no_sampel', $noSampel)->whereJsonContains('parameter', "160;Suhu")->first();
+        $cekSuhu  = OrderDetail::where('no_sampel', $noSampel)
+            ->where(function ($query) {
+                $query->whereJsonContains('parameter', '160;Suhu')
+                    ->orWhereJsonContains('parameter', '2329;Suhu (NA)');
+            })
+            ->first();
         $cekDebit = OrderDetail::where('no_sampel', $noSampel)->where('parameter', 'LIKE', "%Debit Air%")->first();
 
         // === pH ===
@@ -881,7 +891,7 @@ class DraftAirController extends Controller
                 'akr'           => '',
                 'keterangan'    => 'Suhu',
                 'satuan'        => $bakumutu->satuan ?? '°C',
-                'methode'       => $bakumutu->method ?? $masterParameter->method ?? '-',
+                'methode'       => $bakumutu->method ?? ($masterParameter->method ?? '-'),
                 'baku_mutu'     => [$bakumutu->baku_mutu ?? '-'],
                 'hasil'         => $suhuValue,
                 'hasil_koreksi' => '',

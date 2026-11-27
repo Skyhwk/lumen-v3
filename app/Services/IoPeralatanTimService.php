@@ -397,7 +397,10 @@ class IoPeralatanTimService
         array $batchIds,
         array $peralatan,
         ?int $idCabang = null,
-        ?string $actor = null
+        ?string $actor = null,
+        ?string $driver = null,
+        ?string $kendaraan = null,
+        bool $syncTransport = false
     ): IoPeralatanTim {
         $petugasKey = self::normalizePetugasKey($petugasSampling);
         if ($petugasKey === '') {
@@ -453,6 +456,15 @@ class IoPeralatanTimService
         ];
         if (Schema::hasColumn('io_peralatan_tim', 'snapshots')) {
             $payload['snapshots'] = $snapshots;
+        }
+        // Driver/kendaraan aktual hanya di-set saat modal IO mengirim (syncTransport).
+        if ($syncTransport) {
+            if (Schema::hasColumn('io_peralatan_tim', 'driver')) {
+                $payload['driver'] = $driver !== null && trim($driver) !== '' ? trim($driver) : null;
+            }
+            if (Schema::hasColumn('io_peralatan_tim', 'kendaraan')) {
+                $payload['kendaraan'] = $kendaraan !== null && trim($kendaraan) !== '' ? trim($kendaraan) : null;
+            }
         }
 
         $record->fill($payload);

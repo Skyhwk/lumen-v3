@@ -159,46 +159,12 @@ class TqcUdaraSwabTesController extends Controller
                     ->select('baku_mutu', 'satuan', 'method', 'nama_header')
                     ->first();
 
-                $ws = $item->ws_udara ?? $item->ws_value_linkungan ?? null;
-
-                $nilai = '-';
-
-                if ($ws) {
-                    $hasil = $ws->toArray();
-
-                    $index = $getSatuan->udara($bakuMutu->satuan ?? null);
-
-                    if ($index === null) {
-                        // cari f_koreksi_1..17 dulu
-                        for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
-                            $key = "f_koreksi_$i";
-                            if (isset($hasil[$key]) && $hasil[$key] !== '' && $hasil[$key] !== null) {
-                                $nilai = $hasil[$key];
-                                break;
-                            }
-                        }
-
-                        // kalau masih kosong, cari hasil1..17
-                        if ($nilai === '-' || $nilai === null || $nilai === '') {
-                            for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
-                                $key = "hasil$i";
-                                if (isset($hasil[$key]) && $hasil[$key] !== '' && $hasil[$key] !== null) {
-                                    $nilai = $hasil[$key];
-                                    break;
-                                }
-                            }
-                        }
-                    } else {
-                        $fKoreksiHasil = "f_koreksi_$index";
-                        $fhasil        = "hasil$index";
-
-                        if (isset($hasil[$fKoreksiHasil]) && $hasil[$fKoreksiHasil] !== '' && $hasil[$fKoreksiHasil] !== null) {
-                            $nilai = $hasil[$fKoreksiHasil];
-                        } elseif (isset($hasil[$fhasil]) && $hasil[$fhasil] !== '' && $hasil[$fhasil] !== null) {
-                            $nilai = $hasil[$fhasil];
-                        }
-                    }
-                }
+                $index = $getSatuan->udara($bakuMutu->satuan ?? null);
+                $nilai = $this->resolveTrendNilaiUji(
+                    $item->ws_udara ? $item->ws_udara->toArray() : null,
+                    $item->ws_value_linkungan ? $item->ws_value_linkungan->toArray() : null,
+                    $index
+                );
 
                 $data[] = [
                     'no_sampel'   => $orderDetail->no_sampel,
@@ -219,6 +185,99 @@ class TqcUdaraSwabTesController extends Controller
             'data'    => $data,
         ]);
     }
+    private function resolveTrendNilaiUji(?array $hasilUdara, ?array $hasilLingkungan, $index): string
+    {
+        $useWsUdara = collect($hasilUdara ?? [])
+            ->contains(fn ($v) => $v !== null && $v !== '');
+
+        $hasil = $useWsUdara ? ($hasilUdara ?? []) : ($hasilLingkungan ?? []);
+        if (!$hasil) {
+            $hasil = array_merge($hasilLingkungan ?? [], $hasilUdara ?? []);
+        }
+
+        if (!$hasil) {
+            return '-';
+        }
+
+        $has = function ($key) use ($hasil) {
+            return array_key_exists($key, $hasil) && $hasil[$key] !== null && $hasil[$key] !== '';
+        };
+
+        $pick = function ($key) use ($hasil, $has) {
+            return $has($key) ? (string) $hasil[$key] : null;
+        };
+
+        if ($index === null) {
+            if ($pick('f_koreksi_c') !== null) {
+                return $pick('f_koreksi_c');
+            }
+
+            for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
+                if ((int) $i === 0) {
+                    continue;
+                }
+                $v = $pick("f_koreksi_c{$i}");
+                if ($v !== null) {
+                    return $v;
+                }
+            }
+
+            if ($pick('C') !== null) {
+                return $pick('C');
+            }
+
+            for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
+                $v = $pick("C{$i}");
+                if ($v !== null) {
+                    return $v;
+                }
+            }
+
+            for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
+                $v = $pick("f_koreksi_{$i}");
+                if ($v !== null) {
+                    return $v;
+                }
+            }
+
+            for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
+                $v = $pick("hasil{$i}");
+                if ($v !== null) {
+                    return $v;
+                }
+            }
+
+            return '-';
+        }
+
+        $CIndex = $index == 1 ? '' : $index - 1;
+        $keysToTry = [
+            "f_koreksi_c{$index}",
+            "C{$CIndex}",
+            "f_koreksi_{$index}",
+            "hasil{$index}",
+        ];
+
+        if ($index == 17) {
+            $keysToTry = array_merge($keysToTry, ['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2']);
+        } elseif ($index == 15) {
+            $keysToTry = array_merge($keysToTry, ['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3']);
+        } elseif ($index == 16) {
+            $keysToTry = array_merge($keysToTry, ['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1']);
+        } else {
+            $keysToTry = array_merge($keysToTry, ['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1']);
+        }
+
+        foreach ($keysToTry as $key) {
+            $v = $pick($key);
+            if ($v !== null) {
+                return $v;
+            }
+        }
+
+        return '-';
+    }
+
     public function detailLapangan(Request $request)
     {
         try {

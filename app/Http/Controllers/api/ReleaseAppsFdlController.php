@@ -16,7 +16,7 @@ class ReleaseAppsFdlController extends Controller
 {
     public function index(Request $request)
     {
-        $releaseSystem = ReleaseSystem::where('system', 'Apps FDL')->get();
+        $releaseSystem = ReleaseSystem::where('system', 'Apps FDL')->orderBy('id', 'desc')->get();
         return response()->json(['success' => true, 'data' => $releaseSystem], 200);
     }
 

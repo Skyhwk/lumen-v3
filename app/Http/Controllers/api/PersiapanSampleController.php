@@ -1048,6 +1048,21 @@ class PersiapanSampleController extends Controller
         return $stored === $wanted;
     }
 
+    /**
+     * True jika dua set no_sampel saling terkait (identik / overlap / subset).
+     * False jika disjoint → pecah parsial tim sama, tanggal sama, sampel beda (case 3).
+     */
+    private function persiapanNoSampelSetsRelated($headerNoSampelJson, array $wantedNoSampel): bool
+    {
+        $wanted = $this->normalizeNoSampelList($wantedNoSampel);
+        $stored = $this->normalizeNoSampelList(json_decode($headerNoSampelJson ?? 'null', true) ?? []);
+        if ($wanted === [] || $stored === []) {
+            return false;
+        }
+
+        return count(array_intersect($stored, $wanted)) > 0;
+    }
+
     private function normalizeSamplerList($sampler): array
     {
         $names = array_map(function ($name) {
@@ -1094,6 +1109,14 @@ class PersiapanSampleController extends Controller
             return (int) $id !== (int) $keeper->id;
         })->values()->all();
         if ($removeIds) {
+            // Tanggal+sampler sama (match set yang sama) → amankan BAS/CS ke keeper sebelum nonaktif.
+            foreach ($rows as $row) {
+                if ((int) $row->id === (int) $keeper->id) {
+                    continue;
+                }
+                $this->copyBasDocumentsIfSameDayTeam($keeper, $row);
+            }
+
             PersiapanSampelHeader::whereIn('id', $removeIds)->update([
                 'is_active' => 0,
                 'updated_by' => $this->karyawan,
@@ -1215,10 +1238,155 @@ class PersiapanSampleController extends Controller
             }
 
             $psh->save();
+
+            // Exact no_sampel match bisa miss header lama saat ada ganti/tambah sampel.
+            // Matikan sibling aktif (order+periode+tanggal+sampler) supaya hanya 1 yang hidup.
+            $this->deactivateSiblingPersiapanHeaders($request, (int) $psh->id);
+
             return $this->collapseDuplicatePersiapanHeaders($request, $psh);
         } catch (\Throwable $th) {
             new Exception($th);
         }
+    }
+
+    private function persiapanDocumentKosong($value): bool
+    {
+        if ($value === null) {
+            return true;
+        }
+        if (is_string($value)) {
+            $trim = trim($value);
+            return $trim === '' || $trim === 'null' || $trim === '[]' || $trim === '{}';
+        }
+
+        return false;
+    }
+
+    /**
+     * Copy BAS/CS ke header keeper HANYA jika tanggal + sampler sama
+     * dan keeper belum punya dokumen. Dipakai saat sibling di-nonaktifkan.
+     */
+    private function copyBasDocumentsIfSameDayTeam(PersiapanSampelHeader $keeper, PersiapanSampelHeader $source): bool
+    {
+        $sameTanggal = $this->normalizePersiapanDate($keeper->tanggal_sampling)
+            === $this->normalizePersiapanDate($source->tanggal_sampling);
+        $sameSampler = $this->normalizeSamplerList($keeper->sampler_jadwal)
+            === $this->normalizeSamplerList($source->sampler_jadwal);
+
+        if (!$sameTanggal || !$sameSampler) {
+            return false;
+        }
+
+        $copied = false;
+        $docFields = [
+            'detail_bas_documents',
+            'detail_cs_documents',
+            'filename_bas',
+            'filename_cs',
+            'tanda_tangan_bas',
+            'nama_sampler_cs',
+            'file_ttd_sampler_cs',
+            'nama_pic_sampling_cs',
+            'file_ttd_pic_sampling_cs',
+        ];
+
+        foreach ($docFields as $field) {
+            if ($this->persiapanDocumentKosong($keeper->$field) && !$this->persiapanDocumentKosong($source->$field)) {
+                $keeper->$field = $source->$field;
+                $copied = true;
+            }
+        }
+
+        if ($copied) {
+            $keeper->updated_by = $this->karyawan;
+            $keeper->updated_at = Carbon::now();
+            $keeper->save();
+        }
+
+        return $copied;
+    }
+
+    private function normalizePersiapanDate($date): string
+    {
+        if ($date === null || trim((string) $date) === '') {
+            return '';
+        }
+        try {
+            return Carbon::parse($date)->toDateString();
+        } catch (\Throwable $e) {
+            return trim((string) $date);
+        }
+    }
+
+    /**
+     * Nonaktifkan PS header aktif lain dengan identitas sama
+     * (quotation/order + periode + tanggal + sampler) DAN set no_sampel terkait (overlap).
+     * Disjoint (parsial tim sama, sampel beda) → biarkan hidup berdampingan, jangan copy BAS.
+     */
+    private function deactivateSiblingPersiapanHeaders(Request $request, int $keepId): void
+    {
+        $periode = trim((string) $request->periode);
+        $wantedSampler = $this->normalizeSamplerList($request->sampler_jadwal);
+        $wantedNoSampel = $this->resolveRequestNoSampelList($request);
+
+        $query = PersiapanSampelHeader::where('is_active', 1)
+            ->where('id', '!=', $keepId)
+            ->where('tanggal_sampling', $request->tanggal_sampling)
+            ->where(function ($quotation) use ($request) {
+                $quotation->where('no_quotation', $request->no_quotation);
+                if (!empty($request->no_order)) {
+                    $quotation->orWhere('no_order', $request->no_order);
+                }
+            });
+
+        if ($periode === '') {
+            $query->where(function ($inner) {
+                $inner->whereNull('periode')->orWhere('periode', '')->orWhereRaw("TRIM(periode) = ''");
+            });
+        } else {
+            $query->whereRaw('TRIM(periode) = ?', [$periode]);
+        }
+
+        $siblings = $query->get()
+            ->filter(function ($header) use ($wantedSampler, $wantedNoSampel) {
+                if ($this->normalizeSamplerList($header->sampler_jadwal) !== $wantedSampler) {
+                    return false;
+                }
+                // Case 3: parsial 005-006 vs induk 001-004 → disjoint → jangan nonaktifkan.
+                return $this->persiapanNoSampelSetsRelated($header->no_sampel, $wantedNoSampel);
+            })
+            ->values();
+
+        if ($siblings->isEmpty()) {
+            return;
+        }
+
+        $keeper = PersiapanSampelHeader::find($keepId);
+        if ($keeper) {
+            $sourceWithBas = $siblings
+                ->filter(function ($header) {
+                    return !$this->persiapanDocumentKosong($header->detail_bas_documents);
+                })
+                ->sortByDesc('id')
+                ->first();
+
+            if ($sourceWithBas) {
+                $this->copyBasDocumentsIfSameDayTeam($keeper, $sourceWithBas);
+            }
+        }
+
+        $siblingIds = $siblings->pluck('id')->values()->all();
+
+        PersiapanSampelHeader::whereIn('id', $siblingIds)->update([
+            'is_active' => 0,
+            'updated_by' => $this->karyawan,
+            'updated_at' => Carbon::now(),
+        ]);
+        PersiapanSampelDetail::whereIn('id_persiapan_sampel_header', $siblingIds)->update([
+            'is_active' => 0,
+            'updated_by' => $this->karyawan,
+            'updated_at' => Carbon::now(),
+        ]);
     }
 
 
@@ -1288,7 +1456,7 @@ class PersiapanSampleController extends Controller
             
             return true;
         } catch (\Throwable $th) {
-            throw $th;
+            throw $th;  
         }
     }
 

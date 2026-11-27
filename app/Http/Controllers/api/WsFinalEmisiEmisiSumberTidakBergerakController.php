@@ -232,7 +232,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
     {
         DB::beginTransaction();
         try {
-            $faktor_koreksi = (float) $request->faktor_koreksi / 100;
+            $faktor_koreksi = (float) $request->faktor_koreksi;
             $dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $request->no_sampel)->first();
             $orderDetail = OrderDetail::where('no_sampel', $request->no_sampel)
                 ->where('is_active', true)
@@ -274,7 +274,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                 $C1_value = $wsValue->f_koreksi_c1 !== null
                     ? (float) $wsValue->f_koreksi_c1
                     : (float) $wsValue->C1;
-                $hasil = ((20.9 - $faktor_koreksi) / (20.9 - (float) $dataLapangan->O2)) * $C1_value;
+                $hasil = ((21 - $faktor_koreksi) / (21 - (float) $dataLapangan->O2)) * $C1_value;
                 $keterangan = $request->jenis_koreksi ?? [];
                 $keterangan[] = 'Angka koreksi ' . $faktor_koreksi . '%';
                 $wsValue->input_koreksi = $faktor_koreksi;
@@ -307,6 +307,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
             if ($request->type == 'emisi_cerobong_header') {
                 $data = EmisiCerobongHeader::where('id', $request->id)->update([
                     'is_approved'  => 0,
+                    'is_active'    => false,
                     'notes_reject' => $request->note,
                     'rejected_by'  => $this->karyawan,
                     'rejected_at'  => Carbon::now()->format('Y-m-d H:i:s'),

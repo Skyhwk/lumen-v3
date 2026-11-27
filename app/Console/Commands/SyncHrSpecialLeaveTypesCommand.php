@@ -34,6 +34,7 @@ class SyncHrSpecialLeaveTypesCommand extends Command
         ['code' => 'government_summons', 'name' => 'Panggilan instansi pemerintahan', 'duration' => 0, 'duration_unit' => 'open', 'max_uses' => null, 'requires_attachment' => true, 'description' => 'Sesuai surat resmi'],
         ['code' => 'religious_travel', 'name' => 'Perjalanan ibadah', 'duration' => 15, 'duration_unit' => 'calendar', 'max_uses' => null, 'requires_attachment' => true, 'description' => '15 hari kalender termasuk administrasi'],
         ['code' => 'hajj', 'name' => 'Ibadah haji', 'duration' => 45, 'duration_unit' => 'calendar', 'max_uses' => 1, 'requires_attachment' => true, 'description' => '45 hari kalender — maksimal 1x selama masa kerja'],
+        ['code' => 'maternity', 'name' => 'Cuti Melahirkan', 'duration' => 3, 'duration_unit' => 'month', 'max_uses' => null, 'requires_attachment' => true, 'description' => 'Cuti melahirkan selama 3 bulan sejak tanggal mulai (khusus karyawan perempuan, wajib lampiran surat dokter/HPL). Bulan mulai cuti tetap dibayar penuh, bulan cuti penuh Rp 0, dan bulan kembali masuk kerja dihitung prorata.'],
     ];
 
     public function handle(): int

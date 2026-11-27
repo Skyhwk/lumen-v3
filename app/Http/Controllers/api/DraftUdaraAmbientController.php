@@ -32,7 +32,7 @@ use App\Models\Subkontrak;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
 use App\Helpers\EmailLhpRilisHelpers;
-use App\Models\MdlUdara;
+use App\Services\MdlUdaraService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -47,6 +47,7 @@ class DraftUdaraAmbientController extends Controller
         $data = OrderDetail::with([
         'lhps_ling',
         'allDetailLingkunganHidup',
+        'allDetailSenyawaVolatile',
         'dataLapanganPartikulatMeter', // Relasi ini sudah dipanggil
         'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
         ])
@@ -60,6 +61,9 @@ class DraftUdaraAmbientController extends Controller
         ->map(function ($item) {
             $lhps = $item->lhps_ling;
             $lapangan = collect($item->allDetailLingkunganHidup);
+            if ($lapangan->isEmpty()) {
+                $lapangan = collect($item->allDetailSenyawaVolatile);
+            }
             $partikulat = DataLapanganPartikulatMeter::where('no_sampel', $item->no_sampel)
                 ->get();
             // Ambil data partikulat sebagai collection
@@ -797,6 +801,7 @@ class DraftUdaraAmbientController extends Controller
                     $durasi   = $item->ws_value_linkungan->durasi ?? null;
                     return [
                         'id'            => $item->id,
+                        'id_parameter'  => $newQuery->id ?? null,
                         'parameter'     => $newQuery->nama_lhp ?? $newQuery->nama_regulasi ?? $item->parameter,
                         'nama_lab'      => $item->parameter,
                         'satuan'        => $newQuery->satuan ?? null,
@@ -856,19 +861,13 @@ class DraftUdaraAmbientController extends Controller
                 //     })->toArray();
 
                 $parameters = Parameter::where(['id_kategori' => 4, 'is_active' => true])->whereIn('nama_lab', $validasi->pluck('nama_lab'))->get()->map(fn($item) => ['id' => $item->id, 'parameter' => $item->nama_lab]);
-                $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
-                
-                $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
-                    if ($hasilUji && $hasilUji !== "-" && $hasilUji !== "##" && !str_contains($hasilUji, '<')) {
-                        $colToSearch = "hasil" . ($index ?: 1);
-                        $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
-                        if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
-                            $hasilUji = "<" . $mdlUdara->$colToSearch;
-                        }
-                    }
-
-                    return $hasilUji;
-                };
+                $mdlUdara = MdlUdaraService::loadForParameterIds($parameters->pluck('id'));
+                $getHasilUji = fn ($index, $parameterId, $hasilUji) => MdlUdaraService::formatHasilUjiForDisplay(
+                    $hasilUji,
+                    (int) $index,
+                    $parameterId,
+                    $mdlUdara
+                );
 
                 foreach ($validasi as $item) {
                     $entry      = $this->formatEntry((object) $item, $request->regulasi, $methodsUsed, $getHasilUji);
@@ -943,11 +942,13 @@ class DraftUdaraAmbientController extends Controller
         $getSatuan = new HelperSatuan;
 
         $index    = $getSatuan->udara($bakumutu->satuan ?? null) ?? 1;
-        $ws_udara = (object) $val->ws_udara;
+        $ws_udara = (object) ($val->ws_udara ?? []);
+        $ws_value_lingkungan = (object) ($val->ws_lingkungan ?? []);
 
-        $ws_value_lingkungan = (object) $val->ws_lingkungan;
-        $ws          = null;
-        if ($ws_udara != null) {
+        $useWsUdara = collect((array) $val->ws_udara)
+            ->contains(fn ($v) => $v !== null && $v !== '');
+
+        if ($useWsUdara) {
             $fKoreksiKey = "f_koreksi_$index";
             $hasilKey    = "hasil$index";
             $ws = $ws_udara;
@@ -958,8 +959,8 @@ class DraftUdaraAmbientController extends Controller
             $hasilKey    = "C{$i}";
             $ws = $ws_value_lingkungan;
         }
-        
-        $entry['hasil_uji'] = $ws->$fKoreksiKey ?? $ws->$hasilKey ?? null;
+
+        $entry['hasil_uji'] = $this->pickWsHasilValue($ws, $index, $fKoreksiKey, $hasilKey);
         if ($bakumutu && in_array($bakumutu->satuan, ["mg/m³", "mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
             $fKoreksi2          = $ws->f_koreksi_2 ?? null;
             $hasil2             = $ws->hasil2 ?? null;
@@ -995,9 +996,51 @@ class DraftUdaraAmbientController extends Controller
             $entry['baku_mutu'] = ['-'];
         }
         
-        $entry['hasil_uji'] = $getHasilUji($index, Parameter::where(['id_kategori' => 4, 'nama_lab' => $val->nama_lab, 'is_active' => true])->first()->id, $entry['hasil_uji']);
+        $parameterId = $val->id_parameter
+            ?? Parameter::where(['id_kategori' => 4, 'nama_lab' => $val->nama_lab, 'is_active' => true])->value('id');
+        $entry['hasil_uji'] = $getHasilUji($index, $parameterId, $entry['hasil_uji']);
 
         return $entry;
+    }
+
+    private function pickWsHasilValue($ws, $index, string $fKoreksiKey, string $hasilKey)
+    {
+        $has = function ($key) use ($ws) {
+            return isset($ws->$key) && $ws->$key !== null && $ws->$key !== '';
+        };
+
+        if ($has($fKoreksiKey)) {
+            return $ws->$fKoreksiKey;
+        }
+        if ($has($hasilKey)) {
+            return $ws->$hasilKey;
+        }
+
+        $CIndex = $index == 1 ? '' : $index - 1;
+        $keysToTry = [
+            "f_koreksi_c{$index}",
+            "C{$CIndex}",
+            "f_koreksi_{$index}",
+            "hasil{$index}",
+        ];
+
+        if ($index == 17) {
+            $keysToTry = array_merge($keysToTry, ['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2']);
+        } elseif ($index == 15) {
+            $keysToTry = array_merge($keysToTry, ['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3']);
+        } elseif ($index == 16) {
+            $keysToTry = array_merge($keysToTry, ['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1']);
+        } else {
+            $keysToTry = array_merge($keysToTry, ['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1']);
+        }
+
+        foreach ($keysToTry as $key) {
+            if ($has($key)) {
+                return $ws->$key;
+            }
+        }
+
+        return null;
     }
 
     public function handleApprove(Request $request, $isManual = true)

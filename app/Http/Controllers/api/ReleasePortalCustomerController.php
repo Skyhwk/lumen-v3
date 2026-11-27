@@ -16,7 +16,7 @@ class ReleasePortalCustomerController extends Controller
 {
     public function index(Request $request)
     {
-        $releaseSystem = ReleaseSystem::where('system', 'Portal Customer')->get();
+        $releaseSystem = ReleaseSystem::where('system', 'Portal Customer')->orderBy('id', 'desc')->get();
         return response()->json(['success' => true, 'data' => $releaseSystem], 200);
     }
 
@@ -92,7 +92,7 @@ class ReleasePortalCustomerController extends Controller
 
     public function indexReleaseBackendPpi(Request $request)
     {
-        $releaseSystem = ReleaseSystem::where('system', 'Backend PPI')->get();
+        $releaseSystem = ReleaseSystem::where('system', 'Backend PPI')->orderBy('id', 'desc')->get();
         return response()->json(['success' => true, 'data' => $releaseSystem], 200);
     }
 
@@ -167,13 +167,13 @@ class ReleasePortalCustomerController extends Controller
 
     public function indexReleaseFrontendPpi(Request $request)
     {
-        $releaseSystem = ReleaseSystem::where('system', 'Frontend PPI')->get();
+        $releaseSystem = ReleaseSystem::where('system', 'Frontend PPI')->orderBy('id', 'desc')->get();
         return response()->json(['success' => true, 'data' => $releaseSystem], 200);
     }
 
     public function indexReleaseMobilePpi(Request $request)
     {
-        $releaseSystem = ReleaseSystem::where('system', 'Mobile PPI')->get();
+        $releaseSystem = ReleaseSystem::where('system', 'Mobile PPI')->orderBy('id', 'desc')->get();
         return response()->json(['success' => true, 'data' => $releaseSystem], 200);
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\HelpersFormula;
 
+use App\Services\MdlUdaraService;
 use Carbon\Carbon;
 
 class LingkunganHidupH2S
@@ -89,6 +90,14 @@ class LingkunganHidupH2S
         $C14 = round(array_sum($hasil14_array) / count($hasil14_array), 4);
         $C15 = round(array_sum($hasil15_array) / count($hasil15_array), 4);
         $C16 = round(array_sum($hasil16_array) / count($hasil16_array), 4);
+
+        $mdlRow = MdlUdaraService::activeRowForParameter($id_parameter);
+        $C = MdlUdaraService::applyColumn($C, $mdlRow, 'hasil1');
+        $C1 = MdlUdaraService::applyColumn($C1, $mdlRow, 'hasil2');
+        $C2 = MdlUdaraService::applyColumn($C2, $mdlRow, 'hasil3');
+        $C14 = MdlUdaraService::applyColumn($C14, $mdlRow, 'hasil15');
+        $C15 = MdlUdaraService::applyColumn($C15, $mdlRow, 'hasil16');
+        $C16 = MdlUdaraService::applyColumn($C16, $mdlRow, 'hasil17');
 
         $satuan = 'mg/Nm3';
 
