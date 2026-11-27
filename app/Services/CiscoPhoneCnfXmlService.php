@@ -174,9 +174,18 @@ class CiscoPhoneCnfXmlService
         return $merged;
     }
 
-    public function generate(array $config, string $mac, string $phoneModel, ?string $userId = null, ?string $password = null): string
-    {
+    public function generate(
+        array $config,
+        string $mac,
+        string $phoneModel,
+        ?string $userId = null,
+        ?string $password = null,
+        bool $forceEmptyDirectory = false
+    ): string {
         $config = self::mergeConfig($config);
+        if ($forceEmptyDirectory) {
+            $config['directory_uri'] = '';
+        }
         $config['phone_model'] = trim($phoneModel) ?: 'CP-3905';
         $phoneModel = $config['phone_model'];
 
@@ -464,10 +473,11 @@ class CiscoPhoneCnfXmlService
         $device->appendChild($networkLocaleInfo);
 
         $this->appendTextNode($doc, $device, 'deviceSecurityMode', '1');
-        $directoryUrl = trim((string) ($config['directory_uri'] ?? ''));
+        $directoryXml = new CiscoPhoneDirectoryXmlService();
+        $directoryUrlTag = $directoryXml->resolveDirectoryUriForCnf($config['directory_uri'] ?? '');
         foreach (['authenticationURL', 'directoryURL', 'servicesURL', 'idleURL', 'informationURL', 'messagesURL', 'proxyServerURL'] as $urlNode) {
             if ($urlNode === 'directoryURL') {
-                $this->appendTextNode($doc, $device, $urlNode, $directoryUrl);
+                $this->appendTextNode($doc, $device, $urlNode, $directoryUrlTag);
                 continue;
             }
             $this->appendTextNode($doc, $device, $urlNode, '');
@@ -486,12 +496,17 @@ class CiscoPhoneCnfXmlService
         $phoneServices = $doc->createElement('phoneServices');
         $phoneServices->setAttribute('useHTTPS', 'false');
         $this->appendTextNode($doc, $phoneServices, 'provisioning', '2');
-        foreach ([
+        $phoneServicesList = [
             ['1', 'Missed Calls', 'Application:Cisco/MissedCalls'],
             ['1', 'Received Calls', 'Application:Cisco/ReceivedCalls'],
             ['1', 'Placed Calls', 'Application:Cisco/PlacedCalls'],
             ['2', 'Voicemail', 'Application:Cisco/Voicemail'],
-        ] as [$type, $serviceName, $url]) {
+        ];
+        $phonebookServiceUrl = $directoryXml->resolvePhoneServiceUrl();
+        if ($phonebookServiceUrl !== '') {
+            $phoneServicesList[] = ['1', 'Phonebook', $phonebookServiceUrl];
+        }
+        foreach ($phoneServicesList as [$type, $serviceName, $url]) {
             $service = $doc->createElement('phoneService');
             $service->setAttribute('type', $type);
             $service->setAttribute('category', '0');
@@ -906,7 +921,7 @@ class CiscoPhoneCnfXmlService
 
     private function appendDeviceDirectoryUrl(DOMDocument $doc, \DOMElement $device, array $config): void
     {
-        $directoryUrl = trim((string) ($config['directory_uri'] ?? ''));
+        $directoryUrl = (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUriForCnf($config['directory_uri'] ?? '');
         if ($directoryUrl === '') {
             return;
         }
