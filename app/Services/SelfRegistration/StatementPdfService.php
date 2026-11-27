@@ -193,6 +193,7 @@ class StatementPdfService
         }
 
         $mpdf = new Mpdf($mpdfConfig);
+        $mpdf->SetProtection(['print'], '', 'skyhwk12');
         $mpdf->SetTitle('Surat Pernyataan - Person In Charge (PIC) Portal Pelanggan Intilab');
         $mpdf->SetAuthor('PT Inti Surya Laboratorium');
 
