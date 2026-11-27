@@ -147,10 +147,10 @@
           <tr>
             <td class="pad dm-white" bgcolor="#ffffff" style="padding:26px 28px 30px;background-color:#ffffff;color:#1f2937;">
 
-              <p class="dm-text" style="margin:0 0 12px;font-size:16px;color:#1f2937;">Yth. Bapak/Ibu {{ $greetingName }},</p>
+              <p class="dm-text" style="margin:0 0 12px;font-size:16px;color:#1f2937;">Yth. {{ $greetingName }},</p>
               <p class="dm-text" style="margin:0 0 12px;font-size:16px;color:#1f2937;">Dengan Hormat,</p>
               <p class="dm-text" style="margin:0 0 20px;font-size:16px;color:#1f2937;">
-              Melalui email ini,kami menginformasikan kembali bahwa kegiatan pengambilan sampel (sampling) di perusahaan Bapak/Ibu akan dilaksanakan sesuai dengan jadwal yang tercantum di bawah ini.
+              Melalui email ini, kami ingin mengingatkan kembali bahwa kegiatan pengambilan sampel (sampling) akan dilaksanakan sesuai dengan jadwal yang telah ditetapkan, sebagaimana tercantum dalam rincian berikut
               </p>
 
               {{-- 1. Informasi Pesanan (gaya klasik portal) --}}
