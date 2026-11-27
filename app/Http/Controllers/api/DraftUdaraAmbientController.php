@@ -797,6 +797,7 @@ class DraftUdaraAmbientController extends Controller
                     $durasi   = $item->ws_value_linkungan->durasi ?? null;
                     return [
                         'id'            => $item->id,
+                        'id_parameter'  => $newQuery->id ?? null,
                         'parameter'     => $newQuery->nama_lhp ?? $newQuery->nama_regulasi ?? $item->parameter,
                         'nama_lab'      => $item->parameter,
                         'satuan'        => $newQuery->satuan ?? null,
@@ -859,12 +860,28 @@ class DraftUdaraAmbientController extends Controller
                 $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
                 
                 $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
-                    if ($hasilUji && $hasilUji !== "-" && $hasilUji !== "##" && !str_contains($hasilUji, '<')) {
-                        $colToSearch = "hasil" . ($index ?: 1);
-                        $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
-                        if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
-                            $hasilUji = "<" . $mdlUdara->$colToSearch;
-                        }
+                    if ($hasilUji === null || $hasilUji === '' || $hasilUji === '-' || $hasilUji === '##') {
+                        return $hasilUji;
+                    }
+
+                    $hasilUji = (string) $hasilUji;
+                    if (str_contains($hasilUji, '<')) {
+                        return $hasilUji;
+                    }
+
+                    if (!$parameterId) {
+                        return $hasilUji;
+                    }
+
+                    $colToSearch = 'hasil' . ($index ?: 1);
+                    $mdlRow = $mdlUdara->first(function ($row) use ($parameterId, $colToSearch) {
+                        return (string) $row->parameter_id === (string) $parameterId
+                            && $row->{$colToSearch} !== null
+                            && $row->{$colToSearch} !== '';
+                    });
+
+                    if ($mdlRow && is_numeric($hasilUji) && is_numeric($mdlRow->{$colToSearch}) && (float) $hasilUji < (float) $mdlRow->{$colToSearch}) {
+                        return '<' . $mdlRow->{$colToSearch};
                     }
 
                     return $hasilUji;
@@ -943,11 +960,13 @@ class DraftUdaraAmbientController extends Controller
         $getSatuan = new HelperSatuan;
 
         $index    = $getSatuan->udara($bakumutu->satuan ?? null) ?? 1;
-        $ws_udara = (object) $val->ws_udara;
+        $ws_udara = (object) ($val->ws_udara ?? []);
+        $ws_value_lingkungan = (object) ($val->ws_lingkungan ?? []);
 
-        $ws_value_lingkungan = (object) $val->ws_lingkungan;
-        $ws          = null;
-        if ($ws_udara != null) {
+        $useWsUdara = collect((array) $val->ws_udara)
+            ->contains(fn ($v) => $v !== null && $v !== '');
+
+        if ($useWsUdara) {
             $fKoreksiKey = "f_koreksi_$index";
             $hasilKey    = "hasil$index";
             $ws = $ws_udara;
@@ -958,8 +977,8 @@ class DraftUdaraAmbientController extends Controller
             $hasilKey    = "C{$i}";
             $ws = $ws_value_lingkungan;
         }
-        
-        $entry['hasil_uji'] = $ws->$fKoreksiKey ?? $ws->$hasilKey ?? null;
+
+        $entry['hasil_uji'] = $this->pickWsHasilValue($ws, $index, $fKoreksiKey, $hasilKey);
         if ($bakumutu && in_array($bakumutu->satuan, ["mg/m³", "mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
             $fKoreksi2          = $ws->f_koreksi_2 ?? null;
             $hasil2             = $ws->hasil2 ?? null;
@@ -995,9 +1014,51 @@ class DraftUdaraAmbientController extends Controller
             $entry['baku_mutu'] = ['-'];
         }
         
-        $entry['hasil_uji'] = $getHasilUji($index, Parameter::where(['id_kategori' => 4, 'nama_lab' => $val->nama_lab, 'is_active' => true])->first()->id, $entry['hasil_uji']);
+        $parameterId = $val->id_parameter
+            ?? Parameter::where(['id_kategori' => 4, 'nama_lab' => $val->nama_lab, 'is_active' => true])->value('id');
+        $entry['hasil_uji'] = $getHasilUji($index, $parameterId, $entry['hasil_uji']);
 
         return $entry;
+    }
+
+    private function pickWsHasilValue($ws, $index, string $fKoreksiKey, string $hasilKey)
+    {
+        $has = function ($key) use ($ws) {
+            return isset($ws->$key) && $ws->$key !== null && $ws->$key !== '';
+        };
+
+        if ($has($fKoreksiKey)) {
+            return $ws->$fKoreksiKey;
+        }
+        if ($has($hasilKey)) {
+            return $ws->$hasilKey;
+        }
+
+        $CIndex = $index == 1 ? '' : $index - 1;
+        $keysToTry = [
+            "f_koreksi_c{$index}",
+            "C{$CIndex}",
+            "f_koreksi_{$index}",
+            "hasil{$index}",
+        ];
+
+        if ($index == 17) {
+            $keysToTry = array_merge($keysToTry, ['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2']);
+        } elseif ($index == 15) {
+            $keysToTry = array_merge($keysToTry, ['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3']);
+        } elseif ($index == 16) {
+            $keysToTry = array_merge($keysToTry, ['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1']);
+        } else {
+            $keysToTry = array_merge($keysToTry, ['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1']);
+        }
+
+        foreach ($keysToTry as $key) {
+            if ($has($key)) {
+                return $ws->$key;
+            }
+        }
+
+        return null;
     }
 
     public function handleApprove(Request $request, $isManual = true)
