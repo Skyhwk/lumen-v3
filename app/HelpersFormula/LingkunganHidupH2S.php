@@ -91,20 +91,13 @@ class LingkunganHidupH2S
         $C15 = round(array_sum($hasil15_array) / count($hasil15_array), 4);
         $C16 = round(array_sum($hasil16_array) / count($hasil16_array), 4);
 
-        $mdlUdara = MdlUdara::where('parameter_id', $id_parameter)
-            ->where('is_active', true)
-            ->orderByDesc('id')
-            ->first();
-        $mdlLimit = function ($column) use ($mdlUdara) {
-            return $mdlUdara ? $mdlUdara->{$column} : null;
-        };
-
-        $C = $this->valueBelowMdl($C, $mdlLimit('hasil1'));
-        $C1 = $this->valueBelowMdl($C1, $mdlLimit('hasil2'));
-        $C2 = $this->valueBelowMdl($C2, $mdlLimit('hasil3'));
-        $C14 = $this->valueBelowMdl($C14, $mdlLimit('hasil15'));
-        $C15 = $this->valueBelowMdl($C15, $mdlLimit('hasil16'));
-        $C16 = $this->valueBelowMdl($C16, $mdlLimit('hasil17'));
+        // baca mdl kalau dibutuhkan aja aktifkan ini
+        // $C = $this->valueBelowMdl($C, $mdlLimit('hasil1'));
+        // $C1 = $this->valueBelowMdl($C1, $mdlLimit('hasil2'));
+        // $C2 = $this->valueBelowMdl($C2, $mdlLimit('hasil3'));
+        // $C14 = $this->valueBelowMdl($C14, $mdlLimit('hasil15'));
+        // $C15 = $this->valueBelowMdl($C15, $mdlLimit('hasil16'));
+        // $C16 = $this->valueBelowMdl($C16, $mdlLimit('hasil17'));
 
         $satuan = 'mg/Nm3';
 
