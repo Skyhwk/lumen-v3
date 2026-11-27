@@ -34,7 +34,10 @@ class MdlUdaraService
             ->get();
     }
 
-    public static function limitForColumn(?MdlUdara $row, string $column): mixed
+    /**
+     * @return mixed
+     */
+    public static function limitForColumn(?MdlUdara $row, string $column)
     {
         if (!$row) {
             return null;
@@ -48,15 +51,20 @@ class MdlUdaraService
         return $value;
     }
 
-    public static function limitForWsIndex(?MdlUdara $row, int $index): mixed
+    /**
+     * @return mixed
+     */
+    public static function limitForWsIndex(?MdlUdara $row, int $index)
     {
         return self::limitForColumn($row, 'hasil' . ($index ?: 1));
     }
 
     /**
      * Hasil numerik di bawah MDL dikembalikan sebagai "&lt;{mdl}".
+     *
+     * @return mixed
      */
-    public static function formatBelowMdl($value, $mdlValue): mixed
+    public static function formatBelowMdl($value, $mdlValue)
     {
         if ($value === null || $value === '' || $value === '-' || $value === '##') {
             return $value;
@@ -81,12 +89,18 @@ class MdlUdaraService
         return $value;
     }
 
-    public static function applyColumn($value, ?MdlUdara $row, string $column): mixed
+    /**
+     * @return mixed
+     */
+    public static function applyColumn($value, ?MdlUdara $row, string $column)
     {
         return self::formatBelowMdl($value, self::limitForColumn($row, $column));
     }
 
-    public static function applyWsIndex($value, ?MdlUdara $row, int $index): mixed
+    /**
+     * @return mixed
+     */
+    public static function applyWsIndex($value, ?MdlUdara $row, int $index)
     {
         return self::formatBelowMdl($value, self::limitForWsIndex($row, $index));
     }
@@ -94,7 +108,10 @@ class MdlUdaraService
     /**
      * Dipakai di draft / WS Final saat koleksi MDL sudah di-load per parameter order.
      */
-    public static function formatHasilUjiForDisplay($hasilUji, int $index, $parameterId, Collection $mdlUdaraRows): mixed
+    /**
+     * @return mixed
+     */
+    public static function formatHasilUjiForDisplay($hasilUji, int $index, $parameterId, Collection $mdlUdaraRows)
     {
         if ($hasilUji === null || $hasilUji === '' || $hasilUji === '-' || $hasilUji === '##') {
             return $hasilUji;
