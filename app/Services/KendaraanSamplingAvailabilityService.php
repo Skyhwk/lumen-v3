@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 class KendaraanSamplingAvailabilityService
 {
-    public function availableByTanggal(?string $tanggal, $idSamplingEdit = null): array
+    public function availableByTanggal(?string $tanggal, $idSamplingEdit = null, ?string $tanggalEnd = null): array
     {
         if (!$tanggal) {
             return [
@@ -22,7 +22,9 @@ class KendaraanSamplingAvailabilityService
         }
 
         $tanggal = Carbon::parse($tanggal)->format('Y-m-d');
-        $bookedPlats = $this->bookedPenggunaanPlats($tanggal);
+        $bookedPlats = $this->bookedPenggunaanPlats($tanggal, $tanggalEnd);
+        $serviceIds = array_fill_keys((new ServiceMobilAvailabilityService())->busyMobilIdsOnDate($tanggal), true);
+        $serviceBlockedPlats = [];
 
         $options = [];
         $seen = [];
@@ -33,6 +35,10 @@ class KendaraanSamplingAvailabilityService
                 continue;
             }
             $key = $this->normalizePlat($plat);
+            if (isset($serviceIds[$mobil->id])) {
+                $serviceBlockedPlats[$key] = true;
+                continue;
+            }
             if (isset($bookedPlats[$key]) || isset($seen[$key])) {
                 continue;
             }
@@ -46,7 +52,7 @@ class KendaraanSamplingAvailabilityService
                 continue;
             }
             $key = $this->normalizePlat($plat);
-            if (isset($bookedPlats[$key]) || isset($seen[$key])) {
+            if (isset($bookedPlats[$key]) || isset($seen[$key]) || isset($serviceBlockedPlats[$key])) {
                 continue;
             }
             $seen[$key] = true;
@@ -59,13 +65,15 @@ class KendaraanSamplingAvailabilityService
             'status' => true,
             'data' => $options,
             'conflicts' => $this->jadwalConflicts($tanggal, $idSamplingEdit),
+            'service_blocked_plates' => array_keys($serviceBlockedPlats),
+            'usage_conflicts' => (object) $bookedPlats,
         ];
     }
 
     /**
      * @return array{ok:bool,plat:?string,tanggal:?string,alasan:?string,message:?string}
      */
-    public function validateSelection(?string $kendaraan, ?string $tanggal): array
+    public function validateSelection(?string $kendaraan, ?string $tanggal, ?string $tanggalEnd = null): array
     {
         $tanggalFmt = $tanggal ? Carbon::parse($tanggal)->format('Y-m-d') : null;
         $plat = $this->stripTebeng((string) $kendaraan);
@@ -81,9 +89,9 @@ class KendaraanSamplingAvailabilityService
         }
 
         $key = $this->normalizePlat($plat);
-        $booked = $this->bookedPenggunaanPlats($tanggalFmt);
+        $booked = $this->bookedPenggunaanPlats($tanggalFmt, $tanggalEnd);
         if (isset($booked[$key])) {
-            $alasan = 'Mobil memiliki catatan Penggunaan Mobil aktif pada tanggal tersebut.';
+            $alasan = "Mobil memiliki catatan Penggunaan Mobil aktif pada {$booked[$key]}.";
             return [
                 'ok' => false,
                 'plat' => $plat,
@@ -95,12 +103,15 @@ class KendaraanSamplingAvailabilityService
 
         $ops = $this->findOperationalByPlat($plat);
         if ($ops) {
+            $service = (new ServiceMobilAvailabilityService())
+                ->findFirstOverlappingActiveService((int) $ops->id, $tanggalFmt, $tanggalFmt);
+            $alasan = $service ? 'Mobil memiliki jadwal servis aktif pada tanggal tersebut.' : null;
             return [
-                'ok' => true,
+                'ok' => $service === null,
                 'plat' => $plat,
                 'tanggal' => $tanggalFmt,
-                'alasan' => null,
-                'message' => null,
+                'alasan' => $alasan,
+                'message' => $alasan ? $this->formatRejectMessage($plat, $tanggalFmt, $alasan) : null,
             ];
         }
 
@@ -251,10 +262,11 @@ class KendaraanSamplingAvailabilityService
     }
 
     /**
-     * @return array<string, true> keyed by normalized plat
+     * @return array<string, string> Tanggal bentrok pertama per plat.
      */
-    protected function bookedPenggunaanPlats(string $tanggal): array
+    protected function bookedPenggunaanPlats(string $tanggal, ?string $tanggalEnd): array
     {
+        $afterEnd = Carbon::parse($tanggalEnd ?? $tanggal)->addDay()->toDateString();
         $rows = PenggunaanMobilDetail::query()
             ->from('penggunaan_mobil_detail as d')
             ->join('penggunaan_mobil_header as h', function ($join) {
@@ -263,15 +275,17 @@ class KendaraanSamplingAvailabilityService
             ->join('daftar_mobil as m', 'm.id', '=', 'd.mobil_id')
             ->where('d.is_active', true)
             ->whereNull('d.deleted_at')
-            ->whereDate('d.tanggal_penggunaan', $tanggal)
+            ->where('d.tanggal_penggunaan', '>=', $tanggal)
+            ->where('d.tanggal_penggunaan', '<', $afterEnd)
             ->where('m.is_active', true)
-            ->get(['m.plat_mobil']);
+            ->orderBy('d.tanggal_penggunaan')
+            ->get(['m.plat_mobil', 'd.tanggal_penggunaan']);
 
         $map = [];
         foreach ($rows as $row) {
             $key = $this->normalizePlat((string) $row->plat_mobil);
-            if ($key !== '') {
-                $map[$key] = true;
+            if ($key !== '' && !isset($map[$key])) {
+                $map[$key] = Carbon::parse($row->tanggal_penggunaan)->toDateString();
             }
         }
 
