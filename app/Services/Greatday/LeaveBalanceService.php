@@ -439,7 +439,7 @@ class LeaveBalanceService
     private function normalizeSpecialDurationUnit(?string $unit): string
     {
         $u = strtolower(trim((string) $unit));
-        if ($u === 'calendar' || $u === 'open') {
+        if ($u === 'calendar' || $u === 'open' || $u === 'month') {
             return $u;
         }
 
@@ -448,7 +448,7 @@ class LeaveBalanceService
 
     public function countDaysForSpecialType(?string $start, ?string $end, string $durationUnit): int
     {
-        if ($durationUnit === 'calendar' || $durationUnit === 'open') {
+        if ($durationUnit === 'calendar' || $durationUnit === 'open' || $durationUnit === 'month') {
             return $this->countCalendarDaysBetween($start, $end);
         }
 

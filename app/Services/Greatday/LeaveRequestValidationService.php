@@ -4,6 +4,7 @@ namespace App\Services\Greatday;
 
 use App\Models\Hr\HrSpecialLeaveType;
 use App\Models\MasterKaryawan;
+use App\Services\Payroll\MaternityLeavePayrollService;
 use App\Support\Greatday\FormSubmissionDates;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
@@ -230,6 +231,25 @@ class LeaveRequestValidationService
 
         if (!$typeRow) {
             return 'Jenis cuti khusus tidak valid.';
+        }
+
+        if (MaternityLeavePayrollService::isMaternitySpecialLeaveType($typeRow)) {
+            if (!MaternityLeavePayrollService::isFemaleEmployee($employee)) {
+                return 'Cuti Melahirkan hanya berlaku untuk karyawan perempuan.';
+            }
+
+            if (!$hasAttachment) {
+                return 'Cuti Melahirkan wajib melampirkan surat keterangan dokter / HPL.';
+            }
+
+            $expectedEnd = MaternityLeavePayrollService::calculateEndDate($startDate);
+            $actualEnd = Carbon::parse($endDate)->startOfDay()->toDateString();
+            if ($actualEnd !== $expectedEnd) {
+                return 'Tanggal selesai Cuti Melahirkan harus otomatis 3 bulan dari tanggal mulai ('
+                    . Carbon::parse($expectedEnd)->format('d-m-Y') . ').';
+            }
+
+            return null;
         }
 
         $unit = $this->normalizeDurationUnit($typeRow->duration_unit ?? 'weekday');

@@ -112,9 +112,14 @@ final class PayrollTrainingSpecialLeaveService
             ->where('status', WorkflowStatus::APPROVED_HRD)
             ->get();
 
+        $maternityTypeIds = MaternityLeavePayrollService::hrMaternityTypeIds();
+
         foreach ($leaves as $request) {
             $detail = $request->leaveDetail;
             if (!$detail || (string) ($detail->leave_kind ?? '') !== 'special') {
+                continue;
+            }
+            if ($maternityTypeIds !== [] && in_array((int) ($detail->special_leave_type_id ?? 0), $maternityTypeIds, true)) {
                 continue;
             }
             $karyawanId = (int) $request->karyawan_id;
@@ -146,7 +151,12 @@ final class PayrollTrainingSpecialLeaveService
             ->where('type', 'Special Leave')
             ->get();
 
+        $maternityTypeIds = MaternityLeavePayrollService::legacyMaternityTypeIds();
+
         foreach ($leaves as $row) {
+            if ($maternityTypeIds !== [] && in_array((int) ($row->special_leave_id ?? 0), $maternityTypeIds, true)) {
+                continue;
+            }
             $karyawanId = (int) $row->employee_id;
             self::addDatesInRange(
                 $datesByKaryawan,
