@@ -10,6 +10,7 @@ use App\Helpers\LhpStepSequence;
 use App\Services\GroupedCfrByLhp;
 
 use App\Models\{
+    BlokLhp,
     GenerateLink,
     HoldHp,
     OrderHeader,
@@ -123,6 +124,37 @@ class LHPHandleController extends BaseController
                     return $item;
                 });
         }
+
+        // 6. Cek daftar blok LHP: bila diblok, hanya tampilkan nomor LHP (cfr) & penamaan titik (keterangan_1)
+        //    serta sembunyikan seluruh data step/hasil/dokumen agar sisi portal menampilkannya sebagai error sistem.
+        $cfrList = $dataGrouped->pluck('cfr')->filter()->unique()->values()->all();
+        $blockedMap = [];
+        if (!empty($cfrList)) {
+            $blockedCfrs = BlokLhp::query()
+                ->where('is_active', true)
+                ->whereIn('cfr', $cfrList)
+                ->pluck('cfr')
+                ->all();
+            $blockedMap = array_flip($blockedCfrs);
+        }
+
+        $hasBlockedLhp = false;
+        $dataGrouped = $dataGrouped->map(function ($item) use ($blockedMap, &$hasBlockedLhp) {
+            $cfr = $item['cfr'] ?? null;
+            $isBlocked = $cfr !== null && isset($blockedMap[$cfr]);
+
+            if ($isBlocked) {
+                $hasBlockedLhp = true;
+                $item['is_blocked'] = true;
+                $item['steps'] = null;
+                $item['rekap_pengujian'] = [];
+            } else {
+                $item['is_blocked'] = false;
+            }
+
+            return $item;
+        })->values();
+
         // return response()->json(['data' => $dataGrouped], 200);
         return response()->json([
             'message' => 'LHP data retrieved successfully',
@@ -130,7 +162,8 @@ class LHPHandleController extends BaseController
             'order' => $orderHeader,
             'periode' => $linkLhp->periode,
             'invoice' => $invoices,
-            'fileName' => $linkLhp->filename,
+            'fileName' => $hasBlockedLhp ? null : $linkLhp->filename,
+            'has_blocked_lhp' => $hasBlockedLhp,
             'hold' => HoldHp::where('no_order', $linkLhp->no_order)->where('periode', $linkLhp->periode)->first()
         ], 200);
     }
