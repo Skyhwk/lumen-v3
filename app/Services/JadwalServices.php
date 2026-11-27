@@ -17,6 +17,8 @@ use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Exception;
 use App\Services\SendEmail;
+use App\Services\JadwalMobilisasiService;
+use App\Services\IoPeralatanTimService;
 use App\Jobs\SendNotifPerubahanJadwalJob;
 use App\Jobs\SyncSamplerTrackingScheduleJob;
 
@@ -49,6 +51,82 @@ class JadwalServices
     public function __construct()
     {
         $this->timestamp = Carbon::now()->format('Y-m-d H:i:s');
+    }
+
+    /**
+     * Normalisasi kendaraan untuk disimpan — selalu plat bersih.
+     * Info tebeng disimpan di kolom terpisah `tebeng_dengan` (jangan sentuh note).
+     */
+    public static function normalizeKendaraan($kendaraan)
+    {
+        if (is_array($kendaraan)) {
+            $normalized = [];
+            foreach ($kendaraan as $key => $value) {
+                $normalized[$key] = self::normalizeKendaraan($value);
+            }
+            return $normalized;
+        }
+
+        $value = trim((string) ($kendaraan ?? ''));
+        if ($value === '') {
+            return $kendaraan === null ? null : '';
+        }
+
+        return self::basePlatKendaraan($value);
+    }
+
+    /** Plat dasar tanpa suffix Tebeng (untuk match ketersediaan / konflik). */
+    public static function basePlatKendaraan($kendaraan)
+    {
+        $value = trim((string) ($kendaraan ?? ''));
+        if ($value === '') {
+            return '';
+        }
+
+        return trim((string) preg_replace(
+            '/\s*\(Tebeng Transportasi(?:\s*[-:]\s*(?:Tim\s+)?[^)]*)?\)\s*$/i',
+            '',
+            $value
+        ));
+    }
+
+    /** Key konsisten untuk map konflik (huruf besar + spasi dirapikan). */
+    public static function normalizePlatKey($kendaraan)
+    {
+        $base = self::basePlatKendaraan($kendaraan);
+        if ($base === '') {
+            return '';
+        }
+
+        $base = preg_replace('/\s+/', ' ', $base);
+
+        return strtoupper(trim((string) $base));
+    }
+
+    /**
+     * Nama tim yang ditumpangi (Tebeng Transportasi). Null/empty = tidak tebeng.
+     * Simpan nama saja, mis. "Farhan Fauzi" (UI: "Sama dengan Tim Farhan Fauzi").
+     */
+    public static function normalizeTebengDengan($value)
+    {
+        if (is_array($value)) {
+            $normalized = [];
+            foreach ($value as $key => $item) {
+                $normalized[$key] = self::normalizeTebengDengan($item);
+            }
+            return $normalized;
+        }
+
+        $text = trim((string) ($value ?? ''));
+        if ($text === '') {
+            return null;
+        }
+
+        // Buang prefix UI jika ikut terkirim
+        $text = preg_replace('/^Sama dengan Tim\s+/i', '', $text);
+        $text = trim((string) $text);
+
+        return $text === '' ? null : mb_substr($text, 0, 255);
     }
 
     public function __call($method, $arguments)
@@ -551,6 +629,7 @@ class JadwalServices
                 $wilayah = explode('-', $cek->wilayah)[1];
             }
 
+            $newBatchIds = [];
             if ($lama == $baru) { //tidak ada perubhan jumlah sampler
                 $dbInsertLastId = null;
                 Jadwal::whereIn('id', $dataUpdate->batch_id)
@@ -587,7 +666,8 @@ class JadwalServices
                         'status' => $dataUpdate->status,
                         'notif' => 0,
                         'urutan' => $dataUpdate->urutan,
-                        'kendaraan' => $dataUpdate->kendaraan,
+                        'kendaraan' => self::normalizeKendaraan($dataUpdate->kendaraan),
+                        'tebeng_dengan' => self::normalizeTebengDengan($dataUpdate->tebeng_dengan ?? null),
                         'parsial' => !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : null,
                         'updated_at' => $this->timestamp,
                         'updated_by' => $dataUpdate->karyawan,
@@ -596,6 +676,7 @@ class JadwalServices
                         'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($datajad);
+                    $newBatchIds[] = $dbInsertLastId;
                     $noqt = $val->no_quotation;
                 }
                 // perindahan indukMainJadwal
@@ -646,11 +727,13 @@ class JadwalServices
                         'urutan' => $dataUpdate->urutan,
                         'updated_by' => $dataUpdate->karyawan,
                         'updated_at' => $this->timestamp,
-                        'kendaraan' => $dataUpdate->kendaraan,
+                        'kendaraan' => self::normalizeKendaraan($dataUpdate->kendaraan),
+                        'tebeng_dengan' => self::normalizeTebengDengan($dataUpdate->tebeng_dengan ?? null),
                         'parsial' => !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : null,
                         'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($body);
+                    $newBatchIds[] = $dbInsertLastId;
                 }
                 // perindahan indukMainJadwal
                 /* casenya:
@@ -665,6 +748,25 @@ class JadwalServices
 
                 $noqt = $dataUpdate->no_quotation;
             }
+
+            JadwalMobilisasiService::saveForBatch(
+                $newBatchIds,
+                [
+                    'id_sampling' => $dataUpdate->sampling ?? null,
+                    'no_quotation' => $dataUpdate->no_quotation ?? null,
+                    'tanggal' => $dataUpdate->tanggal ?? null,
+                    'warna' => $dataUpdate->warna ?? null,
+                    'tujuan_sampling' => $dataUpdate->tujuan_sampling ?? null,
+                    'estimasi_perjalanan' => $dataUpdate->estimasi_perjalanan ?? null,
+                    'waktu_berangkat_estimasi' => $dataUpdate->waktu_berangkat_estimasi ?? null,
+                    'keterangan_akomodasi' => $dataUpdate->keterangan_akomodasi ?? null,
+                    'rute_perjalanan' => $dataUpdate->rute_perjalanan ?? null,
+                    'keterangan_operasional' => $dataUpdate->keterangan_operasional ?? null,
+                    'peralatan_sampling' => $dataUpdate->peralatan_sampling ?? [],
+                ],
+                $dataUpdate->karyawan ?? null,
+                $dataUpdate->batch_id ?? null
+            );
 
             /* untuk notif 
             if ($tanggal == $tglNow || $tanggal <= $tglBesok) {
@@ -743,6 +845,19 @@ class JadwalServices
                 $this->updatePersiapanHeaderFromSchedule($dataUpdate);
             } catch (\Throwable $th) {
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
+            }
+
+            try {
+                IoPeralatanTimService::reconcileAfterSamplerScheduleChange(
+                    (string) $dataUpdate->tanggal,
+                    $dataUpdate->batch_id ?? [],
+                    !empty($newBatchIds) ? $newBatchIds : ($dataUpdate->batch_id ?? []),
+                    implode(',', $this->parseScheduleSamplerNames($dataUpdate->sampler)),
+                    $dataUpdate->karyawan ?? null,
+                    isset($dataUpdate->tanggal_lama) ? (string) $dataUpdate->tanggal_lama : null
+                );
+            } catch (\Throwable $th) {
+                throw new Exception('Gagal rekonsiliasi peralatan tim: ' . $th->getMessage(), 500);
             }
 
             // Reconcile existing activity after all schedule branches and PSHEADER,
@@ -866,6 +981,7 @@ class JadwalServices
                 $wilayah = explode('-', $cek->wilayah)[1];
             }
 
+            $newBatchIds = [];
             if ($lama == $baru) { // tidak ada perubahan jumlah sampler
                 foreach ($data as $key => $val) {
                     $sampler = explode(',', $dir[$i]);
@@ -893,12 +1009,14 @@ class JadwalServices
                     $val->notif = 0;
                     $val->urutan = $dataUpdate->urutan;
                     $val->kendaraan = $dataUpdate->kendaraan;
+                    $val->tebeng_dengan = self::normalizeTebengDengan($dataUpdate->tebeng_dengan ?? null);
                     $val->parsial = !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : NULL;
                     $val->updated_at = $this->timestamp;
                     $val->updated_by = $dataUpdate->karyawan;
                     $val->id_cabang = $dataUpdate->id_cabang;
                     $val->durasi_personal = $dataUpdate->durasi_personal[$key] ?? null;
                     $val->save();
+                    $newBatchIds[] = $val->id;
 
                     $noqt = $val->no_quotation;
                 }
@@ -948,11 +1066,13 @@ class JadwalServices
                         'urutan' => $dataUpdate->urutan,
                         'updated_by' => $dataUpdate->karyawan,
                         'updated_at' => $this->timestamp,
-                        'kendaraan' => $dataUpdate->kendaraan,
+                        'kendaraan' => self::normalizeKendaraan($dataUpdate->kendaraan),
+                        'tebeng_dengan' => self::normalizeTebengDengan($dataUpdate->tebeng_dengan ?? null),
                         'parsial' => !empty($dataUpdate->tipe_parsial) ? $dataUpdate->tipe_parsial : NULL,
                         'durasi_personal' => $dataUpdate->durasi_personal[$key] ?? null,
                     ];
                     $dbInsertLastId = Jadwal::insertGetId($body);
+                    $newBatchIds[] = $dbInsertLastId;
                 }
                 // perindahan indukMainJadwal
                 /* casenya:
@@ -961,6 +1081,25 @@ class JadwalServices
                 Jadwal::whereIn('parsial', $dataUpdate->batch_id)->update(['parsial' => $dbInsertLastId]);
                 $noqt = $dataUpdate->no_quotation;
             }
+
+            JadwalMobilisasiService::saveForBatch(
+                !empty($newBatchIds) ? $newBatchIds : ($dataUpdate->batch_id ?? []),
+                [
+                    'id_sampling' => $dataUpdate->sampling ?? null,
+                    'no_quotation' => $dataUpdate->no_quotation ?? null,
+                    'tanggal' => $dataUpdate->tanggal ?? null,
+                    'warna' => $dataUpdate->warna ?? null,
+                    'tujuan_sampling' => $dataUpdate->tujuan_sampling ?? null,
+                    'estimasi_perjalanan' => $dataUpdate->estimasi_perjalanan ?? null,
+                    'waktu_berangkat_estimasi' => $dataUpdate->waktu_berangkat_estimasi ?? null,
+                    'keterangan_akomodasi' => $dataUpdate->keterangan_akomodasi ?? null,
+                    'rute_perjalanan' => $dataUpdate->rute_perjalanan ?? null,
+                    'keterangan_operasional' => $dataUpdate->keterangan_operasional ?? null,
+                    'peralatan_sampling' => $dataUpdate->peralatan_sampling ?? [],
+                ],
+                $dataUpdate->karyawan ?? null,
+                $dataUpdate->batch_id ?? null
+            );
 
             // update
             if ($dataUpdate->kategori != null) {
@@ -976,6 +1115,20 @@ class JadwalServices
             } catch (\Throwable $th) {
                 throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
+
+            try {
+                IoPeralatanTimService::reconcileAfterSamplerScheduleChange(
+                    (string) $dataUpdate->tanggal,
+                    $dataUpdate->batch_id ?? [],
+                    !empty($newBatchIds) ? $newBatchIds : ($dataUpdate->batch_id ?? []),
+                    implode(',', $this->parseScheduleSamplerNames($dataUpdate->sampler)),
+                    $dataUpdate->karyawan ?? null,
+                    isset($dataUpdate->tanggal_lama) ? (string) $dataUpdate->tanggal_lama : null
+                );
+            } catch (\Throwable $th) {
+                throw new Exception('Gagal rekonsiliasi peralatan tim: ' . $th->getMessage(), 500);
+            }
+
             // Run for both lama == baru and changed team size, even when PSHEADER
             // itself has no dirty fields. Do not create a new tracking session here.
             DB::commit();
@@ -1109,11 +1262,23 @@ class JadwalServices
                     "status" => $dataAdd->status[$i],
                     "created_by" => $dataAdd->karyawan,
                     "created_at" => $this->timestamp,
-                    "kendaraan" => $dataAdd->kendaraan[$i] ?? null,
+                    "kendaraan" => self::normalizeKendaraan($dataAdd->kendaraan[$i] ?? null),
+                    "tebeng_dengan" => self::normalizeTebengDengan(
+                        is_array($dataAdd->tebeng_dengan ?? null)
+                            ? ($dataAdd->tebeng_dengan[$i] ?? null)
+                            : ($dataAdd->tebeng_dengan ?? null)
+                    ),
                     "wilayah" => $wilayah,
                     "isokinetic" => $dataAdd->isokinetic[$i] ?? 0,
                     "pendampingan_k3" => $dataAdd->pendampingan_k3[$i] ?? 0,
                     "durasi_personal" => $dataAdd->durasi_personal[$i] ?? null,
+                    "tujuan_sampling" => is_array($dataAdd->tujuan_sampling ?? null) ? ($dataAdd->tujuan_sampling[$i] ?? null) : ($dataAdd->tujuan_sampling ?? null),
+                    "estimasi_perjalanan" => is_array($dataAdd->estimasi_perjalanan ?? null) ? ($dataAdd->estimasi_perjalanan[$i] ?? null) : ($dataAdd->estimasi_perjalanan ?? null),
+                    "waktu_berangkat_estimasi" => is_array($dataAdd->waktu_berangkat_estimasi ?? null) ? ($dataAdd->waktu_berangkat_estimasi[$i] ?? null) : ($dataAdd->waktu_berangkat_estimasi ?? null),
+                    "keterangan_akomodasi" => is_array($dataAdd->keterangan_akomodasi ?? null) ? ($dataAdd->keterangan_akomodasi[$i] ?? null) : ($dataAdd->keterangan_akomodasi ?? null),
+                    "rute_perjalanan" => is_array($dataAdd->rute_perjalanan ?? null) ? ($dataAdd->rute_perjalanan[$i] ?? null) : ($dataAdd->rute_perjalanan ?? null),
+                    "keterangan_operasional" => is_array($dataAdd->keterangan_operasional ?? null) ? ($dataAdd->keterangan_operasional[$i] ?? null) : ($dataAdd->keterangan_operasional ?? null),
+                    "peralatan_sampling" => is_array($dataAdd->peralatan_sampling ?? null) ? ($dataAdd->peralatan_sampling[$i] ?? []) : ($dataAdd->peralatan_sampling ?? []),
                 ];
             }
             
@@ -1122,6 +1287,7 @@ class JadwalServices
             $firstJadwalId = null; // Menyimpan ID untuk referensi parsial jika diperlukan
             foreach ($temBody as $key => $val) {
                 $keys = $key;
+                $formBatchIds = [];
                 if ($key == 0) { // Jika data pertama
                     
                     foreach ($val['sampler'] as $key => $value) {
@@ -1142,7 +1308,8 @@ class JadwalServices
                             'created_by' => $val['created_by'],
                             'created_at' => $val['created_at'],
                             'note' => $val['note'],
-                            'kendaraan' => $val['kendaraan'],
+                            'kendaraan' => self::normalizeKendaraan($val['kendaraan'] ?? null),
+                            'tebeng_dengan' => self::normalizeTebengDengan($val['tebeng_dengan'] ?? null),
                             'id_sampling' => $val['id_sampling'],
                             'id_cabang' => $val['id_cabang'][$keys],
                             'wilayah' => $val['wilayah'],
@@ -1155,6 +1322,7 @@ class JadwalServices
                         
                         // Menyimpan data pertama langsung ke database
                         $firstJadwalId = Jadwal::insertGetId($commonData);
+                        $formBatchIds[] = $firstJadwalId;
                     }
                 } else { //jika memiliki parsial
                     
@@ -1177,7 +1345,8 @@ class JadwalServices
                             'created_by' => $val['created_by'],
                             'created_at' => $val['created_at'],
                             'note' => $val['note'],
-                            'kendaraan' => $val['kendaraan'],
+                            'kendaraan' => self::normalizeKendaraan($val['kendaraan'] ?? null),
+                            'tebeng_dengan' => self::normalizeTebengDengan($val['tebeng_dengan'] ?? null),
                             'id_sampling' => $val['id_sampling'],
                             'id_cabang' => $val['id_cabang'][$keys],
                             'wilayah' => $val['wilayah'],
@@ -1189,9 +1358,28 @@ class JadwalServices
                             'durasi_personal' => $val['durasi_personal'][$key] ?? null
                         ];
                         
-                        Jadwal::insert($commonData);
+                        $parsialJadwalId = Jadwal::insertGetId($commonData);
+                        $formBatchIds[] = $parsialJadwalId;
                     }
                 }
+
+                JadwalMobilisasiService::saveForBatch(
+                    $formBatchIds,
+                    [
+                        'id_sampling' => $val['id_sampling'],
+                        'no_quotation' => $val['no_quotation'],
+                        'tanggal' => $val['tanggal'],
+                        'warna' => $val['warna'],
+                        'tujuan_sampling' => $val['tujuan_sampling'] ?? null,
+                        'estimasi_perjalanan' => $val['estimasi_perjalanan'] ?? null,
+                        'waktu_berangkat_estimasi' => $val['waktu_berangkat_estimasi'] ?? null,
+                        'keterangan_akomodasi' => $val['keterangan_akomodasi'] ?? null,
+                        'rute_perjalanan' => $val['rute_perjalanan'] ?? null,
+                        'keterangan_operasional' => $val['keterangan_operasional'] ?? null,
+                        'peralatan_sampling' => $val['peralatan_sampling'] ?? [],
+                    ],
+                    $val['created_by']
+                );
             }
 
             //update request sampling
@@ -1343,6 +1531,7 @@ class JadwalServices
                 }
             }
             $samplers = $dataParsial->sampler;
+            $insertedBatchIds = [];
 
             foreach ($samplers as $key => $value) {
                 $sampler = explode(',', $value);
@@ -1368,7 +1557,8 @@ class JadwalServices
                     'status' => $dataParsial->status,
                     'notif' => 0,
                     'urutan' => $dataParsial->urutan,
-                    'kendaraan' => $dataParsial->kendaraan,
+                    'kendaraan' => self::normalizeKendaraan($dataParsial->kendaraan),
+                    'tebeng_dengan' => self::normalizeTebengDengan($dataParsial->tebeng_dengan ?? null),
                     'pendampingan_k3' => $dataParsial->pendampingan_k3,
                     'isokinetic' => $dataParsial->isokinetic,
                     'parsial' => $dataParsial->id,
@@ -1379,8 +1569,26 @@ class JadwalServices
                     'durasi_personal' => $dataParsial->durasi_personal[$key] ?? null,
                 ];
 
-                $update = Jadwal::insert($body);
+                $insertedBatchIds[] = Jadwal::insertGetId($body);
             }
+
+            JadwalMobilisasiService::saveForBatch(
+                $insertedBatchIds,
+                [
+                    'id_sampling' => $dataParsial->id_sampling ?? null,
+                    'no_quotation' => $dataParsial->no_quotation ?? null,
+                    'tanggal' => $dataParsial->tanggal ?? null,
+                    'warna' => $dataParsial->warna ?? null,
+                    'tujuan_sampling' => $dataParsial->tujuan_sampling ?? null,
+                    'estimasi_perjalanan' => $dataParsial->estimasi_perjalanan ?? null,
+                    'waktu_berangkat_estimasi' => $dataParsial->waktu_berangkat_estimasi ?? null,
+                    'keterangan_akomodasi' => $dataParsial->keterangan_akomodasi ?? null,
+                    'rute_perjalanan' => $dataParsial->rute_perjalanan ?? null,
+                    'keterangan_operasional' => $dataParsial->keterangan_operasional ?? null,
+                    'peralatan_sampling' => $dataParsial->peralatan_sampling ?? [],
+                ],
+                $dataParsial->karyawan ?? null
+            );
             if ($dataParsial->kategori != null) {
                 self::syncTanggalSamplingOrderDetail($dataParsial->no_quotation, $dataParsial->kategori, $dataParsial->tanggal);
             }
@@ -1508,6 +1716,7 @@ class JadwalServices
             }
 
             $samplers = $dataParsial->sampler;
+            $insertedBatchIds = [];
             foreach ($samplers as $key => $value) {
                 $sampler = explode(',', $value);
                 $nama_sampler = $sampler[1];
@@ -1535,14 +1744,33 @@ class JadwalServices
                     'urutan' => $dataParsial->urutan,
                     'created_by' => $dataParsial->karyawan,
                     'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'kendaraan' => $dataParsial->kendaraan,
+                    'kendaraan' => self::normalizeKendaraan($dataParsial->kendaraan),
+                    'tebeng_dengan' => self::normalizeTebengDengan($dataParsial->tebeng_dengan ?? null),
                     'parsial' => $dataParsial->id,
                     'id_sampling' => $dataParsial->id_sampling,
                     'id_cabang' => $dataParsial->id_cabang,
                     'durasi_personal' => $dataParsial->durasi_personal[$key] ?? null,
                 ];
-                $update = Jadwal::insert($body);
+                $insertedBatchIds[] = Jadwal::insertGetId($body);
             }
+
+            JadwalMobilisasiService::saveForBatch(
+                $insertedBatchIds,
+                [
+                    'id_sampling' => $dataParsial->id_sampling ?? null,
+                    'no_quotation' => $dataParsial->no_quotation ?? null,
+                    'tanggal' => $dataParsial->tanggal ?? null,
+                    'warna' => $dataParsial->warna ?? null,
+                    'tujuan_sampling' => $dataParsial->tujuan_sampling ?? null,
+                    'estimasi_perjalanan' => $dataParsial->estimasi_perjalanan ?? null,
+                    'waktu_berangkat_estimasi' => $dataParsial->waktu_berangkat_estimasi ?? null,
+                    'keterangan_akomodasi' => $dataParsial->keterangan_akomodasi ?? null,
+                    'rute_perjalanan' => $dataParsial->rute_perjalanan ?? null,
+                    'keterangan_operasional' => $dataParsial->keterangan_operasional ?? null,
+                    'peralatan_sampling' => $dataParsial->peralatan_sampling ?? [],
+                ],
+                $dataParsial->karyawan ?? null
+            );
 
             if ($dataParsial->kategori != null) {
                 self::syncTanggalSamplingOrderDetail($dataParsial->no_quotation, $dataParsial->kategori, $dataParsial->tanggal);

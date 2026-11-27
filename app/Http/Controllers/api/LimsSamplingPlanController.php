@@ -702,6 +702,7 @@ class LimsSamplingPlanController extends Controller
                 'batch_id'        => $request->batch_id,
                 'urutan'          => $request->urutan != '' ? $request->urutan : null,
                 'kendaraan'       => $request->kendaraan,
+                'tebeng_dengan'   => JadwalServices::normalizeTebengDengan($request->tebeng_dengan),
                 'sampling'        => $request->sampling,
                 'karyawan'        => $this->karyawan,
                 'jadwal_id'       => $request->id,
@@ -825,6 +826,7 @@ class LimsSamplingPlanController extends Controller
                 'urutan'          => $request->urutan != '' ? $request->urutan : null,
                 'karyawan'        => $this->karyawan,
                 'kendaraan'       => $request->kendaraan,
+                'tebeng_dengan'   => JadwalServices::normalizeTebengDengan($request->tebeng_dengan),
                 'sampler'         => $request->sampler,
                 'driver'          => $request->driver,
                 'pendampingan_k3' => $request->pendampingan_k3,
@@ -1331,33 +1333,7 @@ class LimsSamplingPlanController extends Controller
 
         $dataBentrok = $queryBentrok->get();
 
-        // --- 3. Filter Konflik Sesuai Aturan (Paling awal jamnya, lalu created/updated_at) ---
-        $detailKonflik = [];
-
-        foreach ($dataBentrok as $row) {
-            $veh = $row->kendaraan;
-
-            // Jika kendaraan ini belum masuk daftar konflik, masukkan.
-            if (!isset($detailKonflik[$veh])) {
-                $detailKonflik[$veh] = $row;
-            } else {
-                // Jika sudah ada, bandingkan jam_mulai-nya
-                $existing = $detailKonflik[$veh];
-
-                if ($row->jam_mulai < $existing->jam_mulai) {
-                    // Jam lebih awal menang
-                    $detailKonflik[$veh] = $row;
-                } elseif ($row->jam_mulai == $existing->jam_mulai) {
-                    // Jika jamnya sama, adu created_at atau updated_at
-                    $waktuRow = $row->created_at ? strtotime($row->created_at) : strtotime($row->updated_at);
-                    $waktuExisting = $existing->created_at ? strtotime($existing->created_at) : strtotime($existing->updated_at);
-
-                    if ($waktuRow && $waktuExisting && $waktuRow < $waktuExisting) {
-                        $detailKonflik[$veh] = $row;
-                    }
-                }
-            }
-        }
+        $detailKonflik = \App\Services\KendaraanConflictHelper::buildDetailKonflik($dataBentrok);
 
         // --- 4. Return Format JSON ---
         return response()->json([
