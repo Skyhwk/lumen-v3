@@ -665,17 +665,34 @@ class PortalSelfRegistrationService
 
     private function documentYearPrefix()
     {
-        return 'ISL/SPP/' . Carbon::now()->timezone('Asia/Jakarta')->format('y');
+        return 'ISL/SPNY/' . Carbon::now()->timezone('Asia/Jakarta')->format('y') . '-';
+    }
+
+    private function romanMonth($month)
+    {
+        $map = [
+            1 => 'I', 2 => 'II', 3 => 'III', 4 => 'IV', 5 => 'V', 6 => 'VI',
+            7 => 'VII', 8 => 'VIII', 9 => 'IX', 10 => 'X', 11 => 'XI', 12 => 'XII',
+        ];
+
+        return $map[(int) $month] ?? 'I';
+    }
+
+    private function documentCurrentPrefix()
+    {
+        $now = Carbon::now()->timezone('Asia/Jakarta');
+
+        return 'ISL/SPNY/' . $now->format('y') . '-' . $this->romanMonth((int) $now->format('n')) . '/';
     }
 
     private function isIssuedDocumentNumber($nomor)
     {
-        return (bool) preg_match('#^ISL/SPP/\d{6}$#', (string) $nomor);
+        return (bool) preg_match('#^ISL/SPNY/\d{2}-(I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)/\d{4}$#', (string) $nomor);
     }
 
     private function formatDocumentNumber($seq)
     {
-        return $this->documentYearPrefix() . str_pad((string) max(1, (int) $seq), 4, '0', STR_PAD_LEFT);
+        return $this->documentCurrentPrefix() . str_pad((string) max(1, (int) $seq), 4, '0', STR_PAD_LEFT);
     }
 
     private function lastDocumentSequence($lock = false)
@@ -683,12 +700,12 @@ class PortalSelfRegistrationService
         $prefix = $this->documentYearPrefix();
         $q = DB::table('self_registration_customer')
             ->where('nomor_dokumen', 'like', $prefix . '%')
-            ->orderByDesc('nomor_dokumen');
+            ->orderByRaw("CAST(SUBSTRING_INDEX(nomor_dokumen, '/', -1) AS UNSIGNED) DESC");
         if ($lock) {
             $q->lockForUpdate();
         }
         $last = $q->value('nomor_dokumen');
-        if ($last && preg_match('/(\d{4})$/', $last, $m)) {
+        if ($last && preg_match('#/(\d{4})$#', $last, $m)) {
             return (int) $m[1];
         }
 

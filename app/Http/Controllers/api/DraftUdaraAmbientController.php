@@ -32,7 +32,7 @@ use App\Models\Subkontrak;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
 use App\Helpers\EmailLhpRilisHelpers;
-use App\Models\MdlUdara;
+use App\Services\MdlUdaraService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -47,6 +47,7 @@ class DraftUdaraAmbientController extends Controller
         $data = OrderDetail::with([
         'lhps_ling',
         'allDetailLingkunganHidup',
+        'allDetailSenyawaVolatile',
         'dataLapanganPartikulatMeter', // Relasi ini sudah dipanggil
         'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
         ])
@@ -60,6 +61,9 @@ class DraftUdaraAmbientController extends Controller
         ->map(function ($item) {
             $lhps = $item->lhps_ling;
             $lapangan = collect($item->allDetailLingkunganHidup);
+            if ($lapangan->isEmpty()) {
+                $lapangan = collect($item->allDetailSenyawaVolatile);
+            }
             $partikulat = DataLapanganPartikulatMeter::where('no_sampel', $item->no_sampel)
                 ->get();
             // Ambil data partikulat sebagai collection
@@ -857,35 +861,13 @@ class DraftUdaraAmbientController extends Controller
                 //     })->toArray();
 
                 $parameters = Parameter::where(['id_kategori' => 4, 'is_active' => true])->whereIn('nama_lab', $validasi->pluck('nama_lab'))->get()->map(fn($item) => ['id' => $item->id, 'parameter' => $item->nama_lab]);
-                $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
-                
-                $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
-                    if ($hasilUji === null || $hasilUji === '' || $hasilUji === '-' || $hasilUji === '##') {
-                        return $hasilUji;
-                    }
-
-                    $hasilUji = (string) $hasilUji;
-                    if (str_contains($hasilUji, '<')) {
-                        return $hasilUji;
-                    }
-
-                    if (!$parameterId) {
-                        return $hasilUji;
-                    }
-
-                    $colToSearch = 'hasil' . ($index ?: 1);
-                    $mdlRow = $mdlUdara->first(function ($row) use ($parameterId, $colToSearch) {
-                        return (string) $row->parameter_id === (string) $parameterId
-                            && $row->{$colToSearch} !== null
-                            && $row->{$colToSearch} !== '';
-                    });
-
-                    if ($mdlRow && is_numeric($hasilUji) && is_numeric($mdlRow->{$colToSearch}) && (float) $hasilUji < (float) $mdlRow->{$colToSearch}) {
-                        return '<' . $mdlRow->{$colToSearch};
-                    }
-
-                    return $hasilUji;
-                };
+                $mdlUdara = MdlUdaraService::loadForParameterIds($parameters->pluck('id'));
+                $getHasilUji = fn ($index, $parameterId, $hasilUji) => MdlUdaraService::formatHasilUjiForDisplay(
+                    $hasilUji,
+                    (int) $index,
+                    $parameterId,
+                    $mdlUdara
+                );
 
                 foreach ($validasi as $item) {
                     $entry      = $this->formatEntry((object) $item, $request->regulasi, $methodsUsed, $getHasilUji);

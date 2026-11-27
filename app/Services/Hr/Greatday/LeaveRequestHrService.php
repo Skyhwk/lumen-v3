@@ -19,6 +19,7 @@ use App\Services\Hr\HrFormAttachmentStorage;
 use App\Services\Hr\LegacyHrMirror;
 use App\Services\Hr\Presenters\LeaveRequestPresenter;
 use App\Services\Hr\WorkflowStatus;
+use App\Services\Payroll\MaternityLeavePayrollService;
 use App\Support\Greatday\GreatdayAssetPaths;
 use App\Support\Greatday\HrdPayroll;
 use App\Support\Greatday\NotificationCopy;
@@ -52,6 +53,17 @@ class LeaveRequestHrService
     {
         $types = HrSpecialLeaveType::where('is_active', true)->orderBy('name')->get()->map(function ($row) use ($employee) {
             $payload = $row->toArray();
+            $isMaternity = MaternityLeavePayrollService::isMaternitySpecialLeaveType($row);
+            $payload['is_maternity'] = $isMaternity;
+            $payload['auto_duration_months'] = $isMaternity ? MaternityLeavePayrollService::DURATION_MONTHS : null;
+            $payload['is_eligible'] = true;
+            $payload['ineligible_reason'] = null;
+
+            if ($isMaternity && $employee && !MaternityLeavePayrollService::isFemaleEmployee($employee)) {
+                $payload['is_eligible'] = false;
+                $payload['ineligible_reason'] = 'Khusus karyawan perempuan';
+            }
+
             if ($employee) {
                 $stats = app(\App\Services\Greatday\LeaveBalanceService::class)->specialLeaveUsageStats(
                     $employee,
