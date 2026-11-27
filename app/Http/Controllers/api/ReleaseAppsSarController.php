@@ -15,7 +15,7 @@ class ReleaseAppsSarController extends Controller
 {
     public function index(Request $request)
     {
-        $releaseSystem = ReleaseSystem::where('system', 'Apps SAR')->get();
+        $releaseSystem = ReleaseSystem::where('system', 'Apps SAR')->orderBy('id', 'desc')->get();
         return response()->json(['success' => true, 'data' => $releaseSystem], 200);
     }
 
