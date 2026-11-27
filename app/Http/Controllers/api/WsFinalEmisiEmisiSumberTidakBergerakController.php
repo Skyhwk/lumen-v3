@@ -232,7 +232,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
     {
         DB::beginTransaction();
         try {
-            $faktor_koreksi = (float) $request->faktor_koreksi / 100;
+            $faktor_koreksi = (float) $request->faktor_koreksi;
             $dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $request->no_sampel)->first();
             $orderDetail = OrderDetail::where('no_sampel', $request->no_sampel)
                 ->where('is_active', true)
