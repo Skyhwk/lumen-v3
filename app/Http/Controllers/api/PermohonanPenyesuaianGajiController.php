@@ -94,7 +94,7 @@ class PermohonanPenyesuaianGajiController extends Controller
         ]);
     }
 
-    public function getBawahanList()
+    public function getBawahanList($type = 'all')
     {
         if (!SalaryAdjustmentWorkflowService::isManagerGrade($this->grade)) {
             return response()->json([
@@ -103,24 +103,46 @@ class PermohonanPenyesuaianGajiController extends Controller
             ], 403);
         }
 
-        $bawahan = GetBawahan::where('id', $this->user_id)->get()
-            ->filter(function ($row) {
-                return (int) $row->id !== (int) $this->user_id;
-            })
-            ->values()
-            ->map(function ($row) {
-                return [
-                    'id' => $row->id,
-                    'nama_lengkap' => $row->nama_lengkap,
-                    'grade' => $row->grade,
-                    'nik_karyawan' => $row->nik_karyawan,
-                ];
-            });
+        if ($type === 'all') {
+            $bawahan = GetBawahan::where('id', $this->user_id)->get()
+                ->filter(function ($row) {
+                    return (int) $row->id !== (int) $this->user_id;
+                })
+                ->values()
+                ->map(function ($row) {
+                    return [
+                        'id' => $row->id,
+                        'nama_lengkap' => $row->nama_lengkap,
+                        'grade' => $row->grade,
+                        'nik_karyawan' => $row->nik_karyawan,
+                    ];
+                });
 
-        return response()->json([
-            'success' => true,
-            'data' => $bawahan,
-        ]);
+            return response()->json([
+                'success' => true,
+                'data' => $bawahan,
+            ]);
+        } else if ($type === 'penetapan-karyawan-pensiun') {
+            $bawahan = GetBawahan::where('id', $this->user_id)->get()
+                ->where('status_karyawan', 'Permanent')
+                ->filter(function ($row) {
+                    return (int) $row->id !== (int) $this->user_id;
+                })
+                ->values()
+                ->map(function ($row) {
+                    return [
+                        'id' => $row->id,
+                        'nama_lengkap' => $row->nama_lengkap,
+                        'grade' => $row->grade,
+                        'nik_karyawan' => $row->nik_karyawan,
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'data' => $bawahan,
+            ]);
+        }
     }
 
     public function getEmployeeDetail(Request $request)
@@ -249,7 +271,7 @@ class PermohonanPenyesuaianGajiController extends Controller
                     ->addColumn('mutasi_effective_date', function ($row) {
                         return $this->formatMutasiInboxEffectiveDate($row);
                     })
-                    ->addColumn('can_respond', fn () => true)
+                    ->addColumn('can_respond', fn() => true)
             )
         )->make(true);
     }
@@ -605,9 +627,11 @@ class PermohonanPenyesuaianGajiController extends Controller
             ]);
 
             $kpiService = new SalaryAdjustmentKpiService();
-            if (EmployeeAdjustmentTypeRegistry::kpiRequired($data['request_type'])
+            if (
+                EmployeeAdjustmentTypeRegistry::kpiRequired($data['request_type'])
                 || !empty($data['kpi']['items'])
-                || trim((string) ($data['kpi']['summary'] ?? '')) !== '') {
+                || trim((string) ($data['kpi']['summary'] ?? '')) !== ''
+            ) {
                 $kpiService->store($record->id, $data['kpi'], $this->karyawan);
             }
 
@@ -686,8 +710,8 @@ class PermohonanPenyesuaianGajiController extends Controller
                             && $row->status === SalaryAdjustmentWorkflowService::STATUS_WAITING_GIVER
                             && (int) $row->requested_by_id === (int) $this->user_id;
                     })
-                    ->editColumn('adjustment_gaji_pokok', fn ($row) => $this->formatRupiah($row->adjustment_gaji_pokok))
-                    ->editColumn('adjustment_tunjangan', fn ($row) => $this->formatRupiah($row->adjustment_tunjangan))
+                    ->editColumn('adjustment_gaji_pokok', fn($row) => $this->formatRupiah($row->adjustment_gaji_pokok))
+                    ->editColumn('adjustment_tunjangan', fn($row) => $this->formatRupiah($row->adjustment_tunjangan))
             )
         )->make(true);
     }
@@ -745,9 +769,9 @@ class PermohonanPenyesuaianGajiController extends Controller
             ->filterColumn('created_at', function ($query, $keyword) {
                 $query->where('sar.created_at', 'like', "%{$keyword}%");
             })
-            ->orderColumn('nama_lengkap', fn ($query, $order) => $query->orderBy('karyawan.nama_lengkap', $order))
-            ->orderColumn('nama_divisi', fn ($query, $order) => $query->orderBy('d.nama_divisi', $order))
-            ->orderColumn('status_label', fn ($query, $order) => $query->orderBy('sar.status', $order));
+            ->orderColumn('nama_lengkap', fn($query, $order) => $query->orderBy('karyawan.nama_lengkap', $order))
+            ->orderColumn('nama_divisi', fn($query, $order) => $query->orderBy('d.nama_divisi', $order))
+            ->orderColumn('status_label', fn($query, $order) => $query->orderBy('sar.status', $order));
     }
 
     private function listQuery($periode)
@@ -839,47 +863,48 @@ class PermohonanPenyesuaianGajiController extends Controller
         $mutasiService = new EmployeeAdjustmentMutasiService();
         $rekapService = new EmployeeAdjustmentRekapService();
 
-        return array_merge([
-            'id' => $record->id,
-            'no_document' => $record->no_document,
-            'request_type' => $record->request_type ?: EmployeeAdjustmentTypeRegistry::TYPE_PENYESUAIAN_GAJI,
-            'request_type_label' => EmployeeAdjustmentTypeRegistry::label($record->request_type),
-            'workflow_profile' => $record->workflow_profile,
-            'employee_id' => $record->employee_id,
-            'nama_lengkap' => $employee->nama_lengkap ?? '-',
-            'jabatan' => $namaJabatan !== '-' ? $namaJabatan : ($record->jabatan ?: '-'),
-            'current_gaji_pokok' => (float) $record->current_gaji_pokok,
-            'current_tunjangan_kerja' => (float) $record->current_tunjangan_kerja,
-            'adjustment_gaji_pokok' => (float) ($record->adjustment_gaji_pokok ?? 0),
-            'adjustment_tunjangan' => (float) ($record->adjustment_tunjangan ?? 0),
-            'requested_gaji_pokok' => (float) $record->requested_gaji_pokok,
-            'requested_tunjangan_kerja' => (float) $record->requested_tunjangan_kerja,
-            'bulan_efektif' => $record->bulan_efektif,
-            'tanggal_efektif' => $record->tanggal_efektif,
-            'tanggal_mulai' => $record->tanggal_mulai,
-            'tanggal_selesai' => $record->tanggal_selesai,
-            'tanggal_berakhir_kerja' => $record->tanggal_berakhir_kerja,
-            'new_jabatan_id' => $record->new_jabatan_id,
-            'new_jabatan_nama' => $newJabatan->nama_jabatan ?? null,
-            'has_salary_adjustment' => (bool) $record->has_salary_adjustment,
-            'manager_nama' => $senderManager->nama_lengkap ?? $record->created_by,
-            'receiver_manager_id' => $record->receiver_manager_id,
-            'receiver_manager_nama' => optional($record->receiverManager)->nama_lengkap,
-            'mutasi_under_same_manager' => EmployeeAdjustmentMutasiService::isUnderSameManagerScope($record),
-            'scheduled_apply_at' => $record->scheduled_apply_at,
-            'catatan_tambahan' => $record->catatan_tambahan,
-            'status' => $record->status,
-            'status_label' => SalaryAdjustmentWorkflowService::statusLabel($record->status),
-            'reject_reason' => $record->reject_reason,
-            'processed_by' => $record->processed_by,
-            'processed_at' => $record->processed_at,
-            'rejected_by' => $record->rejected_by,
-            'rejected_at' => $record->rejected_at,
-            'created_by' => $record->created_by,
-            'created_at' => $record->created_at,
-            'kpi' => $record->kpi,
-            'logs' => SalaryAdjustmentWorkflowService::formatLogs($record->statusLogs),
-        ],
+        return array_merge(
+            [
+                'id' => $record->id,
+                'no_document' => $record->no_document,
+                'request_type' => $record->request_type ?: EmployeeAdjustmentTypeRegistry::TYPE_PENYESUAIAN_GAJI,
+                'request_type_label' => EmployeeAdjustmentTypeRegistry::label($record->request_type),
+                'workflow_profile' => $record->workflow_profile,
+                'employee_id' => $record->employee_id,
+                'nama_lengkap' => $employee->nama_lengkap ?? '-',
+                'jabatan' => $namaJabatan !== '-' ? $namaJabatan : ($record->jabatan ?: '-'),
+                'current_gaji_pokok' => (float) $record->current_gaji_pokok,
+                'current_tunjangan_kerja' => (float) $record->current_tunjangan_kerja,
+                'adjustment_gaji_pokok' => (float) ($record->adjustment_gaji_pokok ?? 0),
+                'adjustment_tunjangan' => (float) ($record->adjustment_tunjangan ?? 0),
+                'requested_gaji_pokok' => (float) $record->requested_gaji_pokok,
+                'requested_tunjangan_kerja' => (float) $record->requested_tunjangan_kerja,
+                'bulan_efektif' => $record->bulan_efektif,
+                'tanggal_efektif' => $record->tanggal_efektif,
+                'tanggal_mulai' => $record->tanggal_mulai,
+                'tanggal_selesai' => $record->tanggal_selesai,
+                'tanggal_berakhir_kerja' => $record->tanggal_berakhir_kerja,
+                'new_jabatan_id' => $record->new_jabatan_id,
+                'new_jabatan_nama' => $newJabatan->nama_jabatan ?? null,
+                'has_salary_adjustment' => (bool) $record->has_salary_adjustment,
+                'manager_nama' => $senderManager->nama_lengkap ?? $record->created_by,
+                'receiver_manager_id' => $record->receiver_manager_id,
+                'receiver_manager_nama' => optional($record->receiverManager)->nama_lengkap,
+                'mutasi_under_same_manager' => EmployeeAdjustmentMutasiService::isUnderSameManagerScope($record),
+                'scheduled_apply_at' => $record->scheduled_apply_at,
+                'catatan_tambahan' => $record->catatan_tambahan,
+                'status' => $record->status,
+                'status_label' => SalaryAdjustmentWorkflowService::statusLabel($record->status),
+                'reject_reason' => $record->reject_reason,
+                'processed_by' => $record->processed_by,
+                'processed_at' => $record->processed_at,
+                'rejected_by' => $record->rejected_by,
+                'rejected_at' => $record->rejected_at,
+                'created_by' => $record->created_by,
+                'created_at' => $record->created_at,
+                'kpi' => $record->kpi,
+                'logs' => SalaryAdjustmentWorkflowService::formatLogs($record->statusLogs),
+            ],
             SalaryAdjustmentEvaluationService::formatAdjustmentSnapshot($record),
             $mutasiService->formatReceiverFields($record),
             $rekapService->formatForDetail($record)
@@ -943,7 +968,7 @@ class PermohonanPenyesuaianGajiController extends Controller
             return false;
         }
 
-        $allowedIds = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->map(fn ($id) => (int) $id)->toArray();
+        $allowedIds = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->map(fn($id) => (int) $id)->toArray();
 
         return in_array($employeeId, $allowedIds, true);
     }
@@ -1030,13 +1055,15 @@ class PermohonanPenyesuaianGajiController extends Controller
                 ], 403);
             }
 
-            if ($record->status === SalaryAdjustmentWorkflowService::STATUS_HRD_PROCESSING
+            if (
+                $record->status === SalaryAdjustmentWorkflowService::STATUS_HRD_PROCESSING
                 || !SalaryAdjustmentWorkflowService::canManagerCancel($record->status)
                 || !in_array($record->status, $waitingStatuses, true)
                 || !SalaryAdjustmentWorkflowService::canTransition(
                     $record->status,
                     SalaryAdjustmentWorkflowService::STATUS_CANCELLED
-                )) {
+                )
+            ) {
                 DB::connection('mysql')->rollBack();
 
                 $message = $record->status === SalaryAdjustmentWorkflowService::STATUS_HRD_PROCESSING
