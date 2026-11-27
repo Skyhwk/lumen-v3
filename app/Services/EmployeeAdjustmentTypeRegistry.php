@@ -17,6 +17,7 @@ class EmployeeAdjustmentTypeRegistry
     public const TYPE_PHK = 'phk';
     public const TYPE_PENSIUN = 'pensiun';
     public const TYPE_MUTASI = 'mutasi';
+    public const TYPE_PERPANJANG_PENSIUN = 'perpanjang_pensiun';
 
     public const WORKFLOW_FULL = 'full';
     public const WORKFLOW_EXIT = 'exit';
@@ -148,6 +149,18 @@ class EmployeeAdjustmentTypeRegistry
             'requires_assessment' => true,
             'requires_counseling' => true,
             'target_status_karyawan' => null,
+        ],
+        self::TYPE_PERPANJANG_PENSIUN => [
+            'label' => 'Perpanjang Masa Kerja (Pensiun)',
+            // Masih sama dengan workflow Pengangkatan Karyawan Kontrak
+            'workflow_profile' => self::WORKFLOW_FULL,
+            'kpi_required' => true,
+            'salary_required' => false,
+            'allows_negative_salary' => false,
+            'requires_finance_when_salary' => true,
+            'requires_assessment' => true,
+            'requires_counseling' => true,
+            'target_status_karyawan' => self::STATUS_KARYAWAN_CONTRACT,
         ],
     ];
 
