@@ -1467,7 +1467,7 @@ class PersiapanSampleController extends Controller
         DB::beginTransaction();
 
         try {
-            $psh = $this->s aveHeader($request);
+            $psh = $this->saveHeader($request);
             
             $this->saveDetail($request, $psh);
             $this->saveQrDocument($psh);
