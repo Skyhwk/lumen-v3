@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use App\Models\Sector;
@@ -206,6 +207,21 @@ class MasterKaryawan extends Sector implements AuthenticatableContract
     public function feeKaryawan()
     {
         return $this->hasOne(FeeKaryawan::class, 'id_karyawan', 'id')->where('is_active', true);
+    }
+
+    public function suratTeguran()
+    {
+        return $this->hasMany(SuratTeguranDisipliner::class, 'karyawan_id', 'id')->where('is_active', true);
+    }
+
+    public function suratPeringatan()
+    {
+        return $this->hasMany(SuratPeringatanDisipliner::class, 'karyawan_id', 'id')->where('is_active', true);
+    }
+
+    public function bak()
+    {
+        return $this->hasMany(BeritaAcaraKejadianDisipliner::class, 'karyawan_id', 'id')->where('is_active', true);
     }
 
     /**
