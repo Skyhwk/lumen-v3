@@ -8,6 +8,7 @@ use App\Models\{OrderHeader, OrderDetail};
 use App\Models\SamplingPlan;
 use App\Models\MasterCabang;
 use App\Models\MasterKaryawan;
+use App\Services\DateColumnFilterService;
 use Exception;
 use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Http\Request;
@@ -57,16 +58,11 @@ class NeedApproveController extends Controller
 
         return Datatables::of($data)
             ->filterColumn('created_at', function ($query, $keyword) use ($request) {
-                $keyword = trim((string) $keyword);
-                $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
-                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-                    return;
-                }
-
                 $column = $request->mode == 'kontrak'
                     ? 'request_quotation_kontrak_H.created_at'
                     : 'request_quotation.created_at';
-                $query->whereDate($column, $date);
+
+                DateColumnFilterService::apply($query, $column, $keyword);
             })
             ->orderColumn('nama_sales', function ($query, $order) {
                 $query->orderBy('sales_id', $order);

@@ -108,8 +108,13 @@ final class InvestigasiKronologiAiService
             . "Susun:\n"
             . "- kronologi_ringkasan: paragraf naratif yang menggabungkan semua BAK (jika lebih dari satu, jelaskan hubungannya).\n"
             . "- kronologi_what, kronologi_who, kronologi_when, kronologi_where, kronologi_why, kronologi_how: isi 5W+1H sesuai standar investigasi.\n"
+            . "- Untuk kronologi_who, bandingkan uraian tiap BAK dan tentukan peran setiap pihak berdasarkan isi keterangannya. Label Pelapor pada formulir dan nama Pengaju BAK adalah data administratif. Seseorang dapat mengisi BAK untuk menyampaikan keterangannya sebagai terlapor atau saksi.\n"
+            . "  - Pelapor: pihak yang menyampaikan laporan atau pengaduan atas dugaan kejadian.\n"
+            . "  - Terlapor: pihak yang disebut melakukan tindakan yang dilaporkan. Nyatakan tindakan tersebut sebagai dugaan.\n"
+            . "  - Saksi: pihak yang menurut uraian melihat, mendengar, atau mengalami langsung bagian kejadian yang diterangkannya. Keterangan dari orang lain saja tidak cukup untuk menetapkan peran saksi.\n"
+            . "  - Tulis nama dan dasar singkat tiap peran beserta nomor BAK sumbernya. Jika seseorang memiliki lebih dari satu peran, jelaskan konteks masing-masing. Jika identitas atau perannya belum jelas, tulis 'Belum dapat dipastikan' untuk bagian tersebut.\n"
             . "- Gunakan \"Hari dan tanggal kejadian\" serta \"Tempat kejadian\" pada tiap BAK untuk mengisi kronologi_when dan kronologi_where (jika beberapa BAK, gabungkan secara jelas).\n"
-            . "- kronologi_catatan_khusus: kosongkan string jika tidak ada catatan khusus; jika ada perbedaan antar BAK, ringkas di sini.\n\n"
+            . "- kronologi_catatan_khusus: kosongkan string jika tidak ada catatan khusus. Jika keterangan antar BAK berbeda, termasuk soal identitas atau peran, ringkas perbedaan dan sebutkan nomor BAK sumbernya.\n\n"
             . "Data BAK:\n\n"
             . implode("\n\n", $bakBlocks);
 

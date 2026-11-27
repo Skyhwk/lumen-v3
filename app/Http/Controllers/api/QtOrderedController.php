@@ -22,6 +22,7 @@ use App\Jobs\CopyKontrakJob;
 use App\Services\Notification;
 use App\Services\GetAtasan;
 use App\Services\QuotationService;
+use App\Services\DateColumnFilterService;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\Hash;
@@ -185,16 +186,11 @@ class QtOrderedController extends Controller
                     }
                 })
                 ->filterColumn('created_at', function ($query, $keyword) use ($request) {
-                    $keyword = trim((string) $keyword);
-                    $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
-                    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-                        return;
-                    }
-
                     $column = $request->mode == 'kontrak'
                         ? 'request_quotation_kontrak_H.created_at'
                         : 'request_quotation.created_at';
-                    $query->whereDate($column, $date);
+
+                    DateColumnFilterService::apply($query, $column, $keyword);
                 })
                 ->filterColumn('order.no_order', function ($query, $keyword) {
                     $query->whereHas('order', function ($query) use ($keyword) {

@@ -4,6 +4,7 @@ namespace App\Services\Hr;
 
 use App\Models\Absensi;
 use App\Models\MasterKaryawan;
+use App\Models\MasterShiftKaryawan;
 use App\Models\ShiftKaryawan;
 use App\Services\Hr\HrAttendanceDayExcuseLabels;
 
@@ -107,17 +108,20 @@ class MonthlyAbsensiDataBuilder
             $plus = date('Y-m-d', strtotime($tanggal . ' +1 day'));
             $rowsNext = $absensiByDate->get($plus, collect());
 
-            if ($shift === '24jam') {
+            if (MasterShiftKaryawan::is24Jam($shift)) {
                 [$masukRow, $keluarRow] = $this->resolve24JamPunches($rowsToday, $rowsNext);
+                $checkin = $this->shiftCheckinTime($shiftRow);
                 $data[] = $this->mergeExcuseLabel(
-                    $this->composeDayRow($namaLabel, $karyawanId, $tanggal, $masukRow, $keluarRow, '24JAM'),
+                    $this->composeDayRow($namaLabel, $karyawanId, $tanggal, $masukRow, $keluarRow, '24JAM', $checkin),
                     $excuseLabels,
                     $tanggal
                 );
-            } elseif ($shift === 'SHSECURITY2') {
-                [$masukRow, $keluarRow] = $this->resolveSecurity2Punches($rowsToday, $rowsNext);
+            } elseif (MasterShiftKaryawan::isNightShift($shift, $shiftRow->time_in ?? null, $shiftRow->time_out ?? null)) {
+                $shiftLabel = strtoupper(trim((string) $shift));
+                $checkin = $this->shiftCheckinTime($shiftRow);
+                [$masukRow, $keluarRow] = $this->resolveNightShiftPunches($rowsToday, $rowsNext, $shiftRow);
                 $data[] = $this->mergeExcuseLabel(
-                    $this->composeDayRow($namaLabel, $karyawanId, $tanggal, $masukRow, $keluarRow, 'SHSECURITY2'),
+                    $this->composeDayRow($namaLabel, $karyawanId, $tanggal, $masukRow, $keluarRow, $shiftLabel, $checkin),
                     $excuseLabels,
                     $tanggal
                 );
@@ -126,7 +130,7 @@ class MonthlyAbsensiDataBuilder
                 $checkin = $this->shiftCheckinTime($shiftRow);
                 [$masukRow, $keluarRow] = $this->resolveThresholdPunches($rowsToday, $checkin);
                 $data[] = $this->mergeExcuseLabel(
-                    $this->composeDayRow($namaLabel, $karyawanId, $tanggal, $masukRow, $keluarRow, $shiftLabel),
+                    $this->composeDayRow($namaLabel, $karyawanId, $tanggal, $masukRow, $keluarRow, $shiftLabel, $checkin),
                     $excuseLabels,
                     $tanggal
                 );
@@ -204,13 +208,15 @@ class MonthlyAbsensiDataBuilder
     private function shiftCheckinTime($shiftRow): string
     {
         if ($shiftRow && !empty($shiftRow->time_in)) {
-            $time = trim((string) $shiftRow->time_in);
-            if (preg_match('/^\d{1,2}:\d{2}(:\d{2})?$/', $time)) {
-                return strlen($time) === 5 ? $time . ':00' : $time;
+            $hm = MasterShiftKaryawan::normalizeHm($shiftRow->time_in);
+            if ($hm !== null) {
+                return $hm . ':00';
             }
         }
 
-        return '08:00:00';
+        $shiftCode = ($shiftRow && !empty($shiftRow->shift)) ? (string) $shiftRow->shift : 'SHREGULAR';
+
+        return MasterShiftKaryawan::getShiftTimes($shiftCode)['in_hms'];
     }
 
     /**
@@ -236,10 +242,15 @@ class MonthlyAbsensiDataBuilder
      * @param \Illuminate\Support\Collection $rowsNext
      * @return array{0: object|null, 1: object|null}
      */
-    private function resolveSecurity2Punches($rowsToday, $rowsNext): array
+    private function resolveNightShiftPunches($rowsToday, $rowsNext, $shiftRow = null): array
     {
-        $masuk = ShiftAbsensiPunchRules::pickSecurity2MasukRow($rowsToday);
-        $keluar = ShiftAbsensiPunchRules::pickOvernightKeluarRow($rowsNext);
+        $shiftCode = $shiftRow ? (string) ($shiftRow->shift ?? 'SHSECURITY2') : 'SHSECURITY2';
+        $timeIn = $shiftRow->time_in ?? null;
+        $timeOut = $shiftRow->time_out ?? null;
+        $bounds = MasterShiftKaryawan::resolveNightShiftBounds($shiftCode, $timeIn, $timeOut);
+
+        $masuk = ShiftAbsensiPunchRules::pickNightShiftMasukRow($rowsToday, $shiftCode, $timeIn, $timeOut);
+        $keluar = ShiftAbsensiPunchRules::pickOvernightKeluarRow($rowsNext, $bounds['keluar_before']);
 
         return [$masuk, $keluar];
     }
@@ -250,7 +261,8 @@ class MonthlyAbsensiDataBuilder
         string $tanggal,
         $masukRow,
         $keluarRow,
-        string $shiftLabel
+        string $shiftLabel,
+        string $checkin = '08:00:00'
     ): array {
         $jamMasuk = $masukRow ? (string) $masukRow->jam : '';
         $jamKeluar = $keluarRow ? (string) $keluarRow->jam : '';
@@ -266,7 +278,7 @@ class MonthlyAbsensiDataBuilder
             'tgl_keluar' => $keluarRow ? (string) $keluarRow->tanggal : '',
             'id_masuk' => $masukRow ? $masukRow->id : '',
             'id_keluar' => $keluarRow ? $keluarRow->id : '',
-            'selisih' => $this->formatSelisihMasuk($tanggal, $jamMasuk),
+            'selisih' => $this->formatSelisihMasuk($tanggal, $jamMasuk, $checkin),
             'jam_kerja' => $this->formatJamKerja($masukRow, $keluarRow, $jamMasuk, $jamKeluar),
             'kode_kartu_masuk' => $masukRow ? $masukRow->kode_kartu : '',
             'kode_kartu_keluar' => $keluarRow ? $keluarRow->kode_kartu : '',
@@ -274,18 +286,19 @@ class MonthlyAbsensiDataBuilder
         ];
     }
 
-    private function formatSelisihMasuk(string $tanggal, string $jamMasuk): string
+    private function formatSelisihMasuk(string $tanggal, string $jamMasuk, string $checkin = '08:00:00'): string
     {
         if ($jamMasuk === '' || $jamMasuk === '-') {
             return '';
         }
-        if ($jamMasuk < '08:00:00') {
-            $selisih = date_diff(date_create($tanggal . ' ' . $jamMasuk), date_create($tanggal . ' 08:00:00'));
+        $checkinTime = date('H:i:s', strtotime($checkin ?: '08:00:00'));
+        if ($jamMasuk < $checkinTime) {
+            $selisih = date_diff(date_create($tanggal . ' ' . $jamMasuk), date_create($tanggal . ' ' . $checkinTime));
 
             return '+' . (int) ((($selisih->h * 3600) + ($selisih->i * 60) + $selisih->s) / 60) . 'm';
         }
-        if ($jamMasuk > '08:00:00' && $jamMasuk !== '00:00:00') {
-            $selisih = date_diff(date_create($tanggal . ' 08:00:00'), date_create($tanggal . ' ' . $jamMasuk));
+        if ($jamMasuk > $checkinTime && $jamMasuk !== '00:00:00') {
+            $selisih = date_diff(date_create($tanggal . ' ' . $checkinTime), date_create($tanggal . ' ' . $jamMasuk));
 
             return '-' . (int) ((($selisih->h * 3600) + ($selisih->i * 60) + $selisih->s) / 60) . 'm';
         }

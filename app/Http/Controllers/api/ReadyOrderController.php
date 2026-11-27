@@ -12,6 +12,7 @@ use Exception;
 use Yajra\DataTables\DataTables;
 use Carbon\Carbon;
 use App\Services\{Notification, GetAtasan, ProcessAfterOrder, QuotationService, SendEmail};
+use App\Services\DateColumnFilterService;
 use App\Services\SamplingPlanServices;
 use App\Models\SamplingPlan;
 use App\Models\QuotationNonKontrak;
@@ -97,16 +98,20 @@ class ReadyOrderController extends Controller
 
             return DataTables::of($data)
                 ->filterColumn('created_at', function ($query, $keyword) use ($request) {
-                    $keyword = trim((string) $keyword);
-                    $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
-                    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-                        return;
-                    }
-
                     $column = $request->mode == 'kontrak'
                         ? 'request_quotation_kontrak_H.created_at'
                         : 'request_quotation.created_at';
-                    $query->whereDate($column, $date);
+
+                    DateColumnFilterService::apply($query, $column, $keyword);
+                })
+                ->filterColumn('sales.nama_lengkap', function ($query, $keyword) {
+                    $keyword = trim((string) $keyword);
+                    if ($keyword === '') {
+                        return;
+                    }
+                    $query->whereHas('sales', function ($sales) use ($keyword) {
+                        $sales->where('nama_lengkap', 'like', '%' . $keyword . '%');
+                    });
                 })
                 ->addColumn('count_jadwal', function ($row) {
                     return $row->sampling ? $row->sampling->sum(function ($sampling) {
@@ -1641,12 +1646,27 @@ class ReadyOrderController extends Controller
                                 ], 401);
                             }
                         }
+
+                        $persiapanResult = $this->buildPersiapanOrderDetail(
+                            $detail_baru[$changes]["kategori_1"],
+                            is_array($detail_baru[$changes]["parameter"]) ? $detail_baru[$changes]["parameter"] : [],
+                            $existing_detail->koding_sampling,
+                            $existing_detail->persiapan
+                        );
+                        if (!$persiapanResult['ok']) {
+                            DB::rollBack();
+                            return response()->json([
+                                'message' => $persiapanResult['message']
+                            ], 400);
+                        }
+
                         $existing_detail->kategori_1 = $detail_baru[$changes]["status_sampling"];
                         $existing_detail->kategori_2 = $detail_baru[$changes]["kategori_1"];
                         $existing_detail->kategori_3 = $detail_baru[$changes]["kategori_2"];
                         $existing_detail->keterangan_1 = $detail_baru[$changes]["penamaan_titik"];
                         $existing_detail->parameter = json_encode($detail_baru[$changes]["parameter"]);
                         $existing_detail->regulasi = json_encode($detail_baru[$changes]["regulasi"]);
+                        $existing_detail->persiapan = $persiapanResult['persiapan'];
                         $existing_detail->tanggal_sampling = $tanggal_sampling;
                         $existing_detail->updated_at = Carbon::now()->format('Y-m-d H:i:s');
                         $existing_detail->save();
@@ -3766,6 +3786,183 @@ class ReadyOrderController extends Controller
         QrCode::format('png')->size(200)->generate($no_sampel, $path);
 
         return $filename;
+    }
+
+    private function buildPersiapanOrderDetail($kategori_1, array $parameters, $no_sampling, $existing_persiapan_json = null)
+    {
+        $existing_persiapan = json_decode((string) $existing_persiapan_json, true);
+        if (!is_array($existing_persiapan)) {
+            $existing_persiapan = [];
+        }
+
+        $kategori_parts = explode('-', (string) $kategori_1);
+        $id_kategori = $kategori_parts[0] ?? '';
+        $nama_kategori = $kategori_parts[1] ?? '';
+
+        if ($nama_kategori == 'Air') {
+            $idParameter = array_map(function ($p) {
+                return explode(';', (string) $p)[0];
+            }, $parameters);
+
+            $params = HargaParameter::where('id_kategori', $id_kategori)
+                ->where('is_active', true)
+                ->whereIn('id_parameter', $idParameter)
+                ->selectRaw('volume, regen, id_parameter, nama_parameter')
+                ->groupBy('volume', 'regen', 'id_parameter', 'nama_parameter')
+                ->get();
+
+            $param_map = [];
+            foreach ($params as $param) {
+                $param_map[$param->nama_parameter] = $param;
+            }
+            \App\Helpers\ParameterLabelConfigHelper::enrichParamMap($param_map, $idParameter, $id_kategori);
+
+            $invalid = collect($param_map)->filter(function ($p) {
+                return in_array($p->regen, ['-', '', null], true);
+            });
+
+            if ($invalid->isNotEmpty()) {
+                $names = $invalid->pluck('nama_parameter')->implode(', ');
+                return [
+                    'ok' => false,
+                    'message' => 'Regen belum diset untuk parameter ' . $names . ' silahkan hubungi bagian teknis.!',
+                ];
+            }
+
+            $botol_volumes = [];
+            foreach ($parameters as $parameter) {
+                $parts = explode(';', (string) $parameter);
+                $param_name = $parts[1] ?? '';
+                if (isset($param_map[$param_name])) {
+                    $param = $param_map[$param_name];
+                    if (!isset($botol_volumes[$param->regen])) {
+                        $botol_volumes[$param->regen] = 0;
+                    }
+                    $botol_volumes[$param->regen] += ($param->volume != "" && $param->volume != "-" && $param->volume != null) ? (float) $param->volume : 0;
+                }
+            }
+
+            $existing_by_type = [];
+            foreach ($existing_persiapan as $item) {
+                if (is_array($item) && !empty($item['type_botol']) && !empty($item['koding'])) {
+                    $existing_by_type[$item['type_botol']] = $item;
+                }
+            }
+
+            $botol = [];
+            $ketentuan_botol = config('ketentuan_botol', []);
+            $botol_dir = public_path() . '/barcode/botol';
+
+            foreach ($botol_volumes as $type => $volume) {
+                if (empty($type)) {
+                    foreach ($param_map as $p) {
+                        if ($p->regen == '' || $p->regen == null) {
+                            return [
+                                'ok' => false,
+                                'message' => 'Terdapat botol parameter ' . $p->nama_parameter . ' yang belum di set, silahkan hubungi teknis.!',
+                            ];
+                        }
+                    }
+                }
+
+                if (empty($ketentuan_botol[$type])) {
+                    return [
+                        'ok' => false,
+                        'message' => 'Ketentuan botol untuk tipe ' . $type . ' belum diset, silahkan hubungi teknis.!',
+                    ];
+                }
+
+                $jumlah_botol = ceil($volume / $ketentuan_botol[$type]);
+
+                if (isset($existing_by_type[$type])) {
+                    $koding = $existing_by_type[$type]['koding'];
+                    $file = !empty($existing_by_type[$type]['file']) ? $existing_by_type[$type]['file'] : ($koding . '.png');
+                } else {
+                    $koding = $no_sampling . strtoupper(Str::random(5));
+                    $file = $koding . '.png';
+                }
+
+                $botol[] = (object) [
+                    'koding' => $koding,
+                    'type_botol' => $type,
+                    'volume' => $volume,
+                    'file' => $file,
+                    'disiapkan' => $jumlah_botol,
+                ];
+
+                if (!file_exists($botol_dir)) {
+                    mkdir($botol_dir, 0777, true);
+                }
+
+                $qr_filename = \str_replace("/", "_", $koding) . '.png';
+                if (!isset($existing_by_type[$type]) || !file_exists($botol_dir . '/' . $qr_filename)) {
+                    $this->generateQR($koding, '/barcode/botol');
+                }
+            }
+
+            return [
+                'ok' => true,
+                'persiapan' => json_encode($botol),
+            ];
+        }
+
+        if ($kategori_1 == '4-Udara' || $kategori_1 == '5-Emisi') {
+            $cek_ketentuan_parameter = DB::table('konfigurasi_pra_sampling')
+                ->whereIn('parameter', $parameters)
+                ->where('is_active', true)
+                ->get();
+
+            $existing_by_param = [];
+            foreach ($existing_persiapan as $item) {
+                if (is_array($item) && isset($item['parameter']) && !empty($item['koding'])) {
+                    $key = $item['parameter'] . '||' . ($item['disiapkan'] ?? '');
+                    $existing_by_param[$key] = $item;
+                }
+            }
+
+            $persiapan = [];
+            $penjerap_dir = public_path() . '/barcode/penjerap';
+
+            foreach ($cek_ketentuan_parameter as $ketentuan) {
+                $parts = \explode(';', (string) $ketentuan->parameter);
+                $param_label = $parts[1] ?? $ketentuan->parameter;
+                $match_key = $param_label . '||' . $ketentuan->ketentuan;
+
+                if (isset($existing_by_param[$match_key])) {
+                    $koding = $existing_by_param[$match_key]['koding'];
+                    $file = !empty($existing_by_param[$match_key]['file']) ? $existing_by_param[$match_key]['file'] : ($koding . '.png');
+                } else {
+                    $koding = $no_sampling . strtoupper(Str::random(5));
+                    $file = $koding . '.png';
+                }
+
+                $persiapan[] = [
+                    'parameter' => $param_label,
+                    'disiapkan' => $ketentuan->ketentuan,
+                    'koding' => $koding,
+                    'file' => $file,
+                ];
+
+                if (!file_exists($penjerap_dir)) {
+                    mkdir($penjerap_dir, 0777, true);
+                }
+
+                $qr_filename = \str_replace("/", "_", $koding) . '.png';
+                if (!isset($existing_by_param[$match_key]) || !file_exists($penjerap_dir . '/' . $qr_filename)) {
+                    $this->generateQR($koding, '/barcode/penjerap');
+                }
+            }
+
+            return [
+                'ok' => true,
+                'persiapan' => json_encode($persiapan),
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'persiapan' => null,
+        ];
     }
 
     private function directParamExclude($value)

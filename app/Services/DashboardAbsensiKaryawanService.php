@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\MasterKaryawan;
+use App\Models\MasterShiftKaryawan;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -248,35 +249,88 @@ class DashboardAbsensiKaryawanService
     }
 
     /**
-     * Aturan jam kerja mengikuti shift_karyawan / ModalTableShiftKaryawan.
-     * Kelompok berdasarkan pemakaian nyata di master_divisi:
-     * - SHTEKNISI → Technical Assurance / TEKNIS
-     * - SHANALYST → Analyst / Laboratorium (jam 07:00-16:00)
-     * - SHADMSAMPLING → Sampling (jam 07:00-16:00)
-     * - SHOB/security → General Affair
-     * Tanpa baris shift dan SHREGULAR: jam kantor.
+     * Aturan jam kerja mengikuti master_shift_karyawan / shift_karyawan.
+     * Metadata tampilan (title, family, subtitle, urutan) di-overlay ke jam kerja dari master_shift_karyawan.
+     * Tanpa baris shift dan SHREGULAR: jam kantor (KANTOR).
      */
     private function shiftRules(): array
     {
-        return [
-            'KANTOR' => ['title' => 'Jam kantor', 'time_in' => '08:00', 'time_out' => '17:00', 'family' => 'kantor', 'family_label' => 'Jam kantor', 'order' => 1, 'subtitle' => 'Masuk 08:00, pulang 17:00. Termasuk karyawan tanpa shift dan SHREGULAR.'],
-            'SHANALYST' => ['title' => 'Shift analis', 'time_in' => '07:00', 'time_out' => '16:00', 'family' => 'laboratorium', 'family_label' => 'Laboratorium & Sampling', 'order' => 2, 'subtitle' => 'Divisi Analyst / Laboratorium. Masuk 07:00, pulang 16:00. Hanya dibanding sesama analis.'],
-            'SHADMSAMPLING' => ['title' => 'Shift admin sampling', 'time_in' => '07:00', 'time_out' => '16:00', 'family' => 'laboratorium', 'family_label' => 'Laboratorium & Sampling', 'order' => 3, 'subtitle' => 'Divisi Sampling. Masuk 07:00, pulang 16:00. Hanya dibanding sesama admin sampling.'],
-            'SHTEKNISI' => ['title' => 'Shift teknisi', 'time_in' => '10:00', 'time_out' => '19:00', 'family' => 'teknisi', 'family_label' => 'Teknisi', 'order' => 4, 'subtitle' => 'Divisi Technical Assurance. Masuk 10:00, pulang 19:00. Hanya dibanding sesama teknisi.'],
-            'SHOB' => ['title' => 'Shift OB pagi', 'time_in' => '06:00', 'time_out' => '15:00', 'family' => 'operasional', 'family_label' => 'General Affair', 'order' => 5, 'subtitle' => 'Divisi General Affair. Masuk 06:00, pulang 15:00. Hanya dibanding sesama OB pagi.'],
-            'SHOB2' => ['title' => 'Shift OB siang', 'time_in' => '11:00', 'time_out' => '20:00', 'family' => 'operasional', 'family_label' => 'General Affair', 'order' => 6, 'subtitle' => 'Divisi General Affair. Masuk 11:00, pulang 20:00. Hanya dibanding sesama OB siang.'],
-            'SHSPVOPFIN' => ['title' => 'SPV Operational Finance', 'time_in' => '09:00', 'time_out' => '18:00', 'family' => 'kantor', 'family_label' => 'Jam kantor', 'order' => 14, 'subtitle' => 'Masuk 09:00, pulang 18:00.'],
-            'SHANALISMIKRO' => ['title' => 'Analis Mikro', 'time_in' => '09:00', 'time_out' => '13:00', 'family' => 'laboratorium', 'family_label' => 'Laboratorium & Sampling', 'order' => 15, 'subtitle' => 'Masuk 09:00, pulang 13:00.'],
-            'SHKORSAMP1' => ['title' => 'Koordinator Sampling shift 1', 'time_in' => '08:00', 'time_out' => '17:00', 'family' => 'laboratorium', 'family_label' => 'Laboratorium & Sampling', 'order' => 16, 'subtitle' => 'Masuk 08:00, pulang 17:00.'],
-            'SHKORSAMP2' => ['title' => 'Koordinator Sampling shift 2', 'time_in' => '11:00', 'time_out' => '20:00', 'family' => 'laboratorium', 'family_label' => 'Laboratorium & Sampling', 'order' => 17, 'subtitle' => 'Masuk 11:00, pulang 20:00.'],
-            'SWOB' => ['title' => 'Shift OB setengah hari', 'time_in' => '07:00', 'time_out' => '12:00', 'family' => 'operasional', 'family_label' => 'General Affair', 'order' => 7, 'subtitle' => 'Divisi General Affair. Masuk 07:00, pulang 12:00. Hanya dibanding sesama shift ini.'],
-            'SWOB2' => ['title' => 'Shift OB sore', 'time_in' => '09:00', 'time_out' => '18:00', 'family' => 'operasional', 'family_label' => 'General Affair', 'order' => 8, 'subtitle' => 'Divisi General Affair. Masuk 09:00, pulang 18:00. Hanya dibanding sesama OB sore.'],
-            'SHSECURITY' => ['title' => 'Shift security siang', 'time_in' => '08:00', 'time_out' => '20:00', 'family' => 'security', 'family_label' => 'Security', 'order' => 9, 'subtitle' => 'Divisi General Affair. Masuk 08:00, pulang 20:00. Hanya dibanding sesama security siang.'],
-            'SHSECURITY2' => ['title' => 'Shift security malam', 'time_in' => '20:00', 'time_out' => '08:00', 'family' => 'security', 'family_label' => 'Security', 'order' => 10, 'subtitle' => 'Divisi General Affair. Masuk 20:00, pulang 08:00 keesokan harinya. Hanya dibanding sesama security malam.'],
-            'SHSECURITYGO1' => ['title' => 'Shift security GO 12 jam', 'time_in' => '07:00', 'time_out' => '19:00', 'family' => 'security', 'family_label' => 'Security', 'order' => 11, 'subtitle' => 'Divisi General Affair. Masuk 07:00, pulang 19:00. Hanya dibanding sesama shift ini.'],
-            'SHSECURITYGO2' => ['title' => 'Shift security GO 8 jam', 'time_in' => '07:00', 'time_out' => '15:00', 'family' => 'security', 'family_label' => 'Security', 'order' => 12, 'subtitle' => 'Divisi General Affair. Masuk 07:00, pulang 15:00. Hanya dibanding sesama shift ini.'],
-            '24JAM' => ['title' => 'Shift 24 jam', 'time_in' => '08:00', 'time_out' => '08:00', 'family' => 'operasional', 'family_label' => 'General Affair', 'order' => 13, 'subtitle' => 'Shift lintas hari. Hanya dibanding sesama shift 24 jam.'],
+        $meta = [
+            'KANTOR' => ['title' => 'Jam kantor', 'family' => 'kantor', 'family_label' => 'Jam kantor', 'order' => 1, 'desc' => 'Termasuk karyawan tanpa shift dan SHREGULAR.'],
+            'SHANALYST' => ['title' => 'Shift analis', 'family' => 'laboratorium', 'family_label' => 'Laboratorium & Sampling', 'order' => 2, 'desc' => 'Divisi Analyst / Laboratorium. Hanya dibanding sesama analis.'],
+            'SHADMSAMPLING' => ['title' => 'Shift admin sampling', 'family' => 'laboratorium', 'family_label' => 'Laboratorium & Sampling', 'order' => 3, 'desc' => 'Divisi Sampling. Hanya dibanding sesama admin sampling.'],
+            'SHTEKNISI' => ['title' => 'Shift teknisi', 'family' => 'teknisi', 'family_label' => 'Teknisi', 'order' => 4, 'desc' => 'Divisi Technical Assurance. Hanya dibanding sesama teknisi.'],
+            'SHOB' => ['title' => 'Shift OB pagi', 'family' => 'operasional', 'family_label' => 'General Affair', 'order' => 5, 'desc' => 'Divisi General Affair. Hanya dibanding sesama OB pagi.'],
+            'SHOB2' => ['title' => 'Shift OB siang', 'family' => 'operasional', 'family_label' => 'General Affair', 'order' => 6, 'desc' => 'Divisi General Affair. Hanya dibanding sesama OB siang.'],
+            'SWOB' => ['title' => 'Shift OB setengah hari', 'family' => 'operasional', 'family_label' => 'General Affair', 'order' => 7, 'desc' => 'Divisi General Affair. Hanya dibanding sesama shift ini.'],
+            'SWOB2' => ['title' => 'Shift OB sore', 'family' => 'operasional', 'family_label' => 'General Affair', 'order' => 8, 'desc' => 'Divisi General Affair. Hanya dibanding sesama OB sore.'],
+            'SHSECURITY' => ['title' => 'Shift security siang', 'family' => 'security', 'family_label' => 'Security', 'order' => 9, 'desc' => 'Divisi General Affair. Hanya dibanding sesama security siang.'],
+            'SHSECURITY2' => ['title' => 'Shift security malam', 'family' => 'security', 'family_label' => 'Security', 'order' => 10, 'desc' => 'Divisi General Affair. Hanya dibanding sesama security malam.'],
+            'SHSECURITYGO1' => ['title' => 'Shift security GO 12 jam', 'family' => 'security', 'family_label' => 'Security', 'order' => 11, 'desc' => 'Divisi General Affair. Hanya dibanding sesama shift ini.'],
+            'SHSECURITYGO2' => ['title' => 'Shift security GO 8 jam', 'family' => 'security', 'family_label' => 'Security', 'order' => 12, 'desc' => 'Divisi General Affair. Hanya dibanding sesama shift ini.'],
+            'SHSPVOPFIN' => ['title' => 'SPV Operational Finance', 'family' => 'kantor', 'family_label' => 'Jam kantor', 'order' => 14, 'desc' => ''],
+            'SHANALISMIKRO' => ['title' => 'Analis Mikro', 'family' => 'laboratorium', 'family_label' => 'Laboratorium & Sampling', 'order' => 15, 'desc' => ''],
+            'SHKORSAMP1' => ['title' => 'Koordinator Sampling shift 1', 'family' => 'laboratorium', 'family_label' => 'Laboratorium & Sampling', 'order' => 16, 'desc' => ''],
+            'SHKORSAMP2' => ['title' => 'Koordinator Sampling shift 2', 'family' => 'laboratorium', 'family_label' => 'Laboratorium & Sampling', 'order' => 17, 'desc' => ''],
         ];
+
+        $master = MasterShiftKaryawan::allIndexedByKode();
+        $regular = MasterShiftKaryawan::getShiftTimes('SHREGULAR');
+
+        $buildSubtitle = function (string $in, string $out, string $desc): string {
+            $overnight = $this->toSeconds($out) !== null
+                && $this->toSeconds($in) !== null
+                && $this->toSeconds($out) <= $this->toSeconds($in);
+            $jamText = $overnight
+                ? "Masuk {$in}, pulang {$out} keesokan harinya."
+                : "Masuk {$in}, pulang {$out}.";
+
+            return trim($desc !== '' ? "{$jamText} {$desc}" : $jamText);
+        };
+
+        $rules = [
+            'KANTOR' => [
+                'title' => $meta['KANTOR']['title'],
+                'time_in' => $regular['in'],
+                'time_out' => $regular['out'],
+                'family' => $meta['KANTOR']['family'],
+                'family_label' => $meta['KANTOR']['family_label'],
+                'order' => $meta['KANTOR']['order'],
+                'subtitle' => $buildSubtitle($regular['in'], $regular['out'], $meta['KANTOR']['desc']),
+            ],
+        ];
+
+        $fallbackOrder = 50;
+        foreach ($master as $kode => $item) {
+            if ($kode === 'SHREGULAR') {
+                continue;
+            }
+            $timeIn = $item['time_in'] ?: $regular['in'];
+            $timeOut = $item['time_out'] ?: $regular['out'];
+            $m = $meta[$kode] ?? null;
+
+            $rules[$kode] = [
+                'title' => $m['title'] ?? ($item['label'] ?: $kode),
+                'time_in' => $timeIn,
+                'time_out' => $timeOut,
+                'family' => $m['family'] ?? 'operasional',
+                'family_label' => $m['family_label'] ?? 'Lainnya',
+                'order' => $m['order'] ?? ($item['sort_order'] > 0 ? (int) $item['sort_order'] + 20 : $fallbackOrder++),
+                'subtitle' => $buildSubtitle($timeIn, $timeOut, $m['desc'] ?? ''),
+            ];
+        }
+
+        $rules['24JAM'] = [
+            'title' => 'Shift 24 jam',
+            'time_in' => $regular['in'],
+            'time_out' => $regular['in'],
+            'family' => 'operasional',
+            'family_label' => 'General Affair',
+            'order' => 13,
+            'subtitle' => 'Shift lintas hari. Hanya dibanding sesama shift 24 jam.',
+        ];
+
+        return $rules;
     }
 
     private function defaultShiftForEmployee($employee): array
@@ -284,22 +338,27 @@ class DashboardAbsensiKaryawanService
         $divisionId = (int) ($employee->id_department ?? 0);
         $divisionName = strtoupper(trim((string) ($employee->department ?? '')));
 
-        // SHTEKNISI 10:00-19:00 — Technical Assurance / TEKNIS
+        // SHTEKNISI — Technical Assurance / TEKNIS
         if (in_array($divisionId, [16, 22], true) || strpos($divisionName, 'TECHNICAL ASSURANCE') !== false || $divisionName === 'TEKNIS') {
-            return ['name' => 'SHTEKNISI', 'time_in' => '10:00:00', 'time_out' => '19:00:00'];
+            $times = MasterShiftKaryawan::getShiftTimes('SHTEKNISI', null, '10:00', '19:00');
+            return ['name' => 'SHTEKNISI', 'time_in' => $times['in_hms'], 'time_out' => $times['out_hms']];
         }
 
-        // SHANALYST 07:00-16:00 — Analyst / Laboratorium
+        // SHANALYST — Analyst / Laboratorium
         if (in_array($divisionId, [20, 21], true) || $divisionName === 'ANALYST' || $divisionName === 'LABORATORIUM') {
-            return ['name' => 'SHANALYST', 'time_in' => '07:00:00', 'time_out' => '16:00:00'];
+            $times = MasterShiftKaryawan::getShiftTimes('SHANALYST', null, '07:00', '16:00');
+            return ['name' => 'SHANALYST', 'time_in' => $times['in_hms'], 'time_out' => $times['out_hms']];
         }
 
-        // SHADMSAMPLING 07:00-16:00 — Sampling
+        // SHADMSAMPLING — Sampling
         if ($divisionId === 14 || $divisionName === 'SAMPLING') {
-            return ['name' => 'SHADMSAMPLING', 'time_in' => '07:00:00', 'time_out' => '16:00:00'];
+            $times = MasterShiftKaryawan::getShiftTimes('SHADMSAMPLING', null, '07:00', '16:00');
+            return ['name' => 'SHADMSAMPLING', 'time_in' => $times['in_hms'], 'time_out' => $times['out_hms']];
         }
 
-        return ['name' => 'KANTOR', 'time_in' => '08:00:00', 'time_out' => '17:00:00'];
+        $regular = MasterShiftKaryawan::getShiftTimes('SHREGULAR');
+
+        return ['name' => 'KANTOR', 'time_in' => $regular['in_hms'], 'time_out' => $regular['out_hms']];
     }
 
     private function normalizeShiftName($shiftName): string
@@ -441,14 +500,16 @@ class DashboardAbsensiKaryawanService
         $shiftName = strtoupper(trim((string) $shift));
         $todaySeconds = $this->punchSeconds($today);
         $nextSeconds = $this->punchSeconds($tomorrow);
-        $timeInSeconds = $this->toSeconds($timeIn) ?? $this->toSeconds('08:00:00');
-        $timeOutSeconds = $this->toSeconds($timeOut);
-        $overnight = in_array($shiftName, ['24JAM', 'SHSECURITY2'], true)
-            || ($timeInSeconds !== null && $timeOutSeconds !== null && $timeOutSeconds <= $timeInSeconds);
+        $regularIn = MasterShiftKaryawan::getShiftTimes('SHREGULAR')['in_hms'];
+        $timeInSeconds = $this->toSeconds($timeIn) ?? $this->toSeconds($regularIn);
+        $overnight = MasterShiftKaryawan::isOvernight($shiftName, $timeIn, $timeOut);
+        $isNightShift = MasterShiftKaryawan::isNightShift($shiftName, $timeIn, $timeOut);
 
-        if ($shiftName === 'SHSECURITY2') {
-            $in = $todaySeconds->filter(fn ($value) => $value > $this->toSeconds('14:00:00'))->min();
-            $out = $nextSeconds->first(fn ($value) => $value < $this->toSeconds('14:00:00'));
+        if ($isNightShift) {
+            $bounds = MasterShiftKaryawan::resolveNightShiftBounds($shiftName, $timeIn, $timeOut);
+            $keluarBeforeSec = $this->toSeconds($bounds['keluar_before']) ?? $this->toSeconds('14:00:00');
+            $in = $todaySeconds->filter(fn ($value) => $value > $keluarBeforeSec)->min();
+            $out = $nextSeconds->first(fn ($value) => $value < $keluarBeforeSec);
             return [$in ?: null, $out !== null ? $out + 86400 : null];
         }
 
@@ -458,7 +519,7 @@ class DashboardAbsensiKaryawanService
             return [$in, $out !== null ? $out + 86400 : null];
         }
 
-        $split = ($timeInSeconds ?? $this->toSeconds('08:00:00')) + (4 * 3600);
+        $split = ($timeInSeconds ?? $this->toSeconds($regularIn)) + (4 * 3600);
         $in = $todaySeconds->filter(fn ($value) => $value <= $split)->min();
         $out = $todaySeconds->filter(fn ($value) => $value > $split)->max();
 

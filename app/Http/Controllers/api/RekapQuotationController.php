@@ -6,6 +6,7 @@ use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Services\DateColumnFilterService;
 use Picqer\Barcode\BarcodeGeneratorPNG as Barcode;
 
 use Illuminate\Http\Request;
@@ -81,13 +82,7 @@ class RekapQuotationController extends Controller
                     return $row->detail ? $row->detail->count() : 0;
                 })
                 ->filterColumn('created_at', function ($query, $keyword) use ($tableName) {
-                    $keyword = trim((string) $keyword);
-                    $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
-                    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-                        return;
-                    }
-
-                    $query->whereDate($tableName . '.created_at', $date);
+                    DateColumnFilterService::apply($query, $tableName . '.created_at', $keyword);
                 })
                 ->filterColumn('status_quotation', function ($query, $keyword) use ($tableName) {
                     $keyword = trim((string) $keyword);

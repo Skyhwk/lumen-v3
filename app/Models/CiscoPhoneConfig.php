@@ -11,6 +11,7 @@ class CiscoPhoneConfig extends Sector
     protected $casts = [
         'config_json' => 'array',
         'is_active' => 'boolean',
+        'enable_phonebook' => 'boolean',
         'last_generated_at' => 'datetime',
     ];
 

@@ -62,8 +62,8 @@ class InvestigasiController extends Controller
         $rows = $query->orderByDesc('updated_at')->limit(500)->get();
 
         $creatorIds = $rows->pluck('creator_karyawan_id')
-            ->filter(static fn ($id) => (int) $id > 0)
-            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn($id) => (int) $id > 0)
+            ->map(static fn($id) => (int) $id)
             ->unique()
             ->values()
             ->all();
@@ -94,14 +94,14 @@ class InvestigasiController extends Controller
         ];
 
         $investigasiIds = $rows->pluck('id')
-            ->map(static fn ($id) => (int) $id)
-            ->filter(static fn ($id) => $id > 0)
+            ->map(static fn($id) => (int) $id)
+            ->filter(static fn($id) => $id > 0)
             ->values()
             ->all();
         $bakNomorByInvestigasi = $this->loadBakNomorByInvestigasiIds($investigasiIds);
 
         $data = $rows->map(
-            fn ($row) => $this->formatInvestigasiRow($row, $creatorNamesById, $bakNomorByInvestigasi)
+            fn($row) => $this->formatInvestigasiRow($row, $creatorNamesById, $bakNomorByInvestigasi)
         )->values();
 
         return response()->json([
@@ -159,10 +159,10 @@ class InvestigasiController extends Controller
 
         $bakIds = Schema::hasTable('bak_investigasi_berita_acara')
             ? DB::table('bak_investigasi_berita_acara')
-                ->where('bak_investigasi_id', $id)
-                ->pluck('berita_acara_id')
-                ->map(fn ($v) => (int) $v)
-                ->all()
+            ->where('bak_investigasi_id', $id)
+            ->pluck('berita_acara_id')
+            ->map(fn($v) => (int) $v)
+            ->all()
             : [];
 
         $bakNomorByInvestigasi = $this->loadBakNomorByInvestigasiIds([$id]);
@@ -177,6 +177,9 @@ class InvestigasiController extends Controller
             );
         }
 
+        $sanksiStIds = BakInvestigasiService::getLinkedSuratIds($id, BakInvestigasiService::JENIS_ST, $row);
+        $sanksiSpIds = BakInvestigasiService::getLinkedSuratIds($id, BakInvestigasiService::JENIS_SP, $row);
+
         return response()->json([
             'success' => true,
             'data' => array_merge($this->formatInvestigasiRow($row, [], $bakNomorByInvestigasi), [
@@ -187,6 +190,10 @@ class InvestigasiController extends Controller
                 'bak_ids' => $bakIds,
                 'linked_bak' => $linkedBak,
                 'bukti_pendukung' => $buktiPendukung,
+                'sanksi_surat_teguran_ids' => $sanksiStIds,
+                'sanksi_surat_peringatan_ids' => $sanksiSpIds,
+                'sanksi_surat_teguran_items' => $this->loadSuratTeguranItemsByIds($sanksiStIds),
+                'sanksi_surat_peringatan_items' => $this->loadSuratPeringatanItemsByIds($sanksiSpIds),
                 'can_approve_diketahui' => $this->user_id
                     ? app(InvestigasiPengesahanService::class)->viewerCanApproveDiketahui($id, (int) $this->user_id)
                     : false,
@@ -197,7 +204,7 @@ class InvestigasiController extends Controller
     }
 
     /**
-     * Opsi surat teguran (G.1) — difilter karyawan terlapor / BAK terkait bila ada.
+     * Opsi surat teguran (G.1) — hanya ST aktif yang belum dipakai di investigasi lain.
      */
     public function listSuratTeguranOptions(Request $request)
     {
@@ -207,17 +214,19 @@ class InvestigasiController extends Controller
 
         $investigasiId = (int) $request->input('investigasi_id', 0);
         $search = trim((string) $request->input('q', ''));
-        $karyawanIds = $this->resolveInvestigasiKaryawanIds($investigasiId);
-        $selectedId = (int) $request->input('selected_id', 0);
+        $selectedIds = BakInvestigasiService::normalizeSuratIds(
+            $request->input('selected_ids'),
+            $request->input('selected_id')
+        );
+        $usedIds = BakInvestigasiService::usedSuratIds(BakInvestigasiService::JENIS_ST, $investigasiId);
 
         $query = DB::table('surat_teguran_disipliner as st')
-            ->join('master_karyawan as mk', 'mk.id', '=', 'st.karyawan_id')
+            ->leftJoin('master_karyawan as mk', 'mk.id', '=', 'st.karyawan_id')
             ->where('st.is_active', true)
-            ->where('mk.is_active', true)
             ->whereIn('st.status', ['draft', 'issued']);
 
-        if ($karyawanIds !== []) {
-            $query->whereIn('st.karyawan_id', $karyawanIds);
+        if ($usedIds !== []) {
+            $query->whereNotIn('st.id', $usedIds);
         }
 
         if ($search !== '') {
@@ -245,50 +254,37 @@ class InvestigasiController extends Controller
                 'mk.nik_karyawan',
             ]);
 
-        $rowIds = $rows->pluck('id')->map(static fn ($v) => (int) $v)->all();
-        if ($selectedId > 0 && !in_array($selectedId, $rowIds, true)) {
-            $extra = DB::table('surat_teguran_disipliner as st')
-                ->join('master_karyawan as mk', 'mk.id', '=', 'st.karyawan_id')
-                ->where('st.id', $selectedId)
-                ->where('st.is_active', true)
-                ->first([
-                    'st.id',
-                    'st.nomor_surat',
-                    'st.perihal',
-                    'st.status',
-                    'st.tanggal_terbit',
-                    'st.karyawan_id',
-                    'mk.nama_lengkap',
-                    'mk.nik_karyawan',
-                ]);
-            if ($extra !== null) {
-                $rows->prepend($extra);
+        if ($search === '' && $selectedIds !== []) {
+            $rowIds = $rows->pluck('id')->map(static fn($v) => (int) $v)->all();
+            $missingIds = array_values(array_diff($selectedIds, $rowIds, $usedIds));
+            if ($missingIds !== []) {
+                $extras = DB::table('surat_teguran_disipliner as st')
+                    ->leftJoin('master_karyawan as mk', 'mk.id', '=', 'st.karyawan_id')
+                    ->whereIn('st.id', $missingIds)
+                    ->where('st.is_active', true)
+                    ->get([
+                        'st.id',
+                        'st.nomor_surat',
+                        'st.perihal',
+                        'st.status',
+                        'st.tanggal_terbit',
+                        'st.karyawan_id',
+                        'mk.nama_lengkap',
+                        'mk.nik_karyawan',
+                    ]);
+                foreach ($extras->reverse() as $extra) {
+                    $rows->prepend($extra);
+                }
             }
         }
 
-        $data = $rows->map(function ($row) {
-            $nama = trim((string) ($row->nama_lengkap ?? ''));
-            $nik = trim((string) ($row->nik_karyawan ?? ''));
-            $pegawai = $nik !== '' ? ($nik . ' — ' . $nama) : $nama;
-            $nomor = trim((string) ($row->nomor_surat ?? ''));
-
-            return [
-                'id' => (int) $row->id,
-                'nomor_surat' => $nomor,
-                'perihal' => (string) ($row->perihal ?? ''),
-                'status' => (string) ($row->status ?? ''),
-                'tanggal_terbit' => $row->tanggal_terbit,
-                'karyawan_id' => (int) ($row->karyawan_id ?? 0),
-                'nama_karyawan' => $nama,
-                'text' => trim($nomor . ' — ' . $pegawai . ' [' . strtoupper((string) $row->status) . ']'),
-            ];
-        })->values();
+        $data = $rows->map(fn($row) => $this->formatSuratTeguranOption($row))->values();
 
         return response()->json(['success' => true, 'data' => $data], 200);
     }
 
     /**
-     * Opsi surat peringatan / SP (G.1).
+     * Opsi surat peringatan / SP (G.1) — hanya SP aktif yang belum dipakai di investigasi lain.
      */
     public function listSuratPeringatanOptions(Request $request)
     {
@@ -298,17 +294,19 @@ class InvestigasiController extends Controller
 
         $investigasiId = (int) $request->input('investigasi_id', 0);
         $search = trim((string) $request->input('q', ''));
-        $karyawanIds = $this->resolveInvestigasiKaryawanIds($investigasiId);
-        $selectedId = (int) $request->input('selected_id', 0);
+        $selectedIds = BakInvestigasiService::normalizeSuratIds(
+            $request->input('selected_ids'),
+            $request->input('selected_id')
+        );
+        $usedIds = BakInvestigasiService::usedSuratIds(BakInvestigasiService::JENIS_SP, $investigasiId);
 
         $query = DB::table('surat_peringatan_disipliner as sp')
-            ->join('master_karyawan as mk', 'mk.id', '=', 'sp.karyawan_id')
+            ->leftJoin('master_karyawan as mk', 'mk.id', '=', 'sp.karyawan_id')
             ->where('sp.is_active', true)
-            ->where('mk.is_active', true)
             ->whereIn('sp.status', ['draft', 'issued']);
 
-        if ($karyawanIds !== []) {
-            $query->whereIn('sp.karyawan_id', $karyawanIds);
+        if ($usedIds !== []) {
+            $query->whereNotIn('sp.id', $usedIds);
         }
 
         if ($search !== '') {
@@ -336,47 +334,156 @@ class InvestigasiController extends Controller
                 'mk.nik_karyawan',
             ]);
 
-        $rowIds = $rows->pluck('id')->map(static fn ($v) => (int) $v)->all();
-        if ($selectedId > 0 && !in_array($selectedId, $rowIds, true)) {
-            $extra = DB::table('surat_peringatan_disipliner as sp')
-                ->join('master_karyawan as mk', 'mk.id', '=', 'sp.karyawan_id')
-                ->where('sp.id', $selectedId)
-                ->where('sp.is_active', true)
-                ->first([
-                    'sp.id',
-                    'sp.nomor_surat',
-                    'sp.jenis_peringatan',
-                    'sp.status',
-                    'sp.tanggal_terbit',
-                    'sp.karyawan_id',
-                    'mk.nama_lengkap',
-                    'mk.nik_karyawan',
-                ]);
-            if ($extra !== null) {
-                $rows->prepend($extra);
+        if ($search === '' && $selectedIds !== []) {
+            $rowIds = $rows->pluck('id')->map(static fn($v) => (int) $v)->all();
+            $missingIds = array_values(array_diff($selectedIds, $rowIds, $usedIds));
+            if ($missingIds !== []) {
+                $extras = DB::table('surat_peringatan_disipliner as sp')
+                    ->leftJoin('master_karyawan as mk', 'mk.id', '=', 'sp.karyawan_id')
+                    ->whereIn('sp.id', $missingIds)
+                    ->where('sp.is_active', true)
+                    ->get([
+                        'sp.id',
+                        'sp.nomor_surat',
+                        'sp.jenis_peringatan',
+                        'sp.status',
+                        'sp.tanggal_terbit',
+                        'sp.karyawan_id',
+                        'mk.nama_lengkap',
+                        'mk.nik_karyawan',
+                    ]);
+                foreach ($extras->reverse() as $extra) {
+                    $rows->prepend($extra);
+                }
             }
         }
 
-        $data = $rows->map(function ($row) {
-            $nama = trim((string) ($row->nama_lengkap ?? ''));
-            $nik = trim((string) ($row->nik_karyawan ?? ''));
-            $pegawai = $nik !== '' ? ($nik . ' — ' . $nama) : $nama;
-            $nomor = trim((string) ($row->nomor_surat ?? ''));
-            $jenis = trim((string) ($row->jenis_peringatan ?? ''));
-
-            return [
-                'id' => (int) $row->id,
-                'nomor_surat' => $nomor,
-                'jenis_peringatan' => $jenis,
-                'status' => (string) ($row->status ?? ''),
-                'tanggal_terbit' => $row->tanggal_terbit,
-                'karyawan_id' => (int) ($row->karyawan_id ?? 0),
-                'nama_karyawan' => $nama,
-                'text' => trim(($jenis !== '' ? $jenis . ' — ' : '') . $nomor . ' — ' . $pegawai . ' [' . strtoupper((string) $row->status) . ']'),
-            ];
-        })->values();
+        $data = $rows->map(fn($row) => $this->formatSuratPeringatanOption($row))->values();
 
         return response()->json(['success' => true, 'data' => $data], 200);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatSuratTeguranOption(object $row): array
+    {
+        $nama = trim((string) ($row->nama_lengkap ?? ''));
+        $nik = trim((string) ($row->nik_karyawan ?? ''));
+        $pegawai = $nik !== '' && $nama !== ''
+            ? ($nik . ' — ' . $nama)
+            : ($nama !== '' ? $nama : $nik);
+        $nomor = trim((string) ($row->nomor_surat ?? ''));
+        $parts = array_filter([$nomor, $pegawai], static fn($v) => $v !== '');
+
+        return [
+            'id' => (int) $row->id,
+            'nomor_surat' => $nomor,
+            'perihal' => (string) ($row->perihal ?? ''),
+            'status' => (string) ($row->status ?? ''),
+            'tanggal_terbit' => $row->tanggal_terbit,
+            'karyawan_id' => (int) ($row->karyawan_id ?? 0),
+            'nama_karyawan' => $nama,
+            'text' => trim(implode(' — ', $parts) . ' [' . strtoupper((string) ($row->status ?? '')) . ']'),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatSuratPeringatanOption(object $row): array
+    {
+        $nama = trim((string) ($row->nama_lengkap ?? ''));
+        $nik = trim((string) ($row->nik_karyawan ?? ''));
+        $pegawai = $nik !== '' && $nama !== ''
+            ? ($nik . ' — ' . $nama)
+            : ($nama !== '' ? $nama : $nik);
+        $nomor = trim((string) ($row->nomor_surat ?? ''));
+        $jenis = trim((string) ($row->jenis_peringatan ?? ''));
+        $parts = array_filter([$jenis, $nomor, $pegawai], static fn($v) => $v !== '');
+
+        return [
+            'id' => (int) $row->id,
+            'nomor_surat' => $nomor,
+            'jenis_peringatan' => $jenis,
+            'status' => (string) ($row->status ?? ''),
+            'tanggal_terbit' => $row->tanggal_terbit,
+            'karyawan_id' => (int) ($row->karyawan_id ?? 0),
+            'nama_karyawan' => $nama,
+            'text' => trim(implode(' — ', $parts) . ' [' . strtoupper((string) ($row->status ?? '')) . ']'),
+        ];
+    }
+
+    /**
+     * @param  list<int>  $ids
+     * @return list<array<string, mixed>>
+     */
+    private function loadSuratTeguranItemsByIds(array $ids): array
+    {
+        if ($ids === [] || !Schema::hasTable('surat_teguran_disipliner')) {
+            return [];
+        }
+
+        $byId = DB::table('surat_teguran_disipliner as st')
+            ->leftJoin('master_karyawan as mk', 'mk.id', '=', 'st.karyawan_id')
+            ->whereIn('st.id', $ids)
+            ->get([
+                'st.id',
+                'st.nomor_surat',
+                'st.perihal',
+                'st.status',
+                'st.tanggal_terbit',
+                'st.karyawan_id',
+                'mk.nama_lengkap',
+                'mk.nik_karyawan',
+            ])
+            ->keyBy('id');
+
+        $out = [];
+        foreach ($ids as $id) {
+            $row = $byId->get($id);
+            if ($row !== null) {
+                $out[] = $this->formatSuratTeguranOption($row);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<int>  $ids
+     * @return list<array<string, mixed>>
+     */
+    private function loadSuratPeringatanItemsByIds(array $ids): array
+    {
+        if ($ids === [] || !Schema::hasTable('surat_peringatan_disipliner')) {
+            return [];
+        }
+
+        $byId = DB::table('surat_peringatan_disipliner as sp')
+            ->leftJoin('master_karyawan as mk', 'mk.id', '=', 'sp.karyawan_id')
+            ->whereIn('sp.id', $ids)
+            ->get([
+                'sp.id',
+                'sp.nomor_surat',
+                'sp.jenis_peringatan',
+                'sp.status',
+                'sp.tanggal_terbit',
+                'sp.karyawan_id',
+                'mk.nama_lengkap',
+                'mk.nik_karyawan',
+            ])
+            ->keyBy('id');
+
+        $out = [];
+        foreach ($ids as $id) {
+            $row = $byId->get($id);
+            if ($row !== null) {
+                $out[] = $this->formatSuratPeringatanOption($row);
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -413,7 +520,7 @@ class InvestigasiController extends Controller
                 ->get();
 
             $creatorNames = $collection
-                ->map(fn ($row) => trim((string) ($row->created_by ?? '')))
+                ->map(fn($row) => trim((string) ($row->created_by ?? '')))
                 ->filter()
                 ->unique()
                 ->values()
@@ -457,11 +564,13 @@ class InvestigasiController extends Controller
                         : null;
                     $createdBy = trim((string) ($row->created_by ?? ''));
                     $creatorKey = mb_strtolower($createdBy);
+                    $karyawanId = (int) ($row->karyawan_id ?? 0);
 
                     return [
                         'id' => (int) $row->id,
                         'nomor_surat' => (string) ($row->nomor_surat ?? ''),
                         'created_by' => $createdBy,
+                        'id_karyawan' => $karyawanId > 0 ? $karyawanId : null,
                         'created_by_divisi' => $divisiByCreator[$creatorKey] ?? '',
                         'perihal' => trim((string) ($row->perihal ?? '')),
                         'tanggal_kejadian' => $tanggal,
@@ -499,10 +608,10 @@ class InvestigasiController extends Controller
         ]);
 
         $bakIds = array_values(array_unique(array_map(
-            static fn ($id) => (int) $id,
+            static fn($id) => (int) $id,
             is_array($request->input('bak_ids')) ? $request->input('bak_ids') : []
         )));
-        $bakIds = array_values(array_filter($bakIds, static fn ($id) => $id > 0));
+        $bakIds = array_values(array_filter($bakIds, static fn($id) => $id > 0));
 
         if ($bakIds === []) {
             return response()->json([
@@ -811,23 +920,31 @@ class InvestigasiController extends Controller
         }
 
         $g1 = $request->all();
-        $err = BakInvestigasiService::validateG1($g1);
+        $err = BakInvestigasiService::validateG1($g1, $id);
         if ($err !== null) {
             return response()->json(['success' => false, 'message' => $err], 422);
         }
 
-        BakInvestigasiService::applyG1Fields($id, $g1);
+        try {
+            DB::beginTransaction();
+            BakInvestigasiService::applyG1Fields($id, $g1);
 
-        $actor = $this->resolveActorKaryawan();
-        InvestigasiAwalLogService::log(
-            $id,
-            InvestigasiAwalStatus::MENUNGGU_HASIL,
-            InvestigasiAwalStatus::MENUNGGU_HASIL,
-            'save_g1',
-            $actor ? (int) $actor->id : null,
-            $actor ? $actor->nama_lengkap : null,
-            null
-        );
+            $actor = $this->resolveActorKaryawan();
+            InvestigasiAwalLogService::log(
+                $id,
+                InvestigasiAwalStatus::MENUNGGU_HASIL,
+                InvestigasiAwalStatus::MENUNGGU_HASIL,
+                'save_g1',
+                $actor ? (int) $actor->id : null,
+                $actor ? $actor->nama_lengkap : null,
+                null
+            );
+            DB::commit();
+        } catch (\Throwable $ex) {
+            DB::rollBack();
+
+            return response()->json(['success' => false, 'message' => $ex->getMessage()], 500);
+        }
 
         return response()->json([
             'success' => true,
@@ -851,7 +968,7 @@ class InvestigasiController extends Controller
         }
 
         $g1 = $request->all();
-        $err = BakInvestigasiService::validateG1($g1);
+        $err = BakInvestigasiService::validateG1($g1, $id);
         if ($err !== null) {
             return response()->json(['success' => false, 'message' => $err], 422);
         }
@@ -1087,7 +1204,7 @@ class InvestigasiController extends Controller
             $linkedBakIds = DB::table('bak_investigasi_berita_acara')
                 ->where('bak_investigasi_id', $investigasiId)
                 ->pluck('berita_acara_id')
-                ->map(static fn ($id) => (int) $id)
+                ->map(static fn($id) => (int) $id)
                 ->all();
         }
 
@@ -1115,7 +1232,8 @@ class InvestigasiController extends Controller
                 'bak.nama_berkas',
                 'bak.file_path',
                 'bak.created_by',
-                'bak.created_at'
+                'bak.created_at',
+                'bak.karyawan_id',
             );
     }
 
@@ -1194,7 +1312,7 @@ class InvestigasiController extends Controller
     {
         $investigasiIds = array_values(array_unique(array_filter(
             array_map('intval', $investigasiIds),
-            static fn ($id) => $id > 0
+            static fn($id) => $id > 0
         )));
         if ($investigasiIds === [] || !Schema::hasTable('bak_investigasi_berita_acara')) {
             return [];
@@ -1383,69 +1501,6 @@ class InvestigasiController extends Controller
         return $formatted;
     }
 
-    /**
-     * Karyawan terlapor (BAK terkait + pihak terlapor) untuk filter opsi ST / SP.
-     *
-     * @return list<int>
-     */
-    private function resolveInvestigasiKaryawanIds(int $investigasiId): array
-    {
-        if ($investigasiId <= 0) {
-            return [];
-        }
-
-        $ids = [];
-
-        if (
-            Schema::hasTable('bak_investigasi_berita_acara')
-            && Schema::hasTable('berita_acara_kejadian_disipliner')
-        ) {
-            $bakIds = DB::table('bak_investigasi_berita_acara')
-                ->where('bak_investigasi_id', $investigasiId)
-                ->pluck('berita_acara_id')
-                ->map(static fn ($v) => (int) $v)
-                ->filter(static fn ($v) => $v > 0)
-                ->values()
-                ->all();
-
-            if ($bakIds !== []) {
-                $fromBak = DB::table('berita_acara_kejadian_disipliner')
-                    ->whereIn('id', $bakIds)
-                    ->where('is_active', true)
-                    ->pluck('karyawan_id')
-                    ->map(static fn ($v) => (int) $v)
-                    ->filter(static fn ($v) => $v > 0)
-                    ->all();
-                $ids = array_merge($ids, $fromBak);
-            }
-        }
-
-        if (Schema::hasTable('bak_investigasi_pihak') && Schema::hasTable('master_karyawan')) {
-            $names = DB::table('bak_investigasi_pihak')
-                ->where('bak_investigasi_id', $investigasiId)
-                ->where('peran', 'terlapor')
-                ->pluck('nama');
-
-            foreach ($names as $name) {
-                $name = trim((string) $name);
-                if ($name === '') {
-                    continue;
-                }
-
-                $found = MasterKaryawan::query()
-                    ->where('is_active', true)
-                    ->where('nama_lengkap', $name)
-                    ->value('id');
-
-                if ($found) {
-                    $ids[] = (int) $found;
-                }
-            }
-        }
-
-        return array_values(array_unique(array_filter($ids, static fn ($id) => $id > 0)));
-    }
-
     private function viewerIsLegalManager(Request $request): bool
     {
         $jabatan = null;
@@ -1502,6 +1557,7 @@ class InvestigasiController extends Controller
                 'bak.dokumentasi',
                 'bak.perihal',
                 'bak.created_by',
+                'bak.karyawan_id',
                 'bak.file_path',
             ]);
 
@@ -1512,11 +1568,14 @@ class InvestigasiController extends Controller
                 $storedDok
             );
 
+            $karyawanId = (int) ($row->karyawan_id ?? 0);
+
             return [
                 'id' => (int) $row->id,
                 'nomor_surat' => (string) ($row->nomor_surat ?? ''),
                 'perihal' => trim((string) ($row->perihal ?? '')),
                 'created_by' => trim((string) ($row->created_by ?? '')),
+                'id_karyawan' => $karyawanId > 0 ? $karyawanId : null,
                 'dokumentasi' => $dokumentasi,
                 'jumlah_lampiran' => count($dokumentasi),
                 'has_document' => !empty($row->file_path),

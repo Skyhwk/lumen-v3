@@ -240,6 +240,10 @@ class ValidatorSPController extends Controller
                     throw new \Exception('Data quotation tidak ditemukan');
                 }
 
+                if($chekNotice->is_emailed == false) {
+                    throw new \Exception('No Qt ' . $request->no_document . ' belum di emailed, menunggu dari sales!');
+                }
+
                 if ($chekNotice->flag_status === 'rejected') {
                     return response()->json([
                         'message' => 'No Qt ' . $request->no_document . ' sedang di reject, menunggu dari sales!',
@@ -282,6 +286,10 @@ class ValidatorSPController extends Controller
 
                 if (! $chekNotice) {
                     throw new \Exception('Data quotation tidak ditemukan');
+                }
+
+                if($chekNotice->is_emailed == false) {
+                    throw new \Exception('No Qt ' . $request->no_document . ' belum di emailed, menunggu dari sales!');
                 }
 
                 if ($chekNotice->flag_status === 'rejected') {

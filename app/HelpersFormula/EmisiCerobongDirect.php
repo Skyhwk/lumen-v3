@@ -2,6 +2,9 @@
 
 namespace App\HelpersFormula;
 
+use App\Models\MdlEmisi;
+use App\Models\Parameter;
+
 class EmisiCerobongDirect {
     private function avgFromJson($json) {
         if (!$json) return null;
@@ -73,10 +76,7 @@ class EmisiCerobongDirect {
             $values = json_decode($data->nilai_opasitas, true);
 
             if (is_array($values) && count($values) > 0) {
-                // Hitung rata-rata
                 $rataRata = array_sum($values) / count($values);
-
-                // Jika hasil kurang dari 0.83, tampilkan "<0.83", kalau tidak tampilkan angka dibulatkan 1 desimal
                 $c6 = round($rataRata, 2);
                 $satuan = '%';
             } else {
@@ -193,25 +193,40 @@ class EmisiCerobongDirect {
             $satuan = "mmHg";
         }
 
+        // Hasil di bawah MDL disimpan sebagai nilai MDL kolom tersebut (<MDL)
+        $mdlLimits = $this->mdlLimits($id_parameter);
+        $c1 = $this->valueBelowMdl($c1, $mdlLimits['c1']);
+        $c2 = $this->valueBelowMdl($c2, $mdlLimits['c2']);
+        $c3 = $this->valueBelowMdl($c3, $mdlLimits['c3']);
+        $c4 = $this->valueBelowMdl($c4, $mdlLimits['c4']);
+        $c5 = $this->valueBelowMdl($c5, $mdlLimits['c5']);
+        $c6 = $this->valueBelowMdl($c6, $mdlLimits['c6']);
+        $c7 = $this->valueBelowMdl($c7, $mdlLimits['c7']);
+        $c8 = $this->valueBelowMdl($c8, $mdlLimits['c8']);
+        $c9 = $this->valueBelowMdl($c9, $mdlLimits['c9']);
+        $c10 = $this->valueBelowMdl($c10, $mdlLimits['c10']);
+        $c11 = $this->valueBelowMdl($c11, $mdlLimits['c11']);
+        $c12 = $this->valueBelowMdl($c12, $mdlLimits['c12']);
+
         // ======================
         // BLOK FORMATTING AKHIR
         // ======================
 
-        // hanya jika value bukan string "<1" dsb
-        if (is_numeric($c2 ?? null)) {
-            $c2 = number_format($c2, 4, '.', ',');
-        }
-        if (is_numeric($c3 ?? null)) {
-            $c3 = number_format($c3, 1, '.', ',');
-        }
-        if (is_numeric($c5 ?? null)) {
-            $c5 = number_format($c5, 4, '.', ',');
-        }
-        if (is_numeric($c6 ?? null)) {
-            $c6 = number_format($c6, 2, '.', ',');
-        }
         
 
+        // hanya jika value bukan string "<1" dsb
+        if (is_numeric($c2 ?? null)) {
+            $c2 = round($c2, 4);
+        }
+        if (is_numeric($c3 ?? null)) {
+            $c3 = round($c3, 1);
+        }
+        if (is_numeric($c5 ?? null)) {
+            $c5 = round($c5, 4);
+        }
+        if (is_numeric($c6 ?? null)) {
+            $c6 = round($c6, 2);
+        }
         
         return [
             'C1' => $c1,
@@ -228,5 +243,71 @@ class EmisiCerobongDirect {
             'C12' => $c12,
             'satuan' => $satuan
         ];
+    }
+
+    /**
+     * Batas MDL per kolom hasil.
+     * C1 formula = kolom C worksheet, C2 = C1, dst.
+     */
+    private function mdlLimits($idParameter)
+    {
+        $limits = array_fill_keys(
+            ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9', 'c10', 'c11', 'c12'],
+            null
+        );
+
+        $parameter = Parameter::where('nama_lab', $idParameter)
+            ->where('nama_kategori', 'Emisi')
+            ->where('is_active', true)
+            ->first();
+
+        if (!$parameter) {
+            return $limits;
+        }
+
+        $mdlEmisi = MdlEmisi::where('parameter_id', $parameter->id)
+            ->where('is_active', true)
+            ->latest()
+            ->first();
+
+        if (!$mdlEmisi) {
+            return $limits;
+        }
+
+        $map = [
+            'c1' => 'C',
+            'c2' => 'C1',
+            'c3' => 'C2',
+            'c4' => 'C3',
+            'c5' => 'C4',
+            'c6' => 'C5',
+            'c7' => 'C6',
+            'c8' => 'C7',
+            'c9' => 'C8',
+            'c10' => 'C9',
+            'c11' => 'C10',
+            'c12' => 'C11',
+        ];
+
+        foreach ($map as $key => $column) {
+            $limits[$key] = $mdlEmisi->{$column};
+        }
+
+        return $limits;
+    }
+
+    private function valueBelowMdl($value, $mdlValue)
+    {
+        if ($value === null || $mdlValue === null || $mdlValue === '') {
+            return $value;
+        }
+        if (!is_numeric($value) || !is_numeric($mdlValue)) {
+            return $value;
+        }
+        if ((float) $value < (float) $mdlValue) {
+            return '<' . $mdlValue;
+        }
+
+        return $value;
     }
 }

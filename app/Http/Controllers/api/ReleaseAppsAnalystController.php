@@ -15,7 +15,7 @@ class ReleaseAppsAnalystController extends Controller
 {
     public function index(Request $request)
     {
-        $releaseSystem = ReleaseSystem::where('system', 'Analyst Scan')->get();
+        $releaseSystem = ReleaseSystem::where('system', 'Analyst Scan')->orderBy('id', 'desc')->get();
         return response()->json(['success' => true, 'data' => $releaseSystem], 200);
     }
 
