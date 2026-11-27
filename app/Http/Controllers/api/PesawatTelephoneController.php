@@ -5,11 +5,13 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\CiscoPhoneConfig;
 use App\Models\CiscoPhoneDirectoryEntry;
+use App\Models\CiscoPhoneDirectorySetting;
 use App\Services\CiscoPhoneCnfXmlService;
 use App\Services\CiscoPhoneDirectoryXmlService;
 use App\Services\Crypto;
 use Datatables;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
 
@@ -23,8 +25,15 @@ class PesawatTelephoneController extends Controller
     public function index()
     {
         $data = CiscoPhoneConfig::where('is_active', true)->latest('id');
+        $dt = Datatables::of($data);
 
-        return Datatables::of($data)->make(true);
+        if (!Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')) {
+            $dt->addColumn('enable_phonebook', function () {
+                return false;
+            });
+        }
+
+        return $dt->make(true);
     }
 
     public function getDefaults()
@@ -60,6 +69,8 @@ class PesawatTelephoneController extends Controller
             'directory_uri' => (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUriForDisplay(''),
             'directory_uri_cnf' => CiscoPhoneDirectoryXmlService::defaultDirectoryUrl(true),
             'phonebook_embed_in_cnf' => CiscoPhoneDirectoryXmlService::shouldEmbedInCnf(),
+            'phonebook_use_directory_url_tag' => CiscoPhoneDirectoryXmlService::shouldWriteDirectoryUrlTag(),
+            'phonebook_settings' => CiscoPhoneDirectoryXmlService::settingsPayload(),
             'phonebook_entry_count' => CiscoPhoneDirectoryEntry::where('is_active', true)->count(),
             'phonebook_next_sort_order' => $this->nextPhonebookSortOrder(),
         ], 200);
@@ -176,64 +187,99 @@ class PesawatTelephoneController extends Controller
         return response()->json(['message' => 'Urutan kontak diperbarui'], 200);
     }
 
-    public function regenerateAll(Request $request)
+    public function phonebookSettingsSave(Request $request)
     {
-        $configs = CiscoPhoneConfig::where('is_active', true)->get();
-        if ($configs->isEmpty()) {
-            return response()->json(['message' => 'Tidak ada konfigurasi telepon aktif'], 400);
+        $validator = Validator::make($request->all(), [
+            'title' => 'nullable|string|max:32',
+            'base_url' => 'nullable|string|max:255',
+            'cnf_base_url' => 'nullable|string|max:255',
+            'access_key' => 'nullable|string|max:100',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first()], 422);
         }
 
-        $crypto = new Crypto();
-        $ok = 0;
-        $failed = [];
+        $row = CiscoPhoneDirectorySetting::current();
+        $title = trim((string) ($request->title ?? ''));
+        $row->title = $title !== '' ? mb_substr($title, 0, 32) : 'Phonebook Kantor';
+        $row->base_url = rtrim(trim((string) ($request->base_url ?? '')), '/') ?: null;
+        $row->cnf_base_url = rtrim(trim((string) ($request->cnf_base_url ?? '')), '/') ?: null;
+        $row->access_key = trim((string) ($request->access_key ?? '')) ?: null;
+        $row->embed_in_cnf = false;
+        $row->use_directory_url_tag = false;
+        $row->save();
 
-        foreach ($configs as $config) {
-            try {
-                $authPassword = $crypto->decrypt($config->auth_password);
-                $plainConfig = CiscoPhoneCnfXmlService::mergeConfig($config->config_json ?? []);
+        CiscoPhoneDirectoryXmlService::forgetSettingsCache();
 
-                if (!empty($plainConfig['lines'])) {
-                    foreach ($plainConfig['lines'] as $index => $line) {
-                        if (!empty($line['auth_password'])) {
-                            try {
-                                $plainConfig['lines'][$index]['auth_password'] = $crypto->decrypt($line['auth_password']);
-                            } catch (\Throwable $e) {
-                                $plainConfig['lines'][$index]['auth_password'] = $authPassword;
-                            }
-                        } else {
-                            $plainConfig['lines'][$index]['auth_password'] = $authPassword;
-                        }
-                    }
-                }
+        return response()->json([
+            'message' => 'Pengaturan phonebook disimpan',
+            'settings' => CiscoPhoneDirectoryXmlService::settingsPayload(),
+            'directory_uri' => (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUriForDisplay(''),
+            'directory_uri_cnf' => CiscoPhoneDirectoryXmlService::defaultDirectoryUrl(true),
+            'phonebook_embed_in_cnf' => CiscoPhoneDirectoryXmlService::shouldEmbedInCnf(),
+        ], 200);
+    }
 
-                $primaryLinePassword = $plainConfig['lines'][0]['auth_password'] ?? $authPassword;
+    public function regenerateAll(Request $request)
+    {
+        return $this->regenerateActivePhoneConfigs(false);
+    }
 
-                $xml = $this->cnfService()->generate(
-                    $plainConfig,
-                    $config->mac_address,
-                    $config->phone_model,
-                    $config->extension,
-                    $primaryLinePassword
-                );
+    public function togglePhonebook(Request $request)
+    {
+        $id = (int) $request->id;
+        if ($id < 1) {
+            return response()->json(['message' => 'ID konfigurasi tidak dikirim. Refresh halaman, lalu pasang phonebook dari ikon buku di baris pesawat.'], 422);
+        }
 
-                $fileInfo = $this->cnfService()->writeToTftp($xml, $config->mac_address);
+        $config = CiscoPhoneConfig::where('id', $id)->where('is_active', true)->first();
+        if (!$config) {
+            return response()->json(['message' => 'Konfigurasi tidak ditemukan'], 404);
+        }
 
-                $this->persistDirectoryUriOnConfig($config, $plainConfig);
-                $config->cnf_filename = $fileInfo['filename'];
-                $config->cnf_file_path = $fileInfo['path'];
-                $config->last_generated_at = Carbon::now();
-                $config->save();
-                $ok++;
-            } catch (\Throwable $e) {
-                $failed[] = ['id' => $config->id, 'mac' => $config->mac_address, 'error' => $e->getMessage()];
-            }
+        if (!Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')) {
+            return response()->json(['message' => 'Kolom enable_phonebook belum ada. Jalankan migrate.'], 500);
+        }
+
+        $enable = filter_var($request->enable ?? false, FILTER_VALIDATE_BOOLEAN);
+        $config->enable_phonebook = $enable;
+        $config->save();
+
+        try {
+            $this->regenerateSinglePhoneConfig($config, !$enable);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 500);
         }
 
         return response()->json([
-            'message' => "Generate ulang selesai: {$ok} berhasil" . (count($failed) ? ', ' . count($failed) . ' gagal' : ''),
-            'success_count' => $ok,
-            'failed' => $failed,
+            'message' => $enable
+                ? 'Phonebook dipasang ke pesawat ini. Reboot telepon, lalu buka Directories → ' . (CiscoPhoneDirectoryXmlService::settingsPayload()['title'] ?: 'Phonebook')
+                : 'Phonebook dilepas dari pesawat ini. Reboot telepon.',
+            'enable_phonebook' => $enable,
         ], 200);
+    }
+
+    /**
+     * Rollback aman: cnf.xml tanpa directoryURL (untuk pulihkan register setelah regenerate phonebook).
+     */
+    public function regenerateAllSafe(Request $request)
+    {
+        try {
+            $settings = CiscoPhoneDirectorySetting::current();
+            $settings->embed_in_cnf = false;
+            $settings->use_directory_url_tag = false;
+            $settings->save();
+            CiscoPhoneDirectoryXmlService::forgetSettingsCache();
+        } catch (\Throwable $e) {
+            // tabel pengaturan mungkin belum di-migrate
+        }
+
+        if (Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')) {
+            CiscoPhoneConfig::where('is_active', true)->update(['enable_phonebook' => false]);
+        }
+
+        return $this->regenerateActivePhoneConfigs(true);
     }
 
     public function show(Request $request)
@@ -245,6 +291,9 @@ class PesawatTelephoneController extends Controller
         }
 
         $payload = $config->toArray();
+        $payload['enable_phonebook'] = Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')
+            ? (bool) $config->enable_phonebook
+            : false;
         $crypto = new Crypto();
 
         if (!empty($payload['auth_password'])) {
@@ -274,17 +323,37 @@ class PesawatTelephoneController extends Controller
     {
         try {
             $config = $this->buildConfigPayload($request);
+            $configJson = $config['config_json'];
+            $configJson['enable_phonebook'] = $this->requestWantsPhonebook($request, $configJson);
+            $configJson['is_preview'] = true;
+
             $xml = $this->cnfService()->generate(
-                $config['config_json'],
+                $configJson,
                 $config['mac_address'],
                 $config['phone_model'],
                 $config['extension'],
                 $request->auth_password
             );
 
+            $bookUrl = (new CiscoPhoneDirectoryXmlService())->phonebookServiceUrl()
+                ?: CiscoPhoneDirectoryXmlService::defaultDirectoryUrl(true)
+                ?: CiscoPhoneDirectoryXmlService::defaultDirectoryUrl(false);
+            $embedded = strpos($xml, 'cisco-phone-directory.xml') !== false;
+
+            $warning = null;
+            if ($configJson['enable_phonebook'] && $bookUrl === '') {
+                $warning = 'Phonebook aktif, tetapi URL dasar telepon masih kosong. Isi di tab Phonebook → Pengaturan, lalu preview lagi.';
+            } elseif ($configJson['enable_phonebook'] && !$embedded) {
+                $warning = 'Phonebook aktif tapi belum masuk XML. Pastikan model CP-78xx.';
+            }
+
             return response()->json([
                 'xml' => $xml,
                 'filename' => CiscoPhoneCnfXmlService::buildFilename($config['mac_address']),
+                'enable_phonebook' => $configJson['enable_phonebook'],
+                'phonebook_url' => $bookUrl,
+                'phonebook_embedded' => $embedded,
+                'phonebook_warning' => $warning,
             ], 200);
         } catch (\Throwable $e) {
             return response()->json(['message' => $e->getMessage()], 400);
@@ -349,11 +418,18 @@ class PesawatTelephoneController extends Controller
             $config->config_json = $configJson;
             $config->created_by = $config->created_by ?: ($this->user_id ?? null);
             $config->is_active = true;
+            $wantsPhonebook = $this->requestWantsPhonebook($request, $payload['config_json']);
+            if (Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')) {
+                $config->enable_phonebook = $wantsPhonebook;
+            }
             $config->save();
 
             $plainConfig = CiscoPhoneCnfXmlService::mergeConfig(
                 $this->plainConfigForXml($payload['config_json'], $request->auth_password)
             );
+            $plainConfig['enable_phonebook'] = Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')
+                ? (bool) $config->enable_phonebook
+                : $wantsPhonebook;
 
             $primaryLinePassword = $plainConfig['lines'][0]['auth_password'] ?? $request->auth_password;
 
@@ -394,45 +470,20 @@ class PesawatTelephoneController extends Controller
             return response()->json(['message' => 'Konfigurasi tidak ditemukan'], 404);
         }
 
-        try {
-            $crypto = new Crypto();
-            $authPassword = $crypto->decrypt($config->auth_password);
-            $plainConfig = CiscoPhoneCnfXmlService::mergeConfig($config->config_json ?? []);
+        $safe = filter_var($request->safe_mode ?? $request->strip_directory ?? false, FILTER_VALIDATE_BOOLEAN);
 
-            if (!empty($plainConfig['lines'])) {
-                foreach ($plainConfig['lines'] as $index => $line) {
-                    if (!empty($line['auth_password'])) {
-                        try {
-                            $plainConfig['lines'][$index]['auth_password'] = $crypto->decrypt($line['auth_password']);
-                        } catch (\Throwable $e) {
-                            $plainConfig['lines'][$index]['auth_password'] = $authPassword;
-                        }
-                    } else {
-                        $plainConfig['lines'][$index]['auth_password'] = $authPassword;
-                    }
-                }
+        try {
+            $result = $this->regenerateSinglePhoneConfig($config, $safe);
+            if ($result === null) {
+                return response()->json(['message' => 'Gagal generate cnf'], 500);
             }
 
-            $xml = $this->cnfService()->generate(
-                $plainConfig,
-                $config->mac_address,
-                $config->phone_model,
-                $config->extension,
-                $authPassword
-            );
-
-            $fileInfo = $this->cnfService()->writeToTftp($xml, $config->mac_address);
-
-            $config->cnf_filename = $fileInfo['filename'];
-            $config->cnf_file_path = $fileInfo['path'];
-            $this->persistDirectoryUriOnConfig($config, $plainConfig);
-            $config->last_generated_at = Carbon::now();
-            $config->save();
-
             return response()->json([
-                'message' => 'File cnf.xml berhasil di-generate ulang',
-                'filename' => $fileInfo['filename'],
-                'path' => $fileInfo['path'],
+                'message' => $safe
+                    ? 'Rollback cnf.xml berhasil — directoryURL dihapus'
+                    : 'File cnf.xml berhasil di-generate ulang',
+                'filename' => $result['filename'],
+                'path' => $result['path'],
             ], 200);
         } catch (\Throwable $e) {
             return response()->json(['message' => $e->getMessage()], 500);
@@ -496,6 +547,7 @@ class PesawatTelephoneController extends Controller
         $configJson['nat_enabled'] = filter_var($request->nat_enabled ?? ($configJson['nat_enabled'] ?? false), FILTER_VALIDATE_BOOLEAN);
         $configJson['transport_layer_protocol'] = $request->transport_layer_protocol ?? ($configJson['transport_layer_protocol'] ?? 'AUTO');
         $configJson['timer_register_expires'] = (int) ($request->timer_register_expires ?? ($configJson['timer_register_expires'] ?? 3600));
+        $configJson['enable_phonebook'] = $this->requestWantsPhonebook($request, $configJson);
 
         if ($request->filled('ntp_servers')) {
             $ntpServers = $request->ntp_servers;
@@ -621,6 +673,113 @@ class PesawatTelephoneController extends Controller
                 $entry->save();
             }
         }
+    }
+
+    private function regenerateActivePhoneConfigs(bool $forceEmptyDirectory): \Illuminate\Http\JsonResponse
+    {
+        $configs = CiscoPhoneConfig::where('is_active', true)->get();
+        if ($configs->isEmpty()) {
+            return response()->json(['message' => 'Tidak ada konfigurasi telepon aktif'], 400);
+        }
+
+        $ok = 0;
+        $failed = [];
+
+        foreach ($configs as $config) {
+            try {
+                $result = $this->regenerateSinglePhoneConfig($config, $forceEmptyDirectory);
+                if ($result === null) {
+                    throw new \RuntimeException('Generate cnf gagal');
+                }
+                $ok++;
+            } catch (\Throwable $e) {
+                $failed[] = ['id' => $config->id, 'mac' => $config->mac_address, 'error' => $e->getMessage()];
+            }
+        }
+
+        $label = $forceEmptyDirectory
+            ? 'Rollback provisioning selesai (tanpa directoryURL dan tanpa layanan Phonebook)'
+            : 'Generate ulang selesai';
+
+        return response()->json([
+            'message' => "{$label}: {$ok} berhasil" . (count($failed) ? ', ' . count($failed) . ' gagal' : ''),
+            'success_count' => $ok,
+            'failed' => $failed,
+            'safe_mode' => $forceEmptyDirectory,
+        ], 200);
+    }
+
+    private function regenerateSinglePhoneConfig(CiscoPhoneConfig $config, bool $forceEmptyDirectory = false): ?array
+    {
+        $crypto = new Crypto();
+        $authPassword = $crypto->decrypt($config->auth_password);
+        $plainConfig = CiscoPhoneCnfXmlService::mergeConfig($config->config_json ?? []);
+
+        if (!empty($plainConfig['lines'])) {
+            foreach ($plainConfig['lines'] as $index => $line) {
+                if (!empty($line['auth_password'])) {
+                    try {
+                        $plainConfig['lines'][$index]['auth_password'] = $crypto->decrypt($line['auth_password']);
+                    } catch (\Throwable $e) {
+                        $plainConfig['lines'][$index]['auth_password'] = $authPassword;
+                    }
+                } else {
+                    $plainConfig['lines'][$index]['auth_password'] = $authPassword;
+                }
+            }
+        }
+
+        if ($forceEmptyDirectory) {
+            $plainConfig['directory_uri'] = '';
+            $plainConfig['enable_phonebook'] = false;
+        } else {
+            $plainConfig['enable_phonebook'] = Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')
+                ? (bool) $config->enable_phonebook
+                : false;
+        }
+
+        $primaryLinePassword = $plainConfig['lines'][0]['auth_password'] ?? $authPassword;
+
+        $xml = $this->cnfService()->generate(
+            $plainConfig,
+            $config->mac_address,
+            $config->phone_model,
+            $config->extension,
+            $primaryLinePassword,
+            $forceEmptyDirectory
+        );
+
+        $fileInfo = $this->cnfService()->writeToTftp($xml, $config->mac_address);
+
+        if ($forceEmptyDirectory) {
+            $plainConfig['directory_uri'] = '';
+        }
+        $this->persistDirectoryUriOnConfig($config, $plainConfig);
+
+        $config->cnf_filename = $fileInfo['filename'];
+        $config->cnf_file_path = $fileInfo['path'];
+        $config->last_generated_at = Carbon::now();
+        $config->save();
+
+        return $fileInfo;
+    }
+
+    private function requestWantsPhonebook(Request $request, array $configJson = []): bool
+    {
+        if ($request->has('enable_phonebook')) {
+            return filter_var($request->enable_phonebook, FILTER_VALIDATE_BOOLEAN);
+        }
+
+        if (array_key_exists('enable_phonebook', $configJson)) {
+            return filter_var($configJson['enable_phonebook'], FILTER_VALIDATE_BOOLEAN);
+        }
+
+        $id = (int) $request->id;
+        if ($id > 0 && Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')) {
+            return (bool) CiscoPhoneConfig::where('id', $id)->where('is_active', true)->value('enable_phonebook');
+        }
+
+        return false;
     }
 
     private function persistDirectoryUriOnConfig(CiscoPhoneConfig $config, array $mergedPlainConfig): void

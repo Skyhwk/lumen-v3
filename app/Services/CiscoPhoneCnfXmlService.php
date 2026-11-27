@@ -159,8 +159,8 @@ class CiscoPhoneCnfXmlService
         $merged['semi_attended_transfer'] = filter_var($merged['semi_attended_transfer'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $merged['transfer_onhook_enabled'] = filter_var($merged['transfer_onhook_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $merged['kpml'] = (int) ($merged['kpml'] ?? 0);
-
-        $merged['directory_uri'] = (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUriForCnf($merged['directory_uri'] ?? '');
+        $merged['directory_uri'] = '';
+        $merged['enable_phonebook'] = filter_var($merged['enable_phonebook'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
         // CP-3905 sering gagal register jika pakai TCP — defaultkan UDP untuk model basic
         if (self::isBasicPhoneModel($merged['phone_model'] ?? 'CP-3905')) {
@@ -174,9 +174,19 @@ class CiscoPhoneCnfXmlService
         return $merged;
     }
 
-    public function generate(array $config, string $mac, string $phoneModel, ?string $userId = null, ?string $password = null): string
-    {
+    public function generate(
+        array $config,
+        string $mac,
+        string $phoneModel,
+        ?string $userId = null,
+        ?string $password = null,
+        bool $forceEmptyDirectory = false
+    ): string {
         $config = self::mergeConfig($config);
+        if ($forceEmptyDirectory) {
+            $config['directory_uri'] = '';
+            $config['enable_phonebook'] = false;
+        }
         $config['phone_model'] = trim($phoneModel) ?: 'CP-3905';
         $phoneModel = $config['phone_model'];
 
@@ -464,12 +474,7 @@ class CiscoPhoneCnfXmlService
         $device->appendChild($networkLocaleInfo);
 
         $this->appendTextNode($doc, $device, 'deviceSecurityMode', '1');
-        $directoryUrl = trim((string) ($config['directory_uri'] ?? ''));
         foreach (['authenticationURL', 'directoryURL', 'servicesURL', 'idleURL', 'informationURL', 'messagesURL', 'proxyServerURL'] as $urlNode) {
-            if ($urlNode === 'directoryURL') {
-                $this->appendTextNode($doc, $device, $urlNode, $directoryUrl);
-                continue;
-            }
             $this->appendTextNode($doc, $device, $urlNode, '');
         }
         $this->appendTextNode($doc, $device, 'dscpForSCCPPhoneConfig', '96');
@@ -486,12 +491,18 @@ class CiscoPhoneCnfXmlService
         $phoneServices = $doc->createElement('phoneServices');
         $phoneServices->setAttribute('useHTTPS', 'false');
         $this->appendTextNode($doc, $phoneServices, 'provisioning', '2');
-        foreach ([
+        $phoneServicesList = [
             ['1', 'Missed Calls', 'Application:Cisco/MissedCalls'],
             ['1', 'Received Calls', 'Application:Cisco/ReceivedCalls'],
             ['1', 'Placed Calls', 'Application:Cisco/PlacedCalls'],
             ['2', 'Voicemail', 'Application:Cisco/Voicemail'],
-        ] as [$type, $serviceName, $url]) {
+        ];
+        $bookUrl = $this->resolveEmbeddedPhonebookUrl($config);
+        if ($bookUrl !== '') {
+            $title = CiscoPhoneDirectoryXmlService::settingsPayload()['title'] ?: 'Phonebook';
+            $phoneServicesList[] = ['1', $title, $bookUrl];
+        }
+        foreach ($phoneServicesList as [$type, $serviceName, $url]) {
             $service = $doc->createElement('phoneService');
             $service->setAttribute('type', $type);
             $service->setAttribute('category', '0');
@@ -507,6 +518,26 @@ class CiscoPhoneCnfXmlService
         $this->appendTextNode($doc, $device, 'encrConfig', 'false');
 
         return $doc->saveXML();
+    }
+
+    private function resolveEmbeddedPhonebookUrl(array $config): string
+    {
+        if (empty($config['enable_phonebook'])) {
+            return '';
+        }
+
+        $service = new CiscoPhoneDirectoryXmlService();
+        $url = $service->phonebookServiceUrl();
+        if ($url !== '') {
+            return $url;
+        }
+
+        if (!empty($config['is_preview'])) {
+            return CiscoPhoneDirectoryXmlService::defaultDirectoryUrl(true)
+                ?: CiscoPhoneDirectoryXmlService::defaultDirectoryUrl(false);
+        }
+
+        return '';
     }
 
     public static function isBasicPhoneModel(string $model): bool
@@ -906,11 +937,7 @@ class CiscoPhoneCnfXmlService
 
     private function appendDeviceDirectoryUrl(DOMDocument $doc, \DOMElement $device, array $config): void
     {
-        $directoryUrl = trim((string) ($config['directory_uri'] ?? ''));
-        if ($directoryUrl === '') {
-            return;
-        }
-        $this->appendTextNode($doc, $device, 'directoryURL', $directoryUrl);
+        // Phonebook tidak disematkan ke cnf.xml — CP-78xx bisa stuck "Registration in progress".
     }
 
     private function appendUriNode(DOMDocument $doc, \DOMElement $parent, string $name, ?string $value): void
