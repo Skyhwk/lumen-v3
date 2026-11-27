@@ -10,7 +10,7 @@ return new class extends Migration
     public function up(): void
     {
         $now = Carbon::now()->format('Y-m-d H:i:s');
-        $description = 'Cuti melahirkan selama 3 bulan sejak tanggal mulai (khusus karyawan perempuan, wajib lampiran surat dokter/HPL). Bulan mulai cuti tetap dibayar penuh, bulan cuti penuh Rp 0, dan bulan kembali masuk kerja dihitung prorata.';
+        $description = 'Durasi cuti melahirkan otomatis 3 bulan dari tanggal mulai yang diajukan.';
 
         if (Schema::hasTable('hr_special_leave_type')) {
             $existing = DB::table('hr_special_leave_type')
