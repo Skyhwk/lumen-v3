@@ -62,8 +62,8 @@ class InvestigasiController extends Controller
         $rows = $query->orderByDesc('updated_at')->limit(500)->get();
 
         $creatorIds = $rows->pluck('creator_karyawan_id')
-            ->filter(static fn ($id) => (int) $id > 0)
-            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn($id) => (int) $id > 0)
+            ->map(static fn($id) => (int) $id)
             ->unique()
             ->values()
             ->all();
@@ -94,14 +94,14 @@ class InvestigasiController extends Controller
         ];
 
         $investigasiIds = $rows->pluck('id')
-            ->map(static fn ($id) => (int) $id)
-            ->filter(static fn ($id) => $id > 0)
+            ->map(static fn($id) => (int) $id)
+            ->filter(static fn($id) => $id > 0)
             ->values()
             ->all();
         $bakNomorByInvestigasi = $this->loadBakNomorByInvestigasiIds($investigasiIds);
 
         $data = $rows->map(
-            fn ($row) => $this->formatInvestigasiRow($row, $creatorNamesById, $bakNomorByInvestigasi)
+            fn($row) => $this->formatInvestigasiRow($row, $creatorNamesById, $bakNomorByInvestigasi)
         )->values();
 
         return response()->json([
@@ -159,10 +159,10 @@ class InvestigasiController extends Controller
 
         $bakIds = Schema::hasTable('bak_investigasi_berita_acara')
             ? DB::table('bak_investigasi_berita_acara')
-                ->where('bak_investigasi_id', $id)
-                ->pluck('berita_acara_id')
-                ->map(fn ($v) => (int) $v)
-                ->all()
+            ->where('bak_investigasi_id', $id)
+            ->pluck('berita_acara_id')
+            ->map(fn($v) => (int) $v)
+            ->all()
             : [];
 
         $bakNomorByInvestigasi = $this->loadBakNomorByInvestigasiIds([$id]);
@@ -255,7 +255,7 @@ class InvestigasiController extends Controller
             ]);
 
         if ($search === '' && $selectedIds !== []) {
-            $rowIds = $rows->pluck('id')->map(static fn ($v) => (int) $v)->all();
+            $rowIds = $rows->pluck('id')->map(static fn($v) => (int) $v)->all();
             $missingIds = array_values(array_diff($selectedIds, $rowIds, $usedIds));
             if ($missingIds !== []) {
                 $extras = DB::table('surat_teguran_disipliner as st')
@@ -278,7 +278,7 @@ class InvestigasiController extends Controller
             }
         }
 
-        $data = $rows->map(fn ($row) => $this->formatSuratTeguranOption($row))->values();
+        $data = $rows->map(fn($row) => $this->formatSuratTeguranOption($row))->values();
 
         return response()->json(['success' => true, 'data' => $data], 200);
     }
@@ -335,7 +335,7 @@ class InvestigasiController extends Controller
             ]);
 
         if ($search === '' && $selectedIds !== []) {
-            $rowIds = $rows->pluck('id')->map(static fn ($v) => (int) $v)->all();
+            $rowIds = $rows->pluck('id')->map(static fn($v) => (int) $v)->all();
             $missingIds = array_values(array_diff($selectedIds, $rowIds, $usedIds));
             if ($missingIds !== []) {
                 $extras = DB::table('surat_peringatan_disipliner as sp')
@@ -358,7 +358,7 @@ class InvestigasiController extends Controller
             }
         }
 
-        $data = $rows->map(fn ($row) => $this->formatSuratPeringatanOption($row))->values();
+        $data = $rows->map(fn($row) => $this->formatSuratPeringatanOption($row))->values();
 
         return response()->json(['success' => true, 'data' => $data], 200);
     }
@@ -374,7 +374,7 @@ class InvestigasiController extends Controller
             ? ($nik . ' — ' . $nama)
             : ($nama !== '' ? $nama : $nik);
         $nomor = trim((string) ($row->nomor_surat ?? ''));
-        $parts = array_filter([$nomor, $pegawai], static fn ($v) => $v !== '');
+        $parts = array_filter([$nomor, $pegawai], static fn($v) => $v !== '');
 
         return [
             'id' => (int) $row->id,
@@ -400,7 +400,7 @@ class InvestigasiController extends Controller
             : ($nama !== '' ? $nama : $nik);
         $nomor = trim((string) ($row->nomor_surat ?? ''));
         $jenis = trim((string) ($row->jenis_peringatan ?? ''));
-        $parts = array_filter([$jenis, $nomor, $pegawai], static fn ($v) => $v !== '');
+        $parts = array_filter([$jenis, $nomor, $pegawai], static fn($v) => $v !== '');
 
         return [
             'id' => (int) $row->id,
@@ -520,7 +520,7 @@ class InvestigasiController extends Controller
                 ->get();
 
             $creatorNames = $collection
-                ->map(fn ($row) => trim((string) ($row->created_by ?? '')))
+                ->map(fn($row) => trim((string) ($row->created_by ?? '')))
                 ->filter()
                 ->unique()
                 ->values()
@@ -564,11 +564,13 @@ class InvestigasiController extends Controller
                         : null;
                     $createdBy = trim((string) ($row->created_by ?? ''));
                     $creatorKey = mb_strtolower($createdBy);
+                    $karyawanId = (int) ($row->karyawan_id ?? 0);
 
                     return [
                         'id' => (int) $row->id,
                         'nomor_surat' => (string) ($row->nomor_surat ?? ''),
                         'created_by' => $createdBy,
+                        'id_karyawan' => $karyawanId > 0 ? $karyawanId : null,
                         'created_by_divisi' => $divisiByCreator[$creatorKey] ?? '',
                         'perihal' => trim((string) ($row->perihal ?? '')),
                         'tanggal_kejadian' => $tanggal,
@@ -606,10 +608,10 @@ class InvestigasiController extends Controller
         ]);
 
         $bakIds = array_values(array_unique(array_map(
-            static fn ($id) => (int) $id,
+            static fn($id) => (int) $id,
             is_array($request->input('bak_ids')) ? $request->input('bak_ids') : []
         )));
-        $bakIds = array_values(array_filter($bakIds, static fn ($id) => $id > 0));
+        $bakIds = array_values(array_filter($bakIds, static fn($id) => $id > 0));
 
         if ($bakIds === []) {
             return response()->json([
@@ -1202,7 +1204,7 @@ class InvestigasiController extends Controller
             $linkedBakIds = DB::table('bak_investigasi_berita_acara')
                 ->where('bak_investigasi_id', $investigasiId)
                 ->pluck('berita_acara_id')
-                ->map(static fn ($id) => (int) $id)
+                ->map(static fn($id) => (int) $id)
                 ->all();
         }
 
@@ -1230,7 +1232,8 @@ class InvestigasiController extends Controller
                 'bak.nama_berkas',
                 'bak.file_path',
                 'bak.created_by',
-                'bak.created_at'
+                'bak.created_at',
+                'bak.karyawan_id',
             );
     }
 
@@ -1309,7 +1312,7 @@ class InvestigasiController extends Controller
     {
         $investigasiIds = array_values(array_unique(array_filter(
             array_map('intval', $investigasiIds),
-            static fn ($id) => $id > 0
+            static fn($id) => $id > 0
         )));
         if ($investigasiIds === [] || !Schema::hasTable('bak_investigasi_berita_acara')) {
             return [];
@@ -1554,6 +1557,7 @@ class InvestigasiController extends Controller
                 'bak.dokumentasi',
                 'bak.perihal',
                 'bak.created_by',
+                'bak.karyawan_id',
                 'bak.file_path',
             ]);
 
@@ -1564,11 +1568,14 @@ class InvestigasiController extends Controller
                 $storedDok
             );
 
+            $karyawanId = (int) ($row->karyawan_id ?? 0);
+
             return [
                 'id' => (int) $row->id,
                 'nomor_surat' => (string) ($row->nomor_surat ?? ''),
                 'perihal' => trim((string) ($row->perihal ?? '')),
                 'created_by' => trim((string) ($row->created_by ?? '')),
+                'id_karyawan' => $karyawanId > 0 ? $karyawanId : null,
                 'dokumentasi' => $dokumentasi,
                 'jumlah_lampiran' => count($dokumentasi),
                 'has_document' => !empty($row->file_path),

@@ -14,6 +14,7 @@ use App\Services\PencadanganUpahPayrollService;
 use App\Services\PayrollDebtService;
 use App\Services\PayrollDeductionService;
 use App\Services\PayrollRecordSyncService;
+use App\Services\Payroll\MaternityLeavePayrollService;
 use App\Services\Payroll\PayrollTrainingSpecialLeaveService;
 use App\Services\Payroll\PayrollWorkingDaysService;
 use Illuminate\Http\Request;
@@ -291,6 +292,8 @@ class KalkulasiPayrollController extends Controller
                 $excused = $specialLeaveDaysMap[$kid] ?? 0;
                 PayrollTrainingSpecialLeaveService::applyToPreviewRow($row, $excused);
             }
+
+            MaternityLeavePayrollService::applyToPreviewRows($response->data ?? [], $periodePayroll);
 
             $totalFieldMap = [
                 'gaji_pokok' => 'gaji_pokok',

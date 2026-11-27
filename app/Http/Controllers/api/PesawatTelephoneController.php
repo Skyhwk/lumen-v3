@@ -4,7 +4,10 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CiscoPhoneConfig;
+use App\Models\CiscoPhoneDirectoryEntry;
+use App\Models\CiscoPhoneDirectorySetting;
 use App\Services\CiscoPhoneCnfXmlService;
+use App\Services\CiscoPhoneDirectoryXmlService;
 use App\Services\Crypto;
 use Datatables;
 use Illuminate\Http\Request;
@@ -55,7 +58,172 @@ class PesawatTelephoneController extends Controller
                 'vad' => 'Voice Activity Detection (VAD) bisa menyebabkan suara putus-putus/noise saat gateway PSTN. Default: nonaktif.',
             ],
             'tftp_path' => env('CISCO_TFTP_PATH', '/srv/tftp'),
+            'directory_uri' => (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUriForDisplay(''),
+            'directory_uri_cnf' => CiscoPhoneDirectoryXmlService::defaultDirectoryUrl(true),
+            'phonebook_embed_in_cnf' => CiscoPhoneDirectoryXmlService::shouldEmbedInCnf(),
+            'phonebook_use_directory_url_tag' => CiscoPhoneDirectoryXmlService::shouldWriteDirectoryUrlTag(),
+            'phonebook_settings' => CiscoPhoneDirectoryXmlService::settingsPayload(),
+            'phonebook_entry_count' => CiscoPhoneDirectoryEntry::where('is_active', true)->count(),
+            'phonebook_next_sort_order' => $this->nextPhonebookSortOrder(),
         ], 200);
+    }
+
+    public function phonebookIndex()
+    {
+        $data = CiscoPhoneDirectoryEntry::query()
+            ->orderBy('sort_order')
+            ->orderBy('id');
+
+        return Datatables::of($data)
+            ->orderColumn('display_name', 'display_name $1')
+            ->orderColumn('telephone', 'telephone $1')
+            ->orderColumn('department', 'department $1')
+            ->orderColumn('sort_order', 'sort_order $1')
+            ->make(true);
+    }
+
+    public function phonebookStore(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'display_name' => 'required|string|max:120',
+            'telephone' => 'required|string|max:40',
+            'department' => 'nullable|string|max:120',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first()], 422);
+        }
+
+        $telephone = preg_replace('/\s+/', '', trim((string) $request->telephone));
+
+        if ($request->id) {
+            $entry = CiscoPhoneDirectoryEntry::find($request->id);
+            if (!$entry) {
+                return response()->json(['message' => 'Kontak tidak ditemukan'], 404);
+            }
+        } else {
+            $entry = new CiscoPhoneDirectoryEntry();
+        }
+
+        $entry->display_name = trim((string) $request->display_name);
+        $entry->telephone = $telephone;
+        $entry->department = trim((string) ($request->department ?? '')) ?: null;
+        $entry->is_active = filter_var($request->is_active ?? true, FILTER_VALIDATE_BOOLEAN);
+
+        if (!$request->id) {
+            $entry->sort_order = $this->nextPhonebookSortOrder();
+        }
+
+        $entry->save();
+
+        return response()->json([
+            'message' => $request->id ? 'Kontak phonebook diperbarui' : 'Kontak phonebook ditambahkan',
+            'data' => $entry,
+        ], 200);
+    }
+
+    public function phonebookDestroy(Request $request)
+    {
+        $entry = CiscoPhoneDirectoryEntry::where('id', $request->id)->first();
+        if (!$entry) {
+            return response()->json(['message' => 'Kontak tidak ditemukan'], 404);
+        }
+
+        $entry->delete();
+        $this->normalizePhonebookSortOrder();
+
+        return response()->json(['message' => 'Kontak phonebook dihapus'], 200);
+    }
+
+    public function phonebookMove(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id' => 'required|integer',
+            'direction' => 'required|in:up,down',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first()], 422);
+        }
+
+        $entries = CiscoPhoneDirectoryEntry::query()
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
+        $index = $entries->search(function ($row) use ($request) {
+            return (int) $row->id === (int) $request->id;
+        });
+
+        if ($index === false) {
+            return response()->json(['message' => 'Kontak tidak ditemukan'], 404);
+        }
+
+        $targetIndex = $request->direction === 'up' ? $index - 1 : $index + 1;
+        if ($targetIndex < 0 || $targetIndex >= $entries->count()) {
+            return response()->json(['message' => 'Sudah di posisi paling ' . ($request->direction === 'up' ? 'atas' : 'bawah')], 400);
+        }
+
+        $list = $entries->values()->all();
+        $moving = $list[$index];
+        array_splice($list, $index, 1);
+        array_splice($list, $targetIndex, 0, [$moving]);
+
+        foreach ($list as $position => $row) {
+            $order = $position + 1;
+            if ((int) $row->sort_order !== $order) {
+                CiscoPhoneDirectoryEntry::where('id', $row->id)->update(['sort_order' => $order]);
+            }
+        }
+
+        return response()->json(['message' => 'Urutan kontak diperbarui'], 200);
+    }
+
+    public function phonebookSettingsSave(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'title' => 'nullable|string|max:32',
+            'base_url' => 'nullable|string|max:255',
+            'cnf_base_url' => 'nullable|string|max:255',
+            'access_key' => 'nullable|string|max:100',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first()], 422);
+        }
+
+        $row = CiscoPhoneDirectorySetting::current();
+        $title = trim((string) ($request->title ?? ''));
+        $row->title = $title !== '' ? mb_substr($title, 0, 32) : 'Phonebook Kantor';
+        $row->base_url = rtrim(trim((string) ($request->base_url ?? '')), '/') ?: null;
+        $row->cnf_base_url = rtrim(trim((string) ($request->cnf_base_url ?? '')), '/') ?: null;
+        $row->access_key = trim((string) ($request->access_key ?? '')) ?: null;
+        $row->embed_in_cnf = filter_var($request->embed_in_cnf ?? false, FILTER_VALIDATE_BOOLEAN);
+        $row->use_directory_url_tag = filter_var($request->use_directory_url_tag ?? false, FILTER_VALIDATE_BOOLEAN);
+        $row->save();
+
+        CiscoPhoneDirectoryXmlService::forgetSettingsCache();
+
+        return response()->json([
+            'message' => 'Pengaturan phonebook disimpan',
+            'settings' => CiscoPhoneDirectoryXmlService::settingsPayload(),
+            'directory_uri' => (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUriForDisplay(''),
+            'directory_uri_cnf' => CiscoPhoneDirectoryXmlService::defaultDirectoryUrl(true),
+            'phonebook_embed_in_cnf' => CiscoPhoneDirectoryXmlService::shouldEmbedInCnf(),
+        ], 200);
+    }
+
+    public function regenerateAll(Request $request)
+    {
+        return $this->regenerateActivePhoneConfigs(false);
+    }
+
+    /**
+     * Rollback aman: cnf.xml tanpa directoryURL (untuk pulihkan register setelah regenerate phonebook).
+     */
+    public function regenerateAllSafe(Request $request)
+    {
+        return $this->regenerateActivePhoneConfigs(true);
     }
 
     public function show(Request $request)
@@ -173,7 +341,9 @@ class PesawatTelephoneController extends Controller
             $config->is_active = true;
             $config->save();
 
-            $plainConfig = $this->plainConfigForXml($payload['config_json'], $request->auth_password);
+            $plainConfig = CiscoPhoneCnfXmlService::mergeConfig(
+                $this->plainConfigForXml($payload['config_json'], $request->auth_password)
+            );
 
             $primaryLinePassword = $plainConfig['lines'][0]['auth_password'] ?? $request->auth_password;
 
@@ -214,44 +384,20 @@ class PesawatTelephoneController extends Controller
             return response()->json(['message' => 'Konfigurasi tidak ditemukan'], 404);
         }
 
-        try {
-            $crypto = new Crypto();
-            $authPassword = $crypto->decrypt($config->auth_password);
-            $plainConfig = $config->config_json ?? [];
+        $safe = filter_var($request->safe_mode ?? $request->strip_directory ?? false, FILTER_VALIDATE_BOOLEAN);
 
-            if (!empty($plainConfig['lines'])) {
-                foreach ($plainConfig['lines'] as $index => $line) {
-                    if (!empty($line['auth_password'])) {
-                        try {
-                            $plainConfig['lines'][$index]['auth_password'] = $crypto->decrypt($line['auth_password']);
-                        } catch (\Throwable $e) {
-                            $plainConfig['lines'][$index]['auth_password'] = $authPassword;
-                        }
-                    } else {
-                        $plainConfig['lines'][$index]['auth_password'] = $authPassword;
-                    }
-                }
+        try {
+            $result = $this->regenerateSinglePhoneConfig($config, $safe);
+            if ($result === null) {
+                return response()->json(['message' => 'Gagal generate cnf'], 500);
             }
 
-            $xml = $this->cnfService()->generate(
-                $plainConfig,
-                $config->mac_address,
-                $config->phone_model,
-                $config->extension,
-                $authPassword
-            );
-
-            $fileInfo = $this->cnfService()->writeToTftp($xml, $config->mac_address);
-
-            $config->cnf_filename = $fileInfo['filename'];
-            $config->cnf_file_path = $fileInfo['path'];
-            $config->last_generated_at = Carbon::now();
-            $config->save();
-
             return response()->json([
-                'message' => 'File cnf.xml berhasil di-generate ulang',
-                'filename' => $fileInfo['filename'],
-                'path' => $fileInfo['path'],
+                'message' => $safe
+                    ? 'Rollback cnf.xml berhasil — directoryURL dihapus'
+                    : 'File cnf.xml berhasil di-generate ulang',
+                'filename' => $result['filename'],
+                'path' => $result['path'],
             ], 200);
         } catch (\Throwable $e) {
             return response()->json(['message' => $e->getMessage()], 500);
@@ -417,6 +563,128 @@ class PesawatTelephoneController extends Controller
         unset($line);
 
         return $plain;
+    }
+
+    private function nextPhonebookSortOrder(): int
+    {
+        $max = (int) CiscoPhoneDirectoryEntry::max('sort_order');
+
+        return $max + 1;
+    }
+
+    private function normalizePhonebookSortOrder(): void
+    {
+        $entries = CiscoPhoneDirectoryEntry::query()
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($entries as $position => $entry) {
+            $order = $position + 1;
+            if ((int) $entry->sort_order !== $order) {
+                $entry->sort_order = $order;
+                $entry->save();
+            }
+        }
+    }
+
+    private function regenerateActivePhoneConfigs(bool $forceEmptyDirectory): \Illuminate\Http\JsonResponse
+    {
+        $configs = CiscoPhoneConfig::where('is_active', true)->get();
+        if ($configs->isEmpty()) {
+            return response()->json(['message' => 'Tidak ada konfigurasi telepon aktif'], 400);
+        }
+
+        $ok = 0;
+        $failed = [];
+
+        foreach ($configs as $config) {
+            try {
+                $result = $this->regenerateSinglePhoneConfig($config, $forceEmptyDirectory);
+                if ($result === null) {
+                    throw new \RuntimeException('Generate cnf gagal');
+                }
+                $ok++;
+            } catch (\Throwable $e) {
+                $failed[] = ['id' => $config->id, 'mac' => $config->mac_address, 'error' => $e->getMessage()];
+            }
+        }
+
+        $label = $forceEmptyDirectory
+            ? 'Rollback provisioning (tanpa directoryURL) selesai'
+            : 'Generate ulang selesai';
+
+        return response()->json([
+            'message' => "{$label}: {$ok} berhasil" . (count($failed) ? ', ' . count($failed) . ' gagal' : ''),
+            'success_count' => $ok,
+            'failed' => $failed,
+            'safe_mode' => $forceEmptyDirectory,
+        ], 200);
+    }
+
+    private function regenerateSinglePhoneConfig(CiscoPhoneConfig $config, bool $forceEmptyDirectory = false): ?array
+    {
+        $crypto = new Crypto();
+        $authPassword = $crypto->decrypt($config->auth_password);
+        $plainConfig = CiscoPhoneCnfXmlService::mergeConfig($config->config_json ?? []);
+
+        if (!empty($plainConfig['lines'])) {
+            foreach ($plainConfig['lines'] as $index => $line) {
+                if (!empty($line['auth_password'])) {
+                    try {
+                        $plainConfig['lines'][$index]['auth_password'] = $crypto->decrypt($line['auth_password']);
+                    } catch (\Throwable $e) {
+                        $plainConfig['lines'][$index]['auth_password'] = $authPassword;
+                    }
+                } else {
+                    $plainConfig['lines'][$index]['auth_password'] = $authPassword;
+                }
+            }
+        }
+
+        if ($forceEmptyDirectory) {
+            $plainConfig['directory_uri'] = '';
+        }
+
+        $primaryLinePassword = $plainConfig['lines'][0]['auth_password'] ?? $authPassword;
+
+        $xml = $this->cnfService()->generate(
+            $plainConfig,
+            $config->mac_address,
+            $config->phone_model,
+            $config->extension,
+            $primaryLinePassword,
+            $forceEmptyDirectory
+        );
+
+        $fileInfo = $this->cnfService()->writeToTftp($xml, $config->mac_address);
+
+        if ($forceEmptyDirectory) {
+            $plainConfig['directory_uri'] = '';
+        }
+        $this->persistDirectoryUriOnConfig($config, $plainConfig);
+
+        $config->cnf_filename = $fileInfo['filename'];
+        $config->cnf_file_path = $fileInfo['path'];
+        $config->last_generated_at = Carbon::now();
+        $config->save();
+
+        return $fileInfo;
+    }
+
+    private function persistDirectoryUriOnConfig(CiscoPhoneConfig $config, array $mergedPlainConfig): void
+    {
+        $json = $config->config_json ?? [];
+        if (!is_array($json)) {
+            $json = [];
+        }
+        $uri = trim((string) ($mergedPlainConfig['directory_uri'] ?? ''));
+        if ($uri !== '') {
+            $json['directory_uri'] = $uri;
+        } else {
+            unset($json['directory_uri']);
+        }
+        $config->config_json = $json;
     }
 
     private function phoneVendors(): array

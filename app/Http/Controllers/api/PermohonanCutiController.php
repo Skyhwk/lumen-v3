@@ -25,6 +25,7 @@ use App\Services\Hr\PortalHrSync;
 use App\Services\Hr\RekapLiburKalenderService;
 use App\Services\Hr\WorkflowStatus;
 use App\Services\Notification;
+use App\Services\Payroll\MaternityLeavePayrollService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -988,14 +989,26 @@ class PermohonanCutiController extends Controller
     public function getSpecialLeaveTypes()
     {
         try {
+            $employee = MasterKaryawan::find($this->user_id);
             if (HrTableMode::portalReadsHrTables()) {
-                $types = DB::table('hr_special_leave_type')->where('is_active', 1)->get();
+                $types = DB::table('hr_special_leave_type')->where('is_active', 1)->orderBy('name')->get();
             } else {
-                $types = DB::connection('mysql')->table('special_leave_types')->where('is_active', 1)->get();
+                $types = DB::connection('mysql')->table('special_leave_types')->where('is_active', 1)->orderBy('name')->get();
             }
+            $mapped = $types->map(function ($row) use ($employee) {
+                $arr = (array) $row;
+                $isMaternity = MaternityLeavePayrollService::isMaternitySpecialLeaveType($row);
+                $arr['is_maternity'] = $isMaternity;
+                $arr['auto_duration_months'] = $isMaternity ? MaternityLeavePayrollService::DURATION_MONTHS : null;
+                $arr['is_eligible'] = !$isMaternity || !$employee || MaternityLeavePayrollService::isFemaleEmployee($employee);
+                $arr['ineligible_reason'] = $arr['is_eligible'] ? null : 'Khusus karyawan perempuan';
+
+                return $arr;
+            })->values();
+
             return response()->json([
                 'success' => true,
-                'data' => $types
+                'data' => $mapped
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
