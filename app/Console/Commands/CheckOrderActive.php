@@ -291,6 +291,13 @@ class CheckOrderActive extends Command
                 }
             }
 
+            // Nama file aktual: file_lhp (umum/manual), no_dokumen (psikologi), name_file (ULK ergonomi)
+            foreach (['file_lhp', 'no_dokumen', 'name_file'] as $fileColumn) {
+                if (in_array($fileColumn, $tableColumns)) {
+                    $selectColumns[] = $fileColumn;
+                }
+            }
+
             $selectColumns = array_values(array_filter($selectColumns, fn ($col) => in_array($col, $tableColumns)));
 
             $query = $modelClass::whereIn('no_order', $noOrderArray)->select($selectColumns);
@@ -299,9 +306,13 @@ class CheckOrderActive extends Command
             }
 
             return $query->get()->map(function ($row) use ($relationKey, $keyColumn) {
-                return array_merge($row->toArray(), [
+                $arr = $row->toArray();
+                $fileLhp = $arr['file_lhp'] ?? $arr['no_dokumen'] ?? $arr['name_file'] ?? null;
+
+                return array_merge($arr, [
                     '_relation' => $relationKey,
                     '_match_column' => $keyColumn,
+                    'file_lhp' => !empty($fileLhp) ? (string) $fileLhp : null,
                 ]);
             })->all();
         })->all();
@@ -349,6 +360,25 @@ class CheckOrderActive extends Command
                 if (!empty($record[$matchColumn]) && $record[$matchColumn] == $matchValue) {
                     return $record;
                 }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Normalisasi nama PDF aktual dari record LHP header.
+     * Urutan: file_lhp → no_dokumen (Psikologi) → name_file (ULK Ergonomi).
+     */
+    private function resolveFileLhpFromRecord(?array $lhps): ?string
+    {
+        if (empty($lhps)) {
+            return null;
+        }
+
+        foreach (['file_lhp', 'no_dokumen', 'name_file'] as $column) {
+            if (!empty($lhps[$column])) {
+                return (string) $lhps[$column];
             }
         }
 
@@ -550,6 +580,7 @@ class CheckOrderActive extends Command
             // 'regulasi'           => json_decode($d['regulasi'] ?? '', true),
             'lhp_rilis'     => $lhpRilis,
             'tgl_lhp_rilis' => $tglLhpRilis,
+            'file_lhp'      => $this->resolveFileLhpFromRecord($lhps),
             'steps'         => $steps,
             'points'        => $group->pluck('keterangan_1')->toArray(),
             'categories'    => $group->pluck('kategori_3')->toArray(),

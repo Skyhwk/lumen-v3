@@ -36,11 +36,10 @@ use App\Services\GenerateQrDocumentLhp;
 use App\Services\PrintLhp;
 
 use App\Jobs\RenderLhp;
-use App\Jobs\CombineLHPJob;
+use App\Jobs\CombineLhpOrderBerjalanJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
-use App\Models\LinkLhp;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -1163,22 +1162,19 @@ class DraftAirController extends Controller
             ]);
 
             // ------------------------------------------------------
-            // 6. Cek Link + Dispatch Combine Job
+            // 6. Combine PDF dari order_berjalan (tanpa link_lhp)
             // ------------------------------------------------------
             $cekDetail = OrderDetail::where('cfr', $header->no_lhp)
                 ->where('is_active', true)
                 ->first();
 
-            $periode = $cekDetail->periode ?? null;
+            $periode = $cekDetail->periode ?? $detail->periode ?? null;
 
-            $cekLink = LinkLhp::where('no_order', $header->no_order);
-            if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
-            $cekLink = $cekLink->first();
-
-            if ($cekLink) {
-                $job = new CombineLHPJob($header->no_lhp, $header->file_lhp, $header->no_order, $this->karyawan, $cekDetail->periode);
-                $this->dispatch($job);
-            }
+            CombineLhpOrderBerjalanJob::dispatchFor(
+                $header->no_order,
+                $periode,
+                $this->karyawan
+            );
 
             // ------------------------------------------------------
             // 7. Kirim Email (Helper baru yang sudah OK)

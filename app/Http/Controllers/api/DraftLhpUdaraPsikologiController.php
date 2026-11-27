@@ -5,10 +5,11 @@ use App\Helpers\DraftLhpRejectHelper;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\RenderLhpp;
+use App\Jobs\CombineLhpOrderBerjalanJob;
 use App\Jobs\JobPrintLhp;
-use App\Jobs\CombineLHPJob;
 use App\Helpers\EmailLhpRilisHelpers;
 use App\Models\HistoryAppReject;
+use App\Models\OrderBerjalan;
 use App\Models\OrderDetail;
 use App\Models\PsikologiHeader;
 use App\Models\LhpUdaraPsikologiHeader;
@@ -18,7 +19,6 @@ use App\Models\LhpUdaraPsikologiHeaderHistory;
 use App\Models\OrderHeader;
 use App\Models\MasterKaryawan;
 use App\Models\QrDocument;
-use App\Models\LinkLhp;
 use App\Models\PengesahanLhp;
 use App\Models\GenerateLink;
 use App\Services\GenerateQrDocumentLhpp;
@@ -360,13 +360,11 @@ class DraftLhpUdaraPsikologiController extends Controller
 					->first();
 				$periode = $cekDetail->periode ?? null;
 
-				$cekLink = LinkLhp::where('no_order', $data->no_order);
-				if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
-				$cekLink = $cekLink->first();
-				if ($cekLink) {
-					$job = new CombineLHPJob($data->no_cfr, $data->no_dokumen, $data->no_order, $this->karyawan, $cekDetail->periode);
-					$this->dispatch($job);
-				}
+                CombineLhpOrderBerjalanJob::dispatchFor(
+                    $data->no_order,
+                    $cekDetail->periode ?? null,
+                    $this->karyawan
+                );
 
 				$orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
                     ->first();

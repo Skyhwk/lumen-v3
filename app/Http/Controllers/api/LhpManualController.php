@@ -9,8 +9,7 @@ use App\Models\OrderHeader;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 use App\Models\HistoryAppReject;
-use App\Models\LinkLhp;
-use App\Jobs\CombineLHPJob;
+use App\Jobs\CombineLhpOrderBerjalanJob;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -456,14 +455,11 @@ class LhpManualController extends Controller
                     ->where('is_active', true)
                     ->first();
 
-                $cekLink = LinkLhp::where('no_order', $data->no_order);
-                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
-                $cekLink = $cekLink->first();
-                // dd($cekLink);
-                if ($cekLink) {
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
-                    $this->dispatch($job);
-                }
+                    CombineLhpOrderBerjalanJob::dispatchFor(
+                        $data->no_order,
+                        $cekDetail->periode ?? null,
+                        $this->karyawan
+                    );
 
                 $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
                     ->first();

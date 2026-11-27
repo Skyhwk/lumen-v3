@@ -25,16 +25,31 @@ class ResolveLhpFile
         'lhps_padatan' => 'LhpsPadatanHeader',
         'lhp_psikologi' => 'LhpUdaraPsikologiHeader',
         'lhps_hygiene_sanitasi' => 'LhpsHygieneSanitasiHeader',
+        'lhp_manual' => 'LhpManual',
     ];
+
+    /** Kolom nama file aktual per jenis header */
+    private const FILE_COLUMNS = ['file_lhp', 'no_dokumen', 'name_file'];
 
     public function fromOrderDetails(array $orderDetails): ?string
     {
         foreach ($orderDetails as $detail) {
             foreach (array_keys($this->lhpRelations) as $key) {
-                $fileLhp = $detail[$key]['file_lhp'] ?? null;
+                $related = $detail[$key] ?? null;
+                if (!is_array($related)) {
+                    continue;
+                }
+
+                $fileLhp = $this->pickFileName($related);
                 if (!empty($fileLhp)) {
                     return $fileLhp;
                 }
+            }
+
+            // Snapshot order_berjalan detail sudah dinormalisasi ke file_lhp
+            $direct = $this->pickFileName(is_array($detail) ? $detail : []);
+            if (!empty($direct)) {
+                return $direct;
             }
         }
 
@@ -52,7 +67,12 @@ class ResolveLhpFile
             $modelInstance = new $modelClass();
             $tableColumns = Schema::getColumnListing($modelInstance->getTable());
 
-            if (!in_array('file_lhp', $tableColumns)) {
+            $availableFileColumns = array_values(array_filter(
+                self::FILE_COLUMNS,
+                fn ($col) => in_array($col, $tableColumns)
+            ));
+
+            if (empty($availableFileColumns)) {
                 continue;
             }
 
@@ -69,18 +89,34 @@ class ResolveLhpFile
                 continue;
             }
 
+            $select = array_values(array_unique(array_merge([$matchColumn], $availableFileColumns)));
             $query = $modelClass::where('no_order', $noOrder)
                 ->where($matchColumn, $matchValue)
-                ->whereNotNull('file_lhp');
+                ->select($select);
 
             if (in_array('is_active', $tableColumns)) {
                 $query->where('is_active', 1);
             }
 
-            $fileLhp = $query->value('file_lhp');
+            $row = $query->first();
+            if (!$row) {
+                continue;
+            }
 
+            $fileLhp = $this->pickFileName($row->toArray());
             if (!empty($fileLhp)) {
                 return $fileLhp;
+            }
+        }
+
+        return null;
+    }
+
+    private function pickFileName(array $record): ?string
+    {
+        foreach (self::FILE_COLUMNS as $column) {
+            if (!empty($record[$column])) {
+                return (string) $record[$column];
             }
         }
 

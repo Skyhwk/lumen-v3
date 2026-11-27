@@ -9,11 +9,11 @@ use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 use App\Helpers\EmailLhpRilisHelpers;
 
-use App\Models\{HistoryAppReject, OrderHeader, LhpsKebisinganHeader,LhpsKebisinganDetail,LhpsLingHeader,LhpsLingDetail,LhpsPencahayaanHeader,LhpsGetaranHeader,LhpsGetaranDetail,LhpsPencahayaanDetail,LhpsMedanLMHeader,LhpsMedanLMDetail,LhpsKebisinganHeaderHistory,LhpsKebisinganDetailHistory,LhpsGetaranHeaderHistory,LhpsGetaranDetailHistory,LhpsPencahayaanHeaderHistory,LhpsPencahayaanDetailHistory,LhpsMedanLMHeaderHistory,LhpsMedanLMDetailHistory,LhpSinarUVHeaderHistory,LhpsSinarUVDetailHistory,LhpsLingHeaderHistory,LhpsLingDetailHistory,MasterSubKategori,OrderDetail,MetodeSampling,MasterBakumutu,MasterKaryawan,LingkunganHeader,QrDocument,PencahayaanHeader,KebisinganHeader,Subkontrak,MedanLMHeader,SinarUVHeader,GetaranHeader,DataLapanganErgonomi,Parameter,DirectLainHeader,GenerateLink,DraftErgonomiFile, DraftErgonomiFileHistory, PengesahanLhp,LinkLhp,WsValueErgonomi};
+use App\Models\{OrderBerjalan,HistoryAppReject, OrderHeader, LhpsKebisinganHeader,LhpsKebisinganDetail,LhpsLingHeader,LhpsLingDetail,LhpsPencahayaanHeader,LhpsGetaranHeader,LhpsGetaranDetail,LhpsPencahayaanDetail,LhpsMedanLMHeader,LhpsMedanLMDetail,LhpsKebisinganHeaderHistory,LhpsKebisinganDetailHistory,LhpsGetaranHeaderHistory,LhpsGetaranDetailHistory,LhpsPencahayaanHeaderHistory,LhpsPencahayaanDetailHistory,LhpsMedanLMHeaderHistory,LhpsMedanLMDetailHistory,LhpSinarUVHeaderHistory,LhpsSinarUVDetailHistory,LhpsLingHeaderHistory,LhpsLingDetailHistory,MasterSubKategori,OrderDetail,MetodeSampling,MasterBakumutu,MasterKaryawan,LingkunganHeader,QrDocument,PencahayaanHeader,KebisinganHeader,Subkontrak,MedanLMHeader,SinarUVHeader,GetaranHeader,DataLapanganErgonomi,Parameter,DirectLainHeader,GenerateLink,DraftErgonomiFile, DraftErgonomiFileHistory, PengesahanLhp,WsValueErgonomi};
 
 use App\Services\{SendEmail,TemplateLhps,GenerateQrDocumentLhp,TemplateLhpErgonomi};
 use App\Jobs\RenderLhp;
-use App\Jobs\CombineLHPJob;
+use App\Jobs\CombineLhpOrderBerjalanJob;
 
 class DraftUlkErgonomiController extends Controller
 {
@@ -1578,14 +1578,11 @@ class DraftUlkErgonomiController extends Controller
 
                     $cekDetail = $data_order;
 
-                    $cekLink = LinkLhp::where('no_order', $cekDetail->no_order);
-                    if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
-                    $cekLink = $cekLink->first();
-
-                    if ($cekLink) {
-                        $job = new CombineLHPJob($cekDetail->cfr, $data->name_file, $cekDetail->no_order, $this->karyawan, $cekDetail->periode);
-                        $this->dispatch($job);
-                    }
+                    CombineLhpOrderBerjalanJob::dispatchFor(
+                        $cekDetail->no_order,
+                        $cekDetail->periode ?? null,
+                        $this->karyawan
+                    );
                     
                     $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
                     ->first();

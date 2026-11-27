@@ -6,14 +6,15 @@ namespace App\Http\Controllers\api;
 
 use App\Helpers\EmailLhpRilisHelpers;
 use App\Helpers\DraftLhpRejectHelper;
-use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCustom,LinkLhp};
+use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCustom};
+use App\Models\OrderBerjalan;
 
 // service
 use App\Services\{PrintLhp,TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,SendEmail,CombineLHPService};
 
 // job
 use App\Jobs\RenderLhp;
-use App\Jobs\CombineLHPJob;
+use App\Jobs\CombineLhpOrderBerjalanJob;
 
 //iluminate
 use Illuminate\Http\Request;
@@ -1099,14 +1100,11 @@ class DraftEmisiSumberBergerakController extends Controller
                     ->where('is_active', true)
                     ->first();
 
-                $cekLink = LinkLhp::where('no_order', $data->no_order);
-                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
-                $cekLink = $cekLink->first();
-
-                if ($cekLink) {
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
-                    $this->dispatch($job);
-                }
+                CombineLhpOrderBerjalanJob::dispatchFor(
+                    $data->no_order,
+                    $cekDetail->periode ?? null,
+                    $this->karyawan
+                );
 
                 EmailLhpRilisHelpers::run([
                     'cfr'              => $request->cfr,
