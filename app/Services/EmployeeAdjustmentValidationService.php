@@ -225,8 +225,10 @@ class EmployeeAdjustmentValidationService
                 if (!$this->normalizeDate($request->input('tanggal_efektif'))) {
                     return 'Tanggal efektif pengangkatan wajib diisi';
                 }
-                if ($requestType === EmployeeAdjustmentTypeRegistry::TYPE_PENGANGKATAN_KONTRAK
-                    && !$this->normalizeDate($request->input('tanggal_selesai'))) {
+                if (
+                    $requestType === EmployeeAdjustmentTypeRegistry::TYPE_PENGANGKATAN_KONTRAK
+                    && !$this->normalizeDate($request->input('tanggal_selesai'))
+                ) {
                     return 'Tanggal berakhir kontrak wajib diisi';
                 }
                 if ($hasSalaryAdjustment && $adjustmentGaji === 0.0 && $adjustmentTunj === 0.0) {
@@ -251,6 +253,18 @@ class EmployeeAdjustmentValidationService
             case EmployeeAdjustmentTypeRegistry::TYPE_PHK:
                 if (!$this->normalizeDate($request->input('tanggal_berakhir_kerja'))) {
                     return 'Tanggal efektif berakhirnya masa kerja wajib diisi';
+                }
+                return null;
+
+            case EmployeeAdjustmentTypeRegistry::TYPE_PERPANJANG_PENSIUN:
+                if (!$this->normalizeDate($request->input('tanggal_efektif'))) {
+                    return 'Tanggal efektif perpanjang masa kerja wajib diisi';
+                }
+                if (!$this->normalizeDate($request->input('tanggal_selesai'))) {
+                    return 'Tanggal berakhir masa kerja wajib diisi';
+                }
+                if ($hasSalaryAdjustment && $adjustmentGaji === 0.0 && $adjustmentTunj === 0.0) {
+                    return 'Minimal salah satu penyesuaian gaji pokok atau tunjangan harus diisi';
                 }
                 return null;
 

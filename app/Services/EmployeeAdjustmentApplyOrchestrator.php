@@ -322,6 +322,19 @@ class EmployeeAdjustmentApplyOrchestrator
                 $employeeChanged = true;
                 break;
 
+            case EmployeeAdjustmentTypeRegistry::TYPE_PERPANJANG_PENSIUN:
+                $this->applyStatusKaryawanChange(
+                    $record,
+                    $employee,
+                    EmployeeAdjustmentTypeRegistry::STATUS_KARYAWAN_CONTRACT,
+                    $appliedBy,
+                    $source,
+                    $before
+                );
+                $this->applyKontrakEndDate($record, $employee, $appliedBy, $source, $before);
+                $employeeChanged = true;
+                break;
+
             case EmployeeAdjustmentTypeRegistry::TYPE_PHK:
                 $this->deactivateEmployee($record, $employee, $appliedBy, $source, 'PHK');
                 $employeeChanged = true;
