@@ -2,7 +2,7 @@
 
 namespace App\HelpersFormula;
 
-use Carbon\Carbon;
+use App\Services\MdlUdaraService;
 
 class DirectHCHO8Jmgm3 {
     public function index($data, $id_parameter, $mdl) {
@@ -52,9 +52,18 @@ class DirectHCHO8Jmgm3 {
         $c1  = $this->cutDecimal($c1_raw, 4);
         $c3  = $this->cutDecimal($c3_raw, 4);
         $c4  = $this->cutDecimal($c4_raw, 4);
-        $c15 = $c3;
         $c17 = $this->cutDecimal($c17_raw, 4);
         $c16 = $this->cutDecimal($c16_raw, 4);
+
+        $mdlRow = MdlUdaraService::activeRowForParameter($id_parameter);
+        $c3Rounded = $c3;
+        $c1  = MdlUdaraService::applyColumn($c1, $mdlRow, 'hasil1');
+        $c2  = MdlUdaraService::applyColumn($c2, $mdlRow, 'hasil2');
+        $c3  = MdlUdaraService::applyColumn($c3, $mdlRow, 'hasil3');
+        $c4  = MdlUdaraService::applyColumn($c4, $mdlRow, 'hasil4');
+        $c17 = MdlUdaraService::applyColumn($c17, $mdlRow, 'hasil17');
+        $c16 = MdlUdaraService::applyColumn($c16, $mdlRow, 'hasil16');
+        $c15 = MdlUdaraService::applyColumn($c3Rounded, $mdlRow, 'hasil15');
 
         $satuan = 'mg/Nm3';
 
@@ -73,8 +82,9 @@ class DirectHCHO8Jmgm3 {
     }
 
     private function cutDecimal($value, $decimal)
-        {
-            $factor = pow(10, $decimal);
-            return floor($value * $factor) / $factor;
-        }
+    {
+        $factor = pow(10, $decimal);
+        return round($value * $factor) / $factor;
+    }
+
 }
