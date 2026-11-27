@@ -37,12 +37,7 @@ class KendaraanSamplingAvailabilityService
                 continue;
             }
             $seen[$key] = true;
-            $options[] = [
-                'id' => $plat,
-                'text' => $plat,
-                'source' => 'ops',
-                'source_id' => (int) $mobil->id,
-            ];
+            $options[] = $this->buildOption($mobil, 'ops');
         }
 
         foreach ($this->sewaCarsOnDate($tanggal) as $mobil) {
@@ -55,12 +50,7 @@ class KendaraanSamplingAvailabilityService
                 continue;
             }
             $seen[$key] = true;
-            $options[] = [
-                'id' => $plat,
-                'text' => $plat,
-                'source' => 'sewa',
-                'source_id' => (int) $mobil->id,
-            ];
+            $options[] = $this->buildOption($mobil, 'sewa');
         }
 
         usort($options, fn ($a, $b) => strcmp($a['id'], $b['id']));
@@ -198,6 +188,47 @@ class KendaraanSamplingAvailabilityService
         return "Kendaraan {$plat} tidak tersedia pada tanggal {$tanggal}. Alasan: {$alasan}";
     }
 
+    /**
+     * @param  DaftarMobil|DaftarMobilSewa  $mobil
+     * @return array{id:string,text:string,source:string,source_label:string,source_id:int,merk:?string,tipe:?string,is_include:?bool,driver:?string}
+     */
+    protected function buildOption($mobil, string $source): array
+    {
+        $plat = trim((string) ($mobil->plat_mobil ?? ''));
+        $merk = trim((string) ($mobil->merk_mobil ?? ''));
+        $tipe = trim((string) ($mobil->tipe_mobil ?? ''));
+        $sourceLabel = $source === 'sewa' ? 'Sewa' : 'Internal';
+        $jenis = trim(implode(' ', array_filter([$merk, $tipe])));
+        $text = $plat;
+        if ($jenis !== '') {
+            $text .= ' · ' . $jenis;
+        }
+        $text .= ' · ' . $sourceLabel;
+
+        $option = [
+            'id' => $plat,
+            'text' => $text,
+            'source' => $source,
+            'source_label' => $sourceLabel,
+            'source_id' => (int) ($mobil->id ?? 0),
+            'merk' => $merk !== '' ? $merk : null,
+            'tipe' => $tipe !== '' ? $tipe : null,
+        ];
+
+        if ($source === 'sewa') {
+            $option['is_include'] = (bool) ($mobil->is_include ?? false);
+            $driver = trim((string) ($mobil->driver ?? ''));
+            $option['driver'] = $driver !== '' ? $driver : null;
+            if (!empty($option['is_include']) && $option['driver']) {
+                $option['text'] .= ' (sopir: ' . $option['driver'] . ')';
+            } elseif (!empty($option['is_include'])) {
+                $option['text'] .= ' (termasuk sopir)';
+            }
+        }
+
+        return $option;
+    }
+
     protected function operationalCars()
     {
         return DaftarMobil::query()
@@ -216,7 +247,7 @@ class KendaraanSamplingAvailabilityService
                 $q->whereDate('tanggal_sewa', $tanggal);
             })
             ->orderBy('plat_mobil')
-            ->get(['id', 'plat_mobil', 'merk_mobil', 'tipe_mobil']);
+            ->get(['id', 'plat_mobil', 'merk_mobil', 'tipe_mobil', 'is_include', 'driver']);
     }
 
     /**
