@@ -123,9 +123,9 @@ class DaftarMobilController extends Controller
                 $data->nomor_mesin = strtoupper(trim($request->nomor_mesin));
                 $data->warna_mobil = trim($request->warna_mobil);
                 $data->tahun_perakitan = $request->tahun_perakitan;
-                $data->kepemilikan = $kepemilikan;
-                $data->tanggal_mulai_sewa = $tanggalMulaiSewa;
-                $data->tanggal_akhir_sewa = $tanggalAkhirSewa;
+                if ($request->filled('kepemilikan')) {
+                    $data->kepemilikan = $this->normalizeKepemilikan($request->kepemilikan);
+                }
                 if ($request->has('status_gps')) {
                     $data->status_gps = $this->toBoolean($request->status_gps);
                 }
@@ -151,6 +151,7 @@ class DaftarMobilController extends Controller
                 'tanggal_mulai_sewa' => $tanggalMulaiSewa,
                 'tanggal_akhir_sewa' => $tanggalAkhirSewa,
                 'status_gps' => false,
+                'kepemilikan' => $this->normalizeKepemilikan($request->kepemilikan ?? 'internal'),
                 'is_active' => true,
                 'created_at' => date('Y-m-d H:i:s'),
                 'created_by' => $this->karyawan,
@@ -187,24 +188,10 @@ class DaftarMobilController extends Controller
         return $value === true || $value === 1 || $value === '1' || $value === 'true';
     }
 
-    private function resolveKepemilikanSewa(Request $request): array
+    protected function normalizeKepemilikan($value): string
     {
-        $kepemilikan = trim((string) $request->input('kepemilikan', 'Internal'));
-        if (!in_array($kepemilikan, ['Internal', 'External'], true)) {
-            $kepemilikan = 'Internal';
-        }
+        $value = strtolower(trim((string) $value));
 
-        if ($kepemilikan !== 'External') {
-            return ['Internal', null, null];
-        }
-
-        $mulai = trim((string) $request->input('tanggal_mulai_sewa', ''));
-        $akhir = trim((string) $request->input('tanggal_akhir_sewa', ''));
-
-        return [
-            'External',
-            $mulai !== '' ? $mulai : null,
-            $akhir !== '' ? $akhir : null,
-        ];
+        return in_array($value, ['internal', 'external'], true) ? $value : 'internal';
     }
 }

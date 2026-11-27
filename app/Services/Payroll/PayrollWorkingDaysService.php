@@ -2,8 +2,10 @@
 
 namespace App\Services\Payroll;
 
+use App\Models\MasterShiftKaryawan;
 use App\Models\RekapLiburKalender;
 use App\Models\ShiftKaryawan;
+use App\Services\Hr\AbsensiPeriodeService;
 use App\Services\Hr\MonthlyAbsensiDataBuilder;
 use Carbon\Carbon;
 
@@ -52,6 +54,27 @@ class PayrollWorkingDaysService
     /**
      * @return array{mon_fri: int, mon_sat: int, dates: list<string>}
      */
+    /**
+     * @return array{start: string, end: string}
+     */
+    public static function periodBounds(string $periodeYm, ?string $grade = null): array
+    {
+        $range = AbsensiPeriodeService::resolveRange($periodeYm, $grade);
+
+        return ['start' => $range['start_ymd'], 'end' => $range['end_ymd']];
+    }
+
+    public static function calendarCountsForPeriod(string $periodeYm, ?string $grade = null): array
+    {
+        if (AbsensiPeriodeService::usesSupervisorPeriod($grade)) {
+            $bounds = self::periodBounds($periodeYm, $grade);
+
+            return AbsensiPeriodeService::calendarCountsForRange($bounds['start'], $bounds['end']);
+        }
+
+        return self::calendarCountsForMonth($periodeYm);
+    }
+
     public static function calendarCountsForMonth(string $periodeYm): array
     {
         $parts = explode('-', $periodeYm);
@@ -141,11 +164,27 @@ class PayrollWorkingDaysService
         return $count;
     }
 
-    public static function scheduledShiftCount(int $karyawanId, string $periodeYm): int
+    /** @return list<string> */
+    public static function perShiftCodes(): array
     {
-        $parts = explode('-', $periodeYm);
-        $start = sprintf('%s-%s-01', $parts[0] ?? '1970', $parts[1] ?? '01');
-        $end = date('Y-m-t', strtotime($start));
+        $codes = MasterShiftKaryawan::perShiftCodes();
+
+        return $codes !== [] ? $codes : self::PER_SHIFT_CODES;
+    }
+
+    /** @return list<string> */
+    public static function masukPerShiftCodes(): array
+    {
+        $codes = MasterShiftKaryawan::masukPerShiftCodes();
+
+        return $codes !== [] ? $codes : self::MASUK_PER_SHIFT_CODES;
+    }
+
+    public static function scheduledShiftCount(int $karyawanId, string $periodeYm, ?string $grade = null): int
+    {
+        $bounds = self::periodBounds($periodeYm, $grade);
+        $start = $bounds['start'];
+        $end = $bounds['end'];
 
         return (int) ShiftKaryawan::query()
             ->where('karyawan_id', $karyawanId)
@@ -153,25 +192,29 @@ class PayrollWorkingDaysService
             ->whereNotNull('shift')
             ->where('shift', '<>', '')
             ->where('shift', '<>', 'off')
-            ->whereIn('shift', self::PER_SHIFT_CODES)
+            ->whereIn('shift', self::perShiftCodes())
             ->count();
     }
 
     /**
      * Hari kerja expected per karyawan (dipanggil saat generate rekap masuk kerja).
      */
-    public static function expectedHariKerjaForKaryawan(int $karyawanId, ?int $idJabatan, string $periodeYm): int
-    {
-        $shiftCount = self::scheduledShiftCount($karyawanId, $periodeYm);
+    public static function expectedHariKerjaForKaryawan(
+        int $karyawanId,
+        ?int $idJabatan,
+        string $periodeYm,
+        ?string $grade = null
+    ): int {
+        $shiftCount = self::scheduledShiftCount($karyawanId, $periodeYm, $grade);
         if ($shiftCount > 0) {
             return $shiftCount;
         }
 
         if ($idJabatan !== null && in_array($idJabatan, self::jabatanIncludeSaturday(), true)) {
-            return count(self::eligibleWorkDateIndexForKaryawan($karyawanId, $periodeYm, $idJabatan));
+            return count(self::eligibleWorkDateIndexForKaryawan($karyawanId, $periodeYm, $idJabatan, null, $grade));
         }
 
-        $counts = self::calendarCountsForMonth($periodeYm);
+        $counts = self::calendarCountsForPeriod($periodeYm, $grade);
 
         return $counts['mon_fri'];
     }
@@ -181,12 +224,12 @@ class PayrollWorkingDaysService
      *
      * @return array<string, true>
      */
-    public static function eligibleWorkDateIndex(string $periodeYm, ?int $idJabatan): array
+    public static function eligibleWorkDateIndex(string $periodeYm, ?int $idJabatan, ?string $grade = null): array
     {
         $includeSaturday = $idJabatan !== null
             && in_array($idJabatan, self::jabatanIncludeSaturday(), true);
 
-        $counts = self::calendarCountsForMonth($periodeYm);
+        $counts = self::calendarCountsForPeriod($periodeYm, $grade);
         $index = [];
 
         foreach ($counts['dates'] as $ymd) {
@@ -202,9 +245,9 @@ class PayrollWorkingDaysService
             return $index;
         }
 
-        $parts = explode('-', $periodeYm);
-        $start = Carbon::createFromDate((int) ($parts[0] ?? date('Y')), (int) ($parts[1] ?? date('m')), 1);
-        $end = $start->copy()->endOfMonth();
+        $bounds = self::periodBounds($periodeYm, $grade);
+        $start = Carbon::parse($bounds['start'])->startOfDay();
+        $end = Carbon::parse($bounds['end'])->startOfDay();
 
         for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
             if ($day->dayOfWeekIso !== 6) {
@@ -227,15 +270,16 @@ class PayrollWorkingDaysService
         int $karyawanId,
         string $periodeYm,
         ?int $idJabatan,
-        ?iterable $rekapRows = null
+        ?iterable $rekapRows = null,
+        ?string $grade = null
     ): array {
-        $index = self::eligibleWorkDateIndex($periodeYm, $idJabatan);
+        $index = self::eligibleWorkDateIndex($periodeYm, $idJabatan, $grade);
 
         if ($idJabatan === null || !in_array($idJabatan, self::jabatanIncludeSaturday(), true)) {
             return $index;
         }
 
-        self::removeScheduledRestDaysFromIndex($index, $karyawanId, $periodeYm, $rekapRows);
+        self::removeScheduledRestDaysFromIndex($index, $karyawanId, $periodeYm, $rekapRows, $grade);
 
         return $index;
     }
@@ -248,11 +292,12 @@ class PayrollWorkingDaysService
         array &$index,
         int $karyawanId,
         string $periodeYm,
-        ?iterable $rekapRows = null
+        ?iterable $rekapRows = null,
+        ?string $grade = null
     ): void {
-        $parts = explode('-', $periodeYm);
-        $start = sprintf('%s-%s-01', $parts[0] ?? '1970', $parts[1] ?? '01');
-        $end = date('Y-m-t', strtotime($start));
+        $bounds = self::periodBounds($periodeYm, $grade);
+        $start = $bounds['start'];
+        $end = $bounds['end'];
 
         $shiftByDate = ShiftKaryawan::query()
             ->select('tanggal', 'shift')
@@ -288,9 +333,14 @@ class PayrollWorkingDaysService
 
     public static function isMasukPerShift(string $shift): bool
     {
-        $shift = trim($shift);
+        $shift = strtoupper(trim($shift));
+        if ($shift === '') {
+            return false;
+        }
 
-        return $shift !== '' && in_array($shift, self::MASUK_PER_SHIFT_CODES, true);
+        $codes = array_map('strtoupper', self::masukPerShiftCodes());
+
+        return in_array($shift, $codes, true);
     }
 
     /**
@@ -331,11 +381,12 @@ class PayrollWorkingDaysService
         iterable $rekapRows,
         ?int $idJabatan,
         string $periodeYm,
-        ?int $karyawanId = null
+        ?int $karyawanId = null,
+        ?string $grade = null
     ): array {
         $eligible = $karyawanId !== null
-            ? self::eligibleWorkDateIndexForKaryawan($karyawanId, $periodeYm, $idJabatan, $rekapRows)
-            : self::eligibleWorkDateIndex($periodeYm, $idJabatan);
+            ? self::eligibleWorkDateIndexForKaryawan($karyawanId, $periodeYm, $idJabatan, $rekapRows, $grade)
+            : self::eligibleWorkDateIndex($periodeYm, $idJabatan, $grade);
         $dates = [];
 
         foreach ($rekapRows as $data) {

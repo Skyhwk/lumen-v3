@@ -8,6 +8,8 @@ use App\Models\MesinAbsen;
 use App\Models\LogDoor;
 use App\Models\RfidCard;
 use App\Models\Absensi;
+use App\Models\MasterShiftKaryawan;
+use App\Services\Hr\ShiftAbsensiPunchRules;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Jobs\SendMqttAccess;
@@ -100,19 +102,23 @@ class MesinAbsenHandler extends BaseController
 
                                 $cekShift = DB::table('shift_karyawan')->where('tanggal', $waktu[0])->where('karyawan_id', $cekKarywan->karyawan->id)->first();
                                 if($cekShift != null){
-                                    if($cekShift->shift == 'SHSECURITY2'){
-                                        $shift = 'Keluar';
-                                        if($jam >= '18:00:00' )$shift = "Masuk";
+                                    if (MasterShiftKaryawan::isNightShift($cekShift->shift, $cekShift->time_in ?? null, $cekShift->time_out ?? null)) {
+                                        $shift = ShiftAbsensiPunchRules::inferProductionStatus($cekShift->shift, $jam, $cekShift->time_in ?? null, $cekShift->time_out ?? null);
                                     }
-                                    if($cekShift->shift == 'off'){
-                                        $minus =  DATE('Y-m-d', strtotime($waktu[0]. '-1day'));
-                                        $cekShift_ = DB::table('shift_karyawan')->where('tanggal', $minus)->where('userid', $cekKarywan->karyawan->id)->first();
-                                        
-                                        if($cekShift_->shift == 'SHSECURITY2'){
-                                            if($jam <= '10:00:00' )$shift = "Keluar";
+                                    if (strtolower(trim((string) $cekShift->shift)) === 'off') {
+                                        $minus = DATE('Y-m-d', strtotime($waktu[0] . '-1day'));
+                                        $cekShift_ = DB::table('shift_karyawan')->where('tanggal', $minus)->where('karyawan_id', $cekKarywan->karyawan->id)->first();
+
+                                        if ($cekShift_ !== null && MasterShiftKaryawan::isOvernight($cekShift_->shift, $cekShift_->time_in ?? null, $cekShift_->time_out ?? null)) {
+                                            $bounds = MasterShiftKaryawan::resolveNightShiftBounds($cekShift_->shift, $cekShift_->time_in ?? null, $cekShift_->time_out ?? null);
+                                            if ($jam <= $bounds['keluar_before']) {
+                                                $shift = 'Keluar';
+                                            }
                                         } else {
                                             $shift = 'Masuk';
-                                            if($jam >= '14:00:00' )$shift = "Masuk";
+                                            if ($jam >= '14:00:00') {
+                                                $shift = 'Masuk';
+                                            }
                                         }
                                     }
                                 }
@@ -487,19 +493,23 @@ class MesinAbsenHandler extends BaseController
                         $cekShift = DB::table('shift_karyawan')->where('tanggal', $tanggal)->where('karyawan_id', $karyawan->id)->first();
                         
                         if($cekShift != null){
-                            if($cekShift->shift == 'SHSECURITY2'){
-                                $shift = 'Keluar';
-                                if($jam >= '18:00:00' )$shift = "Masuk";
+                            if (MasterShiftKaryawan::isNightShift($cekShift->shift, $cekShift->time_in ?? null, $cekShift->time_out ?? null)) {
+                                $shift = ShiftAbsensiPunchRules::inferProductionStatus($cekShift->shift, $jam, $cekShift->time_in ?? null, $cekShift->time_out ?? null);
                             }
-                            if($cekShift->shift == 'off'){
-                                $minus =  DATE('Y-m-d', strtotime($tanggal. '-1day'));
-                                $cekShift_ = DB::table('shift_karyawan')->where('tanggal', $minus)->where('userid', $karyawan->id)->first();
-                                
-                                if($cekShift_->shift == 'SHSECURITY2'){
-                                    if($jam <= '10:00:00' )$shift = "Keluar";
+                            if (strtolower(trim((string) $cekShift->shift)) === 'off') {
+                                $minus = DATE('Y-m-d', strtotime($tanggal . '-1day'));
+                                $cekShift_ = DB::table('shift_karyawan')->where('tanggal', $minus)->where('karyawan_id', $karyawan->id)->first();
+
+                                if ($cekShift_ !== null && MasterShiftKaryawan::isOvernight($cekShift_->shift, $cekShift_->time_in ?? null, $cekShift_->time_out ?? null)) {
+                                    $bounds = MasterShiftKaryawan::resolveNightShiftBounds($cekShift_->shift, $cekShift_->time_in ?? null, $cekShift_->time_out ?? null);
+                                    if ($jam <= $bounds['keluar_before']) {
+                                        $shift = 'Keluar';
+                                    }
                                 } else {
                                     $shift = 'Masuk';
-                                    if($jam >= '14:00:00' )$shift = "Masuk";
+                                    if ($jam >= '14:00:00') {
+                                        $shift = 'Masuk';
+                                    }
                                 }
                             }
                         }

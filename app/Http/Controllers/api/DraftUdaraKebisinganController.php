@@ -43,7 +43,7 @@ class DraftUdaraKebisinganController extends Controller
     // id regulasi untuk template lh
     private $lh_ids = [
         "46", "54", "151", "167", "168",
-        "382", "1321", "1672", "1740", "1786"
+        "382", "1321", "1672", "1740", "1786", "1981", "1950"
     ];
 
     // done if status = 2
@@ -410,7 +410,7 @@ class DraftUdaraKebisinganController extends Controller
             if (in_array($id_regulasii, $this->lh_ids)) {
 
                 $master_regulasi = MasterRegulasi::find($id_regulasii);
-                if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {
+                if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH' || $master_regulasi->deskripsi == 'Kebisingan') {
                     $fileName = LhpTemplate::setDataDetail($detail)
                         ->setDataHeader($dataHeader)
                         ->setDataCustom($custom)
@@ -482,12 +482,22 @@ class DraftUdaraKebisinganController extends Controller
 
             // Mapping data ke array associative
             $mappedData = $kebisinganData->map(function ($val) {
+                $lokasiKeterangan = function ($value) {
+                    if ($value === null) {
+                        return null;
+                    }
+                    $value = trim((string) $value);
+                    if ($value === '' || $value === '-') {
+                        return null;
+                    }
+                    return $value;
+                };
+
                 $tanggal_sampling = OrderDetail::where('no_sampel', $val->no_sampel)->where('is_active', 1)->first()->tanggal_sampling;
                 return [
-                    'lokasi_keterangan' => $val->data_lapangan->lokasi_titik_sampling
-                        ?? $val->data_lapangan->keterangan
-                        ?? $val->data_lapangan_personal->keterangan
-                        ?? null,
+                    'lokasi_keterangan' => $lokasiKeterangan($val->data_lapangan->informasi_tambahan)
+                        ?? $lokasiKeterangan($val->data_lapangan->keterangan)
+                        ?? $lokasiKeterangan($val->data_lapangan_personal->keterangan),
                     'paparan'          => $val->data_lapangan->jam_pemaparan
                         ?? $val->data_lapangan_personal->waktu_pengukuran
                         ?? null,

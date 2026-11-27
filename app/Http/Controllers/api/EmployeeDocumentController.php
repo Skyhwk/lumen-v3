@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AsetKaryawan;
 use App\Models\EmployeeDocument;
 use App\Models\MasterKaryawan;
 use App\Models\MasterSallary;
@@ -111,7 +112,7 @@ class EmployeeDocumentController extends Controller
     {
         $this->validate($request, [
             'karyawan_id' => 'required|integer',
-            'document_type' => 'required|string|max:50',
+            'document_type' => 'nullable|string|max:50',
         ]);
 
         if (!$request->hasFile('file')) {
@@ -243,6 +244,18 @@ class EmployeeDocumentController extends Controller
             return response()->json([
                 'message' => 'Data gaji aktif belum ada. Jangka waktu Perjanjian disimpan pada data gaji.',
             ], 422);
+        }
+
+        if (Schema::hasTable('aset_karyawan')) {
+            $hasAset = AsetKaryawan::where('master_karyawan_id', $karyawan->id)
+                ->where('is_active', true)
+                ->exists();
+
+            if (!$hasAset) {
+                return response()->json([
+                    'message' => 'Data aset karyawan belum ada. Lengkapi aset karyawan terlebih dahulu sebelum membuat dokumen.',
+                ], 422);
+            }
         }
 
         $salary->satuan_jangka_waktu = $request->satuan_jangka_waktu;

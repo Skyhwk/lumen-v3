@@ -1413,7 +1413,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                 // 🔹 CEK HEADER
                 foreach ($headerMap as $field => $model) {
                     if ($wsUdara->$field) {
-                        $valid = $model::where('id', $wsUdara->$field)->where('parameter', $request->parameter)->exists();
+                        $valid = $model::where('id', $wsUdara->$field)->where('parameter', $request->parameter)->where('is_active', 1)->exists();
                         if ($valid) {
                             for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
                                 $wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;

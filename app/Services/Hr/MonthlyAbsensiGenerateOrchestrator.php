@@ -25,11 +25,7 @@ class MonthlyAbsensiGenerateOrchestrator
 
     public function resolveTargetBulanYm(?string $asOfYmd = null): string
     {
-        $asOf = $asOfYmd !== null && $asOfYmd !== ''
-            ? Carbon::parse($asOfYmd, 'Asia/Jakarta')
-            : Carbon::now('Asia/Jakarta');
-
-        return $asOf->startOfMonth()->subMonth()->format('Y-m');
+        return AbsensiPeriodeService::resolveTargetBulanYmStaff($asOfYmd);
     }
 
     public function hasActiveRekap(int $karyawanId, string $bulanYm): bool
@@ -128,15 +124,23 @@ class MonthlyAbsensiGenerateOrchestrator
             throw new \RuntimeException('Kalender hari kerja belum di set untuk tahun ' . $tahun . '.');
         }
 
-        $karyawanMeta = MasterKaryawan::select('id_jabatan')->find($karyawanId);
+        $karyawanMeta = MasterKaryawan::select('id_jabatan', 'grade')->find($karyawanId);
         $idJabatan = $karyawanMeta ? (int) $karyawanMeta->id_jabatan : null;
+        $grade = $karyawanMeta ? (string) ($karyawanMeta->grade ?? '') : null;
 
-        $masukKerja = PayrollWorkingDaysService::collectMasukKerjaDates($rekapRows, $idJabatan, $bulanYm, $karyawanId);
+        $masukKerja = PayrollWorkingDaysService::collectMasukKerjaDates(
+            $rekapRows,
+            $idJabatan,
+            $bulanYm,
+            $karyawanId,
+            $grade
+        );
 
         $hariKerjaExpected = PayrollWorkingDaysService::expectedHariKerjaForKaryawan(
             $karyawanId,
             $idJabatan,
-            $bulanYm
+            $bulanYm,
+            $grade
         );
 
         RekapMasukKerja::insert([
@@ -158,14 +162,22 @@ class MonthlyAbsensiGenerateOrchestrator
      */
     public function previewRekapMetrics(int $karyawanId, string $bulanYm, array $rekapRows): array
     {
-        $karyawanMeta = MasterKaryawan::select('id_jabatan')->find($karyawanId);
+        $karyawanMeta = MasterKaryawan::select('id_jabatan', 'grade')->find($karyawanId);
         $idJabatan = $karyawanMeta ? (int) $karyawanMeta->id_jabatan : null;
+        $grade = $karyawanMeta ? (string) ($karyawanMeta->grade ?? '') : null;
 
-        $masukKerja = PayrollWorkingDaysService::collectMasukKerjaDates($rekapRows, $idJabatan, $bulanYm, $karyawanId);
+        $masukKerja = PayrollWorkingDaysService::collectMasukKerjaDates(
+            $rekapRows,
+            $idJabatan,
+            $bulanYm,
+            $karyawanId,
+            $grade
+        );
         $hariKerjaExpected = PayrollWorkingDaysService::expectedHariKerjaForKaryawan(
             $karyawanId,
             $idJabatan,
-            $bulanYm
+            $bulanYm,
+            $grade
         );
         $masukCount = count($masukKerja);
 
@@ -187,12 +199,35 @@ class MonthlyAbsensiGenerateOrchestrator
      *     details: list<array<string, mixed>>
      * }
      */
-    public function generateForStaffSupervisor(string $bulanYm, bool $skipExisting = true, bool $dryRun = false): array
-    {
+    /**
+     * @param  string|null  $bulanYm  Override eksplisit untuk semua grade (opsi --bulan)
+     * @param  string|null  $asOfYmd  Acuan WIB bila bulanYm null (staff vs SPV boleh beda)
+     * @param  string|null  $gradeFilter  STAFF|SUPERVISOR — batasi satu grade
+     */
+    public function generateForStaffSupervisor(
+        ?string $bulanYm = null,
+        bool $skipExisting = true,
+        bool $dryRun = false,
+        ?string $asOfYmd = null,
+        ?string $gradeFilter = null
+    ): array {
+        $grades = self::GRADES_AUTO_GENERATE;
+        $normalizedFilter = $gradeFilter !== null && $gradeFilter !== ''
+            ? AbsensiPeriodeService::normalizeGrade($gradeFilter)
+            : null;
+        if ($normalizedFilter !== null) {
+            $grades = in_array($normalizedFilter, self::GRADES_AUTO_GENERATE, true)
+                ? [$normalizedFilter]
+                : [];
+        }
+
+        $bulanStaff = $bulanYm ?? AbsensiPeriodeService::resolveTargetBulanYmStaff($asOfYmd);
+        $bulanSupervisor = $bulanYm ?? AbsensiPeriodeService::resolveTargetBulanYmSupervisor($asOfYmd);
+
         $employees = MasterKaryawan::query()
             ->select('id', 'nik_karyawan', 'nama_lengkap', 'grade')
             ->where('is_active', true)
-            ->whereIn('grade', self::GRADES_AUTO_GENERATE)
+            ->whereIn('grade', $grades)
             ->orderBy('id')
             ->get();
 
@@ -209,8 +244,12 @@ class MonthlyAbsensiGenerateOrchestrator
         foreach ($employees as $employee) {
             $summary['processed']++;
             $karyawanId = (int) $employee->id;
+            $employeeGrade = (string) ($employee->grade ?? '');
+            $bulanForEmployee = AbsensiPeriodeService::usesSupervisorPeriod($employeeGrade)
+                ? $bulanSupervisor
+                : $bulanStaff;
 
-            if ($skipExisting && $this->hasActiveRekap($karyawanId, $bulanYm)) {
+            if ($skipExisting && $this->hasActiveRekap($karyawanId, $bulanForEmployee)) {
                 $summary['skipped']++;
                 $summary['details'][] = [
                     'karyawan_id' => $karyawanId,
@@ -224,7 +263,7 @@ class MonthlyAbsensiGenerateOrchestrator
             }
 
             try {
-                $rows = $this->builder->buildForKaryawan($karyawanId, $bulanYm);
+                $rows = $this->builder->buildForKaryawan($karyawanId, $bulanForEmployee);
                 if ($rows === []) {
                     $summary['failed']++;
                     $summary['details'][] = [
@@ -241,7 +280,7 @@ class MonthlyAbsensiGenerateOrchestrator
                 $payload = $this->buildPayloadFromRows($rows);
 
                 if ($dryRun) {
-                    $metrics = $this->previewRekapMetrics($karyawanId, $bulanYm, $payload['data']);
+                    $metrics = $this->previewRekapMetrics($karyawanId, $bulanForEmployee, $payload['data']);
                     $summary['would_generate']++;
                     $summary['details'][] = [
                         'karyawan_id' => $karyawanId,
@@ -257,19 +296,19 @@ class MonthlyAbsensiGenerateOrchestrator
                     continue;
                 }
 
-                $generated = DB::transaction(function () use ($karyawanId, $bulanYm, $payload, $skipExisting) {
+                $generated = DB::transaction(function () use ($karyawanId, $bulanForEmployee, $payload, $skipExisting) {
                     // Lock a row that exists even before the first monthly rekap.
                     // Concurrent automatic commands wait here, then recheck.
                     $employee = MasterKaryawan::where('id', $karyawanId)->lockForUpdate()->first();
                     if (!$employee) {
                         throw new \RuntimeException('Karyawan tidak ditemukan.');
                     }
-                    if ($skipExisting && $this->hasActiveRekap($karyawanId, $bulanYm)) {
+                    if ($skipExisting && $this->hasActiveRekap($karyawanId, $bulanForEmployee)) {
                         return false;
                     }
                     $this->persistGenerate(
                         $karyawanId,
-                        $bulanYm,
+                        $bulanForEmployee,
                         // Generate (cron & portal) hanya rekap; ubah punch via Update / koreksi HRD.
                         null,
                         $payload['data'],
@@ -310,7 +349,7 @@ class MonthlyAbsensiGenerateOrchestrator
 
                 Log::error('absensi:generate-monthly gagal per karyawan', [
                     'karyawan_id' => $karyawanId,
-                    'bulan' => $bulanYm,
+                    'bulan' => $bulanForEmployee,
                     'error' => $e->getMessage(),
                 ]);
             }
@@ -355,10 +394,13 @@ class MonthlyAbsensiGenerateOrchestrator
             return;
         }
 
-        $start = $bulanYm . '-01';
-        $end = date('Y-m-t', strtotime($start));
+        $karyawan = MasterKaryawan::select('grade')->find($karyawanId);
+        $bounds = PayrollWorkingDaysService::periodBounds(
+            $bulanYm,
+            $karyawan ? (string) ($karyawan->grade ?? '') : null
+        );
         $existing = Absensi::where('karyawan_id', $karyawanId)
-            ->whereBetween('tanggal', [$start, date('Y-m-d', strtotime($end . ' +1 day'))])
+            ->whereBetween('tanggal', [$bounds['start'], date('Y-m-d', strtotime($bounds['end'] . ' +1 day'))])
             ->get(['id', 'tanggal', 'status']);
 
         $insertRows = [];
@@ -393,7 +435,7 @@ class MonthlyAbsensiGenerateOrchestrator
                     $keepBySlot['Keluar|' . $dataAbsen->tgl_keluar] = $idKeluar;
                 } else {
                     $tanggal = $dataAbsen->tgl;
-                    if ($dataAbsen->shift == 'SHSECURITY2' || $dataAbsen->shift == '24jam') {
+                    if (\App\Models\MasterShiftKaryawan::isOvernight($dataAbsen->shift ?? null)) {
                         $tanggal = date('Y-m-d', strtotime($dataAbsen->tgl . ' +1 day'));
                     }
                     $insertRows[] = [

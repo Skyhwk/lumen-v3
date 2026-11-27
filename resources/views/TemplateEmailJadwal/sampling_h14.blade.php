@@ -147,10 +147,10 @@
           <tr>
             <td class="pad dm-white" bgcolor="#ffffff" style="padding:26px 28px 30px;background-color:#ffffff;color:#1f2937;">
 
-              <p class="dm-text" style="margin:0 0 12px;font-size:16px;color:#1f2937;">Yth. Bapak/Ibu {{ $greetingName }},</p>
+              <p class="dm-text" style="margin:0 0 12px;font-size:16px;color:#1f2937;">Yth. {{ $greetingName }},</p>
               <p class="dm-text" style="margin:0 0 12px;font-size:16px;color:#1f2937;">Dengan Hormat,</p>
               <p class="dm-text" style="margin:0 0 20px;font-size:16px;color:#1f2937;">
-              Melalui email ini,kami menginformasikan kembali bahwa kegiatan pengambilan sampel (sampling) di perusahaan Bapak/Ibu akan dilaksanakan sesuai dengan jadwal yang tercantum di bawah ini.
+              Melalui email ini, kami ingin mengingatkan kembali bahwa kegiatan pengambilan sampel (sampling) akan dilaksanakan sesuai dengan jadwal yang telah ditetapkan, sebagaimana tercantum dalam rincian berikut
               </p>
 
               {{-- 1. Informasi Pesanan (gaya klasik portal) --}}
@@ -170,11 +170,6 @@
                         <td style="{{ $classicVal }}">{{ $payload['no_penawaran'] ?? ($payload['no_quotation'] ?: '-') }}</td>
                       </tr>
                       <tr>
-                        <td style="{{ $classicLbl }}">Tanggal Order</td>
-                        <td style="{{ $classicColon }}">:</td>
-                        <td style="{{ $classicVal }}">{{ $payload['tanggal_order_label'] ?? '-' }}</td>
-                      </tr>
-                      <tr>
                         <td style="{{ $classicLbl }}">Nama Perusahaan</td>
                         <td style="{{ $classicColon }}">:</td>
                         <td style="{{ $classicVal }}">{{ $payload['nama_perusahaan'] ?: '-' }}</td>
@@ -190,23 +185,14 @@
                         $picOrderNo = trim((string) ($payload['pic_order']['no'] ?? ''));
                         $picSamplingNama = trim((string) ($payload['pic_sampling']['nama'] ?? ''));
                         $picSamplingNo = trim((string) ($payload['pic_sampling']['no'] ?? ''));
+                        // Hanya pecah label PIC Order / PIC Sampling jika keduanya ada & berbeda.
+                        $showDualPic = !$samePic && $picOrderNama !== '' && $picSamplingNama !== '';
                       @endphp
-                      @if($samePic || ($picOrderNama !== '' && $picSamplingNama === ''))
+                      @if($showDualPic)
                         <tr>
                           <td style="{{ $classicLbl }}">PIC Order</td>
                           <td style="{{ $classicColon }}">:</td>
-                          <td style="{{ $classicVal }}">{{ $picOrderNama !== '' ? $picOrderNama : '-' }}</td>
-                        </tr>
-                        <tr>
-                          <td style="{{ $classicLbl }}">No. Telepon</td>
-                          <td style="{{ $classicColon }}">:</td>
-                          <td style="{{ $classicVal }}">{{ $picOrderNo !== '' ? $picOrderNo : '-' }}</td>
-                        </tr>
-                      @else
-                        <tr>
-                          <td style="{{ $classicLbl }}">PIC Order</td>
-                          <td style="{{ $classicColon }}">:</td>
-                          <td style="{{ $classicVal }}">{{ $picOrderNama !== '' ? $picOrderNama : '-' }}</td>
+                          <td style="{{ $classicVal }}">{{ $picOrderNama }}</td>
                         </tr>
                         <tr>
                           <td style="{{ $classicLbl }}">No. Telepon PIC Order</td>
@@ -216,12 +202,23 @@
                         <tr>
                           <td style="{{ $classicLbl }}">PIC Sampling</td>
                           <td style="{{ $classicColon }}">:</td>
-                          <td style="{{ $classicVal }}">{{ $picSamplingNama !== '' ? $picSamplingNama : '-' }}</td>
+                          <td style="{{ $classicVal }}">{{ $picSamplingNama }}</td>
                         </tr>
                         <tr>
                           <td style="{{ $classicLbl }}">No. Telepon PIC Sampling</td>
                           <td style="{{ $classicColon }}">:</td>
                           <td style="{{ $classicVal }}">{{ $picSamplingNo !== '' ? $picSamplingNo : '-' }}</td>
+                        </tr>
+                      @else
+                        <tr>
+                          <td style="{{ $classicLbl }}">PIC</td>
+                          <td style="{{ $classicColon }}">:</td>
+                          <td style="{{ $classicVal }}">{{ $picOrderNama !== '' ? $picOrderNama : ($picSamplingNama !== '' ? $picSamplingNama : '-') }}</td>
+                        </tr>
+                        <tr>
+                          <td style="{{ $classicLbl }}">No. Telepon</td>
+                          <td style="{{ $classicColon }}">:</td>
+                          <td style="{{ $classicVal }}">{{ $picOrderNo !== '' ? $picOrderNo : ($picSamplingNo !== '' ? $picSamplingNo : '-') }}</td>
                         </tr>
                       @endif
                     </table>
@@ -243,15 +240,9 @@
                         <td style="{{ $classicVal }}"><strong>{{ $payload['tanggal_label'] ?: '-' }}</strong></td>
                       </tr>
                       <tr>
-                        <td style="{{ $classicLbl }}">Jam</td>
+                        <td style="{{ $classicLbl }}">Jam Mulai</td>
                         <td style="{{ $classicColon }}">:</td>
-                        <td style="{{ $classicVal }}">
-                          @if(!empty($payload['jam_mulai']) && !empty($payload['jam_selesai']) && $payload['jam_selesai'] !== '-')
-                            {{ $payload['jam_mulai'] }} s/d {{ $payload['jam_selesai'] }}
-                          @else
-                            {{ $payload['jam_range_label'] ?? ($payload['jam_mulai'] ?: '-') }}
-                          @endif
-                        </td>
+                        <td style="{{ $classicVal }}">{{ !empty($payload['jam_mulai']) ? $payload['jam_mulai'] : '-' }}</td>
                       </tr>
                       <tr>
                         <td style="{{ $classicLbl }}">Durasi</td>
@@ -259,40 +250,32 @@
                         <td style="{{ $classicVal }}">{{ $payload['durasi_label'] ?: '-' }}</td>
                       </tr>
                       <tr>
-                        <td style="{{ $classicLbl }}">Petugas</td>
-                        <td style="{{ $classicColon }}">:</td>
+                        <td style="{{ $classicLbl }}vertical-align:top;">Petugas</td>
+                        <td style="{{ $classicColon }}vertical-align:top;">:</td>
                         <td style="{{ $classicVal }}">
                           @if(empty($payload['sampler_list']))
                             -
                           @else
-                            {{ implode(', ', $payload['sampler_list']) }}
+                            @foreach($payload['sampler_list'] as $sampler)
+                              <div style="margin:0 0 2px;">- {{ $sampler }}</div>
+                            @endforeach
+                          @endif
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="{{ $classicLbl }}vertical-align:top;">Kategori</td>
+                        <td style="{{ $classicColon }}vertical-align:top;">:</td>
+                        <td style="{{ $classicVal }}">
+                          @if(empty($payload['kategori_summary']))
+                            -
+                          @else
+                            @foreach($payload['kategori_summary'] as $kat)
+                              <div style="margin:0 0 2px;">- {{ $kat['nama'] }} {{ '('. $kat['count'] . ' titik)' }}</div>
+                            @endforeach
                           @endif
                         </td>
                       </tr>
                     </table>
-                    
-
-                    <div style="margin-top:18px;padding-top:14px;border-top:1px solid #E5E7EB;">
-                      <div class="dm-title" style="margin:0 0 10px;font-size:14px;font-weight:700;color:#111827;">Kategori yang akan diambil</div>
-                      @if(empty($payload['kategori_summary']))
-                        <p class="dm-muted" style="{{ $empty }}">Belum ada data kategori.</p>
-                      @else
-                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="border:1px solid #E5E7EB;border-radius:8px;border-collapse:separate;border-spacing:0;overflow:hidden;width:100%;background-color:#ffffff;">
-                          <tr>
-                            <td width="12%" class="dm-blue" bgcolor="#0304EC" style="{{ $th }}text-align:center;white-space:nowrap;">No</td>
-                            <td width="68%" class="dm-blue" bgcolor="#0304EC" style="{{ $th }}white-space:nowrap;">Kategori</td>
-                            <td width="20%" class="dm-blue" bgcolor="#0304EC" style="{{ $th }}text-align:center;white-space:nowrap;">Jumlah</td>
-                          </tr>
-                          @foreach($payload['kategori_summary'] as $i => $kat)
-                            <tr>
-                              <td width="12%" class="dm-muted" bgcolor="#ffffff" style="{{ $cell }}text-align:center;color:#475569;white-space:nowrap;">{{ $i + 1 }}</td>
-                              <td width="68%" class="dm-text" bgcolor="#ffffff" style="{{ $cell }}">{{ $kat['nama'] }}</td>
-                              <td width="20%" class="dm-text" bgcolor="#ffffff" style="{{ $cell }}text-align:center;white-space:nowrap;"><strong>{{ $kat['count'] }}</strong></td>
-                            </tr>
-                          @endforeach
-                        </table>
-                      @endif
-                    </div>
                     <p class="dm-muted" style="margin:12px 0 0;font-size:12px;font-style:italic;color:#6b7280;">
                       *Petugas dapat berubah sewaktu-waktu sesuai kondisi lapangan
                     </p>
@@ -300,8 +283,7 @@
                 </tr>
               </table>
 
-              <h3 class="dm-title" style="{{ $sectionTitle }}">Ada pertanyaan?</h3>
-              <p class="dm-text" style="margin:0 0 12px;font-size:15px;color:#1f2937;">
+              <p class="dm-text" style="margin:10px 0 12px;font-size:15px;color:#1f2937;">
                 Apabila terdapat pertanyaan, konfirmasi penjadwalan, atau hal lain yang ingin didiskusikan, Bapak/Ibu dapat menghubungi kami melalui:<br>
                 <strong>{{ $salesName }}</strong> ({{ $salesKontak }})
               </p>

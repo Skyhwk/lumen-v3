@@ -8,6 +8,7 @@ use App\Models\Rfid;
 use App\Models\MasterDivisi;
 use App\Models\MasterJabatan;
 use App\Models\MasterKaryawan;
+use App\Models\MasterShiftKaryawan;
 use App\Models\ShiftKaryawan;
 use App\Models\RekapLiburKalender;
 use App\Models\Greatday\AbsensiAndroid;
@@ -180,13 +181,14 @@ class AbsensiController extends Controller
                             ->first();
 
                         if ($gen != null) {
-                            if ($gen->masuk < '08:00:00') {
+                            $regularIn = MasterShiftKaryawan::getShiftTimes('SHREGULAR')['in_hms'];
+                            if ($gen->masuk < $regularIn) {
                                 // Calculate difference when arriving early
-                                $selisih_masuk = date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' 08:00:00'));
+                                $selisih_masuk = date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' ' . $regularIn));
                                 $masuk = '+' . (int) (($selisih_masuk->h * 3600 + $selisih_masuk->i * 60 + $selisih_masuk->s) / 60) . 'm';
                             } else {
                                 // Calculate difference when arriving late
-                                $selisih_masuk = date_diff(date_create($gen->tanggal . ' 08:00:00'), date_create($gen->tanggal . ' ' . $gen->masuk));
+                                $selisih_masuk = date_diff(date_create($gen->tanggal . ' ' . $regularIn), date_create($gen->tanggal . ' ' . $gen->masuk));
                                 $masuk = '-' . (int) (($selisih_masuk->h * 3600 + $selisih_masuk->i * 60 + $selisih_masuk->s) / 60) . 'm';
                             }
 
@@ -248,21 +250,15 @@ class AbsensiController extends Controller
                 ], 404);
             }
 
-            $month = $periode['month'];
-            $year = $periode['year'];
-            $lastDay = self::daysInMonth((int) $month, (int) $year);
-
-            $data = self::buildMonthlyAbsensiData(
-                $cekKaryawan->id,
-                $year,
-                $month,
-                $lastDay,
-                $cekKaryawan->nik_karyawan,
-                $cekKaryawan->nama_lengkap
+            $bulanYm = sprintf('%s-%s', $periode['year'], str_pad((string) $periode['month'], 2, '0', STR_PAD_LEFT));
+            $data = (new MonthlyAbsensiDataBuilder())->buildForKaryawan(
+                (int) $cekKaryawan->id,
+                $bulanYm,
+                false
             );
 
             return response()->json([
-                'data' => $data
+                'data' => $data,
             ], 200);
         }
     }
@@ -277,7 +273,11 @@ class AbsensiController extends Controller
             return $this->buildLiburAbsensiRow($nik_karyawan, $nama_lengkap, $tanggalKey);
         }
 
-        if ($shift == '24jam') {
+        $resolvedTimes = MasterShiftKaryawan::getShiftTimes((string) ($shift ?: 'SHREGULAR'));
+        $checkin = MasterShiftKaryawan::normalizeHm($checkin) ? (MasterShiftKaryawan::normalizeHm($checkin) . ':00') : $resolvedTimes['in_hms'];
+        $checkout = MasterShiftKaryawan::normalizeHm($checkout) ? (MasterShiftKaryawan::normalizeHm($checkout) . ':00') : $resolvedTimes['out_hms'];
+
+        if (MasterShiftKaryawan::is24Jam($shift)) {
             $plus = DATE('Y-m-d', strtotime($tanggal . '+1day'));
 
             $gen = DB::select("select master_karyawan.nik_karyawan, master_karyawan.nama_lengkap, absensi.tanggal, MIN(jam) as masuk, CASE WHEN (SELECT min(jam) from absensi WHERE absensi.tanggal = '$plus' AND absensi.karyawan_id = '$id' group by absensi.tanggal) < '14:00:00' THEN (SELECT min(jam) from absensi WHERE absensi.tanggal = '$plus' AND absensi.karyawan_id = '$id' group by absensi.tanggal) ELSE '' END as keluar FROM absensi LEFT JOIN master_karyawan ON absensi.absensi.karyawan_id = master_karyawan.id WHERE absensi.tanggal = '$tanggal' AND absensi.karyawan_id = '$id' GROUP BY absensi.tanggal;");
@@ -319,10 +319,13 @@ class AbsensiController extends Controller
                     'shift' => '24JAM'
                 ];
             }
-        } else if ($shift == 'SHSECURITY2') {
+        } else if (MasterShiftKaryawan::isNightShift($shift, $checkin, $checkout)) {
             $plus = DATE('Y-m-d', strtotime($tanggal . '+1day'));
+            $nightBounds = MasterShiftKaryawan::resolveNightShiftBounds($shift, $checkin, $checkout);
+            $keluarBefore = $nightBounds['keluar_before'];
+            $shiftLabel = strtoupper(trim((string) $shift));
 
-            $gen = DB::select("select master_karyawan.nik_karyawan, master_karyawan.nama_lengkap, absensi.tanggal, MAX(jam) as masuk, CASE WHEN (SELECT min(jam) from absensi WHERE absensi.tanggal = '$plus' AND absensi.karyawan_id = '$id' group by absensi.tanggal) < '14:00:00' THEN (SELECT min(jam) from absensi WHERE absensi.tanggal = '$plus' AND absensi.karyawan_id = '$id' group by absensi.tanggal) ELSE '' END as keluar FROM absensi LEFT JOIN master_karyawan ON absensi.karyawan_id = master_karyawan.id WHERE absensi.tanggal = '$tanggal' AND absensi.karyawan_id = '$id' GROUP BY absensi.tanggal");
+            $gen = DB::select("select master_karyawan.nik_karyawan, master_karyawan.nama_lengkap, absensi.tanggal, MAX(jam) as masuk, CASE WHEN (SELECT min(jam) from absensi WHERE absensi.tanggal = '$plus' AND absensi.karyawan_id = '$id' group by absensi.tanggal) < '$keluarBefore' THEN (SELECT min(jam) from absensi WHERE absensi.tanggal = '$plus' AND absensi.karyawan_id = '$id' group by absensi.tanggal) ELSE '' END as keluar FROM absensi LEFT JOIN master_karyawan ON absensi.karyawan_id = master_karyawan.id WHERE absensi.tanggal = '$tanggal' AND absensi.karyawan_id = '$id' GROUP BY absensi.tanggal");
 
             if ($gen != null) {
                 $gen = $gen[0];
@@ -341,7 +344,7 @@ class AbsensiController extends Controller
                 }
                 $waktu_masuk = $gen->masuk;
                 $masuk_ = $masuk;
-                if ($gen->masuk <= '14:00:00') {
+                if ($gen->masuk <= $keluarBefore) {
                     $waktu_masuk = '';
                     $masuk_ = '';
                     $total_jam_kerja = '';
@@ -355,7 +358,7 @@ class AbsensiController extends Controller
                     'keluar' => $gen->keluar,
                     'selisih' => $masuk_,
                     'jam_kerja' => $total_jam_kerja,
-                    'shift' => 'SHSECURITY2'
+                    'shift' => $shiftLabel
                 ];
             } else {
                 $data = [
@@ -366,7 +369,7 @@ class AbsensiController extends Controller
                     'keluar' => '',
                     'selisih' => '',
                     'jam_kerja' => '',
-                    'shift' => 'SHSECURITY2'
+                    'shift' => $shiftLabel
                 ];
             }
         } else if (MonthlyAbsensiDataBuilder::isRestDayShift($shift)) {
@@ -494,9 +497,10 @@ class AbsensiController extends Controller
                         ->first();
 
                     if ($gen) {
-                        $masuk = ($gen->masuk < '08:00:00')
-                            ? '+' . (int) (\date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' 08:00:00'))->h * 60 + \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' 08:00:00'))->i)
-                            : '-' . (int) (\date_diff(date_create($gen->tanggal . ' 08:00:00'), date_create($gen->tanggal . ' ' . $gen->masuk))->h * 60 + \date_diff(date_create($gen->tanggal . ' 08:00:00'), date_create($gen->tanggal . ' ' . $gen->masuk))->i);
+                        $regularIn = MasterShiftKaryawan::getShiftTimes('SHREGULAR')['in_hms'];
+                        $masuk = ($gen->masuk < $regularIn)
+                            ? '+' . (int) (\date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' ' . $regularIn))->h * 60 + \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' ' . $regularIn))->i)
+                            : '-' . (int) (\date_diff(date_create($gen->tanggal . ' ' . $regularIn), date_create($gen->tanggal . ' ' . $gen->masuk))->h * 60 + \date_diff(date_create($gen->tanggal . ' ' . $regularIn), date_create($gen->tanggal . ' ' . $gen->masuk))->i);
 
                         $total_jam_kerja = ($gen->keluar)
                             ? \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' ' . $gen->keluar))->h . 'h ' . \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' ' . $gen->keluar))->i . 'm'
@@ -571,11 +575,12 @@ class AbsensiController extends Controller
                             ->groupBy('absensi.tanggal', 'absensi.karyawan_id')
                             ->first();
                         if ($gen != null) {
-                            if ($gen->masuk < '08:00:00') {
-                                $selisih_masuk = \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' 08:00:00'));
+                            $regularIn = MasterShiftKaryawan::getShiftTimes('SHREGULAR')['in_hms'];
+                            if ($gen->masuk < $regularIn) {
+                                $selisih_masuk = \date_diff(date_create($gen->tanggal . ' ' . $gen->masuk), date_create($gen->tanggal . ' ' . $regularIn));
                                 $masuk = '+' . (int) ((($selisih_masuk->h * 3600) + ($selisih_masuk->i * 60) + $selisih_masuk->s) / 60) . 'm';
                             } else {
-                                $selisih_masuk = \date_diff(date_create($gen->tanggal . ' 08:00:00'), date_create($gen->tanggal . ' ' . $gen->masuk));
+                                $selisih_masuk = \date_diff(date_create($gen->tanggal . ' ' . $regularIn), date_create($gen->tanggal . ' ' . $gen->masuk));
                                 $masuk = '-' . (int) ((($selisih_masuk->h * 3600) + ($selisih_masuk->i * 60) + $selisih_masuk->s) / 60) . 'm';
                             }
 
@@ -827,7 +832,7 @@ class AbsensiController extends Controller
     {
         $masukTanggal = date('Y-m-d', strtotime($tanggal));
         $shift = strtoupper(trim((string) ($row['shift'] ?? '')));
-        $keluarTanggal = in_array($shift, ['24JAM', 'SHSECURITY2'], true)
+        $keluarTanggal = MasterShiftKaryawan::isOvernight($shift)
             ? date('Y-m-d', strtotime($masukTanggal . ' +1 day'))
             : $masukTanggal;
 
@@ -1060,10 +1065,13 @@ class AbsensiController extends Controller
             return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $shiftLabel), $tanggal, $tanggal);
         }
 
-        $checkin = ($shiftRow && $shiftRow->time_in) ? $shiftRow->time_in : '08:00:00';
-        $shiftName = ($shiftRow && $shiftRow->shift) ? $shiftRow->shift : 'SHREGULAR';
+        $shiftName = ($shiftRow && $shiftRow->shift) ? strtoupper(trim((string) $shiftRow->shift)) : 'SHREGULAR';
+        $rowInHm = $shiftRow ? MasterShiftKaryawan::normalizeHm($shiftRow->time_in ?? null) : null;
+        $checkin = $rowInHm !== null
+            ? ($rowInHm . ':00')
+            : MasterShiftKaryawan::getShiftTimes($shiftName)['in_hms'];
 
-        if ($shiftRow && $shiftRow->shift === '24jam') {
+        if ($shiftRow && MasterShiftKaryawan::is24Jam($shiftRow->shift)) {
             $masuk = ($punch && $punch->min_jam) ? $punch->min_jam : '';
             $keluar = ($nextPunch && $nextPunch->min_jam && $nextPunch->min_jam < '14:00:00') ? $nextPunch->min_jam : '';
             if ($masuk === '' && $keluar === '') {
@@ -1073,17 +1081,19 @@ class AbsensiController extends Controller
             return $attach(self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, '24JAM', $checkin), $tanggal, $nextDate);
         }
 
-        if ($shiftRow && $shiftRow->shift === 'SHSECURITY2') {
+        if ($shiftRow && MasterShiftKaryawan::isNightShift($shiftRow->shift, $shiftRow->time_in ?? null, $shiftRow->time_out ?? null)) {
+            $nightBounds = MasterShiftKaryawan::resolveNightShiftBounds($shiftRow->shift, $shiftRow->time_in ?? null, $shiftRow->time_out ?? null);
+            $keluarBefore = $nightBounds['keluar_before'];
             $masuk = ($punch && $punch->max_jam) ? $punch->max_jam : '';
-            $keluar = ($nextPunch && $nextPunch->min_jam && $nextPunch->min_jam < '14:00:00') ? $nextPunch->min_jam : '';
-            if ($masuk !== '' && $masuk <= '14:00:00') {
-                return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'SHSECURITY2'), $tanggal, $nextDate);
+            $keluar = ($nextPunch && $nextPunch->min_jam && $nextPunch->min_jam < $keluarBefore) ? $nextPunch->min_jam : '';
+            if ($masuk !== '' && $masuk <= $keluarBefore) {
+                return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $shiftName), $tanggal, $nextDate);
             }
             if ($masuk === '' && $keluar === '') {
-                return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, 'SHSECURITY2'), $tanggal, $nextDate);
+                return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $shiftName), $tanggal, $nextDate);
             }
 
-            return $attach(self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, 'SHSECURITY2', $checkin), $tanggal, $nextDate);
+            return $attach(self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, $shiftName, $checkin), $tanggal, $nextDate);
         }
 
         if ($shiftRow) {
@@ -1117,7 +1127,7 @@ class AbsensiController extends Controller
             return $attach(self::buildEmptyMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, ''), $tanggal, $tanggal);
         }
 
-        return $attach(self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, 'SHREGULAR'), $tanggal, $tanggal);
+        return $attach(self::buildMonthlyRow($karyawan->nik_karyawan, $karyawan->nama_lengkap, $tanggal, $masuk, $keluar, 'SHREGULAR', $checkin), $tanggal, $tanggal);
     }
 
     private function buildMonthlyAbsensiData($karyawanId, $year, $month, $lastDay, $nikKaryawan, $namaLengkap)

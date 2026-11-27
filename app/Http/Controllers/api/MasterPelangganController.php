@@ -436,7 +436,7 @@ class MasterPelangganController extends Controller
                 $idPelanggan = null;
                 for ($i = 1; $i <= 10; $i++) {
                     $generatedId = $this->randomstr($namaPelangganUpper, $i);
-                    if (!MasterPelanggan::where('id_pelanggan', $generatedId)->exists()) {
+                    if (!MasterPelanggan::idPelangganTaken($generatedId)) {
                         $idPelanggan = $generatedId;
                         break;
                     }

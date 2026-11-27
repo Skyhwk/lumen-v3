@@ -35,6 +35,7 @@ class ContractExpiryReminderController extends Controller
                 'today' => $today,
                 'upcoming' => $upcoming,
                 'window_days' => ContractExpiryReminderService::WINDOW_DAYS,
+                'lookback_months' => ContractExpiryReminderService::LOOKBACK_MONTHS,
             ],
         ]);
     }

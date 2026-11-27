@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Absensi;
 use App\Models\Greatday\AbsensiAndroid;
+use App\Models\MasterShiftKaryawan;
 use App\Models\RfidCard;
 use App\Models\ShiftKaryawan;
 use App\Services\Hr\ShiftAbsensiPunchRules;
@@ -75,7 +76,7 @@ class SyncGreatdayMobileAbsensiCommand extends Command
 
         $shiftRangeStart = Carbon::parse($startDate)->subDay()->toDateString();
         $shiftByKaryawanDate = ShiftKaryawan::on($connection)
-            ->select('karyawan_id', 'tanggal', 'shift')
+            ->select('karyawan_id', 'tanggal', 'shift', 'time_in', 'time_out')
             ->whereIn('karyawan_id', $karyawanIds)
             ->whereBetween('tanggal', [$shiftRangeStart, $endDate])
             ->get()
@@ -95,14 +96,22 @@ class SyncGreatdayMobileAbsensiCommand extends Command
 
             $tanggal = Carbon::parse($row->tanggal)->toDateString();
             $jam = $this->normalizeJam($row->jam);
-            $shiftCode = $this->resolveShiftForMobilePunch(
+            $shiftRow = $this->resolveShiftRowForMobilePunch(
                 (int) $row->karyawan_id,
                 $tanggal,
                 $jam,
-                $shiftByKaryawanDate
+                $shiftByKaryawanDate,
+                $connection
             );
-            $status = ShiftAbsensiPunchRules::inferProductionStatus($shiftCode, $jam);
-            $context = $this->describePunchContext($tanggal, $jam, $shiftCode, $status);
+            $shiftCode = $shiftRow ? (string) ($shiftRow->shift ?? '') : null;
+            $status = ShiftAbsensiPunchRules::inferProductionStatus(
+                $shiftCode,
+                $jam,
+                $shiftRow->time_in ?? null,
+                $shiftRow->time_out ?? null,
+                $connection
+            );
+            $context = $this->describePunchContext($tanggal, $jam, $shiftRow, $status, $connection);
             $label = "karyawan={$row->karyawan_id} {$tanggal} {$jam} status={$status}{$context}";
 
             if (isset($existingByKey[$key])) {
@@ -222,34 +231,41 @@ class SyncGreatdayMobileAbsensiCommand extends Command
     }
 
     /**
-     * Shift untuk infer status: pagi (<14:00) pada shift malam = pulang shift **hari sebelumnya**.
+     * Shift untuk infer status: pagi (< keluar_before) pada shift malam = pulang shift **hari sebelumnya**.
      *
      * @param  \Illuminate\Support\Collection<string, object>  $shiftByKaryawanDate
      */
-    private function resolveShiftForMobilePunch(int $karyawanId, string $tanggal, string $jam, $shiftByKaryawanDate): ?string
-    {
+    private function resolveShiftRowForMobilePunch(
+        int $karyawanId,
+        string $tanggal,
+        string $jam,
+        $shiftByKaryawanDate,
+        string $connection
+    ): ?object {
         $keyToday = $karyawanId . '|' . $tanggal;
-        $shiftToday = optional($shiftByKaryawanDate->get($keyToday))->shift;
+        $rowToday = $shiftByKaryawanDate->get($keyToday);
 
-        if ($jam < ShiftAbsensiPunchRules::OVERNIGHT_KELUAR_BEFORE) {
-            $prev = Carbon::parse($tanggal)->subDay()->toDateString();
-            $shiftPrev = optional($shiftByKaryawanDate->get($karyawanId . '|' . $prev))->shift;
-            if ($shiftPrev && strtolower((string) $shiftPrev) === 'shsecurity2') {
-                return $shiftPrev;
+        $prev = Carbon::parse($tanggal)->subDay()->toDateString();
+        $rowPrev = $shiftByKaryawanDate->get($karyawanId . '|' . $prev);
+        if ($rowPrev && MasterShiftKaryawan::isNightShift($rowPrev->shift ?? null, $rowPrev->time_in ?? null, $rowPrev->time_out ?? null, $connection)) {
+            $bounds = MasterShiftKaryawan::resolveNightShiftBounds($rowPrev->shift ?? null, $rowPrev->time_in ?? null, $rowPrev->time_out ?? null, $connection);
+            if ($jam < $bounds['keluar_before']) {
+                return $rowPrev;
             }
         }
 
-        return $shiftToday;
+        return $rowToday;
     }
 
-    private function describePunchContext(string $tanggal, string $jam, ?string $shiftCode, string $status): string
+    private function describePunchContext(string $tanggal, string $jam, ?object $shiftRow, string $status, string $connection): string
     {
-        $shift = strtolower(trim((string) $shiftCode));
-        if ($shift !== 'shsecurity2') {
+        $shiftCode = $shiftRow ? (string) ($shiftRow->shift ?? '') : null;
+        if (!$shiftRow || !MasterShiftKaryawan::isNightShift($shiftCode, $shiftRow->time_in ?? null, $shiftRow->time_out ?? null, $connection)) {
             return $shiftCode ? " shift={$shiftCode}" : '';
         }
 
-        if ($status === 'Keluar' && $jam < ShiftAbsensiPunchRules::OVERNIGHT_KELUAR_BEFORE) {
+        $bounds = MasterShiftKaryawan::resolveNightShiftBounds($shiftCode, $shiftRow->time_in ?? null, $shiftRow->time_out ?? null, $connection);
+        if ($status === 'Keluar' && $jam < $bounds['keluar_before']) {
             $shiftDate = Carbon::parse($tanggal)->subDay()->toDateString();
 
             return " shift={$shiftCode} untuk_pulang_shift={$shiftDate}";

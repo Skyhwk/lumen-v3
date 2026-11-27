@@ -149,15 +149,16 @@ class GenerateQrDocumentDisipliner
         }
 
         if ($typeDocument === self::TYPE_BERITA_ACARA_KEJADIAN) {
-            $uraianPlain = trim(strip_tags((string) ($document->uraian_kejadian ?? '')));
+            $namaPelapor = trim((string) ($document->penandatangan_nama ?? ''));
+            if ($namaPelapor === '') {
+                $namaPelapor = trim((string) ($detailRow->nama_lengkap ?? ''));
+            }
 
             return [
-                'no_document' => trim((string) ($document->nomor_surat ?? '')),
-                'nama_karyawan' => trim((string) ($detailRow->nama_lengkap ?? '')) ?: '-',
+                'tipe_dokumen' => 'Berita Acara Kejadian',
+                'no_dokumen' => trim((string) ($document->nomor_surat ?? '')),
+                'nama_pelapor' => $namaPelapor !== '' ? $namaPelapor : '-',
                 'perihal' => trim((string) ($document->perihal ?? '')) ?: '-',
-                'uraian_kejadian' => $uraianPlain !== '' ? $uraianPlain : '-',
-                'modul' => 'disipliner',
-                'jenis_dokumen' => 'Berita Acara Kejadian',
             ];
         }
 

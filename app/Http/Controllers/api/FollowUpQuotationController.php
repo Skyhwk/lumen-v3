@@ -9,6 +9,7 @@ use App\Models\QuotationKontrakD;
 use App\Models\QuotationNonKontrak;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Services\DateColumnFilterService;
 use App\Services\SamplingPlanServices;
 use App\Services\{ QuotationService};
 use Picqer\Barcode\BarcodeGeneratorPNG as Barcode;
@@ -106,16 +107,11 @@ class FollowUpQuotationController extends Controller
                     }
                 })
                 ->filterColumn('created_at', function ($query, $keyword) use ($request) {
-                    $keyword = trim((string) $keyword);
-                    $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
-                    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-                        return;
-                    }
-
                     $column = $request->mode == 'kontrak'
                         ? 'request_quotation_kontrak_H.created_at'
                         : 'request_quotation.created_at';
-                    $query->whereDate($column, $date);
+
+                    DateColumnFilterService::apply($query, $column, $keyword);
                 })
                 ->make(true);
         } catch (Exception $e) {

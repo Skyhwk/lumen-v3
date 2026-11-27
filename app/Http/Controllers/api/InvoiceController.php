@@ -7,6 +7,7 @@ use App\Models\Invoice;
 use App\Models\RecordPembayaranInvoice;
 use App\Http\Controllers\Controller;
 use App\Models\SummaryInvoice;
+use App\Services\DateColumnFilterService;
 use App\Services\RenderInvoice;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -40,21 +41,81 @@ class InvoiceController extends Controller
             $year = $this->resolveYear($request->year);
 
             $data = SummaryInvoice::query()
-                ->whereYear('tgl_invoice', $year);
+                ->whereYear('summary_invoice.tgl_invoice', $year)
+                ->leftJoin('request_quotation', 'summary_invoice.document', '=', 'request_quotation.no_document')
+                ->leftJoin('request_quotation_kontrak_H', 'summary_invoice.document', '=', 'request_quotation_kontrak_H.no_document')
+                ->select(
+                    'summary_invoice.*',
+                    'request_quotation.kode_promo as kode_promo_non_kontrak',
+                    'request_quotation_kontrak_H.kode_promo as kode_promo_kontrak'
+                );
 
-            $statusLunas = trim((string) $request->input('columns.3.search.value', $request->input('keterangan', '')));
-
-            if ($statusLunas !== '') {
-                $data->where('status_lunas', $statusLunas);
-            }
-
-            return Datatables::of($data)->make(true);
+            return $this->filterInvoiceColumns(Datatables::of($data))->make(true);
         } catch (\Throwable $th) {
             return response()->json([
                 'data' => [],
                 'message' => $th->getMessage(),
             ], 401);
         }
+    }
+
+    private function filterInvoiceColumns($datatable)
+    {
+        $like = function ($column) {
+            return function ($query, $keyword) use ($column) {
+                $query->whereRaw('LOWER(' . $column . ') LIKE ?', ['%' . strtolower($keyword) . '%']);
+            };
+        };
+
+        return $datatable
+            ->filterColumn('status_lunas', function ($query, $keyword) {
+                $query->where('summary_invoice.status_lunas', $keyword);
+            })
+            ->filterColumn('kode_promo_non_kontrak', function ($query, $keyword) {
+                $likeValue = '%' . strtolower($keyword) . '%';
+                $query->where(function ($inner) use ($likeValue) {
+                    $inner->whereRaw('LOWER(request_quotation.kode_promo) LIKE ?', [$likeValue])
+                        ->orWhereRaw('LOWER(request_quotation_kontrak_H.kode_promo) LIKE ?', [$likeValue]);
+                });
+            })
+            ->orderColumn('kode_promo_non_kontrak', function ($query, $direction) {
+                $direction = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+                $query->orderByRaw(
+                    'COALESCE(request_quotation.kode_promo, request_quotation_kontrak_H.kode_promo) ' . $direction
+                );
+            })
+            ->filterColumn('no_invoice', $like('summary_invoice.no_invoice'))
+            ->filterColumn(
+                'tgl_invoice',
+                DateColumnFilterService::datatablesFilter('summary_invoice.tgl_invoice')
+            )
+            ->filterColumn('document', $like('summary_invoice.document'))
+            ->filterColumn('sales_penanggung_jawab', $like('summary_invoice.sales_penanggung_jawab'))
+            ->filterColumn('nama_customer', $like('summary_invoice.nama_customer'))
+            ->filterColumn('consultant', $like('summary_invoice.consultant'))
+            ->filterColumn('no_po', $like('summary_invoice.no_po'))
+            ->filterColumn('no_spk', $like('summary_invoice.no_spk'))
+            ->filterColumn(
+                'tgl_jatuh_tempo',
+                DateColumnFilterService::datatablesFilter('summary_invoice.tgl_jatuh_tempo')
+            )
+            ->filterColumn(
+                'tgl_pelunasan',
+                DateColumnFilterService::datatablesFilter('summary_invoice.tgl_pelunasan')
+            )
+            ->filterColumn('nilai_tagihan', $like('summary_invoice.nilai_tagihan'))
+            ->filterColumn('nilai_pelunasan', $like('summary_invoice.nilai_pelunasan'))
+            ->filterColumn('emailed_by', $like('summary_invoice.emailed_by'))
+            ->filterColumn(
+                'emailed_at',
+                DateColumnFilterService::datatablesFilter('summary_invoice.emailed_at')
+            )
+            ->filterColumn(
+                'created_at',
+                DateColumnFilterService::datatablesFilter('summary_invoice.created_at')
+            )
+            ->filterColumn('created_by', $like('summary_invoice.created_by'))
+        ;
     }
 
     public function pelunasan(Request $request)

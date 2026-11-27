@@ -34,7 +34,7 @@ class MasterWilayahSurat extends Sector
             'id_master_wilayah_sampling'
         );
     }
-  
+
     public function sampling()
     {
         return $this->belongsToMany(

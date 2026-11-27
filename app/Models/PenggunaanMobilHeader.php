@@ -10,16 +10,6 @@ class PenggunaanMobilHeader extends Sector
     public $timestamps = false;
     protected $guarded = [];
 
-    public function mobil()
-    {
-        return $this->belongsTo(DaftarMobil::class, 'mobil_id');
-    }
-
-    public function driver()
-    {
-        return $this->belongsTo(MasterDriver::class, 'driver_id', 'user_id');
-    }
-
     public function requester()
     {
         return $this->belongsTo(MasterKaryawan::class, 'requester_id');
@@ -28,5 +18,10 @@ class PenggunaanMobilHeader extends Sector
     public function details()
     {
         return $this->hasMany(PenggunaanMobilDetail::class, 'header_id');
+    }
+
+    public function drivers()
+    {
+        return $this->hasMany(PenggunaanMobilDriver::class, 'header_id');
     }
 }

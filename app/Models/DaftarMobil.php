@@ -20,6 +20,7 @@ class DaftarMobil extends Sector
         'tanggal_mulai_sewa',
         'tanggal_akhir_sewa',
         'status_gps',
+        'kepemilikan',
         'created_at',
         'created_by',
         'updated_at',

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\MasterKaryawan;
 use App\Models\OrderHeader;
+use App\Services\DateColumnFilterService;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -39,13 +40,7 @@ class QtRevisiController extends Controller
                 return $this->resolveStatusQuotation($row);
             })
             ->filterColumn('created_at', function ($query, $keyword) {
-                $keyword = trim((string) $keyword);
-                $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
-                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-                    return;
-                }
-
-                $query->whereDate('order_header.created_at', $date);
+                DateColumnFilterService::apply($query, 'order_header.created_at', $keyword);
             })
             ->filterColumn('status_quotation', function ($query, $keyword) {
                 $keyword = trim((string) $keyword);

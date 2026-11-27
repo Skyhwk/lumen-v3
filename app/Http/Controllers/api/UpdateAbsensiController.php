@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
-use \App\Models\{Absensi, RekapMasukKerja, RekapLiburKalender, ShiftKaryawan, MasterKaryawan};
+use \App\Models\{Absensi, RekapMasukKerja, RekapLiburKalender, ShiftKaryawan, MasterKaryawan, MasterShiftKaryawan};
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -62,7 +62,7 @@ class UpdateAbsensiController extends Controller
                     ]);
                 } else {
                     $tanggal = $request->tgl;
-                    if ($request->shift == 'SHSECURITY2' || $request->shift == '24jam') {
+                    if (MasterShiftKaryawan::isOvernight($request->shift)) {
                         $tanggal = DATE('Y-m-d', strtotime($request->tgl . '+1day'));
                     }
                     Absensi::insert([
@@ -107,7 +107,7 @@ class UpdateAbsensiController extends Controller
                 ->delete();
 
             $keluarDate = (string) ($request->tgl_keluar ?: $tanggal);
-            if ($request->tgl_keluar === '' && in_array($request->shift, ['SHSECURITY2', '24jam'], true)) {
+            if ($request->tgl_keluar === '' && MasterShiftKaryawan::isOvernight($request->shift)) {
                 $keluarDate = date('Y-m-d', strtotime($tanggal . ' +1 day'));
             }
             Absensi::where('karyawan_id', $karyawanId)
@@ -203,8 +203,9 @@ class UpdateAbsensiController extends Controller
 
             $karyawan_id = $request->id_karyawan;
             $bulan = explode("-", $request->bulan);
-            $karyawanMeta = MasterKaryawan::select('id_jabatan')->find($request->id_karyawan);
+            $karyawanMeta = MasterKaryawan::select('id_jabatan', 'grade')->find($request->id_karyawan);
             $idJabatan = $karyawanMeta ? (int) $karyawanMeta->id_jabatan : null;
+            $grade = $karyawanMeta ? (string) ($karyawanMeta->grade ?? '') : null;
 
             $rekapRows = [];
             foreach ($request->tanggal as $key => $value) {
@@ -219,13 +220,15 @@ class UpdateAbsensiController extends Controller
                 $rekapRows,
                 $idJabatan,
                 $request->bulan,
-                (int) $request->id_karyawan
+                (int) $request->id_karyawan,
+                $grade
             );
 
             $hariKerjaExpected = PayrollWorkingDaysService::expectedHariKerjaForKaryawan(
                 (int) $request->id_karyawan,
                 $idJabatan,
-                $request->bulan
+                $request->bulan,
+                $grade
             );
 
             RekapMasukKerja::insert([
@@ -260,9 +263,18 @@ class UpdateAbsensiController extends Controller
             }
 
             $builder = new MonthlyAbsensiDataBuilder();
-            $data = $builder->buildForKaryawan($karyawanId, (string) $request->tgl);
+            $bulanYm = (string) $request->tgl;
+            $data = $builder->buildForKaryawan($karyawanId, $bulanYm);
+            $grade = (string) (MasterKaryawan::where('id', $karyawanId)->value('grade') ?? '');
+            $periodLabel = $bulanYm !== '' && preg_match('/^\d{4}-\d{2}$/', $bulanYm)
+                ? \App\Services\Hr\AbsensiPeriodeService::periodLabel($bulanYm, $grade)
+                : null;
 
-            return response()->json(['data' => $data], 200);
+            return response()->json([
+                'data' => $data,
+                'period_label' => $periodLabel,
+                'grade' => $grade,
+            ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'message' => $e->getMessage(),

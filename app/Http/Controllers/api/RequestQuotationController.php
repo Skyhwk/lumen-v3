@@ -29,6 +29,7 @@ use App\Models\TemplatePaketAnalisa;
 use App\Jobs\RenderPdfPenawaran;
 use App\Services\RenderNonKontrakCopy;
 use App\Services\RenderKontrakCopy;
+use App\Services\DateColumnFilterService;
 use App\Services\Notification;
 use App\Services\GetAtasan;
 use App\Services\GetBawahan;
@@ -87,20 +88,10 @@ class RequestQuotationController extends Controller
         }
 
         return Datatables::of($data)
-            ->filterColumn('created_at', function ($query, $keyword) {
-                $keyword = trim((string) $keyword);
-                if ($keyword === '') {
-                    return;
-                }
-
-                $date = strlen($keyword) >= 10 ? substr($keyword, 0, 10) : $keyword;
-                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-                    $query->whereDate('created_at', $date);
-                    return;
-                }
-
-                $query->where('created_at', 'like', '%' . $keyword . '%');
-            })
+            ->filterColumn(
+                'created_at',
+                DateColumnFilterService::datatablesFilter('created_at')
+            )
             ->editColumn('email_cc', function ($item) {
                 $emailCC = json_decode($item['email_cc']) ?? null;
                 if ($item->sales_id == 19 && $emailCC != null) {
@@ -1230,13 +1221,12 @@ class RequestQuotationController extends Controller
                 foreach ($payload->data_diskon->biaya_preparasi_padatan as $biaya) {
                     $biaya_preparasi += floatval(str_replace(['Rp. ', ',', '.'], '', $biaya->harga));
                 }
+            } else {
+                $data->biaya_preparasi_padatan = json_encode([]);
             }
             $data->total_biaya_preparasi = $biaya_preparasi;
             $grand_total += $biaya_preparasi;
             $harga_total += $biaya_preparasi;
-            // $data->biaya_preparasi_padatan = null;
-            // $data->total_biaya_preparasi = 0;
-            // $biaya_preparasi = 0;
 
             //BIAYA DI LUAR PAJAK
             $biaya_akhir = 0;
@@ -2179,13 +2169,12 @@ class RequestQuotationController extends Controller
                 foreach ($payload->data_diskon->biaya_preparasi_padatan as $biaya) {
                     $biaya_preparasi += floatval(str_replace(['Rp. ', ',', '.'], '', $biaya->harga));
                 }
+            } else {
+                $data->biaya_preparasi_padatan = json_encode([]);
             }
             $data->total_biaya_preparasi = $biaya_preparasi;
             $grand_total += $biaya_preparasi;
             $harga_total += $biaya_preparasi;
-            // $data->biaya_preparasi_padatan = null;
-            // $data->total_biaya_preparasi = 0;
-            // $biaya_preparasi = 0;
 
             //BIAYA DI LUAR PAJAK
             $biaya_akhir = 0;

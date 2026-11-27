@@ -26,6 +26,11 @@ $router->post('/api/reset-password', 'AuthController@resetPassword');
 
 $router->get('/api/cs-attachment', 'CsTicketAssetController@show');
 
+$router->group(['prefix' => 'api/internal', 'middleware' => ['internal.ppi']], function () use ($router) {
+    $router->post('self-registration/store-document', 'api\SelfRegistrationDocumentController@store');
+    $router->post('self-registration/fetch-document', 'api\SelfRegistrationDocumentController@fetch');
+});
+
 $router->group(['prefix' => 'api', 'middleware' => ['auth.token', 'rate.limit.user', 'log.request', 'decrypt.slice']], function () use ($router) {
     $router->post('route', 'BaseController@handle');
 });
