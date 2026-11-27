@@ -36,10 +36,18 @@ class StpsFdlController extends Controller
                 ->whereIn('id_jabatan', [41, 42])
                 ->exists();
 
+            // Periode dari FE (apps-fdl kirim hari ini + 7 hari ke belakang).
+            // Jika client lama kirim tanggal sama (1 hari), backend tetap expand 7 hari kebelakang.
+            $periodeAkhir = $request->periode_akhir;
+            $periodeAwal = $request->periode_awal;
+            if ($periodeAwal && $periodeAkhir && $periodeAwal === $periodeAkhir) {
+                $periodeAwal = Carbon::parse($periodeAwal)->subDays(7)->toDateString();
+            }
+
             $existingWork = DB::table('persiapan_sampel_header')
             ->select('no_order', 'tanggal_sampling', 'sampler_jadwal', 'is_downloaded_stps', 'is_printed_stps')
             ->where('is_active', true)
-            ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
+            ->whereBetween('tanggal_sampling', [$periodeAwal, $periodeAkhir])
             ->get();
 
             $doneList = [];
@@ -95,7 +103,7 @@ class StpsFdlController extends Controller
             ])
             ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
             ->where('is_active', true)
-            ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
+            ->whereBetween('tanggal_sampling', [$periodeAwal, $periodeAkhir])
             ->get(); // Hati-hati, load semua ke memori
             
             // 2. Mapping Manual (High Performance PHP Array)
