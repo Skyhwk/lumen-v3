@@ -28,6 +28,7 @@ use App\Models\Subkontrak;
 use App\Models\MasterBakumutu;
 use App\Models\Parameter;
 use App\Services\AnalystFormula;
+use App\Services\MdlUdaraService;
 
 use App\Models\LingkunganHeader;
 use App\Models\DirectLainHeader;
@@ -186,31 +187,13 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
             $getSatuan = new HelperSatuan;
 
             $parameters = collect(json_decode($request->parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
-            $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
-
-            $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
-                if ($hasilUji === null || $hasilUji === '' || $hasilUji === '-') {
-                    return $hasilUji;
-                }
-
-                $hasilUji = (string) $hasilUji;
-                if (str_contains($hasilUji, '<')) {
-                    return $hasilUji;
-                }
-
-                $colToSearch = 'hasil' . ($index ?: 1);
-                $mdlRow = $mdlUdara->first(function ($row) use ($parameterId, $colToSearch) {
-                    return (string) $row->parameter_id === (string) $parameterId
-                        && $row->{$colToSearch} !== null
-                        && $row->{$colToSearch} !== '';
-                });
-
-                if ($mdlRow && is_numeric($hasilUji) && is_numeric($mdlRow->{$colToSearch}) && (float) $hasilUji < (float) $mdlRow->{$colToSearch}) {
-                    return '<' . $mdlRow->{$colToSearch};
-                }
-
-                return $hasilUji;
-            };
+            $mdlUdara = MdlUdaraService::loadForParameterIds($parameters->pluck('id'));
+            $getHasilUji = fn ($index, $parameterId, $hasilUji) => MdlUdaraService::formatHasilUjiForDisplay(
+                $hasilUji,
+                (int) $index,
+                $parameterId,
+                $mdlUdara
+            );
 
 			$parameterHasKoreksi = [
 				"SO2",
