@@ -497,12 +497,10 @@ class CiscoPhoneCnfXmlService
             ['1', 'Placed Calls', 'Application:Cisco/PlacedCalls'],
             ['2', 'Voicemail', 'Application:Cisco/Voicemail'],
         ];
-        if (!empty($config['enable_phonebook'])) {
-            $bookUrl = (new CiscoPhoneDirectoryXmlService())->phonebookServiceUrl();
-            if ($bookUrl !== '') {
-                $title = CiscoPhoneDirectoryXmlService::settingsPayload()['title'] ?: 'Phonebook';
-                $phoneServicesList[] = ['1', $title, $bookUrl];
-            }
+        $bookUrl = $this->resolveEmbeddedPhonebookUrl($config);
+        if ($bookUrl !== '') {
+            $title = CiscoPhoneDirectoryXmlService::settingsPayload()['title'] ?: 'Phonebook';
+            $phoneServicesList[] = ['1', $title, $bookUrl];
         }
         foreach ($phoneServicesList as [$type, $serviceName, $url]) {
             $service = $doc->createElement('phoneService');
@@ -520,6 +518,26 @@ class CiscoPhoneCnfXmlService
         $this->appendTextNode($doc, $device, 'encrConfig', 'false');
 
         return $doc->saveXML();
+    }
+
+    private function resolveEmbeddedPhonebookUrl(array $config): string
+    {
+        if (empty($config['enable_phonebook'])) {
+            return '';
+        }
+
+        $service = new CiscoPhoneDirectoryXmlService();
+        $url = $service->phonebookServiceUrl();
+        if ($url !== '') {
+            return $url;
+        }
+
+        if (!empty($config['is_preview'])) {
+            return CiscoPhoneDirectoryXmlService::defaultDirectoryUrl(true)
+                ?: CiscoPhoneDirectoryXmlService::defaultDirectoryUrl(false);
+        }
+
+        return '';
     }
 
     public static function isBasicPhoneModel(string $model): bool

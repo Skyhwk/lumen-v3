@@ -25,8 +25,15 @@ class PesawatTelephoneController extends Controller
     public function index()
     {
         $data = CiscoPhoneConfig::where('is_active', true)->latest('id');
+        $dt = Datatables::of($data);
 
-        return Datatables::of($data)->make(true);
+        if (!Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')) {
+            $dt->addColumn('enable_phonebook', function () {
+                return false;
+            });
+        }
+
+        return $dt->make(true);
     }
 
     public function getDefaults()
@@ -221,7 +228,12 @@ class PesawatTelephoneController extends Controller
 
     public function togglePhonebook(Request $request)
     {
-        $config = CiscoPhoneConfig::where('id', $request->id)->where('is_active', true)->first();
+        $id = (int) $request->id;
+        if ($id < 1) {
+            return response()->json(['message' => 'ID konfigurasi tidak dikirim. Refresh halaman, lalu pasang phonebook dari ikon buku di baris pesawat.'], 422);
+        }
+
+        $config = CiscoPhoneConfig::where('id', $id)->where('is_active', true)->first();
         if (!$config) {
             return response()->json(['message' => 'Konfigurasi tidak ditemukan'], 404);
         }
@@ -279,6 +291,9 @@ class PesawatTelephoneController extends Controller
         }
 
         $payload = $config->toArray();
+        $payload['enable_phonebook'] = Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')
+            ? (bool) $config->enable_phonebook
+            : false;
         $crypto = new Crypto();
 
         if (!empty($payload['auth_password'])) {
@@ -308,17 +323,37 @@ class PesawatTelephoneController extends Controller
     {
         try {
             $config = $this->buildConfigPayload($request);
+            $configJson = $config['config_json'];
+            $configJson['enable_phonebook'] = $this->requestWantsPhonebook($request, $configJson);
+            $configJson['is_preview'] = true;
+
             $xml = $this->cnfService()->generate(
-                $config['config_json'],
+                $configJson,
                 $config['mac_address'],
                 $config['phone_model'],
                 $config['extension'],
                 $request->auth_password
             );
 
+            $bookUrl = (new CiscoPhoneDirectoryXmlService())->phonebookServiceUrl()
+                ?: CiscoPhoneDirectoryXmlService::defaultDirectoryUrl(true)
+                ?: CiscoPhoneDirectoryXmlService::defaultDirectoryUrl(false);
+            $embedded = strpos($xml, 'cisco-phone-directory.xml') !== false;
+
+            $warning = null;
+            if ($configJson['enable_phonebook'] && $bookUrl === '') {
+                $warning = 'Phonebook aktif, tetapi URL dasar telepon masih kosong. Isi di tab Phonebook → Pengaturan, lalu preview lagi.';
+            } elseif ($configJson['enable_phonebook'] && !$embedded) {
+                $warning = 'Phonebook aktif tapi belum masuk XML. Pastikan model CP-78xx.';
+            }
+
             return response()->json([
                 'xml' => $xml,
                 'filename' => CiscoPhoneCnfXmlService::buildFilename($config['mac_address']),
+                'enable_phonebook' => $configJson['enable_phonebook'],
+                'phonebook_url' => $bookUrl,
+                'phonebook_embedded' => $embedded,
+                'phonebook_warning' => $warning,
             ], 200);
         } catch (\Throwable $e) {
             return response()->json(['message' => $e->getMessage()], 400);
@@ -383,8 +418,9 @@ class PesawatTelephoneController extends Controller
             $config->config_json = $configJson;
             $config->created_by = $config->created_by ?: ($this->user_id ?? null);
             $config->is_active = true;
-            if (Schema::hasColumn('cisco_phone_configs', 'enable_phonebook') && $request->has('enable_phonebook')) {
-                $config->enable_phonebook = filter_var($request->enable_phonebook, FILTER_VALIDATE_BOOLEAN);
+            $wantsPhonebook = $this->requestWantsPhonebook($request, $payload['config_json']);
+            if (Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')) {
+                $config->enable_phonebook = $wantsPhonebook;
             }
             $config->save();
 
@@ -393,7 +429,7 @@ class PesawatTelephoneController extends Controller
             );
             $plainConfig['enable_phonebook'] = Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')
                 ? (bool) $config->enable_phonebook
-                : false;
+                : $wantsPhonebook;
 
             $primaryLinePassword = $plainConfig['lines'][0]['auth_password'] ?? $request->auth_password;
 
@@ -511,6 +547,7 @@ class PesawatTelephoneController extends Controller
         $configJson['nat_enabled'] = filter_var($request->nat_enabled ?? ($configJson['nat_enabled'] ?? false), FILTER_VALIDATE_BOOLEAN);
         $configJson['transport_layer_protocol'] = $request->transport_layer_protocol ?? ($configJson['transport_layer_protocol'] ?? 'AUTO');
         $configJson['timer_register_expires'] = (int) ($request->timer_register_expires ?? ($configJson['timer_register_expires'] ?? 3600));
+        $configJson['enable_phonebook'] = $this->requestWantsPhonebook($request, $configJson);
 
         if ($request->filled('ntp_servers')) {
             $ntpServers = $request->ntp_servers;
@@ -725,6 +762,24 @@ class PesawatTelephoneController extends Controller
         $config->save();
 
         return $fileInfo;
+    }
+
+    private function requestWantsPhonebook(Request $request, array $configJson = []): bool
+    {
+        if ($request->has('enable_phonebook')) {
+            return filter_var($request->enable_phonebook, FILTER_VALIDATE_BOOLEAN);
+        }
+
+        if (array_key_exists('enable_phonebook', $configJson)) {
+            return filter_var($configJson['enable_phonebook'], FILTER_VALIDATE_BOOLEAN);
+        }
+
+        $id = (int) $request->id;
+        if ($id > 0 && Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')) {
+            return (bool) CiscoPhoneConfig::where('id', $id)->where('is_active', true)->value('enable_phonebook');
+        }
+
+        return false;
     }
 
     private function persistDirectoryUriOnConfig(CiscoPhoneConfig $config, array $mergedPlainConfig): void
