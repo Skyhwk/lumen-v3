@@ -130,28 +130,21 @@ class CiscoPhoneDirectoryXmlService
      */
     public static function shouldEmbedInCnf(): bool
     {
-        $row = self::settings();
-        if ($row !== null) {
-            if (!$row->embed_in_cnf) {
-                return false;
-            }
-        } else {
-            $raw = env('CISCO_PHONE_EMBED_DIRECTORY_URL');
-            if ($raw === null || $raw === '' || !filter_var($raw, FILTER_VALIDATE_BOOLEAN)) {
-                return false;
-            }
-        }
+        return false;
+    }
 
+    /** URL layanan Phonebook (on-demand). Tidak ditulis ke directoryURL. */
+    public function phonebookServiceUrl(): string
+    {
         $url = self::defaultDirectoryUrl(true);
         if ($url === '') {
-            return false;
+            return '';
         }
-
         if (preg_match('#(?:localhost|127\.0\.0\.1|host\.docker\.internal)#i', $url)) {
-            return false;
+            return '';
         }
 
-        return true;
+        return $url;
     }
 
     /** Tulis ke tag directoryURL (umumnya JANGAN — CP-78xx request terus). */
@@ -206,9 +199,19 @@ class CiscoPhoneDirectoryXmlService
         return $query->orderBy('sort_order')->orderBy('display_name')->get();
     }
 
+    public static function baseFromRequestUrl(string $requestUrl): string
+    {
+        $url = preg_replace('#/api/cisco-phone-directory\.xml(?:\?.*)?$#i', '', trim($requestUrl));
+
+        return rtrim((string) $url, '/');
+    }
+
     public function generateForPhone(array $params): string
     {
-        $base = self::directoryBaseForCnf() ?: self::directoryBaseForDisplay();
+        $requestBase = trim((string) ($params['request_base'] ?? ''));
+        $base = $requestBase !== ''
+            ? rtrim($requestBase, '/')
+            : (self::directoryBaseForCnf() ?: self::directoryBaseForDisplay());
         $mode = (string) ($params['mode'] ?? 'menu');
         $search = trim((string) ($params['name'] ?? ''));
         $start = max(0, (int) ($params['start'] ?? 0));
@@ -332,8 +335,8 @@ class CiscoPhoneDirectoryXmlService
 
     private function newDoc(): DOMDocument
     {
-        $doc = new DOMDocument('1.0', 'ISO-8859-1');
-        $doc->formatOutput = false;
+        $doc = new DOMDocument('1.0', 'UTF-8');
+        $doc->formatOutput = true;
 
         return $doc;
     }

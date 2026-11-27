@@ -11,6 +11,7 @@ use App\Services\CiscoPhoneDirectoryXmlService;
 use App\Services\Crypto;
 use Datatables;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
 
@@ -198,8 +199,8 @@ class PesawatTelephoneController extends Controller
         $row->base_url = rtrim(trim((string) ($request->base_url ?? '')), '/') ?: null;
         $row->cnf_base_url = rtrim(trim((string) ($request->cnf_base_url ?? '')), '/') ?: null;
         $row->access_key = trim((string) ($request->access_key ?? '')) ?: null;
-        $row->embed_in_cnf = filter_var($request->embed_in_cnf ?? false, FILTER_VALIDATE_BOOLEAN);
-        $row->use_directory_url_tag = filter_var($request->use_directory_url_tag ?? false, FILTER_VALIDATE_BOOLEAN);
+        $row->embed_in_cnf = false;
+        $row->use_directory_url_tag = false;
         $row->save();
 
         CiscoPhoneDirectoryXmlService::forgetSettingsCache();
@@ -218,6 +219,35 @@ class PesawatTelephoneController extends Controller
         return $this->regenerateActivePhoneConfigs(false);
     }
 
+    public function togglePhonebook(Request $request)
+    {
+        $config = CiscoPhoneConfig::where('id', $request->id)->where('is_active', true)->first();
+        if (!$config) {
+            return response()->json(['message' => 'Konfigurasi tidak ditemukan'], 404);
+        }
+
+        if (!Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')) {
+            return response()->json(['message' => 'Kolom enable_phonebook belum ada. Jalankan migrate.'], 500);
+        }
+
+        $enable = filter_var($request->enable ?? false, FILTER_VALIDATE_BOOLEAN);
+        $config->enable_phonebook = $enable;
+        $config->save();
+
+        try {
+            $this->regenerateSinglePhoneConfig($config, !$enable);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+
+        return response()->json([
+            'message' => $enable
+                ? 'Phonebook dipasang ke pesawat ini. Reboot telepon, lalu buka Directories → ' . (CiscoPhoneDirectoryXmlService::settingsPayload()['title'] ?: 'Phonebook')
+                : 'Phonebook dilepas dari pesawat ini. Reboot telepon.',
+            'enable_phonebook' => $enable,
+        ], 200);
+    }
+
     /**
      * Rollback aman: cnf.xml tanpa directoryURL (untuk pulihkan register setelah regenerate phonebook).
      */
@@ -231,6 +261,10 @@ class PesawatTelephoneController extends Controller
             CiscoPhoneDirectoryXmlService::forgetSettingsCache();
         } catch (\Throwable $e) {
             // tabel pengaturan mungkin belum di-migrate
+        }
+
+        if (Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')) {
+            CiscoPhoneConfig::where('is_active', true)->update(['enable_phonebook' => false]);
         }
 
         return $this->regenerateActivePhoneConfigs(true);
@@ -349,11 +383,17 @@ class PesawatTelephoneController extends Controller
             $config->config_json = $configJson;
             $config->created_by = $config->created_by ?: ($this->user_id ?? null);
             $config->is_active = true;
+            if (Schema::hasColumn('cisco_phone_configs', 'enable_phonebook') && $request->has('enable_phonebook')) {
+                $config->enable_phonebook = filter_var($request->enable_phonebook, FILTER_VALIDATE_BOOLEAN);
+            }
             $config->save();
 
             $plainConfig = CiscoPhoneCnfXmlService::mergeConfig(
                 $this->plainConfigForXml($payload['config_json'], $request->auth_password)
             );
+            $plainConfig['enable_phonebook'] = Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')
+                ? (bool) $config->enable_phonebook
+                : false;
 
             $primaryLinePassword = $plainConfig['lines'][0]['auth_password'] ?? $request->auth_password;
 
@@ -654,7 +694,11 @@ class PesawatTelephoneController extends Controller
 
         if ($forceEmptyDirectory) {
             $plainConfig['directory_uri'] = '';
-            $plainConfig['skip_phonebook_service'] = true;
+            $plainConfig['enable_phonebook'] = false;
+        } else {
+            $plainConfig['enable_phonebook'] = Schema::hasColumn('cisco_phone_configs', 'enable_phonebook')
+                ? (bool) $config->enable_phonebook
+                : false;
         }
 
         $primaryLinePassword = $plainConfig['lines'][0]['auth_password'] ?? $authPassword;

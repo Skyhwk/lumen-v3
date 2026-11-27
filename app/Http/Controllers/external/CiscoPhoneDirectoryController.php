@@ -14,7 +14,7 @@ class CiscoPhoneDirectoryController extends Controller
         $expectedKey = trim((string) (optional(CiscoPhoneDirectoryXmlService::settings())->access_key ?? env('CISCO_PHONE_DIRECTORY_KEY', '')));
         if ($expectedKey !== '' && (string) $request->query('key', '') !== $expectedKey) {
             return $this->ciscoXmlResponse(
-                '<?xml version="1.0" encoding="ISO-8859-1"?><CiscoIPPhoneText><Title>Error</Title><Text>Unauthorized</Text></CiscoIPPhoneText>',
+                '<?xml version="1.0" encoding="UTF-8"?><CiscoIPPhoneText><Title>Error</Title><Text>Unauthorized</Text></CiscoIPPhoneText>',
                 401
             );
         }
@@ -33,6 +33,7 @@ class CiscoPhoneDirectoryController extends Controller
             'mode' => $mode,
             'name' => $name,
             'start' => (int) $request->query('start', 0),
+            'request_base' => CiscoPhoneDirectoryXmlService::baseFromRequestUrl($request->url()),
         ]);
 
         return $this->ciscoXmlResponse($xml, 200);
@@ -40,8 +41,12 @@ class CiscoPhoneDirectoryController extends Controller
 
     private function ciscoXmlResponse(string $xml, int $status): Response
     {
+        if (trim($xml) === '' || strpos($xml, '<') === false) {
+            $xml = '<?xml version="1.0" encoding="UTF-8"?><CiscoIPPhoneText><Title>Phonebook</Title><Text>XML kosong</Text></CiscoIPPhoneText>';
+        }
+
         return response($xml, $status)
-            ->header('Content-Type', 'text/xml; charset=ISO-8859-1')
+            ->header('Content-Type', 'text/xml; charset=UTF-8')
             ->header('Content-Encoding', 'identity')
             ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
             ->header('Pragma', 'no-cache')
