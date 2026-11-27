@@ -223,6 +223,16 @@ class PesawatTelephoneController extends Controller
      */
     public function regenerateAllSafe(Request $request)
     {
+        try {
+            $settings = CiscoPhoneDirectorySetting::current();
+            $settings->embed_in_cnf = false;
+            $settings->use_directory_url_tag = false;
+            $settings->save();
+            CiscoPhoneDirectoryXmlService::forgetSettingsCache();
+        } catch (\Throwable $e) {
+            // tabel pengaturan mungkin belum di-migrate
+        }
+
         return $this->regenerateActivePhoneConfigs(true);
     }
 
@@ -611,7 +621,7 @@ class PesawatTelephoneController extends Controller
         }
 
         $label = $forceEmptyDirectory
-            ? 'Rollback provisioning (tanpa directoryURL) selesai'
+            ? 'Rollback provisioning selesai (tanpa directoryURL dan tanpa layanan Phonebook)'
             : 'Generate ulang selesai';
 
         return response()->json([
@@ -644,6 +654,7 @@ class PesawatTelephoneController extends Controller
 
         if ($forceEmptyDirectory) {
             $plainConfig['directory_uri'] = '';
+            $plainConfig['skip_phonebook_service'] = true;
         }
 
         $primaryLinePassword = $plainConfig['lines'][0]['auth_password'] ?? $authPassword;

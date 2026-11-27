@@ -185,6 +185,7 @@ class CiscoPhoneCnfXmlService
         $config = self::mergeConfig($config);
         if ($forceEmptyDirectory) {
             $config['directory_uri'] = '';
+            $config['skip_phonebook_service'] = true;
         }
         $config['phone_model'] = trim($phoneModel) ?: 'CP-3905';
         $phoneModel = $config['phone_model'];
@@ -502,7 +503,9 @@ class CiscoPhoneCnfXmlService
             ['1', 'Placed Calls', 'Application:Cisco/PlacedCalls'],
             ['2', 'Voicemail', 'Application:Cisco/Voicemail'],
         ];
-        $phonebookServiceUrl = $directoryXml->resolvePhoneServiceUrl();
+        $phonebookServiceUrl = !empty($config['skip_phonebook_service'])
+            ? ''
+            : $directoryXml->resolvePhoneServiceUrl();
         if ($phonebookServiceUrl !== '') {
             $phoneServicesList[] = ['1', 'Phonebook', $phonebookServiceUrl];
         }
