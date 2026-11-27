@@ -132,25 +132,18 @@
         <table role="presentation" class="dm-card" width="100%" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="max-width:640px;background-color:#ffffff;border:1px solid #E0E2F5;border-radius:12px;overflow:hidden;">
 
           <tr>
-            <td class="pad dm-white" bgcolor="#ffffff" style="background-color:#ffffff;padding:18px 28px 14px;border-bottom:3px solid #D71919;">
+            <td class="pad dm-white" bgcolor="#ffffff" style="background-color:#ffffff;padding:18px 28px 14px;border-bottom:3px solid #0304EC;">
               <div class="dm-title" style="font-size:24px;line-height:1.1;font-weight:800;letter-spacing:.02em;color:#0304EC;">INTI SURYA</div>
               <div class="dm-title" style="font-size:10px;line-height:1.4;font-weight:700;letter-spacing:.46em;color:#0304EC;margin-top:3px;">LABORATORIUM</div>
             </td>
           </tr>
           <tr>
-            <td class="pad dm-blue" bgcolor="#0304EC" style="background-color:#0304EC;padding:20px 28px;">
-              <div style="font-size:22px;line-height:1.3;font-weight:700;color:#ffffff;">Pengingat Jadwal Sampling</div>
-              <div style="font-size:13px;color:#DDE0FF;margin-top:6px;">Dikirim 14 hari sebelum tanggal sampling (H-14)</div>
-            </td>
-          </tr>
-
-          <tr>
             <td class="pad dm-white" bgcolor="#ffffff" style="padding:26px 28px 30px;background-color:#ffffff;color:#1f2937;">
 
-              <p class="dm-text" style="margin:0 0 12px;font-size:16px;color:#1f2937;">Yth. Bapak/Ibu {{ $greetingName }},</p>
+              <p class="dm-text" style="margin:0 0 12px;font-size:16px;color:#1f2937;">Yth. {{ $greetingName }},</p>
               <p class="dm-text" style="margin:0 0 12px;font-size:16px;color:#1f2937;">Dengan Hormat,</p>
               <p class="dm-text" style="margin:0 0 20px;font-size:16px;color:#1f2937;">
-              Melalui email ini,kami menginformasikan kembali bahwa kegiatan pengambilan sampel (sampling) di perusahaan Bapak/Ibu akan dilaksanakan sesuai dengan jadwal yang tercantum di bawah ini.
+              Melalui email ini, kami ingin mengingatkan kembali bahwa kegiatan pengambilan sampel (sampling) akan dilaksanakan sesuai dengan jadwal yang telah ditetapkan, sebagaimana tercantum dalam rincian berikut
               </p>
 
               {{-- 1. Informasi Pesanan (gaya klasik portal) --}}

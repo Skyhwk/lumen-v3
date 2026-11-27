@@ -288,7 +288,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 						$hasil = ((21 - $faktor_koreksi) / (21 - floatval($dataLapangan->O2))) * $C1_value;
 						if ($ws_value != null) {
 							$ws_value->input_koreksi = $request->faktor_koreksi;
-							$ws_value->nil_koreksi = number_format((float) $hasil, 4, '.', '');
+							$ws_value->nil_koreksi = round((float) $hasil, 4);
 							// $ws_value->keterangan_koreksi = json_encode($request->jenis_koreksi);
 							$keterangan = $request->jenis_koreksi; // Jenis Koreksi
 							$keterangan[] = 'Angka koreksi ' . $request->faktor_koreksi . '%'; // Menambahkan keterangan angka koreksi
@@ -297,7 +297,6 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 							$ws_value->is_active = true;
 							$ws_value->updated_at = Carbon::now();
 							$ws_value->updated_by = $this->karyawan;
-							// dd($ws_value);
 							$ws_value->save();
 						} else {
 							return response()->json([

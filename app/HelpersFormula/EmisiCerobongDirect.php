@@ -212,21 +212,21 @@ class EmisiCerobongDirect {
         // BLOK FORMATTING AKHIR
         // ======================
 
-        // hanya jika value bukan string "<1" dsb
-        if (is_numeric($c2 ?? null)) {
-            $c2 = number_format($c2, 4, '.', ',');
-        }
-        if (is_numeric($c3 ?? null)) {
-            $c3 = number_format($c3, 1, '.', ',');
-        }
-        if (is_numeric($c5 ?? null)) {
-            $c5 = number_format($c5, 4, '.', ',');
-        }
-        if (is_numeric($c6 ?? null)) {
-            $c6 = number_format($c6, 2, '.', ',');
-        }
         
 
+        // hanya jika value bukan string "<1" dsb
+        if (is_numeric($c2 ?? null)) {
+            $c2 = round($c2, 4);
+        }
+        if (is_numeric($c3 ?? null)) {
+            $c3 = round($c3, 1);
+        }
+        if (is_numeric($c5 ?? null)) {
+            $c5 = round($c5, 4);
+        }
+        if (is_numeric($c6 ?? null)) {
+            $c6 = round($c6, 2);
+        }
         
         return [
             'C1' => $c1,

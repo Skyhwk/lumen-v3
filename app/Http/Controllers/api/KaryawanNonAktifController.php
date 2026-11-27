@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use Illuminate\Http\Request;
 use App\Models\MasterKaryawan;
 use App\Models\MasterCabang;
+use App\Models\PenanggungJawabDokumenKaryawan;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
@@ -139,14 +140,13 @@ class KaryawanNonAktifController extends Controller
                 ], 404);
             }
 
-            $hrd = MasterKaryawan::with('jabatan', 'department')->where('id', $this->user_id)->first();
             $cabang = MasterCabang::where('id', $this->idcabang)->first();
 
             $mpdfConfig = array(
                 'mode' => 'utf-8',
                 'format' => 'A4',
-                'margin_left' => 18,
-                'margin_right' => 18,
+                'margin_left' => 12,
+                'margin_right' => 12,
                 'margin_top' => 34,
                 'margin_bottom' => 30,
                 'margin_header' => 12,
@@ -157,10 +157,17 @@ class KaryawanNonAktifController extends Controller
             );
             $pdf = new PDF($mpdfConfig);
 
-            $namaDivisi = e(optional($data->department)->nama_divisi ?: '-');
-            $namaJabatan = e(optional($data->jabatan)->nama_jabatan ?: '-');
-            $namaHrd = e(optional($hrd)->nama_lengkap ?: '-');
-            $jabatanHrd = e(optional(optional($hrd)->jabatan)->nama_jabatan ?: '-');
+            $namaDivisi = $data->department;
+            $namaJabatan = $data->jabatan;
+
+            PenanggungJawabDokumenKaryawan::syncActive();
+            $penanggungJawab = PenanggungJawabDokumenKaryawan::query()
+                ->where('is_active', 1)
+                ->orderByDesc('id')
+                ->first();
+            $namaHrd = e(optional($penanggungJawab)->nama_karyawan ?: '-');
+            $jabatanHrd = e(optional($penanggungJawab)->jabatan ?: '-');
+
             $tanggalTerakhir = !empty($data->effective_date)
                 ? e(self::tanggal_indonesia($data->effective_date))
                 : '-';
@@ -168,20 +175,19 @@ class KaryawanNonAktifController extends Controller
             $teleponCabang = e(optional($cabang)->tlp_cabang ?: '');
 
             $pdf->SetHTMLHeader('
-                <table style="width: 198mm; margin-left: -13mm; border-collapse: collapse;">
+                <table style="width: 100%; margin-left: 0mm; border-collapse: collapse;">
                     <tr>
-                        <td style="width: 36%; vertical-align: middle; padding: 0 0 3mm 14mm;">
+                        <td style="width: 50%; vertical-align: middle; padding: 0 0 0mm 0mm;">
                             <img src="' . public_path() . '/logo/isl_logo.png" alt="ISL" style="height: 52px; width: auto;">
                         </td>
-                        <td style="width: 44%; text-align: center; vertical-align: middle; padding: 0 0 0mm 20mm;">
+                        <td style="width: 50%; text-align: center; vertical-align: middle; padding: 0 0 0mm 0;">
+                        <div style="display: flex; flex-direction: column; align-items: center;">      
                             <div style="font-size: 14pt; font-weight: bold; letter-spacing: 0.4px;">SURAT PEMBERITAHUAN</div>
                             <div style="font-size: 9pt; margin-top: 4px;">Ref : ISL/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/' . DATE('y') . '-' . self::romawi(DATE('m')) . '/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</div>
-                        </td>
-                        <td style="width: 28%; padding: 0 12mm 7mm 0;"></td>
+                        </div></td>
                     </tr>
                 </table>
             ');
-
             $pdf->WriteHTML('
                 <style>
                     body { font-family: sans-serif; font-size: 11pt; color: #111; line-height: 1.45; }
@@ -190,10 +196,10 @@ class KaryawanNonAktifController extends Controller
                     table.identitas td { padding: 3px 0; vertical-align: top; font-size: 10.5pt; }
                     table.identitas td.label { width: 145px; }
                 </style>
-                <div style="position: fixed; left: -12mm; top: -29mm; width: 198mm; height: 275mm; border: 1.2pt solid #1a1a1a;">&nbsp;</div>
-                <div style="position: fixed; left: -12mm; top: -2mm; width: 198mm; border-top: 0.5pt solid grey; font-size: 1pt; line-height: 0;">&nbsp;</div>
-                <div style="position: fixed; left: -12mm; top: 233mm; width: 198mm; border-top: 0.5pt solid grey; font-size: 1pt; line-height: 0;">&nbsp;</div>
-                <div style="position: fixed; left: -12mm; top: 249mm; width: 198mm; text-align: right; font-family: serif; font-style: italic; font-size: 8pt; color: #000; line-height: 1.35;">
+                <div style="position: fixed; left: -6mm; top: -29mm; width: 198.5mm; height: 275mm; border: 1.2pt solid #1a1a1a;">&nbsp;</div>
+                <div style="position: fixed; left: -6mm; top: -2mm; width: 198.5mm; border-top: 0.5pt solid grey; font-size: 1pt; line-height: 0;">&nbsp;</div>
+                <div style="position: fixed; left: -6mm; top: 233mm; width: 198.5mm; border-top: 0.5pt solid grey; font-size: 1pt; line-height: 0;">&nbsp;</div>
+                <div style="position: fixed; left: -6mm; top: 249mm; width: 198.5mm; text-align: right; font-family: serif; font-style: italic; font-size: 8pt; color: #000; line-height: 1.35;">
                     Note : Dokumen ini diterbitkan otomatis oleh sistem<br>' . date('YmdHi') . '
                 </div>
                 <p style="margin-top: 10mm;">Perihal : <b>Karyawan Keluar</b></p>
@@ -229,7 +235,7 @@ class KaryawanNonAktifController extends Controller
             $pdf->WriteHTML('
                 <p>Dihimbau kepada seluruh karyawan agar dapat diperhatikan, dimengerti dan dipahami serta dapat bekerja dengan sebaik-baiknya dan sebenar-benarnya.</p>
                 <p style="margin-top: 18px;">Tangerang, ' . self::tanggal_indonesia(date('Y-m-d')) . '</p>
-                <p style="margin-top: 48px;"><b><u>' . $namaHrd . '</u></b><br>' . $jabatanHrd . '</p>
+                <p style="margin-top: 90px;"><b><u>' . $namaHrd . '</u></b><br>' . $jabatanHrd . '</p>
             ');
 
             $pdf->SetHTMLFooter('
