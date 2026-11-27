@@ -864,7 +864,7 @@ class JadwalMobilisasiService
     /**
      * Daftar unit peralatan (1 row = 1 kode_aset) + flag terkunci.
      * Kunci IO: tanggal sampling yang sama (tanpa durasi).
-     * Kunci monitoring: status terakhir != Tersedia DAN tanggal jadwal masih <= end_date.
+     * Kunci monitoring: status efektif pada tanggal sampling.
      *
      * @return list<array<string, mixed>>
      */
@@ -921,16 +921,10 @@ class JadwalMobilisasiService
             ->orderBy('kode_aset', 'asc')
             ->get();
 
-        // IO lock antar-tim: hanya tanggal yang sama (durasi diabaikan).
-        $locked = ['kodes' => [], 'by_kode' => [], 'range' => null];
-        if ($tanggalNorm) {
-            $locked = IoPeralatanTimService::usedKodeAsetByTanggal(
-                $tanggalNorm,
-                $excludePetugasKey,
-                1
-            );
-        }
-        $lockedByKode = $locked['by_kode'] ?? [];
+        $monitoringContext = MonitoringPeralatanService::buildContext(
+            $tanggalNorm ?? Carbon::today()->toDateString(),
+            $excludePetugasKey
+        );
 
         $ownKodes = [];
         if ($tanggalNorm && $excludePetugasKey) {
@@ -947,10 +941,6 @@ class JadwalMobilisasiService
             }
         }
 
-        $monitoringById = MonitoringPeralatanService::latestMonitoringByPeralatanIds(
-            $rows->pluck('id')->map(fn ($id) => (int) $id)->all()
-        );
-
         $result = [];
         foreach ($rows as $row) {
             $namaAlat = trim((string) $row->nama_alat);
@@ -960,18 +950,16 @@ class JadwalMobilisasiService
             }
 
             $idPeralatan = (int) $row->id;
-            $isLockedIo = isset($lockedByKode[$kodeAset]);
-            $monitoring = $monitoringById[$idPeralatan] ?? null;
-            // latest is_active=0 sudah di-normalize jadi Tersedia di service.
-            $statusAlat = $monitoring['status_alat'] ?? MonitoringPeralatanService::STATUS_TERSEDIA;
-            $isOwn = isset($ownKodes[$kodeAset]);
-
-            // Sibuk: is_active=1 + status != Tersedia. is_active=0 = tersedia.
-            $isBusyMonitoring = MonitoringPeralatanService::isBusyOnTanggal(
-                $monitoring,
-                $tanggalNorm ?? ''
+            $monitoring = MonitoringPeralatanService::resolveEffectiveStatus(
+                $idPeralatan,
+                $tanggalNorm ? $kodeAset : null,
+                $monitoringContext
             );
-            $isUnavailableStatus = $isBusyMonitoring && !$isOwn;
+            $isLockedIo = $monitoring['source'] === 'io';
+            $statusAlat = $monitoring['status_alat'];
+            $isOwn = isset($ownKodes[$kodeAset]);
+            $isUnavailableStatus = strcasecmp($statusAlat, MonitoringPeralatanService::STATUS_TERSEDIA) !== 0
+                && !$isOwn;
 
             $isLocked = $isLockedIo || $isUnavailableStatus;
             $lockedReason = null;
@@ -996,7 +984,7 @@ class JadwalMobilisasiService
                 'monitoring_end_date' => $monitoring['end_date'] ?? null,
                 'is_locked' => $isLocked,
                 'locked_reason' => $lockedReason,
-                'locked_by' => $isLockedIo ? (string) $lockedByKode[$kodeAset] : null,
+                'locked_by' => $isLockedIo ? $monitoring['keterangan'] : null,
             ];
         }
 
