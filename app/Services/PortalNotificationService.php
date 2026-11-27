@@ -361,32 +361,29 @@ class PortalNotificationService
     {
         $noQuotation = $extraData['no_quotation'] ?? null;
         $noOrder = $extraData['no_order'] ?? null;
-        $company = $extraData['nama_perusahaan'] ?? $extraData['company'] ?? null;
-        $tanggal = $extraData['tanggal_label'] ?? $extraData['jadwal_tanggal'] ?? null;
-        $jamMulai = $extraData['jam_mulai'] ?? null;
+        $company = trim((string) ($extraData['nama_perusahaan'] ?? $extraData['company'] ?? ''));
+        $tanggal = trim((string) ($extraData['tanggal_label'] ?? $extraData['jadwal_tanggal'] ?? ''));
+        $jamMulai = trim((string) ($extraData['jam_mulai'] ?? ''));
 
-        // Sapaan netral (tanpa asumsi gender/usia). Nama opsional setelah Bapak/Ibu.
-        $picName = trim((string) (
-            $extraData['pic_name']
-            ?? $extraData['customer_name']
-            ?? $extraData['name']
-            ?? $user->nama_lengkap
-            ?? $user->name
-            ?? $user->nama
-            ?? ''
-        ));
-        $greeting = $picName !== ''
-            ? "Yth. Bapak/Ibu {$picName}"
-            : 'Yth. Bapak/Ibu PIC';
+        // Contoh:
+        // Title: Sudah Siap untuk Sampling Berikutnya?
+        // Body: Tim kami akan hadir di PT ... pada 10 Desember 2026, pukul 08.00 WIB. Ketuk...
+        $where = $company !== '' ? " di {$company}" : '';
+        $when = $tanggal !== '' ? " pada {$tanggal}" : '';
+        $jamText = '';
+        if ($jamMulai !== '' && $jamMulai !== '-') {
+            // 08:00 / 08.00 → 08.00 WIB
+            $jamNorm = preg_replace('/\bWIB\b/i', '', $jamMulai);
+            $jamNorm = trim(str_replace(':', '.', (string) $jamNorm));
+            $jamText = ", pukul {$jamNorm} WIB";
+        }
 
-        $companyText = $company ? " di {$company}" : '';
-        $tanggalText = $tanggal ? " pada {$tanggal}" : '';
-        $jamText = $jamMulai ? " pukul {$jamMulai}" : '';
-        $qtText = $noQuotation ? " (QT {$noQuotation})" : '';
+        $body = trim("Tim kami akan hadir{$where}{$when}{$jamText}.")
+            . ' Ketuk untuk melihat detail jadwal di pesanan Anda.';
 
         return [
-            'title' => 'Reminder Jadwal Sampling',
-            'body' => trim("{$greeting}, reminder jadwal sampling{$companyText}{$tanggalText}{$jamText}{$qtText}."),
+            'title' => 'Sudah Siap untuk Sampling Berikutnya?',
+            'body' => $body,
             // Path relatif app (BrowserRouter basename=/customers → /customers/pesanan)
             'url' => '/pesanan',
             'data' => array_merge([
@@ -396,9 +393,9 @@ class PortalNotificationService
                 'url' => '/pesanan',
                 'no_quotation' => $noQuotation,
                 'no_order' => $noOrder,
-                'nama_perusahaan' => $company,
-                'tanggal_label' => $tanggal,
-                'jam_mulai' => $jamMulai,
+                'nama_perusahaan' => $company !== '' ? $company : null,
+                'tanggal_label' => $tanggal !== '' ? $tanggal : null,
+                'jam_mulai' => $jamMulai !== '' ? $jamMulai : null,
             ], $this->normalizeData($extraData['data'] ?? [])),
         ];
     }

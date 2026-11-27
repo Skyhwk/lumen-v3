@@ -4,6 +4,7 @@ namespace App\Services\Greatday;
 
 use App\Models\Absensi;
 use App\Models\MasterKaryawan;
+use App\Models\MasterShiftKaryawan;
 use App\Models\ShiftKaryawan;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -362,20 +363,23 @@ class AttendanceReminderDetectionService
      */
     private function resolveSchedule(?object $shiftRow): array
     {
+        $regular = MasterShiftKaryawan::getShiftTimes('SHREGULAR', $this->connection, '08:00', '17:00');
         if (!$shiftRow) {
             return [
                 'shift' => 'DEFAULT',
-                'time_in' => self::DEFAULT_TIME_IN,
-                'time_out' => self::DEFAULT_TIME_OUT,
+                'time_in' => $regular['in_hms'],
+                'time_out' => $regular['out_hms'],
                 'source' => 'default_08_17',
             ];
         }
 
-        $timeIn = $this->normalizeClock($shiftRow->time_in) ?: self::DEFAULT_TIME_IN;
-        $timeOut = $this->normalizeClock($shiftRow->time_out) ?: self::DEFAULT_TIME_OUT;
+        $shiftCode = strtoupper(trim((string) $shiftRow->shift));
+        $masterTimes = MasterShiftKaryawan::getShiftTimes($shiftCode ?: 'SHREGULAR', $this->connection, $regular['in'], $regular['out']);
+        $timeIn = $this->normalizeClock($shiftRow->time_in) ?: $masterTimes['in_hms'];
+        $timeOut = $this->normalizeClock($shiftRow->time_out) ?: $masterTimes['out_hms'];
 
         return [
-            'shift' => strtoupper(trim((string) $shiftRow->shift)),
+            'shift' => $shiftCode,
             'time_in' => $timeIn,
             'time_out' => $timeOut,
             'source' => 'shift_karyawan',
@@ -389,18 +393,7 @@ class AttendanceReminderDetectionService
 
     private function isOvernightShift(string $shiftName, string $timeIn, string $timeOut): bool
     {
-        $name = strtoupper(trim($shiftName));
-        if (in_array($name, ['24JAM', 'SHSECURITY2'], true)) {
-            return true;
-        }
-
-        $in = $this->toSeconds($timeIn);
-        $out = $this->toSeconds($timeOut);
-        if ($in === null || $out === null) {
-            return false;
-        }
-
-        return $out <= $in;
+        return MasterShiftKaryawan::isOvernight($shiftName, $timeIn, $timeOut, $this->connection);
     }
 
     private function hasMasuk(Collection $attendance, int $karyawanId, string $date): bool
