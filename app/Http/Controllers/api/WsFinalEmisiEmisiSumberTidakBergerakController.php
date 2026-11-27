@@ -307,6 +307,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
             if ($request->type == 'emisi_cerobong_header') {
                 $data = EmisiCerobongHeader::where('id', $request->id)->update([
                     'is_approved'  => 0,
+                    'is_active'    => false,
                     'notes_reject' => $request->note,
                     'rejected_by'  => $this->karyawan,
                     'rejected_at'  => Carbon::now()->format('Y-m-d H:i:s'),

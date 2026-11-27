@@ -45,6 +45,7 @@ $router->post('/api/quotation-auto/open-link', 'external\QuotationAutoLinkOpenHa
 $router->post('/api/payroll-transfer/complete', 'external\PayrollTransferCallbackController@complete');
 
 $router->get('/api/cisco-phone-directory.xml', 'external\CiscoPhoneDirectoryController@xml');
+$router->options('/api/cisco-phone-directory.xml', 'external\CiscoPhoneDirectoryController@xml');
 
 $router->get('/api/getJadwal', 'external\JadwalHandler@getJadwal');
 $router->get('/api/showDetailJadwal', 'external\JadwalHandler@getDetailJadwalApi');
