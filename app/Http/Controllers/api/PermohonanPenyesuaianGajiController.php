@@ -22,6 +22,7 @@ use App\Services\SalaryAdjustmentWorkflowService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Yajra\Datatables\Datatables;
 
 class PermohonanPenyesuaianGajiController extends Controller
@@ -202,6 +203,7 @@ class PermohonanPenyesuaianGajiController extends Controller
                 ))
                 ->count(),
             SalaryAdjustmentWorkflowService::MANAGER_TAB_MUTASI_INBOX => $this->mutasiInboxCount($periode),
+            SalaryAdjustmentWorkflowService::MANAGER_TAB_SENIOR_INBOX => $this->seniorManagerInboxCount($periode),
         ];
 
         return response()->json([
@@ -225,6 +227,158 @@ class PermohonanPenyesuaianGajiController extends Controller
                 'salary_decisions' => EmployeeAdjustmentMutasiService::salaryDecisionOptions(),
             ],
         ]);
+    }
+
+    public function indexSeniorManagerInbox(Request $request)
+    {
+        if (!SalaryAdjustmentWorkflowService::isSeniorManagerGrade($this->grade)) {
+            return response()->json(['success' => false, 'message' => 'Hanya Senior Manager yang dapat mengakses inbox ini'], 403);
+        }
+        if (!Schema::hasColumn('salary_adjustment_requests', 'senior_manager_id')) {
+            return response()->json(['success' => false, 'message' => 'Kolom senior_manager_id belum tersedia. Jalankan migrasi terlebih dahulu.'], 503);
+        }
+
+        $periode = $request->periode ?? date('Y');
+        $query = $this->seniorManagerInboxQuery($periode)
+            ->select(
+                'sar.id',
+                'sar.no_document',
+                'sar.request_type',
+                'sar.employee_id',
+                'sar.jabatan',
+                'sar.status',
+                'sar.created_at',
+                'sar.catatan_tambahan',
+                'karyawan.nama_lengkap',
+                'd.nama_divisi',
+                'sender.nama_lengkap as manager_pengaju'
+            )
+            ->orderByDesc('sar.id');
+
+        return $this->applyDatatablesFilter(
+            $this->decorateRequestTypeColumn(
+                Datatables::of($query)
+                    ->addColumn('status_label', function ($row) {
+                        return SalaryAdjustmentWorkflowService::statusLabel($row->status);
+                    })
+                    ->addColumn('can_respond', fn () => true)
+            )
+        )->make(true);
+    }
+
+    public function respondSeniorManager(Request $request)
+    {
+        if (!SalaryAdjustmentWorkflowService::isSeniorManagerGrade($this->grade)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hanya Senior Manager yang dapat merespons permohonan ini',
+            ], 403);
+        }
+
+        $id = (int) $request->input('id');
+        $decision = strtolower(trim((string) $request->input('decision', '')));
+        $reason = trim((string) ($request->input('reject_reason') ?? $request->input('reason') ?? ''));
+
+        if (!$id) {
+            return response()->json(['success' => false, 'message' => 'ID permohonan wajib diisi'], 400);
+        }
+        if (!in_array($decision, ['approve', 'reject'], true)) {
+            return response()->json(['success' => false, 'message' => 'Keputusan tidak valid'], 400);
+        }
+        if ($decision === 'reject' && $reason === '') {
+            return response()->json(['success' => false, 'message' => 'Alasan penolakan wajib diisi'], 422);
+        }
+
+        $record = SalaryAdjustmentRequest::query()
+            ->where('id', $id)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$record) {
+            return response()->json(['success' => false, 'message' => 'Permohonan tidak ditemukan'], 404);
+        }
+        if ($record->status !== SalaryAdjustmentWorkflowService::STATUS_WAITING_SENIOR_MANAGER) {
+            return response()->json(['success' => false, 'message' => 'Permohonan tidak menunggu approval Senior Manager'], 422);
+        }
+        if ((int) ($record->senior_manager_id ?? 0) !== (int) $this->user_id) {
+            return response()->json(['success' => false, 'message' => 'Anda bukan Senior Manager penanggung jawab permohonan ini'], 403);
+        }
+
+        $fromStatus = $record->status;
+        $now = Carbon::now();
+
+        DB::connection('mysql')->beginTransaction();
+        try {
+            if ($decision === 'reject') {
+                $record->status = SalaryAdjustmentWorkflowService::STATUS_REJECTED;
+                $record->rejected_stage = 'senior_manager';
+                $record->reject_reason = $reason;
+                $record->rejected_by = $this->karyawan;
+                $record->rejected_at = $now;
+                $record->updated_by = $this->karyawan;
+                $record->save();
+
+                SalaryAdjustmentLogService::log(
+                    $record->id,
+                    $fromStatus,
+                    $record->status,
+                    'senior_manager_reject',
+                    $this->user_id,
+                    $this->karyawan,
+                    $reason
+                );
+
+                DB::connection('mysql')->commit();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Permohonan ditolak oleh Senior Manager',
+                ]);
+            }
+
+            $meta = is_array($record->type_metadata) ? $record->type_metadata : [];
+            $nextStatus = $meta['after_senior_manager_status']
+                ?? SalaryAdjustmentWorkflowService::STATUS_SUBMITTED;
+            if (!in_array($nextStatus, [
+                SalaryAdjustmentWorkflowService::STATUS_SUBMITTED,
+                SalaryAdjustmentWorkflowService::STATUS_WAITING_RECEIVER,
+            ], true)) {
+                $nextStatus = SalaryAdjustmentWorkflowService::STATUS_SUBMITTED;
+            }
+
+            $record->status = $nextStatus;
+            $record->updated_by = $this->karyawan;
+            $record->save();
+
+            SalaryAdjustmentLogService::log(
+                $record->id,
+                $fromStatus,
+                $record->status,
+                'senior_manager_approve',
+                $this->user_id,
+                $this->karyawan,
+                'Senior Manager menyetujui — lanjut ' . SalaryAdjustmentWorkflowService::statusLabel($nextStatus)
+            );
+
+            DB::connection('mysql')->commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Permohonan disetujui Senior Manager',
+                'data' => [
+                    'id' => $record->id,
+                    'status' => $record->status,
+                    'status_label' => SalaryAdjustmentWorkflowService::statusLabel($record->status),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            DB::connection('mysql')->rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan sistem: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function indexMutasiInbox(Request $request)
@@ -585,13 +739,33 @@ class PermohonanPenyesuaianGajiController extends Controller
         $requestedGaji = $currentGaji + $adjustmentGaji;
         $requestedTunj = $currentTunjangan + $adjustmentTunj;
 
-        $initialStatus = $data['request_type'] === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI && !$mutasiUnderSameManager
+        $afterSeniorStatus = $data['request_type'] === EmployeeAdjustmentTypeRegistry::TYPE_MUTASI && !$mutasiUnderSameManager
             ? SalaryAdjustmentWorkflowService::STATUS_WAITING_RECEIVER
             : SalaryAdjustmentWorkflowService::STATUS_SUBMITTED;
 
+        $seniorManagerId = SalaryAdjustmentWorkflowService::resolveSeniorManagerId(
+            (int) $this->user_id,
+            $this->grade
+        );
+        $needsSeniorManager = $seniorManagerId !== null;
+        if ($needsSeniorManager && !Schema::hasColumn('salary_adjustment_requests', 'senior_manager_id')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kolom senior_manager_id belum tersedia. Jalankan migrasi terlebih dahulu.',
+            ], 503);
+        }
+        $initialStatus = $needsSeniorManager
+            ? SalaryAdjustmentWorkflowService::STATUS_WAITING_SENIOR_MANAGER
+            : $afterSeniorStatus;
+
+        $typeMetadata = is_array($data['type_metadata'] ?? null) ? $data['type_metadata'] : [];
+        if ($needsSeniorManager) {
+            $typeMetadata['after_senior_manager_status'] = $afterSeniorStatus;
+        }
+
         DB::connection('mysql')->beginTransaction();
         try {
-            $record = SalaryAdjustmentRequest::create([
+            $createPayload = [
                 'no_document' => $this->generateDocumentNumber($data['request_type']),
                 'request_type' => $data['request_type'],
                 'workflow_profile' => $data['workflow_profile'],
@@ -619,12 +793,17 @@ class PermohonanPenyesuaianGajiController extends Controller
                 'scheduled_apply_at' => $data['scheduled_apply_at'],
                 'apply_status' => EmployeeAdjustmentWorkflowResolver::APPLY_STATUS_PENDING,
                 'catatan_tambahan' => $data['catatan_tambahan'],
-                'type_metadata' => $data['type_metadata'] ?? null,
+                'type_metadata' => $typeMetadata ?: null,
                 'status' => $initialStatus,
                 'created_by' => $this->karyawan,
                 'updated_by' => $this->karyawan,
                 'is_active' => true,
-            ]);
+            ];
+            if (Schema::hasColumn('salary_adjustment_requests', 'senior_manager_id')) {
+                $createPayload['senior_manager_id'] = $seniorManagerId;
+            }
+
+            $record = SalaryAdjustmentRequest::create($createPayload);
 
             $kpiService = new SalaryAdjustmentKpiService();
             if (
@@ -635,6 +814,13 @@ class PermohonanPenyesuaianGajiController extends Controller
                 $kpiService->store($record->id, $data['kpi'], $this->karyawan);
             }
 
+            $createNote = 'Permohonan ' . EmployeeAdjustmentTypeRegistry::label($data['request_type']) . ' dibuat';
+            if ($needsSeniorManager) {
+                $createNote .= ' — menunggu approval Senior Manager';
+            } elseif ($mutasiUnderSameManager) {
+                $createNote .= ' (mutasi dalam naungan manager yang sama — langsung HRD)';
+            }
+
             SalaryAdjustmentLogService::log(
                 $record->id,
                 null,
@@ -642,8 +828,7 @@ class PermohonanPenyesuaianGajiController extends Controller
                 'create',
                 $this->user_id,
                 $this->karyawan,
-                'Permohonan ' . EmployeeAdjustmentTypeRegistry::label($data['request_type']) . ' dibuat'
-                    . ($mutasiUnderSameManager ? ' (mutasi dalam naungan manager yang sama — langsung HRD)' : '')
+                $createNote
             );
 
             DB::connection('mysql')->commit();
@@ -679,6 +864,9 @@ class PermohonanPenyesuaianGajiController extends Controller
         $detail['can_respond_mutasi'] = $mutasiService->canRespond($record, (int) $this->user_id);
         $detail['can_propose_mutasi_date'] = $mutasiService->canProposeMutasiDate($record, (int) $this->user_id);
         $detail['can_respond_mutasi_date'] = $mutasiService->canRespondMutasiDate($record, (int) $this->user_id);
+        $detail['can_respond_senior_manager'] = $record->status === SalaryAdjustmentWorkflowService::STATUS_WAITING_SENIOR_MANAGER
+            && SalaryAdjustmentWorkflowService::isSeniorManagerGrade($this->grade)
+            && (int) ($record->senior_manager_id ?? 0) === (int) $this->user_id;
 
         return response()->json([
             'success' => true,
@@ -845,6 +1033,10 @@ class PermohonanPenyesuaianGajiController extends Controller
             return $record;
         }
 
+        if ((int) ($record->senior_manager_id ?? 0) === (int) $this->user_id) {
+            return $record;
+        }
+
         $allowedIds = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
         if ((int) $record->requested_by_id !== (int) $this->user_id && !in_array((int) $record->employee_id, $allowedIds, true)) {
             return null;
@@ -960,6 +1152,30 @@ class PermohonanPenyesuaianGajiController extends Controller
             ->where('receiver_manager_id', (int) $this->user_id)
             ->where('status', SalaryAdjustmentWorkflowService::STATUS_WAITING_RECEIVER)
             ->count();
+    }
+
+    private function seniorManagerInboxQuery($periode)
+    {
+        return DB::connection('mysql')
+            ->table('salary_adjustment_requests as sar')
+            ->leftJoin('master_karyawan as karyawan', 'sar.employee_id', '=', 'karyawan.id')
+            ->leftJoin('master_divisi as d', 'karyawan.id_department', '=', 'd.id')
+            ->leftJoin('master_karyawan as sender', 'sar.requested_by_id', '=', 'sender.id')
+            ->where('sar.is_active', true)
+            ->whereYear('sar.created_at', $periode)
+            ->where('sar.status', SalaryAdjustmentWorkflowService::STATUS_WAITING_SENIOR_MANAGER)
+            ->where('sar.senior_manager_id', (int) $this->user_id);
+    }
+
+    private function seniorManagerInboxCount($periode): int
+    {
+        if (!SalaryAdjustmentWorkflowService::isSeniorManagerGrade($this->grade)
+            || !Schema::hasColumn('salary_adjustment_requests', 'senior_manager_id')
+        ) {
+            return 0;
+        }
+
+        return $this->seniorManagerInboxQuery($periode)->count();
     }
 
     private function isAllowedSubordinate(int $employeeId): bool

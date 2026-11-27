@@ -60,4 +60,9 @@ class SalaryAdjustmentRequest extends Model
     {
         return $this->belongsTo(MasterKaryawan::class, 'receiver_manager_id');
     }
+
+    public function seniorManager()
+    {
+        return $this->belongsTo(MasterKaryawan::class, 'senior_manager_id');
+    }
 }

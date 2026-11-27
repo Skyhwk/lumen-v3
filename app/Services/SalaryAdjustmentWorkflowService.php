@@ -2,9 +2,12 @@
 
 namespace App\Services;
 
+use App\Models\MasterKaryawan;
+
 class SalaryAdjustmentWorkflowService
 {
     public const STATUS_SUBMITTED = 'submitted';
+    public const STATUS_WAITING_SENIOR_MANAGER = 'waiting_senior_manager';
     public const STATUS_WAITING_RECEIVER = 'waiting_receiver';
     public const STATUS_WAITING_GIVER = 'waiting_giver';
     public const STATUS_RECEIVER_RESPONDED = 'receiver_responded';
@@ -24,6 +27,7 @@ class SalaryAdjustmentWorkflowService
     public const STATUS_CANCELLED = 'cancelled';
 
     public const MANAGER_TAB_WAITING = 'waiting';
+    public const MANAGER_TAB_SENIOR_INBOX = 'senior_inbox';
     public const MANAGER_TAB_MUTASI_INBOX = 'mutasi_inbox';
     public const MANAGER_TAB_IN_PROGRESS = 'in_progress';
     public const MANAGER_TAB_COMPLETED = 'completed';
@@ -68,6 +72,7 @@ class SalaryAdjustmentWorkflowService
 
     public const STATUS_LABELS = [
         self::STATUS_SUBMITTED => 'Menunggu HRD',
+        self::STATUS_WAITING_SENIOR_MANAGER => 'Menunggu Senior Manager',
         self::STATUS_WAITING_RECEIVER => 'Menunggu Manager Penerima',
         self::STATUS_WAITING_GIVER => 'Menunggu Manager Pemberi',
         self::STATUS_RECEIVER_RESPONDED => 'Manager Penerima Merespons',
@@ -89,6 +94,7 @@ class SalaryAdjustmentWorkflowService
 
     public const MANAGER_TAB_STATUS_MAP = [
         self::MANAGER_TAB_WAITING => [
+            self::STATUS_WAITING_SENIOR_MANAGER,
             self::STATUS_SUBMITTED,
             self::STATUS_WAITING_RECEIVER,
             self::STATUS_WAITING_GIVER,
@@ -127,6 +133,57 @@ class SalaryAdjustmentWorkflowService
         return in_array($normalized, ['MANAGER', 'SENIOR MANAGER'], true);
     }
 
+    public static function isSeniorManagerGrade(?string $grade): bool
+    {
+        $normalized = strtoupper(trim(str_replace('_', ' ', (string) $grade)));
+
+        return $normalized === 'SENIOR MANAGER';
+    }
+
+    /**
+     * Cari Senior Manager di atasan langsung pengaju.
+     * Pengaju yang sudah SENIOR MANAGER → null (step dilewati).
+     */
+    public static function resolveSeniorManagerId(int $requesterId, ?string $requesterGrade): ?int
+    {
+        if ($requesterId <= 0 || self::isSeniorManagerGrade($requesterGrade)) {
+            return null;
+        }
+
+        $requester = MasterKaryawan::query()
+            ->where('id', $requesterId)
+            ->where('is_active', true)
+            ->first(['id', 'atasan_langsung']);
+
+        if (!$requester) {
+            return null;
+        }
+
+        $atasanIds = [];
+        $raw = $requester->atasan_langsung ?? [];
+        if (is_string($raw)) {
+            $raw = json_decode($raw, true) ?? [];
+        }
+        if (is_array($raw)) {
+            $atasanIds = array_values(array_filter(array_map('intval', $raw)));
+        }
+
+        if ($atasanIds === []) {
+            return null;
+        }
+
+        $senior = MasterKaryawan::query()
+            ->whereIn('id', $atasanIds)
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->whereRaw("UPPER(REPLACE(COALESCE(grade, ''), '_', ' ')) = 'SENIOR MANAGER'");
+            })
+            ->orderBy('id')
+            ->first(['id']);
+
+        return $senior ? (int) $senior->id : null;
+    }
+
     public const ACTION_LABELS = [
         'process' => 'HRD Memproses',
         'reject' => 'Ditolak',
@@ -145,6 +202,8 @@ class SalaryAdjustmentWorkflowService
         'bapak_reject' => 'Waiting Approval Final Ditolak',
         'create' => 'Permohonan Diajukan',
         'store' => 'Permohonan Diajukan',
+        'senior_manager_approve' => 'Senior Manager Menyetujui',
+        'senior_manager_reject' => 'Senior Manager Menolak',
         'mutasi_notify_receiver' => 'Notifikasi Mutasi ke Manager Penerima',
         'receiver_accept' => 'Manager Penerima Menerima Mutasi',
         'receiver_reject' => 'Manager Penerima Menolak Mutasi',
@@ -257,6 +316,12 @@ class SalaryAdjustmentWorkflowService
     public static function canTransition(string $from, string $to): bool
     {
         $allowed = [
+            self::STATUS_WAITING_SENIOR_MANAGER => [
+                self::STATUS_SUBMITTED,
+                self::STATUS_WAITING_RECEIVER,
+                self::STATUS_REJECTED,
+                self::STATUS_CANCELLED,
+            ],
             self::STATUS_WAITING_RECEIVER => [
                 self::STATUS_RECEIVER_RESPONDED,
                 self::STATUS_WAITING_GIVER,
