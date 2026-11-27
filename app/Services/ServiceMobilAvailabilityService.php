@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\PenggunaanMobilDetail;
 use App\Models\ServiceMobil;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
@@ -40,19 +41,32 @@ class ServiceMobilAvailabilityService
         string $rangeEnd,
         ?int $excludeServiceId = null
     ): Collection {
+        return $this->overlappingActiveServices($rangeStart, $rangeEnd)
+            ->where('daftar_mobil_id', $mobilId)
+            ->when($excludeServiceId, function ($q) use ($excludeServiceId) {
+                $q->where('id', '!=', $excludeServiceId);
+            })
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    public function busyMobilIdsOnDate(string $tanggal): array
+    {
+        return $this->overlappingActiveServices($tanggal, $tanggal)
+            ->distinct()
+            ->pluck('daftar_mobil_id')
+            ->all();
+    }
+
+    private function overlappingActiveServices(string $rangeStart, string $rangeEnd): Builder
+    {
         $start = Carbon::parse($rangeStart)->toDateString();
         $end = Carbon::parse($rangeEnd)->toDateString();
 
         return ServiceMobil::where('is_active', true)
-            ->where('daftar_mobil_id', $mobilId)
             ->whereIn('status', self::ACTIVE_SERVICE_STATUSES)
-            ->when($excludeServiceId, function ($q) use ($excludeServiceId) {
-                $q->where('id', '!=', $excludeServiceId);
-            })
             ->whereRaw('COALESCE(tanggal_mulai_aktual, tanggal_mulai_rencana) <= ?', [$end])
-            ->whereRaw('COALESCE(tanggal_selesai_aktual, tanggal_selesai_estimasi) >= ?', [$start])
-            ->orderByDesc('id')
-            ->get();
+            ->whereRaw('COALESCE(tanggal_selesai_aktual, tanggal_selesai_estimasi) >= ?', [$start]);
     }
 
     public function findFirstOverlappingActiveService(
