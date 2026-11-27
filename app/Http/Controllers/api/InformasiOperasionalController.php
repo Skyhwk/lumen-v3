@@ -702,8 +702,8 @@ class InformasiOperasionalController extends Controller
         $petugasKey = IoPeralatanTimService::normalizePetugasKey($petugas);
         // Kunci antar-tim & monitoring: tanggal sampling saja (tanpa durasi).
         $tanggalEnd = $tanggal;
-        $locked = IoPeralatanTimService::usedKodeAsetByTanggal($tanggal, $petugasKey, 1);
-        $lockedByKode = $locked['by_kode'] ?? [];
+        $monitoringContext = MonitoringPeralatanService::buildContext($tanggal, $petugasKey);
+        $lockedByKode = $monitoringContext->ioKodeOwners;
         foreach (array_keys($seenKode) as $kode) {
             if (isset($lockedByKode[$kode])) {
                 $owner = $lockedByKode[$kode];
@@ -729,9 +729,8 @@ class InformasiOperasionalController extends Controller
             }
         }
 
-        // Validasi monitoring: hanya status_alat (bukan start/end date).
+        // Gunakan status efektif pada tanggal sampling, sama seperti daftar pilihan kode aset.
         $peralatanIds = MonitoringPeralatanService::resolvePeralatanIds($peralatan);
-        $monitoringById = MonitoringPeralatanService::latestMonitoringByPeralatanIds($peralatanIds);
         $kodeById = [];
         if ($peralatanIds !== []) {
             $kodeById = \App\Models\Peralatan::query()
@@ -745,9 +744,9 @@ class InformasiOperasionalController extends Controller
             if (isset($ownBeforeKodes[$kode])) {
                 continue; // re-save bawaan tim sendiri
             }
-            $monitoring = $monitoringById[$idPeralatan] ?? null;
-            if (MonitoringPeralatanService::isBusyOnTanggal($monitoring, $tanggal)) {
-                $status = $monitoring['status_alat'] ?? '-';
+            $monitoring = MonitoringPeralatanService::resolveEffectiveStatus($idPeralatan, null, $monitoringContext);
+            $status = $monitoring['status_alat'];
+            if (strcasecmp($status, MonitoringPeralatanService::STATUS_TERSEDIA) !== 0) {
                 return response()->json([
                     'message' => "Kode aset {$kode} berstatus {$status}; hanya status Tersedia yang bisa dipilih.",
                 ], 422);
