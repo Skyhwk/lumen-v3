@@ -9,6 +9,9 @@ class SamplingPlan extends Sector
     protected $connection = 'mysql';
     public $timestamps = false;
     protected $guarded = [];
+    protected $casts = [
+        'riwayat_reject_validator' => 'array',
+    ];
 
     public function getTable()
     {
