@@ -17,7 +17,7 @@ class ReleaseAttendanceController extends Controller
 {
     public function index(Request $request)
     {
-        $releaseSystem = ReleaseSystem::where('system', 'Attendance')->get();
+        $releaseSystem = ReleaseSystem::where('system', 'Attendance')->orderBy('id', 'desc')->get();
         return response()->json(['success' => true, 'data' => $releaseSystem], 200);
     }
 
