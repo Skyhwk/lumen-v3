@@ -572,7 +572,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                                     'hasil_uji' => $hasilIsokinetik['berat_molekul_kering_method5'],
                                     'baku_mutu' => '-',
                                     'satuan' => 'g/gmol',
-                                    'spesifikasi_method' => 'SNI 7177.15:2009',
+                                    'spesifikasi_method' => 'SNI 7117.15:2009',
                                 ];
                             }
                             // kadar_uap_air
@@ -582,7 +582,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                                     'hasil_uji' => $hasilIsokinetik['uap_air_dalam_aliran_gas'],
                                     'baku_mutu' => '-',
                                     'satuan' => '%',
-                                    'spesifikasi_method' => 'SNI 7177.16:2009',
+                                    'spesifikasi_method' => 'SNI 7117.16:2009',
                                 ];
                             }
                             // kecepatan_volumetrik_aktual
@@ -592,7 +592,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                                     'hasil_uji' => $hasilIsokinetik['kecepatan_volumetrik_aktual'],
                                     'baku_mutu' => '-',
                                     'satuan' => 'm³/s',
-                                    'spesifikasi_method' => 'SNI 7177.14:2009',
+                                    'spesifikasi_method' => 'SNI 7117.14:2009',
                                 ];
                             }
                             // traverse_poin_partikulat
@@ -602,7 +602,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                                     'hasil_uji' => $hasilIsokinetik['traverse_poin_partikulat'],
                                     'baku_mutu' => '-',
                                     'satuan' => '-',
-                                    'spesifikasi_method' => 'SNI 7177.13:2009',
+                                    'spesifikasi_method' => 'SNI 7117.13:2009',
                                 ];
                             }
                             // persen_sampling_isokinetik
@@ -612,7 +612,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                                     'hasil_uji' => $hasilIsokinetik['persen_sampling_isokinetik'],
                                     'baku_mutu' => '90-110',
                                     'satuan' => '%',
-                                    'spesifikasi_method' => 'SNI 7177.17:2009',
+                                    'spesifikasi_method' => 'SNI 7117.17:2009',
                                 ];
                             }
 
