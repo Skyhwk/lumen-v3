@@ -45,9 +45,9 @@ class DirectHCHO8Jmgm3 {
         $c17_raw = $average;                                        // mg/m³
         $c3_raw  = ($c17_raw / 30.03) * 24.45;                       // mg/m³
         $c16_raw = $c17_raw * 1000;                                 // ug/m³
-        $c4_raw = $c3_raw / 1000;                                    // PPB
+        $c4_raw = $c3_raw * 1000;                                    // PPB
 
-        // POTONG (BUKAN ROUND)
+        // POTONG (BUKAN ROUND) 
         $c2  = $this->cutDecimal($c2_raw, 4);
         $c1  = $this->cutDecimal($c1_raw, 4);
         $c3  = $this->cutDecimal($c3_raw, 4);
