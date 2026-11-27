@@ -274,7 +274,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                 $C1_value = $wsValue->f_koreksi_c1 !== null
                     ? (float) $wsValue->f_koreksi_c1
                     : (float) $wsValue->C1;
-                $hasil = ((20.9 - $faktor_koreksi) / (20.9 - (float) $dataLapangan->O2)) * $C1_value;
+                $hasil = ((21 - $faktor_koreksi) / (21 - (float) $dataLapangan->O2)) * $C1_value;
                 $keterangan = $request->jenis_koreksi ?? [];
                 $keterangan[] = 'Angka koreksi ' . $faktor_koreksi . '%';
                 $wsValue->input_koreksi = $faktor_koreksi;

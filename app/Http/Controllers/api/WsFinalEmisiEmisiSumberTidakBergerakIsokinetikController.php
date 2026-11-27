@@ -285,7 +285,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 						->first();
 					if($request->faktor_koreksi > 0) {
 						$C1_value = $ws_value->f_koreksi_c1 !== null ? floatval($ws_value->f_koreksi_c1) : floatval($ws_value->C1);
-						$hasil = ((20.9 - $faktor_koreksi) / (20.9 - floatval($dataLapangan->O2))) * $C1_value;
+						$hasil = ((21 - $faktor_koreksi) / (21 - floatval($dataLapangan->O2))) * $C1_value;
 						if ($ws_value != null) {
 							$ws_value->input_koreksi = $request->faktor_koreksi;
 							$ws_value->nil_koreksi = round((float) $hasil, 4);
