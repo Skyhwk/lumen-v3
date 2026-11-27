@@ -160,6 +160,8 @@ class CiscoPhoneCnfXmlService
         $merged['transfer_onhook_enabled'] = filter_var($merged['transfer_onhook_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $merged['kpml'] = (int) ($merged['kpml'] ?? 0);
 
+        $merged['directory_uri'] = (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUri($merged['directory_uri'] ?? '');
+
         // CP-3905 sering gagal register jika pakai TCP — defaultkan UDP untuk model basic
         if (self::isBasicPhoneModel($merged['phone_model'] ?? 'CP-3905')) {
             if (strtoupper($merged['transport_layer_protocol'] ?? 'UDP') === 'TCP') {
@@ -462,7 +464,12 @@ class CiscoPhoneCnfXmlService
         $device->appendChild($networkLocaleInfo);
 
         $this->appendTextNode($doc, $device, 'deviceSecurityMode', '1');
+        $directoryUrl = (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUri($config['directory_uri'] ?? '');
         foreach (['authenticationURL', 'directoryURL', 'servicesURL', 'idleURL', 'informationURL', 'messagesURL', 'proxyServerURL'] as $urlNode) {
+            if ($urlNode === 'directoryURL') {
+                $this->appendTextNode($doc, $device, $urlNode, $directoryUrl);
+                continue;
+            }
             $this->appendTextNode($doc, $device, $urlNode, '');
         }
         $this->appendTextNode($doc, $device, 'dscpForSCCPPhoneConfig', '96');
@@ -542,6 +549,8 @@ class CiscoPhoneCnfXmlService
             $this->appendTextNode($doc, $device, 'password', $password);
         }
 
+        $this->appendDeviceDirectoryUrl($doc, $device, $config);
+
         return $doc->saveXML();
     }
 
@@ -559,6 +568,7 @@ class CiscoPhoneCnfXmlService
         $this->appendCommonProfile($doc, $device, $config);
         $this->appendNetworkLocale($doc, $device, $config);
         $this->appendLoadInformation($doc, $device, $config, $phoneModel);
+        $this->appendDeviceDirectoryUrl($doc, $device, $config);
 
         if ($userId !== null && $userId !== '') {
             $this->appendTextNode($doc, $device, 'userId', $userId);
@@ -892,6 +902,15 @@ class CiscoPhoneCnfXmlService
             $loadInformation->appendChild($doc->createTextNode($loadInfo));
             $device->appendChild($loadInformation);
         }
+    }
+
+    private function appendDeviceDirectoryUrl(DOMDocument $doc, \DOMElement $device, array $config): void
+    {
+        $directoryUrl = (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUri($config['directory_uri'] ?? '');
+        if ($directoryUrl === '') {
+            return;
+        }
+        $this->appendTextNode($doc, $device, 'directoryURL', $directoryUrl);
     }
 
     private function appendUriNode(DOMDocument $doc, \DOMElement $parent, string $name, ?string $value): void
