@@ -35,4 +35,9 @@ class BeritaAcaraKejadianDisipliner extends Sector
     {
         return $this->belongsTo(MasterKaryawan::class, 'penandatangan_karyawan_id');
     }
+
+    public function investigasiLink()
+    {
+        return $this->hasOne(BakInvestigasiBeritaAcara::class, 'berita_acara_id');
+    }
 }

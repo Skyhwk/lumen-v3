@@ -7,6 +7,7 @@ use App\Support\InvestigasiStatusCase;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+
 /**
  * Investigasi Awal (F1) — Case Code & persistensi header.
  */
@@ -95,8 +96,9 @@ final class BakInvestigasiService
             ->delete();
 
         $now = Carbon::now();
+
         foreach ($rows as $index => $row) {
-            DB::table('bak_investigasi_pihak')->insert([
+            $insert = [
                 'bak_investigasi_id' => $bakInvestigasiId,
                 'urutan' => (int) ($row['urutan'] ?? ($index + 1)),
                 'nama' => $row['nama'] ?? null,
@@ -105,7 +107,9 @@ final class BakInvestigasiService
                 'keterangan' => $row['keterangan'] ?? null,
                 'created_at' => $now,
                 'updated_at' => $now,
-            ]);
+                'karyawan_id' => $row['karyawan_id'] ?? null,
+            ];
+            DB::table('bak_investigasi_pihak')->insert($insert);
         }
     }
 
@@ -251,8 +255,8 @@ final class BakInvestigasiService
                 ->where('jenis', $jenis)
                 ->orderBy('id')
                 ->pluck('surat_id')
-                ->map(static fn ($v) => (int) $v)
-                ->filter(static fn ($v) => $v > 0)
+                ->map(static fn($v) => (int) $v)
+                ->filter(static fn($v) => $v > 0)
                 ->values()
                 ->all();
         }
@@ -299,7 +303,7 @@ final class BakInvestigasiService
 
             $used = array_merge(
                 $used,
-                $pivotQuery->pluck('ss.surat_id')->map(static fn ($v) => (int) $v)->all()
+                $pivotQuery->pluck('ss.surat_id')->map(static fn($v) => (int) $v)->all()
             );
         }
 
@@ -319,11 +323,11 @@ final class BakInvestigasiService
 
             $used = array_merge(
                 $used,
-                $legacyQuery->pluck($legacyCol)->map(static fn ($v) => (int) $v)->all()
+                $legacyQuery->pluck($legacyCol)->map(static fn($v) => (int) $v)->all()
             );
         }
 
-        return array_values(array_unique(array_filter($used, static fn ($id) => $id > 0)));
+        return array_values(array_unique(array_filter($used, static fn($id) => $id > 0)));
     }
 
     /**
