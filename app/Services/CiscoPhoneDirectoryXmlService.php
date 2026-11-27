@@ -130,28 +130,21 @@ class CiscoPhoneDirectoryXmlService
      */
     public static function shouldEmbedInCnf(): bool
     {
-        $row = self::settings();
-        if ($row !== null) {
-            if (!$row->embed_in_cnf) {
-                return false;
-            }
-        } else {
-            $raw = env('CISCO_PHONE_EMBED_DIRECTORY_URL');
-            if ($raw === null || $raw === '' || !filter_var($raw, FILTER_VALIDATE_BOOLEAN)) {
-                return false;
-            }
-        }
+        return false;
+    }
 
+    /** URL layanan Phonebook (on-demand). Tidak ditulis ke directoryURL. */
+    public function phonebookServiceUrl(): string
+    {
         $url = self::defaultDirectoryUrl(true);
         if ($url === '') {
-            return false;
+            return '';
         }
-
         if (preg_match('#(?:localhost|127\.0\.0\.1|host\.docker\.internal)#i', $url)) {
-            return false;
+            return '';
         }
 
-        return true;
+        return $url;
     }
 
     /** Tulis ke tag directoryURL (umumnya JANGAN — CP-78xx request terus). */
@@ -206,9 +199,19 @@ class CiscoPhoneDirectoryXmlService
         return $query->orderBy('sort_order')->orderBy('display_name')->get();
     }
 
+    public static function baseFromRequestUrl(string $requestUrl): string
+    {
+        $url = preg_replace('#/api/cisco-phone-directory\.xml(?:\?.*)?$#i', '', trim($requestUrl));
+
+        return rtrim((string) $url, '/');
+    }
+
     public function generateForPhone(array $params): string
     {
-        $base = self::directoryBaseForCnf() ?: self::directoryBaseForDisplay();
+        $requestBase = trim((string) ($params['request_base'] ?? ''));
+        $base = $requestBase !== ''
+            ? rtrim($requestBase, '/')
+            : (self::directoryBaseForCnf() ?: self::directoryBaseForDisplay());
         $mode = (string) ($params['mode'] ?? 'menu');
         $search = trim((string) ($params['name'] ?? ''));
         $start = max(0, (int) ($params['start'] ?? 0));
@@ -218,7 +221,13 @@ class CiscoPhoneDirectoryXmlService
         }
 
         if ($mode === 'list' || $search !== '') {
-            return $this->generateDirectoryXml($this->activeEntries($search), $base, $start, $search);
+            try {
+                $entries = $this->activeEntries($search);
+            } catch (\Throwable $e) {
+                $entries = collect([]);
+            }
+
+            return $this->generateDirectoryXml($entries, $base, $start, $search);
         }
 
         return $this->generateMenuXml($base);
@@ -332,7 +341,8 @@ class CiscoPhoneDirectoryXmlService
 
     private function newDoc(): DOMDocument
     {
-        $doc = new DOMDocument('1.0', 'ISO-8859-1');
+        $doc = new DOMDocument('1.0', 'UTF-8');
+        $doc->encoding = 'UTF-8';
         $doc->formatOutput = false;
 
         return $doc;
@@ -349,27 +359,33 @@ class CiscoPhoneDirectoryXmlService
     private function appendText(DOMDocument $doc, \DOMElement $parent, string $tag, string $value): void
     {
         $node = $doc->createElement($tag);
-        $node->appendChild($doc->createTextNode($this->toIso($value)));
+        $node->appendChild($doc->createTextNode($this->xmlSafe($value)));
         $parent->appendChild($node);
     }
 
     private function clip(string $value, int $max): string
     {
-        $iso = $this->toIso($value);
-        if (strlen($iso) <= $max) {
-            return $value;
+        $safe = $this->xmlSafe($value);
+        if (strlen($safe) <= $max) {
+            return $safe;
         }
 
-        return rtrim(substr($iso, 0, $max - 1)) . '.';
+        return rtrim(substr($safe, 0, $max - 1)) . '.';
     }
 
-    private function toIso(string $value): string
+    /** ASCII 0x20-0x7E agar valid UTF-8 dan aman untuk Cisco IP Phone XML. */
+    private function xmlSafe(string $value): string
     {
-        $converted = @iconv('UTF-8', 'ISO-8859-1//TRANSLIT', $value);
-        if ($converted === false) {
-            return preg_replace('/[^\x20-\x7E]/', '?', $value) ?: '';
+        $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if (!mb_check_encoding($value, 'UTF-8')) {
+            $value = mb_convert_encoding($value, 'UTF-8', 'ISO-8859-1') ?: '';
         }
 
-        return $converted;
+        $ascii = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        if ($ascii === false || $ascii === null) {
+            $ascii = $value;
+        }
+
+        return preg_replace('/[^\x20-\x7E]/', '?', $ascii) ?: '';
     }
 }
