@@ -19,13 +19,16 @@ class MonitoringPeralatanService
      * Rusak/Tersedia point-in-time: berlaku sampai event pengganti.
      * IO mengunci Sedang Digunakan untuk kode_aset pada tanggal D.
      */
-    public static function buildContext(string $asOfDate): MonitoringPeralatanResolutionContext
+    public static function buildContext(
+        string $asOfDate,
+        ?string $excludePetugasKey = null
+    ): MonitoringPeralatanResolutionContext
     {
         $normalized = Carbon::parse($asOfDate)->format('Y-m-d');
         $ctx = new MonitoringPeralatanResolutionContext($normalized);
 
         if (Schema::hasTable('io_peralatan_tim')) {
-            $locked = IoPeralatanTimService::usedKodeAsetByTanggal($normalized, null, 1);
+            $locked = IoPeralatanTimService::usedKodeAsetByTanggal($normalized, $excludePetugasKey, 1);
             foreach ($locked['kodes'] ?? [] as $kode) {
                 $kode = trim((string) $kode);
                 if ($kode !== '') {
