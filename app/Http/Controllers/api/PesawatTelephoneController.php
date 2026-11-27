@@ -57,7 +57,9 @@ class PesawatTelephoneController extends Controller
                 'vad' => 'Voice Activity Detection (VAD) bisa menyebabkan suara putus-putus/noise saat gateway PSTN. Default: nonaktif.',
             ],
             'tftp_path' => env('CISCO_TFTP_PATH', '/srv/tftp'),
-            'directory_uri' => (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUri(''),
+            'directory_uri' => (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUriForDisplay(''),
+            'directory_uri_cnf' => CiscoPhoneDirectoryXmlService::defaultDirectoryUrl(true),
+            'phonebook_embed_in_cnf' => CiscoPhoneDirectoryXmlService::shouldEmbedInCnf(),
             'phonebook_entry_count' => CiscoPhoneDirectoryEntry::where('is_active', true)->count(),
             'phonebook_next_sort_order' => $this->nextPhonebookSortOrder(),
         ], 200);
@@ -630,6 +632,8 @@ class PesawatTelephoneController extends Controller
         $uri = trim((string) ($mergedPlainConfig['directory_uri'] ?? ''));
         if ($uri !== '') {
             $json['directory_uri'] = $uri;
+        } else {
+            unset($json['directory_uri']);
         }
         $config->config_json = $json;
     }

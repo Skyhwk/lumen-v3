@@ -160,7 +160,7 @@ class CiscoPhoneCnfXmlService
         $merged['transfer_onhook_enabled'] = filter_var($merged['transfer_onhook_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $merged['kpml'] = (int) ($merged['kpml'] ?? 0);
 
-        $merged['directory_uri'] = (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUri($merged['directory_uri'] ?? '');
+        $merged['directory_uri'] = (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUriForCnf($merged['directory_uri'] ?? '');
 
         // CP-3905 sering gagal register jika pakai TCP — defaultkan UDP untuk model basic
         if (self::isBasicPhoneModel($merged['phone_model'] ?? 'CP-3905')) {
@@ -464,7 +464,7 @@ class CiscoPhoneCnfXmlService
         $device->appendChild($networkLocaleInfo);
 
         $this->appendTextNode($doc, $device, 'deviceSecurityMode', '1');
-        $directoryUrl = (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUri($config['directory_uri'] ?? '');
+        $directoryUrl = trim((string) ($config['directory_uri'] ?? ''));
         foreach (['authenticationURL', 'directoryURL', 'servicesURL', 'idleURL', 'informationURL', 'messagesURL', 'proxyServerURL'] as $urlNode) {
             if ($urlNode === 'directoryURL') {
                 $this->appendTextNode($doc, $device, $urlNode, $directoryUrl);
@@ -906,7 +906,7 @@ class CiscoPhoneCnfXmlService
 
     private function appendDeviceDirectoryUrl(DOMDocument $doc, \DOMElement $device, array $config): void
     {
-        $directoryUrl = (new CiscoPhoneDirectoryXmlService())->resolveDirectoryUri($config['directory_uri'] ?? '');
+        $directoryUrl = trim((string) ($config['directory_uri'] ?? ''));
         if ($directoryUrl === '') {
             return;
         }
