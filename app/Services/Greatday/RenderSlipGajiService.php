@@ -6,6 +6,7 @@ use App\Models\MasterKaryawan;
 use App\Models\Payroll;
 use App\Models\PayrollHeader;
 use App\Services\Greatday\SlipGajiPinService;
+use App\Services\Payroll\MaternityLeavePayrollService;
 use Carbon\Carbon;
 use Mpdf\Mpdf;
 use Illuminate\Support\Facades\Log;
@@ -684,8 +685,10 @@ class RenderSlipGajiService
         $potonganPencadangan = $pencadanganUpah < 0 ? abs($pencadanganUpah) : 0;
 
         $isKaryawanBaruPeriodeIni = self::isKaryawanBaruPeriodeIni($karyawan, $gaji);
-        $potonganProrata = $isKaryawanBaruPeriodeIni ? $absen : 0;
-        $potonganIndisipliner = $isKaryawanBaruPeriodeIni
+        $maternityReturn = self::findMaternityReturnPeriodeIni($karyawan, $gaji);
+        $isProrataPeriodeIni = $isKaryawanBaruPeriodeIni || ($maternityReturn !== null);
+        $potonganProrata = $isProrataPeriodeIni ? $absen : 0;
+        $potonganIndisipliner = $isProrataPeriodeIni
             ? ($sanksi + $potonganLain)
             : ($absen + $sanksi + $potonganLain);
 
@@ -694,16 +697,21 @@ class RenderSlipGajiService
         $takeHomePay = (float) ($gaji->take_home_pay ?? ($totalPendapatan - $totalPotongan));
 
         $tglMulaiKerja = $karyawan->tgl_mulai_kerja ?? null;
+        $keteranganGaji = null;
+        if ($isKaryawanBaruPeriodeIni && $potonganProrata > 0) {
+            $keteranganGaji = 'Karyawan mulai bergabung pada ' . self::formatTglTransfer($tglMulaiKerja)
+                . '. Gaji pokok dan tunjangan di atas merupakan nominal aktual per bulan; pembayaran periode ini dihitung proporsional sesuai tanggal mulai kerja.';
+        } elseif ($maternityReturn !== null && $potonganProrata > 0) {
+            $keteranganGaji = 'Karyawan kembali bekerja dari Cuti Melahirkan pada ' . self::formatTglTransfer($maternityReturn['end_date'])
+                . '. Gaji pokok dan tunjangan di atas merupakan nominal aktual per bulan; pembayaran periode ini dihitung secara prorata sesuai tanggal kembali bekerja.';
+        }
 
         return [
             'tgl_transfer' => $this->tgl_transfer ?? self::formatTglTransfer($gaji->tgl_transfer ?? null),
             'periode' => $this->periode,
             'logo_path' => $this->resolveLogoPath(),
-            'is_karyawan_baru_periode_ini' => $isKaryawanBaruPeriodeIni,
-            'keterangan_gaji' => ($isKaryawanBaruPeriodeIni && $potonganProrata > 0)
-                ? 'Karyawan mulai bergabung pada ' . self::formatTglTransfer($tglMulaiKerja)
-                    . '. Gaji pokok dan tunjangan di atas merupakan nominal aktual per bulan; pembayaran periode ini dihitung proporsional sesuai tanggal mulai kerja.'
-                : null,
+            'is_karyawan_baru_periode_ini' => $isProrataPeriodeIni,
+            'keterangan_gaji' => $keteranganGaji,
             'karyawan' => (object) [
                 'nama' => $karyawan->nama ?? $karyawan->nama_lengkap ?? '-',
                 'nik' => $karyawan->nik ?? $karyawan->nik_karyawan ?? '-',
@@ -827,6 +835,21 @@ class RenderSlipGajiService
         );
 
         return $mulaiKerja->format('Y-m') === $periode->format('Y-m');
+    }
+
+    private static function findMaternityReturnPeriodeIni($karyawan, $gaji): ?array
+    {
+        $karyawanId = (int) ($karyawan->id ?? $gaji->id_karyawan ?? 0);
+        $periodePayroll = (string) ($gaji->periode_payroll ?? '');
+        if ($karyawanId <= 0 || !preg_match('/^\d{4}-\d{2}$/', $periodePayroll)) {
+            return null;
+        }
+
+        return MaternityLeavePayrollService::findReturnMonthForEmployee(
+            $karyawanId,
+            $periodePayroll,
+            $karyawan->grade ?? null
+        );
     }
 
     private static function formatPeriode($periode)

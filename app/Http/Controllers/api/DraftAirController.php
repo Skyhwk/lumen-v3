@@ -771,25 +771,16 @@ class DraftAirController extends Controller
         }
 
         if ($suhuValue !== null && $cekOrderDetaiSUHU) {
-            $suhuParameterName = $this->resolveOrderedSuhuName($cekOrderDetaiSUHU);
-
-            $bakumutu = MasterBakumutu::where('parameter', $suhuParameterName)
+            $bakumutu = MasterBakumutu::where('parameter', 'Suhu')
                 ->where('id_regulasi', $regulasiId)
                 ->where('is_active', true)
                 ->first();
 
-            if (!$bakumutu && $suhuParameterName !== 'Suhu') {
-                $bakumutu = MasterBakumutu::where('parameter', 'Suhu')
-                    ->where('id_regulasi', $regulasiId)
-                    ->where('is_active', true)
-                    ->first();
-            }
-
-            $masterParameterSuhu = Parameter::where('nama_lab', $suhuParameterName)->where('id_kategori', 1)->where('is_active', true)->first();
+            $masterParameterSuhu = Parameter::where('nama_lab', 'Suhu')->where('id_kategori', 1)->where('is_active', true)->first();
 
             $results[] = [
                'id' => 2,
-                'name' => $suhuParameterName,
+                'name' => 'Suhu',
                 'no_sampel' => $lapanganAir->no_sampel,
                 'akr' => '',
                 'satuan' => $bakumutu->satuan ?? '°C',
@@ -798,27 +789,13 @@ class DraftAirController extends Controller
                 'hasil' => $suhuValue,
                 'status' => 'AKREDITASI',
                 'hasil_koreksi' => '',
-                'keterangan' => $suhuParameterName
+                'keterangan' => 'Suhu'
             ];
 
             $methodsUsed[] = $bakumutu->method ?? '-';
         }
 
         return $results;
-    }
-
-    private function resolveOrderedSuhuName($orderDetail): string
-    {
-        $parameters = json_decode($orderDetail->parameter ?? '[]', true) ?: [];
-
-        foreach ($parameters as $item) {
-            $nama = explode(';', (string) $item, 2)[1] ?? '';
-            if ($nama === 'Suhu (NA)') {
-                return 'Suhu (NA)';
-            }
-        }
-
-        return 'Suhu';
     }
 
     private function handleSD($noSampel, $regulasiId, &$methodsUsed = [])
@@ -897,31 +874,22 @@ class DraftAirController extends Controller
 
         // === Suhu ===
         if ($cekSuhu && $suhuValue !== null) {
-            $suhuParameterName = $this->resolveOrderedSuhuName($cekSuhu);
-
-            $bakumutu = MasterBakumutu::where('parameter', $suhuParameterName)
+            $bakumutu = MasterBakumutu::where('parameter', 'Suhu')
                 ->where('id_regulasi', $regulasiId)
                 ->where('is_active', true)
                 ->first();
 
-            if (!$bakumutu && $suhuParameterName !== 'Suhu') {
-                $bakumutu = MasterBakumutu::where('parameter', 'Suhu')
-                    ->where('id_regulasi', $regulasiId)
-                    ->where('is_active', true)
-                    ->first();
-            }
-
-            $masterParameter = Parameter::where('nama_lab', $suhuParameterName)
+            $masterParameter = Parameter::where('nama_lab', 'Suhu')
                 ->where('id_kategori', 1)
                 ->where('is_active', true)
                 ->first();
 
             $results[] = [
                 'id'            => 2,
-                'name'          => $suhuParameterName,
+                'name'          => 'Suhu',
                 'no_sampel'     => $noSampel,
                 'akr'           => '',
-                'keterangan'    => $suhuParameterName,
+                'keterangan'    => 'Suhu',
                 'satuan'        => $bakumutu->satuan ?? '°C',
                 'methode'       => $bakumutu->method ?? ($masterParameter->method ?? '-'),
                 'baku_mutu'     => [$bakumutu->baku_mutu ?? '-'],

@@ -241,6 +241,7 @@ class FdlEmisiCerobongController extends Controller
                 $header = EmisiCerobongHeader::firstOrNew([
                     'no_sampel' => $data->no_sampel,
                     'id_parameter' => $parameter->id,
+                    'is_active' => true,
                 ]);
 
                 $header->fill([

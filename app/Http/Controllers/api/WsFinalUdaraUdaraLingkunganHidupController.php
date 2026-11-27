@@ -28,6 +28,7 @@ use App\Models\Subkontrak;
 use App\Models\MasterBakumutu;
 use App\Models\Parameter;
 use App\Services\AnalystFormula;
+use App\Services\MdlUdaraService;
 
 use App\Models\LingkunganHeader;
 use App\Models\DirectLainHeader;
@@ -186,19 +187,13 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
             $getSatuan = new HelperSatuan;
 
             $parameters = collect(json_decode($request->parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
-            $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
-
-            $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
-                if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
-                    $colToSearch = "hasil" . ($index ?: 1);
-                    $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
-                    if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
-                        $hasilUji = "<" . $mdlUdara->$colToSearch;
-                    }
-                }
-
-                return $hasilUji;
-            };
+            $mdlUdara = MdlUdaraService::loadForParameterIds($parameters->pluck('id'));
+            $getHasilUji = fn ($index, $parameterId, $hasilUji) => MdlUdaraService::formatHasilUjiForDisplay(
+                $hasilUji,
+                (int) $index,
+                $parameterId,
+                $mdlUdara
+            );
 
 			$parameterHasKoreksi = [
 				"SO2",
@@ -251,28 +246,29 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						if ($has('f_koreksi_c')) return $getHasilUji(1, $item->id_parameter, $hasil['f_koreksi_c']);
 
 						for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
+							if ((int) $i === 0) continue;
 							$k = "f_koreksi_c{$i}";
-							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+							if ($has($k)) return $getHasilUji($i + 1, $item->id_parameter, $hasil[$k]);
 						}
 
 
 						// 2) C (tanpa nomor) lalu C1..C16
-						if ($has('C')) return $hasil['C'];
+						if ($has('C')) return $getHasilUji(1, $item->id_parameter, $hasil['C']);
 						for ($i = config('column_ws.ws_value_lingkungan.min'); $i <= config('column_ws.ws_value_lingkungan.max'); $i++) {
 							$k = "C{$i}";
-							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+							if ($has($k)) return $getHasilUji($i + 1, $item->id_parameter, $hasil[$k]);
 						}
 
 						// 3) f_koreksi_1..f_koreksi_17
 						for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
 							$k = "f_koreksi_{$i}";
-							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+							if ($has($k)) return $getHasilUji($i, $item->id_parameter, $hasil[$k]);
 						}
 
 						// 4) hasil1..hasil17
 						for ($i = config('column_ws.ws_value_udara.min'); $i <= config('column_ws.ws_value_udara.max'); $i++) {
 							$k = "hasil{$i}";
-							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
+							if ($has($k)) return $getHasilUji($i, $item->id_parameter, $hasil[$k]);
 						}
 
 						// kalau semua gagal
@@ -290,31 +286,31 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 
 					if ($index == 17) {
 						foreach ($keysToTry as $k) {
-							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+							if ($has($k)) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 						foreach (['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2'] as $k) {
-							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+							if ($has($k)) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
-					} if ($index == 15) {
+					} elseif ($index == 15) {
 						foreach ($keysToTry as $k) {
-							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+							if ($has($k)) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 						foreach (['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3'] as $k) {
-							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+							if ($has($k)) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
-					} if ($index == 16) {
+					} elseif ($index == 16) {
 						foreach ($keysToTry as $k) {
-							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+							if ($has($k)) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
-							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+							if ($has($k)) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 					} else {
 						foreach ($keysToTry as $k) {
-							if ($has($k) && isset($hasil[$k])) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+							if ($has($k)) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
-							if ($has($k) && isset($hasil[$k])) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
+							if ($has($k)) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 					}
 
