@@ -221,7 +221,13 @@ class CiscoPhoneDirectoryXmlService
         }
 
         if ($mode === 'list' || $search !== '') {
-            return $this->generateDirectoryXml($this->activeEntries($search), $base, $start, $search);
+            try {
+                $entries = $this->activeEntries($search);
+            } catch (\Throwable $e) {
+                $entries = collect([]);
+            }
+
+            return $this->generateDirectoryXml($entries, $base, $start, $search);
         }
 
         return $this->generateMenuXml($base);
@@ -336,7 +342,8 @@ class CiscoPhoneDirectoryXmlService
     private function newDoc(): DOMDocument
     {
         $doc = new DOMDocument('1.0', 'UTF-8');
-        $doc->formatOutput = true;
+        $doc->encoding = 'UTF-8';
+        $doc->formatOutput = false;
 
         return $doc;
     }
@@ -352,27 +359,33 @@ class CiscoPhoneDirectoryXmlService
     private function appendText(DOMDocument $doc, \DOMElement $parent, string $tag, string $value): void
     {
         $node = $doc->createElement($tag);
-        $node->appendChild($doc->createTextNode($this->toIso($value)));
+        $node->appendChild($doc->createTextNode($this->xmlSafe($value)));
         $parent->appendChild($node);
     }
 
     private function clip(string $value, int $max): string
     {
-        $iso = $this->toIso($value);
-        if (strlen($iso) <= $max) {
-            return $value;
+        $safe = $this->xmlSafe($value);
+        if (strlen($safe) <= $max) {
+            return $safe;
         }
 
-        return rtrim(substr($iso, 0, $max - 1)) . '.';
+        return rtrim(substr($safe, 0, $max - 1)) . '.';
     }
 
-    private function toIso(string $value): string
+    /** ASCII 0x20-0x7E agar valid UTF-8 dan aman untuk Cisco IP Phone XML. */
+    private function xmlSafe(string $value): string
     {
-        $converted = @iconv('UTF-8', 'ISO-8859-1//TRANSLIT', $value);
-        if ($converted === false) {
-            return preg_replace('/[^\x20-\x7E]/', '?', $value) ?: '';
+        $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if (!mb_check_encoding($value, 'UTF-8')) {
+            $value = mb_convert_encoding($value, 'UTF-8', 'ISO-8859-1') ?: '';
         }
 
-        return $converted;
+        $ascii = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        if ($ascii === false || $ascii === null) {
+            $ascii = $value;
+        }
+
+        return preg_replace('/[^\x20-\x7E]/', '?', $ascii) ?: '';
     }
 }
